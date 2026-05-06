@@ -17,3 +17,8 @@ For any task:
 3. Implement the required changes.
 4. Test the changes.
 5. Mark the current in-flight work as done by updating the relevant tracker files in `task-manager/`.
+
+# Communication
+
+- Keep answers concise.
+- Do not over-explain unless the user asks for detail.
