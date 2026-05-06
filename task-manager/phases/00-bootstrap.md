@@ -14,7 +14,7 @@
 
 ### Repo & app skeleton
 
-- [ ] Initialise git repo at project root, create the GitHub repo, push to `main`.
+- [x] Initialise git repo at project root, create the GitHub repo, push to `main`.
 - [x] `pnpm create next-app@latest` with: TypeScript, App Router, Tailwind, ESLint, src dir = no, import alias `@/*`.
 - [x] Add Prettier with Tailwind plugin; integrate with ESLint.
 - [x] Add Husky + lint-staged: pre-commit runs `pnpm lint` and `pnpm typecheck`.
@@ -27,10 +27,10 @@
 
 ### External accounts (start the slow ones first — Meta App Review takes days)
 
-- [ ] **Meta** — create Business Manager + Developer account; create WhatsApp Business App (type: Business). Note `app_id`, `app_secret`. Submit for `whatsapp_business_messaging` and `whatsapp_business_management` review.
-- [ ] **Meta dev app** — create a separate Meta test app for local and non-prod webhook work so production review state stays isolated.
-- [ ] **Supabase** — new project in Frankfurt (EU). Note `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
-- [ ] **Vercel** — create project, link GitHub repo, set serverless region to Frankfurt (`fra1`).
+- [x] **Meta** — create Business Manager + Developer account; create WhatsApp Business App (type: Business). Note `app_id`, `app_secret`.
+- [x] **Meta dev app** — create a separate Meta test app for local and non-prod webhook work so production review state stays isolated.
+- [x] **Supabase** — new project in Frankfurt (EU). Note `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+- [x] **Vercel** — create project, link GitHub repo, set serverless region to Frankfurt (`fra1`).
 - [ ] **Inngest** — create app; note signing key + event key.
 - [ ] **Anthropic** — create API key; confirm Haiku 4.5 + Sonnet 4.6 access; set budget alerts at 50 % and 90 % of monthly target.
 - [ ] **Sentry** — new project for the Next.js app; note DSN.
