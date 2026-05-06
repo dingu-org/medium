@@ -14,7 +14,7 @@
 
 ### Sentry — refine
 
-- [ ] Server-side instrumentation covering: webhook handler, Inngest functions, Server Actions, Anthropic calls, Graph API calls.
+- [ ] Server-side instrumentation covering: webhook handler, Inngest functions, Server Actions, AI Gateway calls, Graph API calls.
 - [ ] Client-side instrumentation: error boundaries on each top-level route.
 - [ ] Source map upload verified — stack traces show original code, not minified.
 - [ ] Release tagging per Vercel deploy (auto via Sentry CLI in CI).
@@ -22,7 +22,7 @@
 - [ ] Alert rules:
   - Error rate > 1 % over 5 min → email.
   - Webhook handler 95th percentile > 2 s → email.
-  - Anthropic error rate > 5 % over 5 min → email.
+  - AI Gateway / upstream provider error rate > 5 % over 5 min → email.
 
 ### Structured logs
 
@@ -57,11 +57,11 @@
 ### Cost dashboards
 
 - [ ] Daily aggregation job (Inngest cron):
-  - Sum `messages.tokens_in` × Anthropic price per model per day per PT.
+  - Sum `messages.tokens_in` × AI Gateway model price per day per PT.
   - Estimate Meta conversation cost from `conversations` (each new patient conversation in 24 h window = one paid conversation).
 - [ ] Insert into a `cost_daily` rollup table.
 - [ ] Simple admin-only dashboard (server-rendered): yesterday's spend, monthly burn.
-- [ ] Anthropic budget alerts at 50 % and 90 % (set in Anthropic console — Phase 0).
+- [ ] AI Gateway credits / spend controls confirmed in the Vercel dashboard (Phase 0 baseline).
 
 ### Booking funnel surfaces in app
 
@@ -81,7 +81,7 @@
 - [ ] Filtering Axiom by `pt_id` shows only that PT's logs.
 - [ ] PostHog records `pt_signed_up` and `appointment_booked` with correct properties.
 - [ ] Funnel dashboard shows yesterday's signups → connections → bookings.
-- [ ] Cost dashboard shows yesterday's Anthropic + Meta spend per PT.
+- [ ] Cost dashboard shows yesterday's AI + Meta spend per PT.
 - [ ] Sentry alert rule fires on a synthetic error spike.
 - [ ] Trace IDs propagate from webhook through Inngest to outbound send (verified by searching one trace_id across Axiom).
 
@@ -90,6 +90,6 @@
 ## Notes
 
 - Don't go overboard on dashboards. Two are enough for MVP: error rate and cost. Build more once you can name a question they'd answer.
-- Anthropic cost data is in the SDK response (`usage`) — log it per turn into `messages.tokens_in/out`, then aggregate. No need to call Anthropic billing API.
+- The AI SDK response `usage` plus the stored `model` / `provider` fields is enough for per-turn attribution. Keep a local rollup so per-PT cost analysis does not depend on the Vercel dashboard alone.
 - The Meta cost model has changed multiple times; keep the calculator in `lib/billing/meta.ts` so it's easy to update.
 - Trace IDs are easy to forget when an Inngest run handles a non-trace-tagged event. Add a default trace ID = run ID when none is provided.

@@ -12,7 +12,7 @@
 
 | # | Phase | Status | Notes |
 |---|---|---|---|
-| 0 | Bootstrap | ◐ In flight | Local scaffold complete; external services, Sentry, GitHub push, and deploy still pending. |
+| 0 | Bootstrap | ◐ In flight | Local scaffold complete; external services, Sentry, and deploy verification still pending. |
 | 1 | Foundation | ☐ Not started | — |
 | 2 | WhatsApp integration | ☐ Not started | — |
 | 3 | AI conversation engine | ☐ Not started | — |
@@ -43,8 +43,8 @@ _Tasks I'm working on right now._
 
 _Things that need an external answer or an account / approval I'm waiting on._
 
-- Meta Business / Developer setup and App Review.
-- Inngest, Anthropic, Sentry, and PostHog account creation.
+- Meta App Review.
+- Inngest, Vercel AI Gateway, Sentry, and PostHog setup.
 
 ---
 
@@ -53,7 +53,7 @@ _Things that need an external answer or an account / approval I'm waiting on._
 _What is actually complete versus still missing for Phase 0._
 
 - Complete locally: Next.js scaffold at repo root, formatting/tooling, Husky pre-commit, shadcn/ui setup, placeholder routes, module folders, `.env.example`, local `.env.local`, generated local secrets, `pnpm lint`, `pnpm typecheck`, `pnpm dev`, placeholder route smoke tests, and `pnpm build`.
-- Not complete yet: Vercel env wiring, Inngest/Anthropic/Sentry/PostHog accounts, Meta App Review completion, Sentry wizard plus test error verification, Vercel preview deploy, and mobile device preview checks.
+- Not complete yet: Vercel env wiring, Inngest/AI Gateway/Sentry/PostHog setup, Meta App Review completion, Sentry wizard plus test error verification, Vercel preview deploy, and mobile device preview checks.
 - Verified mismatch fixed: `.env.example` is now explicitly unignored so it can be committed while `.env.local` stays ignored.
 
 ---
@@ -63,6 +63,7 @@ _What is actually complete versus still missing for Phase 0._
 _Significant choices that diverge from the tech doc or that I want to remember the reasoning for. Newest first._
 
 - **2026-05-06** — Meta App Review starts in Phase 0 on day one, not Phase 2. Keep a separate Meta dev/test app for local and non-prod work.
+- **2026-05-06** — Replace direct Anthropic integration with Vercel AI Gateway. Use `AI_GATEWAY_API_KEY`, keep Claude Haiku 4.5 / Sonnet 4.6 as the default models, and keep provider routing decisions inside `lib/ai/`.
 - **2026-05-06** — Use the Vercel production URL as the temporary `META_REDIRECT_URI` until a custom domain exists.
 - **2026-05-06** — Follow the current Next.js and Sentry generator outputs as authoritative; do not force legacy config filenames.
 - **2026-05-06** — `create-next-app@latest` produced Next.js `16.2.4`, not 15. Phase 0 now follows the current generator output rather than pinning the earlier plan text.
@@ -85,6 +86,7 @@ _One bullet per session: date — what shipped — what's next._
 - **2026-05-06** — Meta production and testing apps were marked done; next is App Review plus the remaining hosted services and deployment checks.
 - **2026-05-06** — Vercel project setup was marked done; next is env wiring, preview verification, and the remaining hosted services.
 - **2026-05-06** — Supabase project created in Frankfurt and the needed env values captured; next is the remaining hosted services plus Vercel env wiring.
+- **2026-05-06** — Switched the AI plan from direct Anthropic to Vercel AI Gateway; next is create the gateway key and update the remaining Phase 0 hosted-service setup.
 - **2026-05-06** — Retired the detailed `doing` playbook after verification; canonical status now lives in `phases/00-bootstrap.md` and this progress file.
 
 ---

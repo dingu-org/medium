@@ -67,13 +67,14 @@
 - [ ] Inngest: confirm processing region = EU.
 - [ ] Sentry: confirm EU data residency setting on.
 - [ ] PostHog: confirm EU instance.
-- [ ] Anthropic: requests are processed wherever the API serves; document the cross-border transfer in the privacy policy under "subprocessors".
+- [ ] Vercel AI Gateway: document its zero-data-retention posture and request handling in the privacy policy.
+- [ ] AI routing: lock `providerOptions.gateway.only` to the approved upstream providers for production, then document any cross-border transfer implications for those providers in the privacy policy under "subprocessors".
 
 ### Controller / processor split
 
 - [ ] Privacy policy reflects PT as data controller, Medium as processor.
 - [ ] DPA template ready for PT customers (not blocking MVP, but should exist).
-- [ ] Subprocessor list: Supabase, Vercel, Inngest, Anthropic, Meta, Sentry, PostHog.
+- [ ] Subprocessor list: Supabase, Vercel, Vercel AI Gateway, Inngest, Meta, Sentry, PostHog, plus whichever upstream AI providers are enabled in production.
 
 ### Cookie / consent
 

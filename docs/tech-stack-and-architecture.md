@@ -34,7 +34,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 | ORM | **Drizzle** | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies |
 | Auth (PTs) | **Supabase Auth** (email+password, Google OAuth) | Integrates with RLS through `auth.uid()` |
 | Background jobs & scheduling | **Inngest** | Delayed jobs (24h reminders), retries, event bus — matches the docs' event-driven principle; generous free tier |
-| AI | **Anthropic Claude** via the official SDK — Haiku 4.5 default, Sonnet 4.6 for harder turns | Fits the per-PT cost target (~€5–15/mo); tool use for structured booking; prompt caching for static system prompts |
+| AI | **Vercel AI Gateway + AI SDK**, with Claude defaults — Haiku 4.5 default, Sonnet 4.6 for harder turns | One key and one API surface with room to add providers later; gateway routing/fallbacks, spend monitoring, and Claude prompt caching still fit the per-PT cost target |
 | Hosting | **Vercel** (Next.js) + **Supabase EU** (DB/auth/realtime) + **Inngest Cloud** (jobs) | No infrastructure to maintain; all have EU regions |
 | Webhook runtime | Next.js Route Handler on the **Node runtime** (not Edge) | Signature verification needs `crypto`; handler just verifies + enqueues and returns 200 |
 | Realtime (live calendar/chat) | **Supabase Realtime** (Postgres changefeeds) | No extra infrastructure; scopes naturally to RLS |
@@ -50,7 +50,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 - Supabase Pro ~€25
 - Vercel Hobby €0
 - Inngest free tier €0
-- Anthropic Claude usage €15–45 (scales with PTs)
+- Vercel AI Gateway usage (Claude defaults) €15–45 (scales with PTs)
 - Sentry / Axiom / PostHog free tiers €0
 - **Total: ~€40–70/month**, leaving headroom within the €100 budget for Meta conversation fees.
 
@@ -82,7 +82,7 @@ lib/
   channels/
     whatsapp/             — Graph API client, template submission, 24h-window tracking
     instagram/            — (V2)
-  ai/                     — Claude client, system prompts, tool schemas (get_availability,
+  ai/                     — AI Gateway client, system prompts, tool schemas (get_availability,
                             book_appointment, reschedule_appointment, cancel_appointment,
                             escalate_to_human)
   appointments/           — availability resolver, booking, reschedule, cancel, state machine
@@ -127,7 +127,7 @@ Every query through `lib/tenancy/` either uses the authenticated PT's session (R
 
 1. **Meta → `POST /api/webhooks/whatsapp`.** Handler verifies the Meta signature against the shared secret, inserts the raw payload into `messages` with `external_id` for idempotency, emits an `message.received` event to Inngest, and returns 200 in under a second.
 2. **Inngest function `handleInboundMessage`** loads PT context by `phone_number_id` via `whatsapp_connections`, upserts the `patients` row, opens or reuses the `conversations` row, updates `last_inbound_at`, and calls the conversation engine.
-3. **Conversation engine** runs a Claude turn with tools: `get_availability`, `book_appointment`, `reschedule_appointment`, `cancel_appointment`, `escalate_to_human`. Tool calls invoke `lib/appointments` and `lib/tenancy` directly (in-process, transactional).
+3. **Conversation engine** runs an AI SDK turn through Vercel AI Gateway with tools: `get_availability`, `book_appointment`, `reschedule_appointment`, `cancel_appointment`, `escalate_to_human`. Tool calls invoke `lib/appointments` and `lib/tenancy` directly (in-process, transactional).
 4. **`book_appointment` tool** writes the `appointments` row, emits an `appointment.booked` event, returns a structured confirmation to the AI, which renders the final patient-facing message.
 5. **Event subscribers react to `appointment.booked`:**
    - `lib/channels/whatsapp` sends the confirmation back through the Graph API.
@@ -188,9 +188,10 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 **Model selection policy:**
 
-- **Default: Claude Haiku 4.5** for roughly 90% of turns — greetings, availability queries, simple bookings, reminder responses.
-- **Escalate to Claude Sonnet 4.6** when the conversation state shows ambiguity: two clarifying attempts already made, user frustration signals, complex reschedule with multiple constraints, or any turn after a `HELP` keyword.
+- **Default: Claude Haiku 4.5 via Vercel AI Gateway** for roughly 90% of turns — greetings, availability queries, simple bookings, reminder responses.
+- **Escalate to Claude Sonnet 4.6 via Vercel AI Gateway** when the conversation state shows ambiguity: two clarifying attempts already made, user frustration signals, complex reschedule with multiple constraints, or any turn after a `HELP` keyword.
 - **Never call Opus for runtime turns** — reserved for offline tasks such as evaluation or prompt tuning.
+- Keep routing inside the gateway layer so the app can add or swap providers later without rewriting the conversation engine. Once production privacy review is done, lock the allowed upstream providers with `providerOptions.gateway.only`.
 
 **Structured interaction over free-form parsing:**
 
@@ -199,7 +200,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 **Prompt caching:**
 
-- Each PT's system prompt (AI name, greeting, escalation keyword, PT-specific facts) is marked with `cache_control` — cache-write on the first turn of a conversation, cache-read on every subsequent turn.
+- Each PT's system prompt (AI name, greeting, escalation keyword, PT-specific facts) is structured so Claude prompt caching can be enabled through Vercel AI Gateway — cache-write on the first turn of a conversation, cache-read on every subsequent turn.
 - Tool definitions are included in the cached section since they are static across turns.
 
 **Cost math per PT per month:**
@@ -302,16 +303,16 @@ Before any product code is shipped:
 
 3. **Vercel**
    - Create the project, link the repo, set the EU deployment region for serverless functions (Frankfurt).
-   - Set env vars: Meta `app_id`, `app_secret`, webhook verify token, Supabase keys, Anthropic API key, Inngest keys, Sentry DSN, `TOKEN_ENCRYPTION_KEY`.
+   - Set env vars: Meta `app_id`, `app_secret`, webhook verify token, Supabase keys, `AI_GATEWAY_API_KEY`, Inngest keys, Sentry DSN, `TOKEN_ENCRYPTION_KEY`.
 
 4. **Inngest**
    - Create an app; set the signing key.
    - Configure the Inngest endpoint at `/api/inngest`.
    - Define the core functions: `handleInboundMessage`, `sendReminder`, `bootstrapWaConnection`, `purgeExpiredMessages`, `offerResumeAfterPtInactivity`.
 
-5. **Anthropic**
-   - Create an API key; confirm access to Haiku 4.5 and Sonnet 4.6.
-   - Set budget alerts at 50% and 90% of the monthly AI spend.
+5. **Vercel AI Gateway**
+   - Create an AI Gateway API key; confirm `anthropic/claude-haiku-4.5` and `anthropic/claude-sonnet-4.6` are available.
+   - Configure credits / auto top-up and use the AI Gateway dashboard to monitor spend.
 
 6. **Observability and analytics**
    - Sentry project for the Next.js app with source maps.

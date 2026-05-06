@@ -88,7 +88,7 @@
 - [ ] Every function uses Inngest's `step.run` for side effects so retries don't double-send.
 - [ ] Outbound send wrapped in `step.run('send-template', …)` etc.
 - [ ] DB writes inside steps are idempotent (use `external_id` / `appointment_id` checks).
-- [ ] Add a circuit-breaker for the AI client: if Anthropic 5xx-rate exceeds X% in 5 min, pause inbound handling and Sentry-alert. (Stretch; can defer.)
+- [ ] Add a circuit-breaker for the AI client: if AI Gateway / upstream provider 5xx-rate exceeds X% in 5 min, pause inbound handling and Sentry-alert. (Stretch; can defer.)
 
 ---
 
@@ -98,7 +98,7 @@
 - [ ] Replaying the same `message.received` event yields no duplicate outbound (idempotent).
 - [ ] A booked appointment shows up in Inngest's scheduled-runs view at `starts_at - 24h`.
 - [ ] Cancelling that appointment removes the scheduled reminder run.
-- [ ] Failing one Anthropic call retries; failing three fails the run cleanly with a Sentry record.
+- [ ] Failing one AI call retries; failing three fails the run cleanly with a Sentry record.
 - [ ] `purgeExpiredMessages` deletes only messages older than the retention window in fixture data.
 
 ---
@@ -106,5 +106,5 @@
 ## Notes
 
 - Inngest event names should mirror domain event names — easier to reason about. `appointment.booked` is both a DB row in `events` and an Inngest event.
-- Don't call the Anthropic SDK inside `step.run` and forget to `await` — wrap correctly so retries are coherent.
+- Don't call the AI SDK / gateway inside `step.run` and forget to `await` — wrap correctly so retries are coherent.
 - The reminder cancellation on reschedule needs the Inngest run ID; store it in `reminder_jobs.inngest_run_id` when the reminder is scheduled.
