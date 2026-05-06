@@ -31,26 +31,24 @@
 - [x] **Meta dev app** — create a separate Meta test app for local and non-prod webhook work so production review state stays isolated.
 - [x] **Supabase** — new project in Frankfurt (EU). Note `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
 - [x] **Vercel** — create project, link GitHub repo, set serverless region to Frankfurt (`fra1`).
-- [ ] **Inngest** — create app; note signing key + event key.
-- [ ] **OpenRouter** — create `OPENROUTER_API_KEY`; confirm `anthropic/claude-haiku-4.5` + `anthropic/claude-sonnet-4.6` access; keep prompt logging and product-use opt-ins disabled.
-- [ ] **Sentry** — new project for the Next.js app; note DSN.
-- [ ] **PostHog EU** — new project; note browser key.
+- [x] **Inngest** — create app; note signing key + event key.
+- [x] **OpenRouter** — create `OPENROUTER_API_KEY`; pin the current guardrail to `meta-llama/llama-3.3-70b-instruct:free`; keep prompt logging and product-use opt-ins disabled.
+- [x] **Sentry** — intentionally skipped for the current MVP; free-tier exhausted. Use platform logs and manual smoke checks instead.
+- [x] **PostHog EU** — intentionally skipped for the current MVP; free-tier exhausted. Derive funnel metrics from app data and internal dashboards instead.
 
 ### Env wiring
 
 - [x] Create `.env.example` with every var name (no values).
 - [x] Create `.env.local` (gitignored) with dev values.
-- [ ] Set the same vars in Vercel project settings (production + preview).
+- [x] Set the same vars in Vercel project settings (production + preview).
 - [ ] Use the first Vercel production URL as the temporary `META_REDIRECT_URI` until a custom domain exists.
 - [x] Generate and store `TOKEN_ENCRYPTION_KEY` (32-byte random) — used by pgcrypto in Phase 2.
 - [x] Generate Web Push VAPID keypair (used in Phase 9 — generate now so they're stable).
 
-### Sentry from day one
+### Observability tooling
 
-- [ ] Install `@sentry/nextjs`; run the wizard.
-- [ ] Keep the wizard's current output and config filenames; do not force specific Sentry file names from older examples.
-- [ ] Verify a thrown error in a test route shows up in Sentry.
-- [ ] Configure source map upload via the Sentry build plugin so stack traces stay readable in production.
+- [x] Defer Sentry for now; rely on Vercel / Supabase logs plus manual smoke tests because the free-tier limit is already exhausted.
+- [x] Defer PostHog for now; derive MVP funnel and cost visibility from internal tables / dashboards instead of a third-party analytics tool.
 
 ### First deploy
 
@@ -62,9 +60,8 @@
 ## Acceptance criteria
 
 - [x] `pnpm dev` runs with no errors and serves the bootstrap placeholder page.
-- [ ] Every account exists, including a separate Meta dev app; every credential is in `.env.example` (with names) and `.env.local` (with values), and the same vars are set in Vercel.
+- [ ] Every required account exists, including a separate Meta dev app; every required credential is in `.env.example` (with names) and `.env.local` (with values), and the same required vars are set in Vercel.
 - [ ] A push to `main` produces a successful Vercel deploy.
-- [ ] A test thrown error appears in Sentry within ~30 s.
 - [ ] No secrets in committed files (verified with `git log -p` and staged diff review; `gitleaks` if already installed).
 
 ---
@@ -74,4 +71,5 @@
 - Don't skip Meta App Review — it can take days. Submit on day one, build the rest while waiting.
 - Use `pnpm` (lighter lockfile, faster on serverless), not npm.
 - Vercel's `fra1` region matches Supabase Frankfurt for low latency.
+- Sentry and PostHog are intentionally deferred for the current MVP because their free-tier limits are exhausted; revisit if paid monitoring/analytics become justified.
 - A custom domain is not required to finish Phase 0; the Vercel production URL is acceptable as the temporary Embedded Signup redirect URI.

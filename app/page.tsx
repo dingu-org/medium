@@ -18,9 +18,9 @@ const wiredItems = [
 ];
 
 const manualBlockers = [
-  'Meta business app, app review, and system-user token',
-  'Supabase, OpenRouter, Inngest, Sentry, and PostHog setup',
-  'Real environment values for local and hosted deploys',
+  'Meta app review and system-user token',
+  'Set the final META_REDIRECT_URI from the production URL',
+  'Preview deploy, mobile checks, and final secret review',
 ];
 
 export default function Home() {

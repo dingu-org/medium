@@ -57,7 +57,7 @@
 ### Token + key management
 
 - [ ] Verify `whatsapp_connections.access_token_encrypted` is never decrypted outside `lib/channels/whatsapp/client.ts`.
-- [ ] Verify tokens never appear in logs (grep through Sentry + Axiom samples).
+- [ ] Verify tokens never appear in logs (grep through Vercel / Supabase / Axiom samples if Axiom is enabled).
 - [ ] Document the key-rotation procedure: re-encrypt all rows under a new `TOKEN_ENCRYPTION_KEY` (manual SQL script, run in maintenance window).
 
 ### EU residency verification
@@ -65,8 +65,6 @@
 - [ ] Supabase project: confirm region = Frankfurt (`eu-central-1`).
 - [ ] Vercel functions: confirm region = `fra1`.
 - [ ] Inngest: confirm processing region = EU.
-- [ ] Sentry: confirm EU data residency setting on.
-- [ ] PostHog: confirm EU instance.
 - [ ] OpenRouter: confirm prompt logging and product-use opt-ins remain disabled for production.
 - [ ] AI routing: default production requests to ZDR + denied provider data collection, then document that non-Enterprise OpenRouter plans do not guarantee EU-only inference.
 - [ ] Document any upstream AI providers actually used in production and their cross-border transfer implications in the privacy policy under "subprocessors".
@@ -75,11 +73,11 @@
 
 - [ ] Privacy policy reflects PT as data controller, Medium as processor.
 - [ ] DPA template ready for PT customers (not blocking MVP, but should exist).
-- [ ] Subprocessor list: Supabase, Vercel, OpenRouter, Inngest, Meta, Sentry, PostHog, plus whichever upstream AI providers OpenRouter uses in production.
+- [ ] Subprocessor list: Supabase, Vercel, OpenRouter, Inngest, Meta, plus whichever upstream AI providers OpenRouter uses in production.
 
 ### Cookie / consent
 
-- [ ] Confirm what we drop on first visit. PostHog EU is consent-friendly but still drops a session cookie — surface a banner if so.
+- [ ] Confirm what we drop on first visit. No third-party analytics cookies should exist in the current MVP.
 - [ ] No tracking cookies before consent on the marketing pages.
 
 ---

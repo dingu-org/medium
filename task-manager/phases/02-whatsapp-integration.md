@@ -23,7 +23,7 @@
   - [ ] Emit `message.received` Inngest event with `{ messageId, ptId, conversationId }`.
   - [ ] Return 200 immediately (target p95 <200 ms).
 - [ ] Force Node runtime (`export const runtime = 'nodejs'`); Edge runtime can't do `crypto` reliably at the time the doc was written.
-- [ ] Log every rejected signature to Sentry as a warning (sign of misconfiguration or attack).
+- [ ] Log every rejected signature as a structured warning (sign of misconfiguration or attack).
 
 ### Embedded Signup — `app/api/auth/meta-embedded/route.ts`
 

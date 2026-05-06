@@ -88,7 +88,7 @@
 - [ ] Every function uses Inngest's `step.run` for side effects so retries don't double-send.
 - [ ] Outbound send wrapped in `step.run('send-template', …)` etc.
 - [ ] DB writes inside steps are idempotent (use `external_id` / `appointment_id` checks).
-- [ ] Add a circuit-breaker for the AI client: if OpenRouter / upstream provider 5xx-rate exceeds X% in 5 min, pause inbound handling and Sentry-alert. (Stretch; can defer.)
+- [ ] Add a circuit-breaker for the AI client: if OpenRouter / upstream provider 5xx-rate exceeds X% in 5 min, pause inbound handling and emit a structured error log / operator-visible flag. (Stretch; can defer.)
 
 ---
 
@@ -98,7 +98,7 @@
 - [ ] Replaying the same `message.received` event yields no duplicate outbound (idempotent).
 - [ ] A booked appointment shows up in Inngest's scheduled-runs view at `starts_at - 24h`.
 - [ ] Cancelling that appointment removes the scheduled reminder run.
-- [ ] Failing one AI call retries; failing three fails the run cleanly with a Sentry record.
+- [ ] Failing one AI call retries; failing three fails the run cleanly with a structured error record.
 - [ ] `purgeExpiredMessages` deletes only messages older than the retention window in fixture data.
 
 ---

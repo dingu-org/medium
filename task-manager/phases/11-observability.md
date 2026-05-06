@@ -1,50 +1,46 @@
 # Phase 11 — Observability
 
-**Goal.** Errors land in Sentry with useful stacks, structured logs are filterable by `pt_id`, PostHog tracks the booking funnel + escalation rate, and a cost dashboard shows yesterday's AI + Meta spend.
+**Goal.** Runtime failures are visible in structured platform logs, logs are filterable by `pt_id`, internal funnel metrics are available without a third-party analytics tool, and a cost dashboard shows yesterday's AI + Meta spend.
 
 **Source.** Tech doc §2 (observability rows), §8 (cost math).
 
 **Effort.** 2–3 days dedicated, but ramp up incrementally as features ship.
 
-**Prerequisites.** Phase 0 (Sentry installed).
+**Prerequisites.** Phase 0 complete.
 
 ---
 
 ## Tasks
 
-### Sentry — refine
+### Runtime logs
 
-- [ ] Server-side instrumentation covering: webhook handler, Inngest functions, Server Actions, OpenRouter calls, Graph API calls.
-- [ ] Client-side instrumentation: error boundaries on each top-level route.
-- [ ] Source map upload verified — stack traces show original code, not minified.
-- [ ] Release tagging per Vercel deploy (auto via Sentry CLI in CI).
-- [ ] PII scrubbing rules: redact `phone`, `name`, `body` from event payloads before sending to Sentry.
-- [ ] Alert rules:
-  - Error rate > 1 % over 5 min → email.
-  - Webhook handler 95th percentile > 2 s → email.
-  - OpenRouter / upstream provider error rate > 5 % over 5 min → email.
+- [ ] Server-side instrumentation covering: webhook handler, Inngest functions, Server Actions, OpenRouter calls, and Graph API calls.
+- [ ] Error boundaries on each top-level route log enough context for debugging.
+- [ ] PII scrubbing rules: redact `phone`, `name`, `body` from structured log payloads.
+- [ ] Define a launch-period log review checklist for:
+  - error spikes
+  - webhook latency problems
+  - OpenRouter / upstream provider failures
 
 ### Structured logs
 
-- [ ] Pick: Axiom (preferred — structured + easy filtering) or Supabase logs.
+- [ ] Pick: Vercel logs + Supabase logs as the MVP baseline; add Axiom only if filtering becomes too painful.
 - [ ] Logger wrapper in `lib/log.ts`; emits JSON.
 - [ ] Standard log shape: `{ timestamp, level, trace_id, pt_id?, conversation_id?, event_name, message, ...attrs }`.
 - [ ] Inject `pt_id` automatically inside `lib/tenancy/` helpers.
 - [ ] PII redaction at the logger level (phone, name, message body).
 - [ ] Trace IDs generated at the request edge (webhook, Server Action) and propagated through Inngest steps.
 
-### PostHog
+### Internal metrics
 
-- [ ] PostHog EU project set up; browser SDK in PWA.
-- [ ] Server-side capture for events that don't originate in the browser (e.g., AI booking).
-- [ ] Identify the user as the PT on signup; treat patients as anonymous events keyed to a hashed phone.
-- [ ] Events to capture:
+- [ ] Derive funnel metrics from internal events / database rows rather than PostHog.
+- [ ] Events to capture internally:
   - `pt_signed_up`
   - `whatsapp_connected`
   - `template_approved`
   - `first_test_message_sent`
   - `first_real_message_received`
-  - `appointment_booked` (server-side; props: pt_id, model_used, turns_to_book)
+  - `appointment_booked` (props: pt_id, model_used, turns_to_book)
   - `appointment_confirmed`
   - `appointment_cancelled`
   - `conversation_escalated`
@@ -52,7 +48,7 @@
   - `pwa_installed`
   - `push_subscribed`
 - [ ] Funnel dashboard: signed_up → connected → first_message → first_booking.
-- [ ] Cohort: PTs who completed onboarding within 24 h.
+- [ ] Cohort view: PTs who completed onboarding within 24 h.
 
 ### Cost dashboards
 
@@ -66,30 +62,29 @@
 ### Booking funnel surfaces in app
 
 - [ ] PT dashboard widget: "This week — 12 messages, 5 bookings, 1 escalation".
-- [ ] Reduces dependence on PostHog for the PT's own view.
+- [ ] This is the primary operator-facing funnel surface for MVP.
 
 ### Performance budgets
 
-- [ ] Track first-contentful-paint, time-to-interactive, calendar-render-time in PostHog.
-- [ ] Alert if calendar-render-time > 2 s p95.
+- [ ] Track first-contentful-paint, time-to-interactive, and calendar-render-time in internal logs or a lightweight rollup table.
+- [ ] Document a manual threshold for launch review if calendar-render-time exceeds 2 s p95.
 
 ---
 
 ## Acceptance criteria
 
-- [ ] A thrown error in a Server Action lands in Sentry with a readable stack and no PII.
-- [ ] Filtering Axiom by `pt_id` shows only that PT's logs.
-- [ ] PostHog records `pt_signed_up` and `appointment_booked` with correct properties.
+- [ ] A thrown error in a Server Action is visible in platform logs with trace ID and no PII.
+- [ ] Filtering the chosen log sink by `pt_id` shows only that PT's logs.
+- [ ] Internal metrics capture `pt_signed_up` and `appointment_booked` with correct properties.
 - [ ] Funnel dashboard shows yesterday's signups → connections → bookings.
 - [ ] Cost dashboard shows yesterday's AI + Meta spend per PT.
-- [ ] Sentry alert rule fires on a synthetic error spike.
 - [ ] Trace IDs propagate from webhook through Inngest to outbound send (verified by searching one trace_id across Axiom).
 
 ---
 
 ## Notes
 
-- Don't go overboard on dashboards. Two are enough for MVP: error rate and cost. Build more once you can name a question they'd answer.
+- Don't go overboard on dashboards. Two are enough for MVP: funnel + cost. Build more once you can name a question they'd answer.
 - OpenRouter usage accounting returns token counts, cached-token details, and total request cost. Prefer that over hand-maintained price tables.
 - If the AI SDK provider does not expose all cost fields cleanly, persist the generation ID and reconcile via OpenRouter's generation metadata API.
 - The Meta cost model has changed multiple times; keep the calculator in `lib/billing/meta.ts` so it's easy to update.

@@ -53,9 +53,8 @@ Run on a fresh staging environment with a real WhatsApp number:
 - [ ] Inngest production app configured + signing key matches Vercel env.
 - [ ] Meta App Review approved for `whatsapp_business_messaging` and `whatsapp_business_management`.
 - [ ] Custom domain pointed to Vercel; HTTPS active; HSTS header on.
-- [ ] Sentry alerts configured (error rate, webhook latency, AI error rate).
+- [ ] Structured runtime logs visible in Vercel / Supabase and trace IDs survive the full webhook → Inngest → outbound path.
 - [ ] OpenRouter key is set in production, privacy settings are reviewed, and dashboard / Activity data matches sampled requests.
-- [ ] PostHog production project receiving events.
 - [ ] Backup: Supabase point-in-time recovery enabled.
 
 ### Public docs
@@ -82,13 +81,13 @@ Run on a fresh staging environment with a real WhatsApp number:
 - [ ] Walk them through signup live; let them connect their real number.
 - [ ] Send a test patient message yourself.
 - [ ] Confirm: AI responds, booking is created, calendar shows it, push delivered.
-- [ ] Stay on for 24 h to monitor: Sentry, logs, dashboards.
+- [ ] Stay on for 24 h to monitor: logs, dashboards, and manual operator checks.
 - [ ] Capture feedback verbatim; convert into a backlog of fixes / improvements.
 
 ### Post-launch support shape
 
 - [ ] Define an SLA for the first PT: respond within 4 h business hours, 24 h otherwise.
-- [ ] Pager / alert routing: Sentry email → personal phone.
+- [ ] Manual launch-week monitoring routine: check Vercel / Supabase logs and operator dashboards several times per day.
 - [ ] Runbook (one page) for the most likely issues:
   - Token revoked
   - Template rejected
@@ -109,7 +108,7 @@ The MVP ships when **all** of the following are true:
 - [ ] PT sees the appointment in the PWA in real time.
 - [ ] Reminder fires 24 h before the appointment.
 - [ ] Patient confirms via CONFIRM keyword; status updates.
-- [ ] No errors of severity warning-or-above in Sentry during the flow.
+- [ ] No warning-or-above failures appear in structured runtime logs during the flow.
 - [ ] Audit log shows complete trail of patient-data access.
 - [ ] Cost for the conversation is within the budget envelope (~€0.10–0.30).
 

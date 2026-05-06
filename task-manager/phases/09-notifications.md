@@ -30,7 +30,7 @@
 
 - [ ] `sendPush(ptId, payload)` — fan-out to all `push_subscriptions` for the PT.
 - [ ] On 410 Gone (subscription dead): delete the row.
-- [ ] On 4xx other than 410: Sentry-warn, leave the row (could be transient).
+- [ ] On 4xx other than 410: structured-warn, leave the row (could be transient).
 - [ ] Payload shape: `{ title, body, url, tag }`.
   - `tag` deduplicates ("appointment-12345-booked" prevents duplicate booking pushes).
 - [ ] Title + body templates per event type (i18n later).
@@ -73,4 +73,4 @@
 - iOS PWA Web Push works but only for installed PWAs. Test on a real device, not just the simulator.
 - VAPID keys must be base64url-encoded when sent to the browser. `web-push` provides helpers.
 - Don't include patient names in the push title if iOS lock-screen privacy is a concern — keep details inside the notification body, surfaced after unlock.
-- Track delivery rate in PostHog (Phase 11) — Web Push silently fails sometimes.
+- Track delivery rate in the internal Phase 11 dashboard — Web Push silently fails sometimes.

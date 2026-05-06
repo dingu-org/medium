@@ -34,15 +34,15 @@ The stack is optimized for the constraints stated across the canvas documents:
 | ORM | **Drizzle** | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies |
 | Auth (PTs) | **Supabase Auth** (email+password, Google OAuth) | Integrates with RLS through `auth.uid()` |
 | Background jobs & scheduling | **Inngest** | Delayed jobs (24h reminders), retries, event bus — matches the docs' event-driven principle; generous free tier |
-| AI | **OpenRouter + AI SDK**, with Claude defaults — Haiku 4.5 default, Sonnet 4.6 for harder turns | One model-agnostic API surface with strict privacy routing, provider fallbacks, and Claude prompt caching; room to swap providers later without changing app-facing abstractions |
+| AI | **OpenRouter + AI SDK**, currently pinned to `meta-llama/llama-3.3-70b-instruct:free` | One model-agnostic API surface with strict privacy routing and a zero-cost MVP guardrail; room to swap models later without changing app-facing abstractions |
 | Hosting | **Vercel** (Next.js) + **Supabase EU** (DB/auth/realtime) + **Inngest Cloud** (jobs) | No infrastructure to maintain; all have EU regions |
 | Webhook runtime | Next.js Route Handler on the **Node runtime** (not Edge) | Signature verification needs `crypto`; handler just verifies + enqueues and returns 200 |
 | Realtime (live calendar/chat) | **Supabase Realtime** (Postgres changefeeds) | No extra infrastructure; scopes naturally to RLS |
 | Push notifications | **Web Push** via `web-push` + VAPID keys | Works on an installed PWA; free |
 | Service worker / offline | **Serwist** (maintained next-pwa successor) | Offline read of cached data as required by `pt-admin-pwa-screens.md §Offline handling` |
-| Error monitoring | **Sentry** | Generous free tier for MVP traffic |
-| Logs | **Axiom** or Supabase logs | Free tier covers MVP |
-| Product analytics | **PostHog EU** | Track booking funnel, escalation rate (from `ai-conversation-behavior.md §Testing conversation quality`) |
+| Error monitoring | **Vercel + Supabase logs** for MVP | Free-tier limits on Sentry are already exhausted; structured platform logs are enough to get the first PT live |
+| Logs | **Vercel + Supabase logs**, Axiom optional later | Start simple; add a dedicated log platform only if filtering pain justifies it |
+| Product analytics | **Internal events + dashboards** for MVP | Avoid third-party analytics for now; derive booking funnel and escalation rate from app data |
 | Secrets | Vercel environment variables; WA access tokens encrypted at rest via **pgcrypto** | Token compromise blast radius + GDPR |
 
 **Estimated fixed monthly cost at MVP (1–3 PTs):**
@@ -50,8 +50,8 @@ The stack is optimized for the constraints stated across the canvas documents:
 - Supabase Pro ~€25
 - Vercel Hobby €0
 - Inngest free tier €0
-- OpenRouter usage (Claude defaults) €15–45 (scales with PTs)
-- Sentry / Axiom / PostHog free tiers €0
+- OpenRouter usage ~€0 while the current free-model guardrail remains viable
+- No dedicated Sentry/PostHog spend in the current MVP plan
 - **Total: ~€40–70/month**, leaving headroom within the €100 budget for Meta conversation fees.
 
 ---
@@ -188,28 +188,25 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 **Model selection policy:**
 
-- **Default: Claude Haiku 4.5 via OpenRouter** for roughly 90% of turns — greetings, availability queries, simple bookings, reminder responses.
-- **Escalate to Claude Sonnet 4.6 via OpenRouter** when the conversation state shows ambiguity: two clarifying attempts already made, user frustration signals, complex reschedule with multiple constraints, or any turn after a `HELP` keyword.
-- **Never call Opus for runtime turns** — reserved for offline tasks such as evaluation or prompt tuning.
+- The current MVP guardrail routes every runtime turn to `meta-llama/llama-3.3-70b-instruct:free` via OpenRouter.
 - Keep routing inside the OpenRouter layer so the app can add or swap providers later without rewriting the conversation engine.
 - Default production routing uses strict privacy controls: ZDR on, provider data collection denied, and parameter-safe routing.
-- Do not force a manual provider order by default; OpenRouter's sticky routing improves Claude cache hits when prompt caching is active. Pin or allowlist providers only from `lib/ai/` when a flow truly needs it.
+- Do not silently add alternate or paid models. If the free model proves inadequate, make that a documented planning decision first.
 
 **Structured interaction over free-form parsing:**
 
 - Availability, booking, and state changes happen through **tool use** with well-typed schemas defined in `lib/ai/tools.ts`. The model never writes JSON that the app then parses from prose.
 - Tool results are returned to the model so it can render a natural confirmation, but the authoritative state change already happened in the transactional tool call.
 
-**Prompt caching:**
+**Prompt structure:**
 
-- Each PT's system prompt (AI name, greeting, escalation keyword, PT-specific facts) is structured so Claude prompt caching can be enabled through OpenRouter — cache-write on the first turn of a conversation, cache-read on every subsequent turn.
-- OpenRouter's sticky routing keeps cached multi-turn conversations on the same provider endpoint when caching is active, unless we explicitly override provider routing.
-- Tool definitions are included in the cached section since they are static across turns.
+- Each PT's system prompt (AI name, greeting, escalation keyword, PT-specific facts) should stay factored and stable even though the current free-model guardrail does not rely on prompt caching.
+- Tool definitions stay in the static prompt section so a caching-capable paid model can be introduced later without a prompt rewrite.
 
 **Cost math per PT per month:**
 
-- ~100 conversations × ~4 turns each × ~(1.5k cached + 500 uncached) tokens ≈ **€5–15/PT/month** on Haiku, with occasional Sonnet turns raising the average ~20%.
-- Three PTs on MVP → ~€15–45/month AI spend, fitting the €100 total budget once fixed costs are added.
+- Runtime AI spend is effectively **~€0** while the free-model guardrail remains available.
+- Still capture token and generation metadata from day one so the cost baseline is ready if a paid model or fallback is introduced later.
 
 ---
 
@@ -269,7 +266,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 - Automated 24h reminder with CONFIRM/CANCEL/RESCHEDULE response handling.
 - Web Push notifications for bookings, cancellations, reschedules, and escalation requests.
 - GDPR baseline: EU region, token encryption, retention job, per-patient deletion, audit log.
-- Basic observability: Sentry + logs + a couple of dashboards.
+- Basic observability: structured logs + a couple of internal dashboards.
 
 **Deferred, with the architectural seam that enables each:**
 
@@ -307,7 +304,7 @@ Before any product code is shipped:
 
 3. **Vercel**
    - Create the project, link the repo, set the EU deployment region for serverless functions (Frankfurt).
-   - Set env vars: Meta `app_id`, `app_secret`, webhook verify token, Supabase keys, `OPENROUTER_API_KEY`, Inngest keys, Sentry DSN, `TOKEN_ENCRYPTION_KEY`.
+   - Set env vars: Meta `app_id`, `app_secret`, webhook verify token, Supabase keys, `OPENROUTER_API_KEY`, Inngest keys, `TOKEN_ENCRYPTION_KEY`.
 
 4. **Inngest**
    - Create an app; set the signing key.
@@ -315,12 +312,12 @@ Before any product code is shipped:
    - Define the core functions: `handleInboundMessage`, `sendReminder`, `bootstrapWaConnection`, `purgeExpiredMessages`, `offerResumeAfterPtInactivity`.
 
 5. **OpenRouter**
-   - Create an API key; confirm `anthropic/claude-haiku-4.5` and `anthropic/claude-sonnet-4.6` are available.
+   - Create an API key; pin the current runtime guardrail to `meta-llama/llama-3.3-70b-instruct:free`.
    - Leave prompt logging and product-use opt-ins disabled; rely on request-level privacy controls in app code.
 
 6. **Observability and analytics**
-   - Sentry project for the Next.js app with source maps.
-   - PostHog EU project; expose the browser key for the PWA.
+   - No dedicated Sentry or PostHog setup is required for the current MVP because those free-tier limits are already exhausted.
+   - Use structured Vercel / Supabase logs and internal event-derived dashboards instead.
 
 7. **Local dev loop**
    - `.env.local` mirrors production env var names with dev values.
