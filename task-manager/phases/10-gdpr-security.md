@@ -67,14 +67,15 @@
 - [ ] Inngest: confirm processing region = EU.
 - [ ] Sentry: confirm EU data residency setting on.
 - [ ] PostHog: confirm EU instance.
-- [ ] Vercel AI Gateway: document its zero-data-retention posture and request handling in the privacy policy.
-- [ ] AI routing: lock `providerOptions.gateway.only` to the approved upstream providers for production, then document any cross-border transfer implications for those providers in the privacy policy under "subprocessors".
+- [ ] OpenRouter: confirm prompt logging and product-use opt-ins remain disabled for production.
+- [ ] AI routing: default production requests to ZDR + denied provider data collection, then document that non-Enterprise OpenRouter plans do not guarantee EU-only inference.
+- [ ] Document any upstream AI providers actually used in production and their cross-border transfer implications in the privacy policy under "subprocessors".
 
 ### Controller / processor split
 
 - [ ] Privacy policy reflects PT as data controller, Medium as processor.
 - [ ] DPA template ready for PT customers (not blocking MVP, but should exist).
-- [ ] Subprocessor list: Supabase, Vercel, Vercel AI Gateway, Inngest, Meta, Sentry, PostHog, plus whichever upstream AI providers are enabled in production.
+- [ ] Subprocessor list: Supabase, Vercel, OpenRouter, Inngest, Meta, Sentry, PostHog, plus whichever upstream AI providers OpenRouter uses in production.
 
 ### Cookie / consent
 
@@ -89,7 +90,7 @@
 - [ ] Erasing also cancels any scheduled reminder Inngest runs for that patient.
 - [ ] Per-patient export returns expected JSON shape; matches what a DSAR (data subject access request) would expect.
 - [ ] Audit log shows entries for every read, write, and erasure of patient data.
-- [ ] All four key processing regions confirmed EU.
+- [ ] EU-hosted system-of-record services are confirmed, and any non-EU AI processing is documented accurately in privacy/subprocessor materials.
 - [ ] Privacy policy + ToS drafts exist (final version ships with Phase 12).
 - [ ] Token encryption round-trip works under a new key (rotation procedure tested on a fixture).
 

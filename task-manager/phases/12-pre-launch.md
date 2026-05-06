@@ -54,7 +54,7 @@ Run on a fresh staging environment with a real WhatsApp number:
 - [ ] Meta App Review approved for `whatsapp_business_messaging` and `whatsapp_business_management`.
 - [ ] Custom domain pointed to Vercel; HTTPS active; HSTS header on.
 - [ ] Sentry alerts configured (error rate, webhook latency, AI error rate).
-- [ ] AI Gateway credits, auto top-up, and spend monitoring confirmed in the Vercel dashboard.
+- [ ] OpenRouter key is set in production, privacy settings are reviewed, and dashboard / Activity data matches sampled requests.
 - [ ] PostHog production project receiving events.
 - [ ] Backup: Supabase point-in-time recovery enabled.
 
@@ -93,7 +93,7 @@ Run on a fresh staging environment with a real WhatsApp number:
   - Token revoked
   - Template rejected
   - Inngest function failing
-  - AI Gateway outage / upstream provider rate-limit
+  - OpenRouter outage / upstream provider rate-limit
   - Webhook signature failures
   - Realtime subscription dropping
 

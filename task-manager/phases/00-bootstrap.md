@@ -32,7 +32,7 @@
 - [x] **Supabase** — new project in Frankfurt (EU). Note `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
 - [x] **Vercel** — create project, link GitHub repo, set serverless region to Frankfurt (`fra1`).
 - [ ] **Inngest** — create app; note signing key + event key.
-- [ ] **Vercel AI Gateway** — create `AI_GATEWAY_API_KEY`; confirm `anthropic/claude-haiku-4.5` + `anthropic/claude-sonnet-4.6` access; configure credits / auto top-up.
+- [ ] **OpenRouter** — create `OPENROUTER_API_KEY`; confirm `anthropic/claude-haiku-4.5` + `anthropic/claude-sonnet-4.6` access; keep prompt logging and product-use opt-ins disabled.
 - [ ] **Sentry** — new project for the Next.js app; note DSN.
 - [ ] **PostHog EU** — new project; note browser key.
 

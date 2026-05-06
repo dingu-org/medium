@@ -14,7 +14,7 @@
 
 ### Sentry — refine
 
-- [ ] Server-side instrumentation covering: webhook handler, Inngest functions, Server Actions, AI Gateway calls, Graph API calls.
+- [ ] Server-side instrumentation covering: webhook handler, Inngest functions, Server Actions, OpenRouter calls, Graph API calls.
 - [ ] Client-side instrumentation: error boundaries on each top-level route.
 - [ ] Source map upload verified — stack traces show original code, not minified.
 - [ ] Release tagging per Vercel deploy (auto via Sentry CLI in CI).
@@ -22,7 +22,7 @@
 - [ ] Alert rules:
   - Error rate > 1 % over 5 min → email.
   - Webhook handler 95th percentile > 2 s → email.
-  - AI Gateway / upstream provider error rate > 5 % over 5 min → email.
+  - OpenRouter / upstream provider error rate > 5 % over 5 min → email.
 
 ### Structured logs
 
@@ -57,11 +57,11 @@
 ### Cost dashboards
 
 - [ ] Daily aggregation job (Inngest cron):
-  - Sum `messages.tokens_in` × AI Gateway model price per day per PT.
+  - Use OpenRouter usage accounting or generation metadata as the source of truth for per-turn AI cost and cached-token usage.
   - Estimate Meta conversation cost from `conversations` (each new patient conversation in 24 h window = one paid conversation).
 - [ ] Insert into a `cost_daily` rollup table.
 - [ ] Simple admin-only dashboard (server-rendered): yesterday's spend, monthly burn.
-- [ ] AI Gateway credits / spend controls confirmed in the Vercel dashboard (Phase 0 baseline).
+- [ ] OpenRouter dashboard / Activity view validated against sampled requests so local spend reporting can be spot-checked.
 
 ### Booking funnel surfaces in app
 
@@ -90,6 +90,7 @@
 ## Notes
 
 - Don't go overboard on dashboards. Two are enough for MVP: error rate and cost. Build more once you can name a question they'd answer.
-- The AI SDK response `usage` plus the stored `model` / `provider` fields is enough for per-turn attribution. Keep a local rollup so per-PT cost analysis does not depend on the Vercel dashboard alone.
+- OpenRouter usage accounting returns token counts, cached-token details, and total request cost. Prefer that over hand-maintained price tables.
+- If the AI SDK provider does not expose all cost fields cleanly, persist the generation ID and reconcile via OpenRouter's generation metadata API.
 - The Meta cost model has changed multiple times; keep the calculator in `lib/billing/meta.ts` so it's easy to update.
 - Trace IDs are easy to forget when an Inngest run handles a non-trace-tagged event. Add a default trace ID = run ID when none is provided.

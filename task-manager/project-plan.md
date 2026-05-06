@@ -26,7 +26,7 @@ Work the phases in order. Acceptance criteria for each phase must be green befor
 | 0 | [Bootstrap](phases/00-bootstrap.md) | Next.js skeleton + accounts + first preview deploy | 1–2 days | — |
 | 1 | [Foundation](phases/01-foundation.md) | Schema, RLS, tenancy helpers, PT auth | 4–5 days | 0 |
 | 2 | [WhatsApp integration](phases/02-whatsapp-integration.md) | Embedded Signup, webhook, channel adapter | 5–7 days | 1 |
-| 3 | [AI conversation engine](phases/03-ai-conversation-engine.md) | Gateway-routed Claude turns with tools, prompt caching, Haiku→Sonnet escalation | 4–5 days | 1 (can overlap with 2) |
+| 3 | [AI conversation engine](phases/03-ai-conversation-engine.md) | OpenRouter-routed Claude turns with tools, prompt caching, Haiku→Sonnet escalation | 4–5 days | 1 (can overlap with 2) |
 | 4 | [Appointments & availability](phases/04-appointments-availability.md) | Availability resolver, transactional booking, state machine, domain events | 3–4 days | 1 (can overlap with 2/3) |
 | 5 | [Background jobs](phases/05-background-jobs.md) | Inngest functions wired to events; inbound message → AI → outbound | 3–4 days | 2, 3, 4 |
 | 6 | [Reminders system](phases/06-reminders-system.md) | 24 h reminder, template lifecycle, CONFIRM/CANCEL/RESCHEDULE | 2–3 days | 5 |
@@ -85,7 +85,8 @@ This is the goal of [Phase 12](phases/12-pre-launch.md).
 | Embedded Signup failure modes (rejection, duplicate number, abandoned) | Per-state UI per `medium-canvas/documents/whatsapp-cloud-api-architecture.md §9`. | 2 |
 | Token revocation in production | Channel adapter catches Graph API auth errors, flags PT dashboard "Reconnect WhatsApp". | 2, 7 |
 | Template rejected by Meta | Fallback variant + auto-resubmit; surface status in dashboard. | 6 |
-| AI cost overruns | Vercel AI Gateway spend monitoring / credits controls; default model is Haiku; cache static prompt sections. | 3, 11 |
+| AI cost overruns | OpenRouter usage accounting and dashboard checks; default model is Haiku; cache static prompt sections. | 3, 11 |
+| OpenRouter may route AI inference outside the EU on non-Enterprise plans | Accept for MVP with minimized prompt content, ZDR/data-collection-deny defaults, and explicit privacy/subprocessor disclosures. | 3, 10 |
 | GDPR slip (cross-tenant leak) | RLS as DB-layer backstop + tenancy helper as app-layer guardrail; both required. | 1, 10 |
 
 ---

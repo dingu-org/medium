@@ -88,7 +88,7 @@
 - [ ] Every function uses Inngest's `step.run` for side effects so retries don't double-send.
 - [ ] Outbound send wrapped in `step.run('send-template', …)` etc.
 - [ ] DB writes inside steps are idempotent (use `external_id` / `appointment_id` checks).
-- [ ] Add a circuit-breaker for the AI client: if AI Gateway / upstream provider 5xx-rate exceeds X% in 5 min, pause inbound handling and Sentry-alert. (Stretch; can defer.)
+- [ ] Add a circuit-breaker for the AI client: if OpenRouter / upstream provider 5xx-rate exceeds X% in 5 min, pause inbound handling and Sentry-alert. (Stretch; can defer.)
 
 ---
 
@@ -106,5 +106,5 @@
 ## Notes
 
 - Inngest event names should mirror domain event names — easier to reason about. `appointment.booked` is both a DB row in `events` and an Inngest event.
-- Don't call the AI SDK / gateway inside `step.run` and forget to `await` — wrap correctly so retries are coherent.
+- Don't call the AI SDK / OpenRouter provider inside `step.run` and forget to `await` — wrap correctly so retries are coherent.
 - The reminder cancellation on reschedule needs the Inngest run ID; store it in `reminder_jobs.inngest_run_id` when the reminder is scheduled.

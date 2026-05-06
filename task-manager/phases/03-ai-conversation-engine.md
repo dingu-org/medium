@@ -1,6 +1,6 @@
 # Phase 3 — AI conversation engine
 
-**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through Vercel AI Gateway, picks Claude Haiku 4.5 or Sonnet 4.6 by policy, caches static prompt sections, and emits the model's chosen tool calls to the appointments layer.
+**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through OpenRouter, picks Claude Haiku 4.5 or Sonnet 4.6 by policy, caches static prompt sections, and emits the model's chosen tool calls to the appointments layer.
 
 **Source.** Tech doc §3 (module boundaries), §8 (AI orchestration); product spec `docs/medium-canvas/documents/ai-conversation-behavior.md`.
 
@@ -14,10 +14,11 @@
 
 ### SDK + client
 
-- [ ] Install `ai`.
-- [ ] `lib/ai/client.ts` — shared AI SDK / gateway wrapper; reads `AI_GATEWAY_API_KEY` and keeps provider routing options in one place.
+- [ ] Install `ai` and `@openrouter/ai-sdk-provider`.
+- [ ] `lib/ai/client.ts` — shared AI SDK / OpenRouter wrapper; reads `OPENROUTER_API_KEY` and keeps provider routing options in one place.
 - [ ] `lib/ai/models.ts` — model IDs as constants: `'anthropic/claude-haiku-4.5'`, `'anthropic/claude-sonnet-4.6'`.
-- [ ] Decide and codify the initial provider allowlist for production routing via `providerOptions.gateway.only` once privacy review is complete.
+- [ ] Codify the default production routing policy in one place: ZDR on, provider data collection denied, and parameter-safe routing.
+- [ ] Do not set a manual provider order by default; isolate any future provider pinning or allowlists behind `lib/ai/`.
 
 ### Tool schemas — `lib/ai/tools.ts`
 
@@ -47,7 +48,8 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
   - Tool-use guidelines.
 - [ ] Per-PT section (renders into the system prompt):
   - PT name, AI name, greeting, escalation keyword, timezone, language preference, retention window.
-- [ ] Keep static + per-PT sections factored so Claude prompt caching can be enabled through the gateway — cache writes on first turn, cache reads on subsequent turns.
+- [ ] Keep static + per-PT sections factored so Claude prompt caching can be enabled through OpenRouter — cache writes on first turn, cache reads on subsequent turns.
+- [ ] Preserve stable opening system/developer text so OpenRouter sticky routing can maximize cache hits across multi-turn conversations.
 - [ ] Tool definitions live in the cached section (they're static).
 
 ### Conversation engine — `lib/conversation/engine.ts`
@@ -55,7 +57,7 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 - [ ] `runTurn({ ptId, conversationId, inboundMessage }) -> { outboundMessage }`.
 - [ ] Loads conversation history (last N messages — windowed, not unbounded).
 - [ ] Picks model per the escalation policy (see below).
-- [ ] Calls AI SDK `generateText` with `system`, `tools`, `messages`, and a bounded multi-step loop (`stopWhen: stepCountIs(5)` or equivalent).
+- [ ] Calls AI SDK `generateText` with an OpenRouter model, `system`, `tools`, `messages`, and a bounded multi-step loop (`stopWhen: stepCountIs(5)` or equivalent).
 - [ ] If a step includes tool calls, dispatches them via `lib/ai/dispatcher`, feeds the tool results back into the next step, and stops cleanly after the configured cap.
 - [ ] Persists each turn into `messages` with `tokens_in`, `tokens_out`, `model`, `provider`, and `cached_tokens`.
 - [ ] Returns the final assistant text content.
@@ -97,5 +99,6 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 - Don't try to be clever with the escalation heuristics — the doc's bar is "obvious cases". Sonnet is cheap relative to Haiku at MVP scale.
 - AI SDK tool calls return *structured* results — never ask the model to emit JSON in prose. Tool result → next step → natural-language confirmation.
 - Keep provider-specific details inside `lib/ai/`; the rest of the app should only know about the channel-agnostic engine and model IDs.
+- OpenRouter privacy defaults are part of the contract, not a tuning nicety. If a later feature wants looser routing, make that an explicit, reviewed exception.
 - Cache write is a one-time per-conversation cost; subsequent turns hit the read price (much cheaper). Confirm with token counts in the first week.
 - Keep the message window small (last ~10 turns) to control input tokens; the cached system prompt has the persona, not the whole history.

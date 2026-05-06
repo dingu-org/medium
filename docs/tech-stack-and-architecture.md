@@ -16,7 +16,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 - **Event-driven** — domain events (`appointment.booked`, `reminder.sent`, `conversation.escalated`) are first-class so future features (waitlist, analytics, multi-location) subscribe without refactors.
 - **WhatsApp Cloud API direct** (not a BSP). Decided in `medium-canvas/blobs/decision-proceed-with-mvp/`.
 - **Meta webhook must respond within 20 seconds** → all real work is asynchronous.
-- **GDPR, EU residency** — patient data is healthcare-adjacent. Data lives in the EU, tokens and sensitive columns are encrypted at rest.
+- **GDPR, EU residency** — patient data is healthcare-adjacent. Primary app data lives in the EU, tokens and sensitive columns are encrypted at rest, and any non-EU AI processing is explicitly disclosed.
 - **PWA, not native** — installable, offline read of cached calendar, web push notifications.
 - **Human escalation** is mandatory — WhatsApp terms require it, and PT trust depends on it.
 
@@ -34,7 +34,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 | ORM | **Drizzle** | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies |
 | Auth (PTs) | **Supabase Auth** (email+password, Google OAuth) | Integrates with RLS through `auth.uid()` |
 | Background jobs & scheduling | **Inngest** | Delayed jobs (24h reminders), retries, event bus — matches the docs' event-driven principle; generous free tier |
-| AI | **Vercel AI Gateway + AI SDK**, with Claude defaults — Haiku 4.5 default, Sonnet 4.6 for harder turns | One key and one API surface with room to add providers later; gateway routing/fallbacks, spend monitoring, and Claude prompt caching still fit the per-PT cost target |
+| AI | **OpenRouter + AI SDK**, with Claude defaults — Haiku 4.5 default, Sonnet 4.6 for harder turns | One model-agnostic API surface with strict privacy routing, provider fallbacks, and Claude prompt caching; room to swap providers later without changing app-facing abstractions |
 | Hosting | **Vercel** (Next.js) + **Supabase EU** (DB/auth/realtime) + **Inngest Cloud** (jobs) | No infrastructure to maintain; all have EU regions |
 | Webhook runtime | Next.js Route Handler on the **Node runtime** (not Edge) | Signature verification needs `crypto`; handler just verifies + enqueues and returns 200 |
 | Realtime (live calendar/chat) | **Supabase Realtime** (Postgres changefeeds) | No extra infrastructure; scopes naturally to RLS |
@@ -50,7 +50,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 - Supabase Pro ~€25
 - Vercel Hobby €0
 - Inngest free tier €0
-- Vercel AI Gateway usage (Claude defaults) €15–45 (scales with PTs)
+- OpenRouter usage (Claude defaults) €15–45 (scales with PTs)
 - Sentry / Axiom / PostHog free tiers €0
 - **Total: ~€40–70/month**, leaving headroom within the €100 budget for Meta conversation fees.
 
@@ -82,7 +82,7 @@ lib/
   channels/
     whatsapp/             — Graph API client, template submission, 24h-window tracking
     instagram/            — (V2)
-  ai/                     — AI Gateway client, system prompts, tool schemas (get_availability,
+  ai/                     — OpenRouter client, system prompts, tool schemas (get_availability,
                             book_appointment, reschedule_appointment, cancel_appointment,
                             escalate_to_human)
   appointments/           — availability resolver, booking, reschedule, cancel, state machine
@@ -127,7 +127,7 @@ Every query through `lib/tenancy/` either uses the authenticated PT's session (R
 
 1. **Meta → `POST /api/webhooks/whatsapp`.** Handler verifies the Meta signature against the shared secret, inserts the raw payload into `messages` with `external_id` for idempotency, emits an `message.received` event to Inngest, and returns 200 in under a second.
 2. **Inngest function `handleInboundMessage`** loads PT context by `phone_number_id` via `whatsapp_connections`, upserts the `patients` row, opens or reuses the `conversations` row, updates `last_inbound_at`, and calls the conversation engine.
-3. **Conversation engine** runs an AI SDK turn through Vercel AI Gateway with tools: `get_availability`, `book_appointment`, `reschedule_appointment`, `cancel_appointment`, `escalate_to_human`. Tool calls invoke `lib/appointments` and `lib/tenancy` directly (in-process, transactional).
+3. **Conversation engine** runs an AI SDK turn through OpenRouter with tools: `get_availability`, `book_appointment`, `reschedule_appointment`, `cancel_appointment`, `escalate_to_human`. Tool calls invoke `lib/appointments` and `lib/tenancy` directly (in-process, transactional).
 4. **`book_appointment` tool** writes the `appointments` row, emits an `appointment.booked` event, returns a structured confirmation to the AI, which renders the final patient-facing message.
 5. **Event subscribers react to `appointment.booked`:**
    - `lib/channels/whatsapp` sends the confirmation back through the Graph API.
@@ -188,10 +188,12 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 **Model selection policy:**
 
-- **Default: Claude Haiku 4.5 via Vercel AI Gateway** for roughly 90% of turns — greetings, availability queries, simple bookings, reminder responses.
-- **Escalate to Claude Sonnet 4.6 via Vercel AI Gateway** when the conversation state shows ambiguity: two clarifying attempts already made, user frustration signals, complex reschedule with multiple constraints, or any turn after a `HELP` keyword.
+- **Default: Claude Haiku 4.5 via OpenRouter** for roughly 90% of turns — greetings, availability queries, simple bookings, reminder responses.
+- **Escalate to Claude Sonnet 4.6 via OpenRouter** when the conversation state shows ambiguity: two clarifying attempts already made, user frustration signals, complex reschedule with multiple constraints, or any turn after a `HELP` keyword.
 - **Never call Opus for runtime turns** — reserved for offline tasks such as evaluation or prompt tuning.
-- Keep routing inside the gateway layer so the app can add or swap providers later without rewriting the conversation engine. Once production privacy review is done, lock the allowed upstream providers with `providerOptions.gateway.only`.
+- Keep routing inside the OpenRouter layer so the app can add or swap providers later without rewriting the conversation engine.
+- Default production routing uses strict privacy controls: ZDR on, provider data collection denied, and parameter-safe routing.
+- Do not force a manual provider order by default; OpenRouter's sticky routing improves Claude cache hits when prompt caching is active. Pin or allowlist providers only from `lib/ai/` when a flow truly needs it.
 
 **Structured interaction over free-form parsing:**
 
@@ -200,7 +202,8 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 **Prompt caching:**
 
-- Each PT's system prompt (AI name, greeting, escalation keyword, PT-specific facts) is structured so Claude prompt caching can be enabled through Vercel AI Gateway — cache-write on the first turn of a conversation, cache-read on every subsequent turn.
+- Each PT's system prompt (AI name, greeting, escalation keyword, PT-specific facts) is structured so Claude prompt caching can be enabled through OpenRouter — cache-write on the first turn of a conversation, cache-read on every subsequent turn.
+- OpenRouter's sticky routing keeps cached multi-turn conversations on the same provider endpoint when caching is active, unless we explicitly override provider routing.
 - Tool definitions are included in the cached section since they are static across turns.
 
 **Cost math per PT per month:**
@@ -222,8 +225,9 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 ## 10. GDPR
 
-- **EU residency:** Supabase project in Frankfurt (or another EU region). Vercel defaults to edge distribution but origin functions run in Frankfurt. Inngest supports EU processing.
+- **EU residency:** Supabase project in Frankfurt (or another EU region). Vercel defaults to edge distribution but origin functions run in Frankfurt. Inngest supports EU processing. OpenRouter is accepted for MVP without guaranteed EU-only inference on the current plan.
 - **Encryption at rest:** access tokens via pgcrypto; sensitive patient columns via pgcrypto or Supabase Vault. Transport encryption via TLS (automatic).
+- **AI inference and disclosures:** OpenRouter does not retain prompt/response content unless logging or product-use opt-ins are enabled, but it does retain request metadata. Production requests default to ZDR + denied provider data collection, and privacy docs explicitly disclose that AI inference may involve cross-border processing.
 - **Retention:** daily Inngest job purges `messages` older than the PT's configured retention window (default 90 days). Aggregate anonymized metrics are kept indefinitely.
 - **Right to erasure:** per-patient cascade delete surfaced in the PWA patient detail view. Deleting a patient removes their patient row, their conversations, their messages, and their appointments (completed and future).
 - **Data export:** a Server Action generates a JSON bundle of a patient's data or a full PT export on request.
@@ -303,16 +307,16 @@ Before any product code is shipped:
 
 3. **Vercel**
    - Create the project, link the repo, set the EU deployment region for serverless functions (Frankfurt).
-   - Set env vars: Meta `app_id`, `app_secret`, webhook verify token, Supabase keys, `AI_GATEWAY_API_KEY`, Inngest keys, Sentry DSN, `TOKEN_ENCRYPTION_KEY`.
+   - Set env vars: Meta `app_id`, `app_secret`, webhook verify token, Supabase keys, `OPENROUTER_API_KEY`, Inngest keys, Sentry DSN, `TOKEN_ENCRYPTION_KEY`.
 
 4. **Inngest**
    - Create an app; set the signing key.
    - Configure the Inngest endpoint at `/api/inngest`.
    - Define the core functions: `handleInboundMessage`, `sendReminder`, `bootstrapWaConnection`, `purgeExpiredMessages`, `offerResumeAfterPtInactivity`.
 
-5. **Vercel AI Gateway**
-   - Create an AI Gateway API key; confirm `anthropic/claude-haiku-4.5` and `anthropic/claude-sonnet-4.6` are available.
-   - Configure credits / auto top-up and use the AI Gateway dashboard to monitor spend.
+5. **OpenRouter**
+   - Create an API key; confirm `anthropic/claude-haiku-4.5` and `anthropic/claude-sonnet-4.6` are available.
+   - Leave prompt logging and product-use opt-ins disabled; rely on request-level privacy controls in app code.
 
 6. **Observability and analytics**
    - Sentry project for the Next.js app with source maps.

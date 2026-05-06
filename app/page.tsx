@@ -19,7 +19,7 @@ const wiredItems = [
 
 const manualBlockers = [
   'Meta business app, app review, and system-user token',
-  'Supabase, Vercel AI Gateway, Inngest, Sentry, and PostHog setup',
+  'Supabase, OpenRouter, Inngest, Sentry, and PostHog setup',
   'Real environment values for local and hosted deploys',
 ];
 
