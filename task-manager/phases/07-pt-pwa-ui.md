@@ -23,7 +23,7 @@
 
 - [ ] Default view: current week, mobile vertical scroll.
 - [ ] Toggle: month view (compact agenda).
-- [ ] FullCalendar integration; lazy-load the calendar bundle on this route only (per tech doc §9 perf budget). If FullCalendar bundle is too heavy, fall back to a custom layout with date-fns.
+- [ ] Custom calendar built from `react-day-picker` (month) + a CSS grid week view, both driven by `date-fns`. Reserve FullCalendar only for a specific feature later that is too painful to build (e.g. drag-to-reschedule with recurring events).
 - [ ] Tap an appointment → bottom sheet with detail.
 - [ ] Realtime subscription on `appointments` filtered to current PT; calendar updates without refresh.
 - [ ] Show reminder status badge per appointment ("Reminder pending" / "Reminder sent" / "Confirmed").
@@ -83,7 +83,7 @@
 ### Performance
 
 - [ ] First contentful paint ≤ 1.5 s on simulated 3G; first interactive ≤ 3 s (per tech doc §9).
-- [ ] Calendar route lazy-loads FullCalendar.
+- [ ] Calendar route ships its own code-split chunk; no heavy third-party calendar bundle.
 - [ ] Use Server Components by default; Client Components only where interaction demands.
 
 ---

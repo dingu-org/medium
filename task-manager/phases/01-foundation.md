@@ -57,6 +57,16 @@
 - [ ] `withAuditLog(action, target, fn)` — wraps a query, writes to `audit_log` after success, includes actor + target id.
 - [ ] Unit tests covering: helper refuses without ptId, helper writes audit log on success, helper does not write on thrown error.
 
+### Tests (Vitest)
+
+- [ ] Install `vitest`, `@vitest/coverage-v8`, `vite-tsconfig-paths`.
+- [ ] Add `pnpm test` (unit) and `pnpm test:integration` (RLS / DB) scripts.
+- [ ] Wire `vitest.config.ts` to resolve `@/*` and load `.env.test`.
+- [ ] Local DB harness via `supabase start`; integration suite applies Drizzle migrations before running.
+- [ ] RLS isolation matrix: for every tenant-scoped table, assert PT A cannot SELECT / INSERT / UPDATE / DELETE PT B's rows. Generate the cases from the schema list so a new table without coverage fails the suite.
+- [ ] Tenancy helper unit tests (mirrors the bullet above): `getServiceClient()` throws without ptId; `withAuditLog()` writes on success, not on error.
+- [ ] CI assertion: introspect `pg_class.relrowsecurity` to confirm RLS is enabled on every `pt_id`-bearing table.
+
 ### Auth (PT)
 
 - [ ] Configure Supabase Auth providers: email + password, Google OAuth.
@@ -81,6 +91,8 @@
 - [ ] `withAuditLog` writes one `audit_log` row per call.
 - [ ] A new email signs up, a `pts` row is created, the user lands on `/calendar` (empty), and Sign Out works.
 - [ ] Lighthouse mobile pass (no PWA features yet, just basic perf + a11y) ≥ 90.
+- [ ] `pnpm test:integration` passes against a local Supabase stack with the RLS matrix.
+- [ ] CI introspection asserts RLS is enabled on every `pt_id`-bearing table.
 
 ---
 

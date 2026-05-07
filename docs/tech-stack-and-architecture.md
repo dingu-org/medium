@@ -29,7 +29,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 | Language | **TypeScript** end-to-end | One language across PWA, backend, and jobs; best AI SDK surface for a solo dev |
 | App framework | **Next.js 15 (App Router)** | PWA + API routes (webhooks) + Server Actions in one repo; first-class PWA story |
 | UI | **React + Tailwind + shadcn/ui** | Fast to assemble the mobile-first screens from `pt-admin-pwa-screens.md` |
-| Calendar component | **FullCalendar** (or custom with `date-fns` if the bundle is too heavy) | Week and month views, drag-to-reschedule later |
+| Calendar component | **Custom** (`react-day-picker` for month + a CSS grid week view, both driven by `date-fns`) | Keeps the calendar route inside the ≤3 s 3G first-load budget; FullCalendar is reserved for a specific feature that is too painful to build (e.g. drag-to-reschedule with recurring events) |
 | Database | **Postgres on Supabase (EU region)** | Row-Level Security enforces tenant isolation at the DB layer; realtime + auth + storage included |
 | ORM | **Drizzle** | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies |
 | Auth (PTs) | **Supabase Auth** (email+password, Google OAuth) | Integrates with RLS through `auth.uid()` |
@@ -216,7 +216,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 - **Offline read:** Serwist service worker caches the app shell, the latest calendar, the latest messages per open conversation, and PT settings. Writes while offline are queued in IndexedDB and replayed when the connection returns. Banner pattern is described in `medium-canvas/documents/pt-admin-pwa-screens.md §Offline handling`.
 - **Realtime updates:** Supabase Realtime subscriptions scoped per PT — one each for `appointments`, `messages`, `conversations`. Because RLS is enforced on the channel, a PT can only subscribe to their own rows.
 - **Web Push:** PT registers a push subscription on first login (per browser). The `lib/notifications` module sends pushes via `web-push` with VAPID keys for: new bookings, cancellations, reschedules, explicit human-escalation requests, and rule-based alerts (e.g., patient sent a message that requires attention).
-- **Performance budget:** ≤3 second first load on 3G, per the PWA requirements. Supports this by using the Next.js App Router's partial hydration and by shipping the calendar component lazily on the calendar route only.
+- **Performance budget:** ≤3 second first load on 3G, per the PWA requirements. Supports this by using the Next.js App Router's partial hydration and by keeping the calendar custom (no heavy third-party calendar bundle); the calendar route still code-splits on its own chunk.
 
 ---
 
@@ -325,3 +325,37 @@ Before any product code is shipped:
    - Seed script creates a test PT and a test patient for fast iteration.
 
 Once this is in place, the first production milestone is: one real PT connects via Embedded Signup, receives a real patient message on WhatsApp, and sees the appointment in the PWA. Everything else compounds from there.
+
+---
+
+## 15. Testing
+
+The codebase is multi-tenant and healthcare-adjacent, so testing priorities are inverted from a typical SaaS — the highest-leverage tests are the ones that prove tenant isolation, not the ones that exercise UI flows.
+
+### Runner
+
+**Vitest.** Native ESM and TypeScript, fast cold start, integrates with the `@/*` path alias. Avoids Jest's transform cost on a project that's already TS-first.
+
+- Unit tests: co-located `*.test.ts` next to the file under test.
+- Integration tests: `tests/integration/` for cases that need a real database.
+- `pnpm test` runs unit tests; `pnpm test:integration` runs the DB-backed suite.
+
+### Database for tests
+
+Local Supabase via `supabase start` (Docker-backed). The integration runner applies the same Drizzle migrations the dev environment uses, so RLS policies are exercised exactly as they will be in production. CI runs the same stack.
+
+### What we test, by priority
+
+1. **RLS isolation** — for every tenant-scoped table, prove that PT A's authenticated session cannot read or mutate PT B's rows. Cases are generated from the schema's tenant-table list, so adding a new table without coverage fails the suite. This is the single most important test surface in the project.
+2. **Tenancy helpers** — `getServiceClient()` throws without a `pt_id`; `withAuditLog()` writes one `audit_log` row on success and zero on thrown error.
+3. **Idempotency** — duplicate webhooks with the same `external_id` insert one row, not two (Phase 2).
+4. **Tool schemas** — Zod schemas reject malformed model outputs (Phase 3).
+5. **Conversation engine** — `runTurn` against a stubbed model returns expected tool dispatches (Phase 3).
+
+A CI assertion introspects `pg_class.relrowsecurity` to confirm RLS is enabled on every `pt_id`-bearing table. This catches the "added a tenant table, forgot to enable RLS" failure mode at PR time.
+
+### What we don't test for MVP
+
+- End-to-end browser tests — manual smoke covers this until launch.
+- Load tests — irrelevant at 1–3 PTs.
+- AI quality evals — deferred to a separate eval harness once a paid-fallback model is in scope.
