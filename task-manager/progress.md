@@ -3,7 +3,7 @@
 > Living document. Update at the end of every working session.
 
 **Last updated:** 2026-05-07
-**Current phase:** Phase 0 in flight — local scaffold and first deploy are verified; external review and final wiring remain.
+**Current phase:** Phase 0 complete — Phase 1 Foundation is next.
 **Days into build:** 1
 
 ---
@@ -12,7 +12,7 @@
 
 | # | Phase | Status | Notes |
 |---|---|---|---|
-| 0 | Bootstrap | ◐ In flight | Local scaffold and first deploy are verified; remaining work is Meta review, final redirect wiring, and final hygiene checks. |
+| 0 | Bootstrap | ☑ Complete | Local scaffold, first deploy, Meta dev preflight, and final secret review are complete. |
 | 1 | Foundation | ☐ Not started | — |
 | 2 | WhatsApp integration | ☐ Not started | — |
 | 3 | AI conversation engine | ☐ Not started | — |
@@ -34,8 +34,8 @@ Status legend: ☐ not started · ◐ in flight · ☑ complete · ⊘ skipped
 
 _Tasks I'm working on right now._
 
-- Verified the local scaffold against the retired `task-manager/doing/plan.md` checklist.
-- Remaining: Meta App Review, final `META_REDIRECT_URI`, and final secret review.
+- No in-flight work in Phase 0.
+- Next up: Phase 1 — Foundation.
 
 ---
 
@@ -43,7 +43,7 @@ _Tasks I'm working on right now._
 
 _Things that need an external answer or an account / approval I'm waiting on._
 
-- Meta App Review.
+- None for local/dev implementation. External PT onboarding is still gated on Meta Business Verification plus App Review / advanced access.
 
 ---
 
@@ -53,7 +53,8 @@ _What is actually complete versus still missing for Phase 0._
 
 - Complete locally: Next.js scaffold at repo root, formatting/tooling, Husky pre-commit, shadcn/ui setup, placeholder routes, module folders, `.env.example`, local `.env.local`, generated local secrets, `pnpm lint`, `pnpm typecheck`, `pnpm dev`, placeholder route smoke tests, and `pnpm build`.
 - Complete in hosted verification: Vercel production deploy is live at `kdmedium.vercel.app`, and the bootstrap app opens correctly on both mobile and desktop.
-- Not complete yet: `META_REDIRECT_URI` finalization, Meta App Review completion, and final secret review.
+- Complete in Meta dev preflight: `META_REDIRECT_URI` now points at `https://kdmedium.vercel.app/api/auth/meta-embedded`; Facebook Login for Business OAuth settings, allowed domains, redirect validation, saved `config_id`, and `messages` + `account_update` webhook subscriptions are in place; a Meta test WABA and test number exist for dev.
+- Phase 0 is complete. Meta Business Verification plus App Review / advanced access remain pending, but only for external PT onboarding.
 - Verified mismatch fixed: `.env.example` is now explicitly unignored so it can be committed while `.env.local` stays ignored.
 
 ---
@@ -62,6 +63,9 @@ _What is actually complete versus still missing for Phase 0._
 
 _Significant choices that diverge from the tech doc or that I want to remember the reasoning for. Newest first._
 
+- **2026-05-07** — Closed Phase 0. Treat the bootstrap as complete for development: local scaffold, Vercel deploy, env wiring, and Meta Embedded Signup dev preflight are all done. Leave Meta Business Verification plus App Review / advanced access as a later production-onboarding dependency, not a Phase 0 blocker.
+- **2026-05-07** — Continue Meta work on a dev path without Business Verification: keep testing limited to app-role users, the Meta test app, and test WhatsApp assets; defer external PT onboarding until Business Verification plus App Review / advanced access are complete.
+- **2026-05-07** — Finalized the temporary `META_REDIRECT_URI` to `https://kdmedium.vercel.app/api/auth/meta-embedded` and completed the Facebook Login for Business / Embedded Signup dashboard preflight (`config_id`, allowed domains, redirect validation, `messages` + `account_update` subscriptions).
 - **2026-05-07** — Split AI model selection by environment. Dev keeps `meta-llama/llama-3.3-70b-instruct:free` (€0 iteration); prod switches to `openai/gpt-4.1-mini` for reliable tool calling and ZDR-compliant routing. Implemented as `selectModel()` in `lib/ai/models.ts` (Phase 3) driven by `OPENROUTER_DEV_MODEL` / `OPENROUTER_PROD_MODEL` / `OPENROUTER_MODEL_OVERRIDE` env vars. Reason: free Llama's tool-calling reliability and free-tier privacy posture aren't acceptable for production patient-facing chat; cost at MVP volume is well under €5/PT/month. Updated tech doc §2 / §8 / §10 and `phases/03-ai-conversation-engine.md` accordingly; new env names added to Phase 0 wiring.
 - **2026-05-07** — Flipped the calendar default to **custom** (`react-day-picker` for month + a `date-fns`-driven grid for week). Reason: FullCalendar's bundle (~200–400 KB) eats too much of the ≤3 s 3G first-load budget, and the MVP calendar only needs view + tap-to-open; drag-to-reschedule is deferred. FullCalendar is reserved for a specific feature later that is too painful to build. Updated tech doc §2 / §9 and `phases/07-pt-pwa-ui.md` accordingly.
 - **2026-05-07** — Pinned Next.js to stable v15 (`15.5.16`) and `eslint-config-next` to match (was `16.2.4`). Reason: keep the running stack aligned with `docs/tech-stack-and-architecture.md` rather than running production on `create-next-app`'s default v16 ahead of the doc. Required swapping `eslint.config.mjs` to a `FlatCompat` shim because Next 15's `eslint-config-next` is legacy-format; added `@eslint/eslintrc` as a devDependency.
@@ -92,6 +96,8 @@ _Significant choices that diverge from the tech doc or that I want to remember t
 
 _One bullet per session: date — what shipped — what's next._
 
+- **2026-05-07** — Closed Phase 0 by accepting the final secret review; next is Phase 1 Foundation (Drizzle schema, RLS, tenancy helpers, auth, and the first dashboard shell).
+- **2026-05-07** — Finalized the Meta Embedded Signup dev preflight: the temporary `META_REDIRECT_URI`, Facebook Login for Business settings, saved `config_id`, webhook subscriptions, and Meta test assets are all in place; next is the final secret review and then implementation in Phase 1 / Phase 2 can proceed on the dev path while external PT onboarding stays deferred behind Meta verification/review.
 - **2026-05-07** — Split AI model selection by environment (dev = free Llama, prod = `openai/gpt-4.1-mini`) via env-driven `selectModel()`; flipped the calendar default to a custom `react-day-picker` + `date-fns` build; updated tech doc §2 / §8 / §9 / §10 and the Phase 0 / 3 / 7 trackers; next is the remaining Phase 0 wiring (`META_REDIRECT_URI`, Meta App Review, final secret review, plus the new OpenRouter model env vars in Vercel).
 - **2026-05-07** — Pinned Next.js to v15.5.16, Inngest to v3.54.2, fixed the ESLint flat config for Next 15 via `FlatCompat`, and added the testing strategy (Vitest + RLS isolation matrix promoted into Phase 1); next is the remaining Phase 0 wiring (`META_REDIRECT_URI`, Meta App Review, final secret review).
 - **2026-05-07** — Verified the first Vercel deploy at `kdmedium.vercel.app` and confirmed the bootstrap app opens on mobile and desktop; next is `META_REDIRECT_URI`, Meta App Review, and the final secret review.

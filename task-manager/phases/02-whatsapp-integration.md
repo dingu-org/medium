@@ -6,7 +6,7 @@
 
 **Effort.** 5–7 days.
 
-**Prerequisites.** Phase 1 complete; Meta App Review passed (or test app for dev).
+**Prerequisites.** Phase 1 complete. For the dev path, keep testing limited to app-role users / Meta test assets with the Meta dashboard preflight from Phase 0 complete. For the production onboarding path, Business Verification plus App Review / advanced access must be complete before external PTs can grant the needed permissions.
 
 ---
 
@@ -81,6 +81,7 @@
 ## Notes
 
 - For local dev, use ngrok or Cloudflare Tunnel pointing at `localhost:3000/api/webhooks/whatsapp`. Configure a separate Meta test app so prod isn't routed through your laptop.
+- Meta's current Embedded Signup flow requires the app-role dev path to be wired before coding is useful: Facebook Login for Business settings, allowed domains, valid redirect URIs, a saved `config_id`, and `messages` + `account_update` webhook subscriptions.
 - The 24 h window is checked at *send* time, not receive time, because by the time the Inngest job runs the window may have closed.
 - Quality rating is polled, not pushed — schedule in Phase 5.
 - Don't use a queue here for inbound persistence. Insert + emit is fast enough; Inngest does the heavy lifting downstream.

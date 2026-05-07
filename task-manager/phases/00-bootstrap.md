@@ -29,6 +29,7 @@
 
 - [x] **Meta** — create Business Manager + Developer account; create WhatsApp Business App (type: Business). Note `app_id`, `app_secret`.
 - [x] **Meta dev app** — create a separate Meta test app for local and non-prod webhook work so production review state stays isolated.
+- [x] **Meta Embedded Signup dev preflight** — connect the app to the Business, create the system user + system token, configure Facebook Login for Business OAuth settings, set `Allowed domains` + `Valid OAuth redirect URIs`, save the `config_id`, subscribe `messages` + `account_update` webhooks, and keep a Meta test WABA / test number available for dev.
 - [x] **Supabase** — new project in Frankfurt (EU). Note `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
 - [x] **Vercel** — create project, link GitHub repo, set serverless region to Frankfurt (`fra1`).
 - [x] **Inngest** — create app; note signing key + event key.
@@ -41,7 +42,7 @@
 - [x] Create `.env.example` with every var name (no values).
 - [x] Create `.env.local` (gitignored) with dev values.
 - [x] Set the same vars in Vercel project settings (production + preview).
-- [ ] Use the first Vercel production URL as the temporary `META_REDIRECT_URI` until a custom domain exists.
+- [x] Use the first Vercel production URL as the temporary `META_REDIRECT_URI` until a custom domain exists.
 - [x] Generate and store `TOKEN_ENCRYPTION_KEY` (32-byte random) — used by pgcrypto in Phase 2.
 - [x] Generate Web Push VAPID keypair (used in Phase 9 — generate now so they're stable).
 - [x] Add `OPENROUTER_DEV_MODEL`, `OPENROUTER_PROD_MODEL`, `OPENROUTER_MODEL_OVERRIDE` to `.env.local` and Vercel preview + production env vars (defaults already in `.env.example`). `OPENROUTER_MODEL_OVERRIDE` left blank in all environments.
@@ -61,9 +62,9 @@
 ## Acceptance criteria
 
 - [x] `pnpm dev` runs with no errors and serves the bootstrap placeholder page.
-- [ ] Every required account exists, including a separate Meta dev app; every required credential is in `.env.example` (with names) and `.env.local` (with values), and the same required vars are set in Vercel.
+- [x] Every required account exists, including a separate Meta dev app; every required credential is in `.env.example` (with names) and `.env.local` (with values), and the same required vars are set in Vercel.
 - [x] A push to `main` produces a successful Vercel deploy.
-- [ ] No secrets in committed files (verified with `git log -p` and staged diff review; `gitleaks` if already installed).
+- [x] No secrets in committed files (verified with `git log -p` and staged diff review; `gitleaks` if already installed).
 
 ---
 
@@ -74,3 +75,4 @@
 - Vercel's `fra1` region matches Supabase Frankfurt for low latency.
 - Sentry and PostHog are intentionally deferred for the current MVP because their free-tier limits are exhausted; revisit if paid monitoring/analytics become justified.
 - A custom domain is not required to finish Phase 0; the Vercel production URL is acceptable as the temporary Embedded Signup redirect URI.
+- Meta Business Verification and App Review are still needed before external PT self-serve onboarding, but they do not block app-role testing or dev implementation once the Meta dev preflight above is in place.
