@@ -2,9 +2,9 @@
 
 > Living document. Update at the end of every working session.
 
-**Last updated:** 2026-05-06
-**Current phase:** Phase 0 in flight — local scaffold is in place; external account setup and deploy wiring remain.
-**Days into build:** 0
+**Last updated:** 2026-05-07
+**Current phase:** Phase 0 in flight — local scaffold and first deploy are verified; external review and final wiring remain.
+**Days into build:** 1
 
 ---
 
@@ -12,7 +12,7 @@
 
 | # | Phase | Status | Notes |
 |---|---|---|---|
-| 0 | Bootstrap | ◐ In flight | Local scaffold complete; remaining work is Meta review, final redirect wiring, deploy verification, and final hygiene checks. |
+| 0 | Bootstrap | ◐ In flight | Local scaffold and first deploy are verified; remaining work is Meta review, final redirect wiring, and final hygiene checks. |
 | 1 | Foundation | ☐ Not started | — |
 | 2 | WhatsApp integration | ☐ Not started | — |
 | 3 | AI conversation engine | ☐ Not started | — |
@@ -35,7 +35,7 @@ Status legend: ☐ not started · ◐ in flight · ☑ complete · ⊘ skipped
 _Tasks I'm working on right now._
 
 - Verified the local scaffold against the retired `task-manager/doing/plan.md` checklist.
-- Remaining: Meta App Review, final `META_REDIRECT_URI`, first deploy verification, mobile preview checks, and final secret review.
+- Remaining: Meta App Review, final `META_REDIRECT_URI`, and final secret review.
 
 ---
 
@@ -52,7 +52,8 @@ _Things that need an external answer or an account / approval I'm waiting on._
 _What is actually complete versus still missing for Phase 0._
 
 - Complete locally: Next.js scaffold at repo root, formatting/tooling, Husky pre-commit, shadcn/ui setup, placeholder routes, module folders, `.env.example`, local `.env.local`, generated local secrets, `pnpm lint`, `pnpm typecheck`, `pnpm dev`, placeholder route smoke tests, and `pnpm build`.
-- Not complete yet: `META_REDIRECT_URI` finalization, Meta App Review completion, Vercel preview deploy, mobile device preview checks, and final secret review.
+- Complete in hosted verification: Vercel production deploy is live at `kdmedium.vercel.app`, and the bootstrap app opens correctly on both mobile and desktop.
+- Not complete yet: `META_REDIRECT_URI` finalization, Meta App Review completion, and final secret review.
 - Verified mismatch fixed: `.env.example` is now explicitly unignored so it can be committed while `.env.local` stays ignored.
 
 ---
@@ -61,6 +62,7 @@ _What is actually complete versus still missing for Phase 0._
 
 _Significant choices that diverge from the tech doc or that I want to remember the reasoning for. Newest first._
 
+- **2026-05-07** — The first Vercel deployment is live at `kdmedium.vercel.app`; bootstrap rendering is verified on both mobile and desktop.
 - **2026-05-06** — Meta App Review starts in Phase 0 on day one, not Phase 2. Keep a separate Meta dev/test app for local and non-prod work.
 - **2026-05-06** — Replace Vercel AI Gateway with OpenRouter. Use `OPENROUTER_API_KEY` and keep provider routing decisions inside `lib/ai/`.
 - **2026-05-06** — The current OpenRouter guardrail pins runtime inference to `meta-llama/llama-3.3-70b-instruct:free`. Do not silently introduce paid or alternate models without an explicit planning update.
@@ -85,6 +87,7 @@ _Significant choices that diverge from the tech doc or that I want to remember t
 
 _One bullet per session: date — what shipped — what's next._
 
+- **2026-05-07** — Verified the first Vercel deploy at `kdmedium.vercel.app` and confirmed the bootstrap app opens on mobile and desktop; next is `META_REDIRECT_URI`, Meta App Review, and the final secret review.
 - **2026-05-06** — Reviewed and tightened the Phase 0 bootstrap plan; next is execute the bootstrap checklist.
 - **2026-05-06** — Bootstrapped the local app scaffold, added tooling and placeholder routes, and verified `pnpm lint`, `pnpm typecheck`, `pnpm dev`, placeholder route responses, and `pnpm build`; next is external service setup plus deploy wiring.
 - **2026-05-06** — GitHub repo was marked done in Phase 0 tracking; next is the remaining hosted services, env wiring, and deployment checks.

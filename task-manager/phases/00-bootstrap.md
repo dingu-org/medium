@@ -52,8 +52,8 @@
 
 ### First deploy
 
-- [ ] Push to `main`; confirm Vercel builds and serves a preview URL.
-- [ ] Open the preview on a phone — confirm Tailwind renders.
+- [x] Push to `main`; confirm Vercel builds and serves a preview URL.
+- [x] Open the preview on a phone — confirm Tailwind renders.
 
 ---
 
@@ -61,7 +61,7 @@
 
 - [x] `pnpm dev` runs with no errors and serves the bootstrap placeholder page.
 - [ ] Every required account exists, including a separate Meta dev app; every required credential is in `.env.example` (with names) and `.env.local` (with values), and the same required vars are set in Vercel.
-- [ ] A push to `main` produces a successful Vercel deploy.
+- [x] A push to `main` produces a successful Vercel deploy.
 - [ ] No secrets in committed files (verified with `git log -p` and staged diff review; `gitleaks` if already installed).
 
 ---
