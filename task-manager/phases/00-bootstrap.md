@@ -44,6 +44,7 @@
 - [ ] Use the first Vercel production URL as the temporary `META_REDIRECT_URI` until a custom domain exists.
 - [x] Generate and store `TOKEN_ENCRYPTION_KEY` (32-byte random) — used by pgcrypto in Phase 2.
 - [x] Generate Web Push VAPID keypair (used in Phase 9 — generate now so they're stable).
+- [x] Add `OPENROUTER_DEV_MODEL`, `OPENROUTER_PROD_MODEL`, `OPENROUTER_MODEL_OVERRIDE` to `.env.local` and Vercel preview + production env vars (defaults already in `.env.example`). `OPENROUTER_MODEL_OVERRIDE` left blank in all environments.
 
 ### Observability tooling
 

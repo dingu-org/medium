@@ -34,7 +34,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 | ORM | **Drizzle** | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies |
 | Auth (PTs) | **Supabase Auth** (email+password, Google OAuth) | Integrates with RLS through `auth.uid()` |
 | Background jobs & scheduling | **Inngest** | Delayed jobs (24h reminders), retries, event bus — matches the docs' event-driven principle; generous free tier |
-| AI | **OpenRouter + AI SDK**, currently pinned to `meta-llama/llama-3.3-70b-instruct:free` | One model-agnostic API surface with strict privacy routing and a zero-cost MVP guardrail; room to swap models later without changing app-facing abstractions |
+| AI | **OpenRouter + AI SDK**, split per env: dev → `meta-llama/llama-3.3-70b-instruct:free`, prod → `openai/gpt-4.1-mini` | One model-agnostic API surface with strict privacy routing; free model keeps dev cost at €0, paid prod model gives reliable tool-calling and ZDR-compliant routing for patient-facing chat |
 | Hosting | **Vercel** (Next.js) + **Supabase EU** (DB/auth/realtime) + **Inngest Cloud** (jobs) | No infrastructure to maintain; all have EU regions |
 | Webhook runtime | Next.js Route Handler on the **Node runtime** (not Edge) | Signature verification needs `crypto`; handler just verifies + enqueues and returns 200 |
 | Realtime (live calendar/chat) | **Supabase Realtime** (Postgres changefeeds) | No extra infrastructure; scopes naturally to RLS |
@@ -50,9 +50,9 @@ The stack is optimized for the constraints stated across the canvas documents:
 - Supabase Pro ~€25
 - Vercel Hobby €0
 - Inngest free tier €0
-- OpenRouter usage ~€0 while the current free-model guardrail remains viable
+- OpenRouter usage ~€1–5/PT/month at MVP volume on `gpt-4.1-mini`; dev is free
 - No dedicated Sentry/PostHog spend in the current MVP plan
-- **Total: ~€40–70/month**, leaving headroom within the €100 budget for Meta conversation fees.
+- **Total: ~€45–85/month for 1–3 PTs**, leaving headroom within the €100 budget for Meta conversation fees.
 
 ---
 
@@ -188,10 +188,14 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 **Model selection policy:**
 
-- The current MVP guardrail routes every runtime turn to `meta-llama/llama-3.3-70b-instruct:free` via OpenRouter.
-- Keep routing inside the OpenRouter layer so the app can add or swap providers later without rewriting the conversation engine.
-- Default production routing uses strict privacy controls: ZDR on, provider data collection denied, and parameter-safe routing.
-- Do not silently add alternate or paid models. If the free model proves inadequate, make that a documented planning decision first.
+- Selection is environment-driven through `lib/ai/models.ts`'s `selectModel()` helper. Engine call sites never reference a model ID directly.
+- `selectModel()` returns, in order of precedence:
+  1. `OPENROUTER_MODEL_OVERRIDE` if set (escape hatch for ad-hoc dev testing of paid models against the free baseline).
+  2. `OPENROUTER_PROD_MODEL` (default `openai/gpt-4.1-mini`) when `NODE_ENV === 'production'`.
+  3. `OPENROUTER_DEV_MODEL` (default `meta-llama/llama-3.3-70b-instruct:free`) otherwise.
+- Each branch validates its env var is set and throws on missing — there is no silent fallback.
+- Production routing uses strict privacy controls: ZDR on, provider data collection denied, and parameter-safe routing. The paid OpenRouter route enforces these reliably; the free dev model is for developer iteration only and is not exposed to patient data.
+- Adding or swapping models is an env change, not a code change. Substantive changes to the routing logic remain documented planning decisions.
 
 **Structured interaction over free-form parsing:**
 
@@ -205,8 +209,9 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 **Cost math per PT per month:**
 
-- Runtime AI spend is effectively **~€0** while the free-model guardrail remains available.
-- Still capture token and generation metadata from day one so the cost baseline is ready if a paid model or fallback is introduced later.
+- Production: at MVP volume (~1M tokens/PT/month at 80/20 input/output), `openai/gpt-4.1-mini` runs roughly **€0.50–1/PT/month**. Budget envelope is set at **€5/PT/month** so a chatty PT stays within plan; alerts fire well before that.
+- Development: **~€0** while the free Llama route remains available; `OPENROUTER_MODEL_OVERRIDE` is the escape hatch when iterating against a paid model.
+- Capture token and generation metadata (`tokens_in`, `tokens_out`, `model`, `provider`, `cached_tokens`) on every persisted message from day one so the cost baseline is observable and a future paid fallback can be sized against real traffic.
 
 ---
 
@@ -224,7 +229,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 - **EU residency:** Supabase project in Frankfurt (or another EU region). Vercel defaults to edge distribution but origin functions run in Frankfurt. Inngest supports EU processing. OpenRouter is accepted for MVP without guaranteed EU-only inference on the current plan.
 - **Encryption at rest:** access tokens via pgcrypto; sensitive patient columns via pgcrypto or Supabase Vault. Transport encryption via TLS (automatic).
-- **AI inference and disclosures:** OpenRouter does not retain prompt/response content unless logging or product-use opt-ins are enabled, but it does retain request metadata. Production requests default to ZDR + denied provider data collection, and privacy docs explicitly disclose that AI inference may involve cross-border processing.
+- **AI inference and disclosures:** Production AI inference runs on **`openai/gpt-4.1-mini`** via OpenRouter; OpenAI is the production AI sub-processor and its infrastructure is US-based, so cross-border processing is acknowledged in the privacy policy. Production requests default to ZDR + denied provider data collection on the paid route. The free Llama dev route is developer-iteration-only and is not exposed to patient data. OpenRouter does not retain prompt/response content unless logging or product-use opt-ins are enabled, but it does retain request metadata.
 - **Retention:** daily Inngest job purges `messages` older than the PT's configured retention window (default 90 days). Aggregate anonymized metrics are kept indefinitely.
 - **Right to erasure:** per-patient cascade delete surfaced in the PWA patient detail view. Deleting a patient removes their patient row, their conversations, their messages, and their appointments (completed and future).
 - **Data export:** a Server Action generates a JSON bundle of a patient's data or a full PT export on request.

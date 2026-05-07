@@ -1,6 +1,6 @@
 # Phase 3 — AI conversation engine
 
-**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through OpenRouter using the current pinned model guardrail, and emits the model's chosen tool calls to the appointments layer.
+**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through OpenRouter — `meta-llama/llama-3.3-70b-instruct:free` in dev and `openai/gpt-4.1-mini` in prod via the env-driven `selectModel()` helper — and emits the model's chosen tool calls to the appointments layer.
 
 **Source.** Tech doc §3 (module boundaries), §8 (AI orchestration); product spec `docs/medium-canvas/documents/ai-conversation-behavior.md`.
 
@@ -16,9 +16,10 @@
 
 - [ ] Install `ai` and `@openrouter/ai-sdk-provider`.
 - [ ] `lib/ai/client.ts` — shared AI SDK / OpenRouter wrapper; reads `OPENROUTER_API_KEY` and keeps provider routing options in one place.
-- [ ] `lib/ai/models.ts` — current model ID constant: `'meta-llama/llama-3.3-70b-instruct:free'`.
-- [ ] Codify the default production routing policy in one place: ZDR on, provider data collection denied, and parameter-safe routing.
-- [ ] Keep the model guardrail in one place so a future paid fallback can be introduced explicitly rather than by ad hoc call-site changes.
+- [ ] `lib/ai/models.ts` — exports `selectModel()` returning, in order of precedence: `OPENROUTER_MODEL_OVERRIDE` if set; else `OPENROUTER_PROD_MODEL` when `NODE_ENV === 'production'`; else `OPENROUTER_DEV_MODEL`. Each branch validates its env var is set and throws on missing — no silent fallback.
+- [ ] Unit tests covering all three `selectModel()` branches plus the missing-env throw.
+- [ ] Codify the default production routing policy in one place: ZDR on, provider data collection denied, and parameter-safe routing. Apply on every paid route call.
+- [ ] Keep model selection behind `selectModel()` so swapping or A/B-testing models is an env change, not a code change.
 
 ### Tool schemas — `lib/ai/tools.ts`
 
@@ -63,9 +64,10 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 
 ### Model routing policy — `lib/conversation/escalation.ts`
 
-- [ ] Route every runtime turn to `meta-llama/llama-3.3-70b-instruct:free` under the current guardrail.
-- [ ] Keep the selection behind a helper so a future paid fallback or escalation policy can be added without touching the engine call sites.
-- [ ] If the pinned model becomes unavailable or inadequate, fail in a way that is observable; do not silently switch to another model.
+- [ ] Engine and dispatcher route every runtime turn through `selectModel()` — no model ID constants in call sites.
+- [ ] Production: `openai/gpt-4.1-mini`. Dev: `meta-llama/llama-3.3-70b-instruct:free`. `OPENROUTER_MODEL_OVERRIDE` wins when set.
+- [ ] Keep the selection behind the helper so a future runtime fallback chain (e.g., prod-model 5xx → backup) can be added without touching the engine call sites.
+- [ ] If the resolved model becomes unavailable or inadequate, fail in a way that is observable; do not silently switch to another model.
 
 ### Channel-agnostic shape
 
@@ -82,7 +84,7 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 ## Acceptance criteria
 
 - [ ] Given a fixture inbound "I'd like to book a session next week", the engine returns a coherent response that calls `get_availability` and (with stubbed slots) `book_appointment`.
-- [ ] The model selection helper always returns `meta-llama/llama-3.3-70b-instruct:free` while the current guardrail is active.
+- [ ] `selectModel()` returns `OPENROUTER_DEV_MODEL` when `NODE_ENV !== 'production'`, `OPENROUTER_PROD_MODEL` when it is, and `OPENROUTER_MODEL_OVERRIDE` whenever set. Missing env throws.
 - [ ] Tool input that fails Zod validation does not throw — it surfaces as a tool result error and the model recovers on the next turn.
 - [ ] Engine is invoked with no WhatsApp imports — only the channel-agnostic shape (verified by grep on `lib/conversation/`).
 
