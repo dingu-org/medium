@@ -43,10 +43,30 @@ External accounts and live credentials are still required before Phase 0 is full
 ## Commands
 
 ```bash
-pnpm dev
+pnpm dev          # Next.js dev server
 pnpm lint
 pnpm typecheck
+pnpm db:generate  # Drizzle: generate migration from lib/db/schema.ts
+pnpm db:migrate   # Drizzle: apply migrations to $DATABASE_URL
+pnpm db:studio    # Drizzle Studio
+pnpm test         # Vitest unit suite
+pnpm test:integration  # Vitest integration suite (requires local Supabase)
 ```
+
+## Local Supabase stack
+
+Integration tests and end-to-end auth smokes run against a local Supabase
+stack (Postgres + GoTrue) brought up by the Supabase CLI.
+
+```bash
+brew install supabase/tap/supabase   # one-time
+supabase start                        # boot the local stack (Docker required)
+supabase status                       # confirm keys + URLs
+pnpm test:integration                 # runs against the local stack via .env.test
+```
+
+Stop with `supabase stop`. Inbucket (test email inbox) at
+http://127.0.0.1:54324; Studio at http://127.0.0.1:54323.
 
 ## Notes
 

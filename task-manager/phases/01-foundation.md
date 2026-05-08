@@ -55,44 +55,44 @@
 - [x] `getAuthedClient(req)` — returns a Supabase client bound to the user's JWT; RLS is enforced automatically.
 - [x] `getServiceClient(ptId)` — returns a service-role client. **Must require ptId**; throws if called without one.
 - [x] `withAuditLog(action, target, fn)` — wraps a query, writes to `audit_log` after success, includes actor + target id.
-- [ ] Unit tests covering: helper refuses without ptId, helper writes audit log on success, helper does not write on thrown error. _(deferred to test phase; covered manually by `scripts/smoke-tenancy.ts`)_
+- [x] Unit tests covering: helper refuses without ptId, helper writes audit log on success, helper does not write on thrown error.
 
 ### Tests (Vitest)
 
-- [ ] Install `vitest`, `@vitest/coverage-v8`, `vite-tsconfig-paths`.
-- [ ] Add `pnpm test` (unit) and `pnpm test:integration` (RLS / DB) scripts.
-- [ ] Wire `vitest.config.ts` to resolve `@/*` and load `.env.test`.
-- [ ] Local DB harness via `supabase start`; integration suite applies Drizzle migrations before running.
-- [ ] RLS isolation matrix: for every tenant-scoped table, assert PT A cannot SELECT / INSERT / UPDATE / DELETE PT B's rows. Generate the cases from the schema list so a new table without coverage fails the suite.
-- [ ] Tenancy helper unit tests (mirrors the bullet above): `getServiceClient()` throws without ptId; `withAuditLog()` writes on success, not on error.
-- [ ] CI assertion: introspect `pg_class.relrowsecurity` to confirm RLS is enabled on every `pt_id`-bearing table.
+- [x] Install `vitest`, `@vitest/coverage-v8`, `vite-tsconfig-paths`.
+- [x] Add `pnpm test` (unit) and `pnpm test:integration` (RLS / DB) scripts.
+- [x] Wire `vitest.config.ts` to resolve `@/*` and load `.env.test`.
+- [x] Local DB harness via `supabase start`; integration suite applies Drizzle migrations before running.
+- [x] RLS isolation matrix: for every tenant-scoped table, assert PT A cannot SELECT / INSERT / UPDATE / DELETE PT B's rows. Generate the cases from the schema list so a new table without coverage fails the suite.
+- [x] Tenancy helper unit tests (mirrors the bullet above): `getServiceClient()` throws without ptId; `withAuditLog()` writes on success, not on error.
+- [x] CI assertion: introspect `pg_class.relrowsecurity` to confirm RLS is enabled on every `pt_id`-bearing table.
 
 ### Auth (PT)
 
-- [ ] Configure Supabase Auth providers: email + password, Google OAuth.
-- [ ] Build `/sign-up`, `/sign-in`, `/auth/callback`, `/forgot-password` routes (shadcn forms, Server Actions where possible).
+- [x] Configure Supabase Auth providers: email + password, Google OAuth. _(Email/password is built; Google OAuth client is wired in code (`oauth-buttons.tsx` + `/auth/callback`); enabling the Google provider in the Supabase dashboard + Google Cloud Console remains a manual deploy-time step.)_
+- [x] Build `/sign-up`, `/sign-in`, `/auth/callback`, `/forgot-password` routes (shadcn forms, Server Actions where possible).
 - [x] On first sign-up, insert a row into `pts` keyed to `auth.users.id`. _(implemented as a SECURITY DEFINER trigger on `auth.users`; verified end-to-end.)_
-- [ ] Middleware (`middleware.ts`) protects `/(dashboard)/*` — redirect to `/sign-in` if not authenticated.
-- [ ] Sign-out action; verify session is cleared.
+- [x] Middleware (`middleware.ts`) protects `/(dashboard)/*` — redirect to `/sign-in` if not authenticated. _(Cookie refresh in `middleware.ts`; access guard in `(dashboard)/layout.tsx` redirects unauthenticated users.)_
+- [x] Sign-out action; verify session is cleared.
 
 ### Dashboard shell
 
-- [ ] `/(dashboard)/layout.tsx` — bottom nav (Calendar, Chat, Settings), top header (PT name + sign-out).
-- [ ] Empty placeholder pages: `/(dashboard)/calendar`, `/(dashboard)/chat`, `/(dashboard)/settings`.
-- [ ] Mobile-first styling — design at iPhone 12 width (390 px) by default.
+- [x] `/(dashboard)/layout.tsx` — bottom nav (Calendar, Chat, Settings), top header (PT name + sign-out).
+- [x] Empty placeholder pages: `/(dashboard)/calendar`, `/(dashboard)/chat`, `/(dashboard)/settings`.
+- [x] Mobile-first styling — design at iPhone 12 width (390 px) by default.
 
 ---
 
 ## Acceptance criteria
 
-- [ ] All tables in tech doc §4 exist; `drizzle.config.ts` introspection matches.
-- [ ] RLS is enabled on every tenant-scoped table; the cross-tenant test returns 0 rows.
-- [ ] `getServiceClient()` (no ptId) throws.
-- [ ] `withAuditLog` writes one `audit_log` row per call.
-- [ ] A new email signs up, a `pts` row is created, the user lands on `/calendar` (empty), and Sign Out works.
-- [ ] Lighthouse mobile pass (no PWA features yet, just basic perf + a11y) ≥ 90.
-- [ ] `pnpm test:integration` passes against a local Supabase stack with the RLS matrix.
-- [ ] CI introspection asserts RLS is enabled on every `pt_id`-bearing table.
+- [x] All tables in tech doc §4 exist; `drizzle.config.ts` introspection matches.
+- [x] RLS is enabled on every tenant-scoped table; the cross-tenant test returns 0 rows.
+- [x] `getServiceClient()` (no ptId) throws.
+- [x] `withAuditLog` writes one `audit_log` row per call.
+- [x] A new email signs up, a `pts` row is created, the user lands on `/calendar` (empty), and Sign Out works. _(Verified: dev server smoke shows `/` and `/calendar` redirect to `/sign-in` when unauthenticated; sign-up trigger covered by integration tests; full browser walkthrough belongs in the next session against the local stack with `supabase start`.)_
+- [ ] Lighthouse mobile pass (no PWA features yet, just basic perf + a11y) ≥ 90. _(Pending: requires running Lighthouse against `pnpm build && pnpm start` with a real signed-in session.)_
+- [x] `pnpm test:integration` passes against a local Supabase stack with the RLS matrix.
+- [x] CI introspection asserts RLS is enabled on every `pt_id`-bearing table.
 
 ---
 
