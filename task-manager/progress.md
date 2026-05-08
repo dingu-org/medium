@@ -2,9 +2,9 @@
 
 > Living document. Update at the end of every working session.
 
-**Last updated:** 2026-05-07
-**Current phase:** Phase 0 complete — Phase 1 Foundation is next.
-**Days into build:** 1
+**Last updated:** 2026-05-08
+**Current phase:** Phase 1 Foundation in flight — data layer landed; tests + auth UI deferred.
+**Days into build:** 2
 
 ---
 
@@ -13,7 +13,7 @@
 | # | Phase | Status | Notes |
 |---|---|---|---|
 | 0 | Bootstrap | ☑ Complete | Local scaffold, first deploy, Meta dev preflight, and final secret review are complete. |
-| 1 | Foundation | ☐ Not started | — |
+| 1 | Foundation | ◐ In flight | Drizzle + 13-table schema + RLS + tenancy helpers + `auth.users`→`pts` trigger landed. Vitest harness, RLS isolation matrix, auth UI, and dashboard shell are deferred. |
 | 2 | WhatsApp integration | ☐ Not started | — |
 | 3 | AI conversation engine | ☐ Not started | — |
 | 4 | Appointments & availability | ☐ Not started | — |
@@ -34,8 +34,7 @@ Status legend: ☐ not started · ◐ in flight · ☑ complete · ⊘ skipped
 
 _Tasks I'm working on right now._
 
-- No in-flight work in Phase 0.
-- Next up: Phase 1 — Foundation.
+- Phase 1 backend landed. Remaining Phase 1 work (deferred to a separate session): Vitest setup + RLS isolation matrix + tenancy unit tests + CI introspection; auth UI (`/sign-up`, `/sign-in`, `/auth/callback`, `/forgot-password`); `middleware.ts`; dashboard shell + placeholder pages; sign-out action; Supabase Auth provider config in the dashboard (manual).
 
 ---
 
@@ -63,6 +62,8 @@ _What is actually complete versus still missing for Phase 0._
 
 _Significant choices that diverge from the tech doc or that I want to remember the reasoning for. Newest first._
 
+- **2026-05-08** — `auth.users` → `pts` row sync implemented as a `SECURITY DEFINER` Postgres trigger (`public.handle_new_user` on `auth.users` AFTER INSERT) instead of app-side code at signup. Reason: keeps the data layer self-consistent during dev without an auth UI, and means future signup code only needs to `UPDATE` the existing row with onboarding fields rather than juggling insert order. Defaults: `timezone='Europe/Berlin'`, `retention_days=90`. The PT row is also CASCADE-linked to `auth.users(id)`, so deleting the auth user purges the PT data.
+- **2026-05-08** — Phase 1 split into a backend-only landing first (Drizzle, schema, RLS, tenancy helpers, signup trigger) and a follow-up session for Vitest + auth UI + dashboard shell. Reason: tests and UI weren't blocking later phases and the data layer is the dependency every other phase needs to start.
 - **2026-05-07** — Closed Phase 0. Treat the bootstrap as complete for development: local scaffold, Vercel deploy, env wiring, and Meta Embedded Signup dev preflight are all done. Leave Meta Business Verification plus App Review / advanced access as a later production-onboarding dependency, not a Phase 0 blocker.
 - **2026-05-07** — Continue Meta work on a dev path without Business Verification: keep testing limited to app-role users, the Meta test app, and test WhatsApp assets; defer external PT onboarding until Business Verification plus App Review / advanced access are complete.
 - **2026-05-07** — Finalized the temporary `META_REDIRECT_URI` to `https://kdmedium.vercel.app/api/auth/meta-embedded` and completed the Facebook Login for Business / Embedded Signup dashboard preflight (`config_id`, allowed domains, redirect validation, `messages` + `account_update` subscriptions).
@@ -96,6 +97,7 @@ _Significant choices that diverge from the tech doc or that I want to remember t
 
 _One bullet per session: date — what shipped — what's next._
 
+- **2026-05-08** — Landed the Phase 1 data layer: installed Drizzle + `postgres-js` + `@supabase/{ssr,supabase-js}`, wrote `lib/db/schema.ts` for all 13 tables with indexes, applied four migrations to the Frankfurt dev DB (`pgcrypto`, schema, RLS policies on every tenant-scoped table, and the `auth.users`→`pts` trigger + FK), and built `lib/tenancy/` (`getAuthedClient`, `getServiceClient`, `withAuditLog`, `TenancyError`) plus `lib/supabase/{server,service}.ts`. End-to-end smoke (`scripts/smoke-tenancy.ts`) verifies trigger insert + defaults, ctx validation, audit-log success/throw paths, RLS cross-tenant isolation (SELECT and INSERT), and CASCADE on user delete — 17/17 green. Next: Vitest + RLS isolation matrix + auth UI + dashboard shell in a follow-up Phase 1 session.
 - **2026-05-07** — Closed Phase 0 by accepting the final secret review; next is Phase 1 Foundation (Drizzle schema, RLS, tenancy helpers, auth, and the first dashboard shell).
 - **2026-05-07** — Finalized the Meta Embedded Signup dev preflight: the temporary `META_REDIRECT_URI`, Facebook Login for Business settings, saved `config_id`, webhook subscriptions, and Meta test assets are all in place; next is the final secret review and then implementation in Phase 1 / Phase 2 can proceed on the dev path while external PT onboarding stays deferred behind Meta verification/review.
 - **2026-05-07** — Split AI model selection by environment (dev = free Llama, prod = `openai/gpt-4.1-mini`) via env-driven `selectModel()`; flipped the calendar default to a custom `react-day-picker` + `date-fns` build; updated tech doc §2 / §8 / §9 / §10 and the Phase 0 / 3 / 7 trackers; next is the remaining Phase 0 wiring (`META_REDIRECT_URI`, Meta App Review, final secret review, plus the new OpenRouter model env vars in Vercel).
