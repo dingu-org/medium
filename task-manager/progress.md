@@ -3,7 +3,7 @@
 > Living document. Update at the end of every working session.
 
 **Last updated:** 2026-05-14
-**Current phase:** Phase 2 WhatsApp integration in flight — Inngest event-bus wiring landed; token crypto + webhook hardening are the next slices.
+**Current phase:** Phase 2 WhatsApp integration in flight — Inngest event-bus wiring + token crypto helpers landed; webhook hardening is the next slice.
 **Days into build:** 2
 
 ---
@@ -14,7 +14,7 @@
 |---|---|---|---|
 | 0 | Bootstrap | ☑ Complete | Local scaffold, first deploy, Meta dev preflight, and final secret review are complete. |
 | 1 | Foundation | ☑ Complete | Schema + RLS + tenancy helpers, tests, auth UI (email/password + Google OAuth end-to-end), middleware, dashboard shell. Lighthouse mobile audit verified at 100 / 100 / 100 / 96 on 2026-05-14. |
-| 2 | WhatsApp integration | ◐ In flight | Inngest client + `serve` handler wired (`lib/inngest/`, `app/api/inngest/route.ts`); 4 Phase 2 events typed. Token crypto, webhook hardening, Embedded Signup, channel adapter still pending. |
+| 2 | WhatsApp integration | ◐ In flight | Inngest client + `serve` handler wired (`lib/inngest/`, `app/api/inngest/route.ts`); 4 Phase 2 events typed; token crypto helpers (`lib/db/crypto.ts`) round-trip-tested against pgcrypto. Webhook hardening, Embedded Signup, channel adapter still pending. |
 | 3 | AI conversation engine | ☐ Not started | — |
 | 4 | Appointments & availability | ☐ Not started | — |
 | 5 | Background jobs | ☐ Not started | — |
@@ -34,7 +34,7 @@ Status legend: ☐ not started · ◐ in flight · ☑ complete · ⊘ skipped
 
 _Tasks I'm working on right now._
 
-- Phase 2 — WhatsApp integration. Inngest event-bus foundation landed. Next slice: token encryption helpers (`lib/db/crypto.ts`), then webhook HMAC verification + idempotent `messages` insert + `message.received` emission.
+- Phase 2 — WhatsApp integration. Inngest event-bus foundation + token crypto helpers landed. Next slice: webhook HMAC verification + idempotent `messages` insert + `message.received` emission.
 
 ---
 
@@ -62,6 +62,7 @@ _What is actually complete versus still missing for Phase 0._
 
 _Significant choices that diverge from the tech doc or that I want to remember the reasoning for. Newest first._
 
+- **2026-05-14** — Token encryption helpers in `lib/db/crypto.ts` expose a minimal two-function async API (`encryptToken` / `decryptToken`) that wraps `pgp_sym_encrypt` / `pgp_sym_decrypt` via a single SELECT round-trip each. Reason: both Phase 2 consumers (Embedded Signup writes once, channel adapter reads once per outbound send) are infrequent, so the round-trip cost is irrelevant; a composable `sql` builder would force the encryption key to leak across more call sites without a real performance win. Key is captured once at module init from `TOKEN_ENCRYPTION_KEY` (matching the repo's "throw at construction" pattern); no per-call env read and no runtime rotation, because silent drift between calls would be a much worse failure mode than a deploy-time restart. No length / format validation on the key — `pgp_sym_encrypt` accepts any non-empty string and derives its own internal key. Schema column `whatsapp_connections.access_token_encrypted` was already `bytea` from `0001_init_schema.sql`, so no migration. Round-trip integration test against the local Postgres confirms encrypt → decrypt yields the original plaintext and that successive encryptions of the same input produce different ciphertexts (pinning the non-deterministic property so a later refactor to a deterministic mode would fail loudly).
 - **2026-05-14** — Inngest client is a module-level singleton in `lib/inngest/client.ts`, not a per-call factory like `lib/supabase/*`. Reason: the Inngest client carries no per-request state (no cookies, no RLS context); the canonical SDK pattern (per `node_modules/inngest/components/Inngest.d.ts`) is module-level instantiation, and a factory would only add ceremony. App `id` is fixed at `'medium'` and treated as immutable — changing the id orphans Inngest history. `INNGEST_EVENT_KEY` is validated at module init (matching the repo's "throw at construction" pattern for env vars); `INNGEST_SIGNING_KEY` is intentionally validated lazily inside `serve()` because the Inngest dev server bypasses signature verification locally and a boot-time throw would block `pnpm dev`. `.env.test` carries `INNGEST_EVENT_KEY=dev` so any future test that imports the client transitively can run without the production key.
 - **2026-05-08** — Closed Phase 1. The remaining open acceptance item is the Lighthouse mobile audit, which is deferred until Phase 7 builds real UI worth measuring against a `pnpm build && pnpm start` signed-in session. Everything else (schema, RLS, tenancy helpers, tests, auth UI, middleware, dashboard shell) is shipped and verified locally.
 - **2026-05-08** — Picked Vitest projects for the unit/integration split rather than CLI flags, after Vitest 4 dropped `--include`. `pnpm test` uses `--project unit`, `pnpm test:integration` uses `--project integration`. Same `vitest.config.ts`, two named project blocks.
@@ -101,6 +102,7 @@ _Significant choices that diverge from the tech doc or that I want to remember t
 
 _One bullet per session: date — what shipped — what's next._
 
+- **2026-05-14** — Landed Phase 2 token crypto helpers. New `lib/db/crypto.ts` exports `encryptToken(plaintext: string) → Promise<Buffer>` and `decryptToken(ciphertext: Buffer) → Promise<string>`, each issuing a single SELECT round-trip through `pgp_sym_encrypt` / `pgp_sym_decrypt` with `TOKEN_ENCRYPTION_KEY` captured at module init. Schema and `pgcrypto` extension were already in place — no migration. Tests: `lib/db/__tests__/crypto.test.ts` (unit; both env-guard branches) plus `lib/db/__tests__/crypto.integration.test.ts` (integration; round-trip against local Postgres, plus assertion that successive encryptions of the same plaintext yield different ciphertexts to pin the non-deterministic property). `pnpm typecheck` + `pnpm lint` clean; `pnpm test:all` reports 65/65 passing (61 baseline + 4 new). Next: webhook handler hardening — raw-body HMAC-SHA256 verification against the Meta `app_secret`, idempotent `messages` insert keyed on Meta's `id`, `conversations.last_inbound_at` bump, and `inngest.send('message.received', ...)` emission.
 - **2026-05-14** — Started Phase 2 with the Inngest event-bus wiring. New `lib/inngest/`: `events.ts` (typed event union for `message.received`, `wa.connection.created`, `wa.connection.revoked`, `wa.template.approved`), `client.ts` (singleton `Inngest({ id: 'medium', schemas: EventSchemas.fromRecord<Events>() })` with module-init throw on missing `INNGEST_EVENT_KEY`), `functions.ts` (empty `InngestFunction.Like[]` — real handlers land in Phases 5–6), and unit tests covering both env-guard branches. Replaced the placeholder `app/api/inngest/route.ts` with the real `serve({ client, functions })` exporting GET/POST/PUT under `runtime = 'nodejs'`. `.env.test` got `INNGEST_EVENT_KEY=dev` so future tests can transitively import the client. Typecheck + lint clean; 61/61 tests pass (59 baseline + 2 new). Local smoke: `GET /api/inngest` returns `{ has_event_key: true, has_signing_key: true, function_count: 0, mode: 'dev' }`; `PUT` returns 500 `"No functions registered within your app"` — expected for zero-function Phase 2 state. Next: token encryption helpers + webhook hardening.
 - **2026-05-14** — Ran Lighthouse mobile audit against prod: 100 / 100 / 100 on Performance, Best Practices, SEO; 96 on Accessibility. Last open Phase 1 acceptance bullet is now satisfied; Phase 1 is fully closed. Next: Phase 2 — WhatsApp integration.
 - **2026-05-14** — Finished Google OAuth end-to-end on prod: added `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` to Vercel Production and redeployed (root cause of the "no network call" symptom — `NEXT_PUBLIC_*` vars are inlined at build time and were missing from the previous build); set Supabase **Site URL** to `https://kdmedium.vercel.app` and added both `https://kdmedium.vercel.app/auth/callback` and `http://localhost:3000/auth/callback` to **Redirect URLs** so the OAuth flow lands on the correct origin for prod and local dev. Google sign-in now works on both. Next: dig into the `pnpm build` `PageNotFoundError` for the auth routes, then start Phase 2 — WhatsApp integration.

@@ -62,9 +62,9 @@ The remaining task lists below assume this wiring exists — any task that emits
 
 ### Token encryption helpers
 
-- [ ] `lib/db/crypto.ts` — wrap `pgp_sym_encrypt` / `pgp_sym_decrypt` calls; key from env.
-- [ ] Migration: ensure `access_token_encrypted` is `bytea` (not text).
-- [ ] Test: round-trip a token (encrypt, decrypt) returns the original.
+- [x] `lib/db/crypto.ts` — wraps `pgp_sym_encrypt` / `pgp_sym_decrypt`; `TOKEN_ENCRYPTION_KEY` captured at module init; two async functions (`encryptToken` / `decryptToken`).
+- [x] Migration: `access_token_encrypted` is `bytea` — already in place from `drizzle/migrations/0001_init_schema.sql:137` (no new migration needed).
+- [x] Test: round-trip encrypt → decrypt yields the original plaintext (`lib/db/__tests__/crypto.integration.test.ts`); also asserts non-deterministic ciphertext + unit test covering the env-guard.
 
 ### Bootstrap connection (Inngest function — placeholder; full wiring in Phase 5)
 
