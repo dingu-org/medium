@@ -69,7 +69,7 @@
 
 ### Auth (PT)
 
-- [x] Configure Supabase Auth providers: email + password, Google OAuth. _(Email/password is built; Google OAuth client is wired in code (`oauth-buttons.tsx` + `/auth/callback`); enabling the Google provider in the Supabase dashboard + Google Cloud Console remains a manual deploy-time step.)_
+- [x] Configure Supabase Auth providers: email + password, Google OAuth. _(Email/password and Google OAuth both live end-to-end: client wired in `oauth-buttons.tsx` + `/auth/callback`; Google provider enabled in Supabase + Google Cloud Console; Site URL + Redirect URLs configured for prod and localhost.)_
 - [x] Build `/sign-up`, `/sign-in`, `/auth/callback`, `/forgot-password` routes (shadcn forms, Server Actions where possible).
 - [x] On first sign-up, insert a row into `pts` keyed to `auth.users.id`. _(implemented as a SECURITY DEFINER trigger on `auth.users`; verified end-to-end.)_
 - [x] Middleware (`middleware.ts`) protects `/(dashboard)/*` — redirect to `/sign-in` if not authenticated. _(Cookie refresh in `middleware.ts`; access guard in `(dashboard)/layout.tsx` redirects unauthenticated users.)_
