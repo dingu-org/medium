@@ -10,6 +10,16 @@
 
 ---
 
+## Foundation already in place (2026-05-14)
+
+- Inngest client + `EventSchemas` typed for all four Phase 2 events (`message.received`, `wa.connection.created`, `wa.connection.revoked`, `wa.template.approved`) — `lib/inngest/{events,client,functions}.ts`.
+- `serve({ client, functions })` exposed at `app/api/inngest/route.ts` (GET / POST / PUT, Node runtime); `functions` is the empty registry — real handlers land in Phases 5–6.
+- Verified locally: `GET /api/inngest` returns `{ has_event_key: true, has_signing_key: true, function_count: 0, mode: 'dev' }`.
+
+The remaining task lists below assume this wiring exists — any task that emits an event will `import { inngest } from '@/lib/inngest/client'` and call `inngest.send(...)`.
+
+---
+
 ## Tasks
 
 ### Webhook handler — `app/api/webhooks/whatsapp/route.ts`

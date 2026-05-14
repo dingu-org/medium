@@ -1,15 +1,7 @@
-export async function GET() {
-  return Response.json({
-    ok: true,
-    route: 'inngest-placeholder',
-    phase: 'bootstrap',
-  });
-}
+import { serve } from 'inngest/next';
+import { inngest } from '@/lib/inngest/client';
+import { functions } from '@/lib/inngest/functions';
 
-export async function POST() {
-  return Response.json({
-    ok: true,
-    route: 'inngest-placeholder',
-    phase: 'bootstrap',
-  });
-}
+export const runtime = 'nodejs';
+
+export const { GET, POST, PUT } = serve({ client: inngest, functions });

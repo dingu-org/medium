@@ -3,7 +3,7 @@
 > Living document. Update at the end of every working session.
 
 **Last updated:** 2026-05-14
-**Current phase:** Phase 1 Foundation complete — Phase 2 WhatsApp integration is next.
+**Current phase:** Phase 2 WhatsApp integration in flight — Inngest event-bus wiring landed; token crypto + webhook hardening are the next slices.
 **Days into build:** 2
 
 ---
@@ -14,7 +14,7 @@
 |---|---|---|---|
 | 0 | Bootstrap | ☑ Complete | Local scaffold, first deploy, Meta dev preflight, and final secret review are complete. |
 | 1 | Foundation | ☑ Complete | Schema + RLS + tenancy helpers, tests, auth UI (email/password + Google OAuth end-to-end), middleware, dashboard shell. Lighthouse mobile audit verified at 100 / 100 / 100 / 96 on 2026-05-14. |
-| 2 | WhatsApp integration | ☐ Not started | — |
+| 2 | WhatsApp integration | ◐ In flight | Inngest client + `serve` handler wired (`lib/inngest/`, `app/api/inngest/route.ts`); 4 Phase 2 events typed. Token crypto, webhook hardening, Embedded Signup, channel adapter still pending. |
 | 3 | AI conversation engine | ☐ Not started | — |
 | 4 | Appointments & availability | ☐ Not started | — |
 | 5 | Background jobs | ☐ Not started | — |
@@ -34,7 +34,7 @@ Status legend: ☐ not started · ◐ in flight · ☑ complete · ⊘ skipped
 
 _Tasks I'm working on right now._
 
-- No in-flight Phase 1 work. Next up: Phase 2 — WhatsApp integration.
+- Phase 2 — WhatsApp integration. Inngest event-bus foundation landed. Next slice: token encryption helpers (`lib/db/crypto.ts`), then webhook HMAC verification + idempotent `messages` insert + `message.received` emission.
 
 ---
 
@@ -62,6 +62,7 @@ _What is actually complete versus still missing for Phase 0._
 
 _Significant choices that diverge from the tech doc or that I want to remember the reasoning for. Newest first._
 
+- **2026-05-14** — Inngest client is a module-level singleton in `lib/inngest/client.ts`, not a per-call factory like `lib/supabase/*`. Reason: the Inngest client carries no per-request state (no cookies, no RLS context); the canonical SDK pattern (per `node_modules/inngest/components/Inngest.d.ts`) is module-level instantiation, and a factory would only add ceremony. App `id` is fixed at `'medium'` and treated as immutable — changing the id orphans Inngest history. `INNGEST_EVENT_KEY` is validated at module init (matching the repo's "throw at construction" pattern for env vars); `INNGEST_SIGNING_KEY` is intentionally validated lazily inside `serve()` because the Inngest dev server bypasses signature verification locally and a boot-time throw would block `pnpm dev`. `.env.test` carries `INNGEST_EVENT_KEY=dev` so any future test that imports the client transitively can run without the production key.
 - **2026-05-08** — Closed Phase 1. The remaining open acceptance item is the Lighthouse mobile audit, which is deferred until Phase 7 builds real UI worth measuring against a `pnpm build && pnpm start` signed-in session. Everything else (schema, RLS, tenancy helpers, tests, auth UI, middleware, dashboard shell) is shipped and verified locally.
 - **2026-05-08** — Picked Vitest projects for the unit/integration split rather than CLI flags, after Vitest 4 dropped `--include`. `pnpm test` uses `--project unit`, `pnpm test:integration` uses `--project integration`. Same `vitest.config.ts`, two named project blocks.
 - **2026-05-08** — Decided to keep the public root `/` as a session-aware redirect (signed-in → `/calendar`, otherwise → `/sign-in`) rather than preserve the Phase 0 status landing. Reason: the status page was a deploy-verification placeholder; the real app shouldn't open on it.
@@ -100,6 +101,7 @@ _Significant choices that diverge from the tech doc or that I want to remember t
 
 _One bullet per session: date — what shipped — what's next._
 
+- **2026-05-14** — Started Phase 2 with the Inngest event-bus wiring. New `lib/inngest/`: `events.ts` (typed event union for `message.received`, `wa.connection.created`, `wa.connection.revoked`, `wa.template.approved`), `client.ts` (singleton `Inngest({ id: 'medium', schemas: EventSchemas.fromRecord<Events>() })` with module-init throw on missing `INNGEST_EVENT_KEY`), `functions.ts` (empty `InngestFunction.Like[]` — real handlers land in Phases 5–6), and unit tests covering both env-guard branches. Replaced the placeholder `app/api/inngest/route.ts` with the real `serve({ client, functions })` exporting GET/POST/PUT under `runtime = 'nodejs'`. `.env.test` got `INNGEST_EVENT_KEY=dev` so future tests can transitively import the client. Typecheck + lint clean; 61/61 tests pass (59 baseline + 2 new). Local smoke: `GET /api/inngest` returns `{ has_event_key: true, has_signing_key: true, function_count: 0, mode: 'dev' }`; `PUT` returns 500 `"No functions registered within your app"` — expected for zero-function Phase 2 state. Next: token encryption helpers + webhook hardening.
 - **2026-05-14** — Ran Lighthouse mobile audit against prod: 100 / 100 / 100 on Performance, Best Practices, SEO; 96 on Accessibility. Last open Phase 1 acceptance bullet is now satisfied; Phase 1 is fully closed. Next: Phase 2 — WhatsApp integration.
 - **2026-05-14** — Finished Google OAuth end-to-end on prod: added `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` to Vercel Production and redeployed (root cause of the "no network call" symptom — `NEXT_PUBLIC_*` vars are inlined at build time and were missing from the previous build); set Supabase **Site URL** to `https://kdmedium.vercel.app` and added both `https://kdmedium.vercel.app/auth/callback` and `http://localhost:3000/auth/callback` to **Redirect URLs** so the OAuth flow lands on the correct origin for prod and local dev. Google sign-in now works on both. Next: dig into the `pnpm build` `PageNotFoundError` for the auth routes, then start Phase 2 — WhatsApp integration.
 - **2026-05-08** — Fixed the font theme-token regression in `app/globals.css`: Tailwind `--font-sans` / `--font-heading` now point at Next's `--font-geist-sans` variable instead of self-referencing `--font-sans`, and the compiled CSS now emits `html{font-family:var(--font-geist-sans)}` again. `pnpm lint` passes. A separate follow-up is needed for `pnpm build`, which currently fails during page-data collection with `PageNotFoundError` on `/sign-in`, `/sign-up`, and `/forgot-password`.
