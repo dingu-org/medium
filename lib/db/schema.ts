@@ -60,28 +60,36 @@ const ptIdRef = () =>
     .notNull()
     .references(() => pts.id, { onDelete: 'cascade' });
 
-export const whatsappConnections = pgTable('whatsapp_connections', {
-  id: uuid('id').primaryKey().default(genUuid),
-  ptId: ptIdRef(),
-  phoneNumberId: text('phone_number_id').notNull(),
-  wabaId: text('waba_id').notNull(),
-  accessTokenEncrypted: bytea('access_token_encrypted'),
-  tier: text('tier'),
-  qualityRating: text('quality_rating'),
-  connectedAt: tsTz('connected_at'),
-  status: connectionStatus('status').notNull().default('pending'),
-  createdAt: tsTz('created_at').notNull().default(now),
-});
+export const whatsappConnections = pgTable(
+  'whatsapp_connections',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    phoneNumberId: text('phone_number_id').notNull(),
+    wabaId: text('waba_id').notNull(),
+    accessTokenEncrypted: bytea('access_token_encrypted'),
+    tier: text('tier'),
+    qualityRating: text('quality_rating'),
+    connectedAt: tsTz('connected_at'),
+    status: connectionStatus('status').notNull().default('pending'),
+    createdAt: tsTz('created_at').notNull().default(now),
+  },
+  (t) => [index('whatsapp_connections_phone_number_id_idx').on(t.phoneNumberId)],
+);
 
-export const patients = pgTable('patients', {
-  id: uuid('id').primaryKey().default(genUuid),
-  ptId: ptIdRef(),
-  name: text('name').notNull(),
-  phone: text('phone').notNull(),
-  waId: text('wa_id'),
-  notes: text('notes'),
-  createdAt: tsTz('created_at').notNull().default(now),
-});
+export const patients = pgTable(
+  'patients',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    name: text('name').notNull(),
+    phone: text('phone').notNull(),
+    waId: text('wa_id'),
+    notes: text('notes'),
+    createdAt: tsTz('created_at').notNull().default(now),
+  },
+  (t) => [uniqueIndex('patients_pt_wa_id_uq').on(t.ptId, t.waId)],
+);
 
 export const conversations = pgTable(
   'conversations',

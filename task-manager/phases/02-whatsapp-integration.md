@@ -24,16 +24,16 @@ The remaining task lists below assume this wiring exists — any task that emits
 
 ### Webhook handler — `app/api/webhooks/whatsapp/route.ts`
 
-- [ ] `GET` handler for Meta's webhook verification challenge (`hub.challenge`).
-- [ ] `POST` handler:
-  - [ ] Read raw body for signature verification (Next.js `request.text()` then JSON parse).
-  - [ ] Verify `x-hub-signature-256` against `app_secret` using HMAC-SHA256. Reject 401 on mismatch.
-  - [ ] For each message in the payload: insert into `messages` with `external_id` = Meta's `id`. Conflict on UNIQUE → swallow (idempotent).
-  - [ ] Update `conversations.last_inbound_at` to `now()` for the affected conversation (upsert if new).
-  - [ ] Emit `message.received` Inngest event with `{ messageId, ptId, conversationId }`.
-  - [ ] Return 200 immediately (target p95 <200 ms).
-- [ ] Force Node runtime (`export const runtime = 'nodejs'`); Edge runtime can't do `crypto` reliably at the time the doc was written.
-- [ ] Log every rejected signature as a structured warning (sign of misconfiguration or attack).
+- [x] `GET` handler for Meta's webhook verification challenge (`hub.challenge`).
+- [x] `POST` handler:
+  - [x] Read raw body for signature verification (`request.text()` then `JSON.parse`).
+  - [x] Verify `x-hub-signature-256` against `META_APP_SECRET` using HMAC-SHA256 + `timingSafeEqual` (extracted to `lib/channels/whatsapp/signature.ts`). Reject 401 on mismatch.
+  - [x] For each message: idempotent upsert chain (patient → conversation → message) in a per-message transaction; message insert uses `ON CONFLICT (external_id) DO NOTHING RETURNING id` and only emits when `returning()` is non-empty.
+  - [x] Conversation upsert keyed on `(patient_id, channel)` bumps `last_inbound_at` to `now()`.
+  - [x] Emit `message.received` Inngest event with `{ messageId, ptId, conversationId }` only when the message was newly persisted (skips on re-delivery).
+  - [x] Return 200 immediately (`EVENT_RECEIVED`).
+- [x] Force Node runtime (`export const runtime = 'nodejs'`); needed for `crypto.createHmac` + `timingSafeEqual`.
+- [x] Log every rejected signature as a structured warning (also: unknown `phone_number_id`, non-text message types, Inngest dispatch failures).
 
 ### Embedded Signup — `app/api/auth/meta-embedded/route.ts`
 
