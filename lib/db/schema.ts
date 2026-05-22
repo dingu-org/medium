@@ -74,7 +74,9 @@ export const whatsappConnections = pgTable(
     status: connectionStatus('status').notNull().default('pending'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
-  (t) => [index('whatsapp_connections_phone_number_id_idx').on(t.phoneNumberId)],
+  // Unique: a phone number maps to exactly one PT. Makes the webhook lookup
+  // unambiguous and lets the Embedded Signup callback detect a duplicate connect.
+  (t) => [uniqueIndex('whatsapp_connections_phone_number_id_uq').on(t.phoneNumberId)],
 );
 
 export const patients = pgTable(

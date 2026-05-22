@@ -37,28 +37,32 @@ The remaining task lists below assume this wiring exists — any task that emits
 
 ### Embedded Signup — `app/api/auth/meta-embedded/route.ts`
 
-- [ ] Frontend "Connect WhatsApp" button on settings page that opens Meta's Embedded Signup with `app_id`, `redirect_uri`, `state` (signed CSRF token tied to the PT session).
-- [ ] Callback handler:
-  - [ ] Verify state token.
-  - [ ] Exchange auth code for short-lived token (server-side fetch).
-  - [ ] Exchange short-lived for long-lived token.
-  - [ ] Call Graph API to retrieve `phone_number_id`, `waba_id`.
-  - [ ] Encrypt token via `pgp_sym_encrypt(token, env.TOKEN_ENCRYPTION_KEY)`.
-  - [ ] Insert `whatsapp_connections` row.
-  - [ ] Subscribe phone number to webhook (Graph API call).
-  - [ ] Emit `wa.connection.created` event.
-- [ ] Error UI per spec doc §9 — rejection, duplicate number, abandoned flow.
+Implemented via Meta's current JS-SDK popup flow (2026-05-22 decision log), which diverges from the legacy redirect/`state` wording the items below were written against.
+
+- [x] "Connect WhatsApp" button on `/settings` — runs `FB.login({ config_id, response_type:'code', override_default_response_type:true })`, captures `phone_number_id` + `waba_id` from the `WA_EMBEDDED_SIGNUP` postMessage, POSTs `{ code, phoneNumberId, wabaId }` (`app/(dashboard)/settings/connect-whatsapp.tsx`).
+- [x] Callback handler (`POST`):
+  - [x] CSRF via same-origin Origin check + authenticated session (replaces the signed `state` token — the JS-SDK flow has no redirect round-trip).
+  - [x] Exchange auth code for the business token — single `GET /<v>/oauth/access_token` (no separate short→long swap; that's the legacy user-token path).
+  - [x] `phone_number_id` + `waba_id` arrive via the popup postMessage (not a Graph lookup).
+  - [x] Encrypt token via `encryptToken` (`pgp_sym_encrypt`).
+  - [x] Insert `whatsapp_connections` row via `getServiceClient` (duplicate number → 409; same-PT reconnect → update).
+  - [x] Subscribe WABA to webhook (`POST /<wabaId>/subscribed_apps`) + best-effort `POST /<phoneNumberId>/register`.
+  - [x] Emit `wa.connection.created` event.
+- [x] Error UI per spec doc §9 — rejection / duplicate number / abandoned flow (toast keyed on the typed error kind; abandoned = no `authResponse`).
+- [x] Unique index on `whatsapp_connections.phone_number_id` (migration `0005`) backs the 409 path + the unambiguous webhook lookup.
 
 ### Channel adapter — `lib/channels/whatsapp/`
 
-- [ ] `client.ts` — Graph API client; reads + decrypts token at call site only, never logs it.
-  - [ ] `sendFreeForm(connectionId, to, body)` — refuses if `last_inbound_at` is older than 24 h.
-  - [ ] `sendTemplate(connectionId, to, templateName, language, variables)` — used outside the 24 h window.
-  - [ ] `submitTemplate(connectionId, name, language, body, variables)` — Business Management API.
-  - [ ] `getTemplateStatus(connectionId, templateId)` — for polling.
-  - [ ] `getQualityRating(connectionId)` — periodic poll.
-- [ ] Auth-error handler: on 401/403 from Graph API, mark `whatsapp_connections.status = 'revoked'`, emit `wa.connection.revoked`. The PWA picks this up and shows "Reconnect WhatsApp".
-- [ ] Rate-limit awareness: read `whatsapp_connections.tier` and a rolling 24h count from `messages` to throttle outbound sends.
+Shared plumbing landed too: `constants.ts` (`GRAPH_VERSION = v25.0`), `graph.ts` (`graphUrl` + `graphFetch` → typed `GraphApiError`), `errors.ts`.
+
+- [x] `client.ts` — Graph API client; reads + decrypts token at call site only, never logs it.
+  - [x] `sendFreeForm(connectionId, to, body)` — refuses if `last_inbound_at` is older than 24 h.
+  - [x] `sendTemplate(connectionId, to, templateName, language, variables)` — used outside the 24 h window; refuses if no approved template.
+  - [x] `submitTemplate(connectionId, name, language, body, variables)` — Business Management API.
+  - [x] `getTemplateStatus(connectionId, templateId)` — for polling (consumed in Phase 5).
+  - [ ] `getQualityRating(connectionId)` — periodic poll. **Deferred to Phase 5.**
+- [x] Auth-error handler: on 401/403 from Graph API, mark `whatsapp_connections.status = 'revoked'`, emit `wa.connection.revoked`. The PWA picks this up and shows "Reconnect WhatsApp".
+- [ ] Rate-limit awareness: read `whatsapp_connections.tier` and a rolling 24h count from `messages` to throttle outbound sends. **Deferred to Phase 5.**
 
 ### Token encryption helpers
 
@@ -66,31 +70,32 @@ The remaining task lists below assume this wiring exists — any task that emits
 - [x] Migration: `access_token_encrypted` is `bytea` — already in place from `drizzle/migrations/0001_init_schema.sql:137` (no new migration needed).
 - [x] Test: round-trip encrypt → decrypt yields the original plaintext (`lib/db/__tests__/crypto.integration.test.ts`); also asserts non-deterministic ciphertext + unit test covering the env-guard.
 
-### Bootstrap connection (Inngest function — placeholder; full wiring in Phase 5)
+### Bootstrap connection (Inngest function — first real function; polling in Phase 5)
 
-- [ ] Stub `bootstrapWaConnection` that:
-  - [ ] Creates `appointment_reminder_24h` template via Graph API.
-  - [ ] Polls approval status every hour for up to 72 h.
-  - [ ] Updates `message_templates.status` accordingly.
-  - [ ] On approval, emit `wa.template.approved`.
+- `bootstrapWaConnection` registered on `wa.connection.created` (`lib/inngest/functions/bootstrap-wa-connection.ts`):
+  - [x] Creates `appointment_reminder_24h` template via Graph API (`submitTemplate`) + writes a `pending` `message_templates` row (idempotent on reconnect).
+  - [ ] Polls approval status every hour for up to 72 h. **Phase 5.**
+  - [ ] Updates `message_templates.status` accordingly. **Phase 5.**
+  - [ ] On approval, emit `wa.template.approved`. **Phase 5.**
 
 ---
 
 ## Acceptance criteria
 
-- [ ] A real PT can complete Embedded Signup and a `whatsapp_connections` row is written with an encrypted token.
-- [ ] A test message sent to that number appears in `messages` within seconds; webhook handler returns 200 in <500 ms locally.
-- [ ] A forged-signature request is rejected with 401.
-- [ ] Two duplicate webhooks for the same Meta `id` produce exactly one `messages` row.
-- [ ] `sendFreeForm` outside the 24 h window refuses cleanly with a typed error.
-- [ ] `sendTemplate` for an unapproved template refuses cleanly.
-- [ ] Decrypting a token never logs the plaintext (audit by grep).
+- [ ] A real PT can complete Embedded Signup and a `whatsapp_connections` row is written with an encrypted token. _(Backend done + integration-tested; full E2E needs a live Meta test-asset run — see Notes.)_
+- [x] A test message sent to that number appears in `messages` within seconds; webhook handler returns 200 in <500 ms locally.
+- [x] A forged-signature request is rejected with 401.
+- [x] Two duplicate webhooks for the same Meta `id` produce exactly one `messages` row.
+- [x] `sendFreeForm` outside the 24 h window refuses cleanly with a typed error.
+- [x] `sendTemplate` for an unapproved template refuses cleanly.
+- [x] Decrypting a token never logs the plaintext (audit by grep + automated test).
 
 ---
 
 ## Notes
 
 - For local dev, use ngrok or Cloudflare Tunnel pointing at `localhost:3000/api/webhooks/whatsapp`. Configure a separate Meta test app so prod isn't routed through your laptop.
+- Embedded Signup dev testing: the backend (token exchange → encrypt → persist → `wa.connection.created`) and the adapter guards are fully covered by mocked-`fetch` integration tests — that's the iteration loop. The interactive `FB.login` popup can only be exercised against a public HTTPS origin (Vercel preview or a tunnel) registered in the test app's Allowed Domains + Valid OAuth Redirect URIs, signed in as an app-role user, using the Meta test WABA + test number. The popup handshake itself can't be automated.
 - Meta's current Embedded Signup flow requires the app-role dev path to be wired before coding is useful: Facebook Login for Business settings, allowed domains, valid redirect URIs, a saved `config_id`, and `messages` + `account_update` webhook subscriptions.
 - The 24 h window is checked at *send* time, not receive time, because by the time the Inngest job runs the window may have closed.
 - Quality rating is polled, not pushed — schedule in Phase 5.

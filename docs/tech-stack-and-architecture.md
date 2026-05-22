@@ -150,10 +150,12 @@ Every query through `lib/tenancy/` either uses the authenticated PT's session (R
 
 ### 5.4 PT onboarding via Embedded Signup
 
+Implemented via Meta's current **JS-SDK popup** flow — not the legacy redirect/`state` model (see the 2026-05-22 decision log).
+
 1. PT signs up in the PWA (Supabase Auth), completes profile (practice name, timezone).
-2. PT clicks "Connect WhatsApp." The app opens Meta's Embedded Signup flow with `app_id`, `redirect_uri`, and state token.
-3. On callback to `/api/auth/meta-embedded`, the app exchanges the auth code for an access token (server-side), stores the encrypted token, `phone_number_id`, and `waba_id` in `whatsapp_connections`, and subscribes the phone number to the webhook.
-4. An Inngest function `bootstrapWaConnection` runs: it creates the `appointment_reminder_24h` template in the PT's WABA, polls Meta for approval status (typically 24–48h), and updates `message_templates` accordingly.
+2. PT clicks "Connect WhatsApp" on `/settings`. The browser runs Embedded Signup via `FB.login({ config_id, response_type: 'code', override_default_response_type: true })`; the popup returns `{ code, phone_number_id, waba_id }` to the page.
+3. The page POSTs those to `/api/auth/meta-embedded` (same-origin; CSRF is bound by the authenticated session + an Origin check, so there is no `state` token). The handler exchanges the code once for the long-lived business token at `GET /<v>/oauth/access_token`, subscribes the WABA to our webhook (and best-effort registers the number), stores the encrypted token + `phone_number_id` + `waba_id` in `whatsapp_connections`, and emits `wa.connection.created`.
+4. An Inngest function `bootstrapWaConnection` runs on `wa.connection.created`: it submits the `appointment_reminder_24h` template to the PT's WABA and writes a `pending` `message_templates` row. Approval polling (typically 24–48h) and the `wa.template.approved` emission land in Phase 5.
 5. The PWA guides the PT through setting availability, configuring the AI's name and greeting, and offering a test message.
 6. Error states (Meta rejection, number already in use, PT abandoned flow) follow the handling in `medium-canvas/documents/whatsapp-cloud-api-architecture.md §PT onboarding flow architecture`.
 

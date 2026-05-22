@@ -36,6 +36,13 @@
       "when": 1778789575096,
       "tag": "0004_whatsapp_webhook_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779469016359,
+      "tag": "0005_whatsapp_connection_unique",
+      "breakpoints": true
     }
   ]
 }

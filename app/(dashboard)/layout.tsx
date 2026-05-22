@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { TopHeader } from '@/components/dashboard/top-header';
+import { Toaster } from '@/components/ui/sonner';
 import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import { createServerClient } from '@/lib/supabase/server';
@@ -27,6 +28,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       <TopHeader practiceName={pt?.practiceName ?? null} email={pt?.email ?? user.email ?? ''} />
       <main className="mx-auto max-w-md px-4 pt-4 pb-20">{children}</main>
       <BottomNav />
+      <Toaster />
     </div>
   );
 }
