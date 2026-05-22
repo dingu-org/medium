@@ -70,16 +70,20 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (!event.origin.endsWith('facebook.com')) return;
+      let data: { type?: string; event?: string; data?: Record<string, unknown> };
       try {
-        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.event === 'FINISH') {
-          sessionInfo.current = {
-            phoneNumberId: data.data?.phone_number_id,
-            wabaId: data.data?.waba_id,
-          };
-        }
+        data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
       } catch {
-        // Unrelated or non-JSON message — ignore.
+        return; // non-JSON message — ignore
+      }
+      if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
+      console.info('[connect-whatsapp] embedded-signup event:', data.event, data.data);
+      // FINISH carries phone_number_id + waba_id; FINISH_ONLY_WABA omits the number.
+      if (typeof data.event === 'string' && data.event.startsWith('FINISH')) {
+        sessionInfo.current = {
+          phoneNumberId: data.data?.phone_number_id as string | undefined,
+          wabaId: data.data?.waba_id as string | undefined,
+        };
       }
     }
     window.addEventListener('message', onMessage);
@@ -106,8 +110,11 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
       const fb = window.FB;
       if (!fb) throw new Error('FB SDK unavailable');
 
-      const authResponse = await new Promise<{ code?: string } | null>((resolve) => {
-        fb.login((resp) => resolve(resp.authResponse ?? null), {
+      const loginResp = await new Promise<{
+        authResponse?: { code?: string } | null;
+        status?: string;
+      }>((resolve) => {
+        fb.login((resp) => resolve(resp), {
           config_id: configId,
           response_type: 'code',
           override_default_response_type: true,
@@ -115,9 +122,15 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
         });
       });
 
-      const code = authResponse?.code;
+      const code = loginResp.authResponse?.code;
       const { phoneNumberId, wabaId } = sessionInfo.current;
       if (!code || !phoneNumberId || !wabaId) {
+        console.warn('[connect-whatsapp] incomplete — missing data after popup', {
+          loginStatus: loginResp.status,
+          hasCode: Boolean(code),
+          phoneNumberId,
+          wabaId,
+        });
         toast.info('Connection incomplete — you can resume anytime.');
         return;
       }
