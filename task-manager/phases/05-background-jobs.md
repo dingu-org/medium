@@ -69,6 +69,13 @@
 - [ ] Call Graph API for quality rating.
 - [ ] Update column; if rating drops to a warning level, emit `wa.quality_warning` (notifications fan-out).
 
+#### `monitorWaTokenExpiry` — WhatsApp access-token expiry (added 2026-05-25)
+
+- [ ] **Context:** the Embedded Signup configuration issues a **system-user token that expires in ~60 days** (confirmed from the live config). This corrects the earlier "long-lived business token, no refresh" assumption. Reactive handling already exists (a Graph 401/403 → `status='revoked'` → `wa.connection.revoked` → PWA "Reconnect"), which is fine for dev/MVP, but a token silently dying every 60 days is poor UX for a real PT.
+- [ ] **First, try to remove the problem:** check whether the Embedded Signup config / token settings can issue a **non-expiring** system-user token. If yes, this job is unnecessary.
+- [ ] If it must expire: add an `expires_at` column to `whatsapp_connections` (set at connect time, or `connected_at + 60d`), then a daily cron flags connections within N days of expiry and emits `wa.connection.expiring` → notifications prompt the PT to reconnect before it lapses.
+- [ ] Note: Embedded Signup **system-user** tokens are not refreshable via `fb_exchange_token` (that's the user-token path) — "refresh" means the PT re-runs Embedded Signup. Confirm Meta's current guidance at implementation.
+
 ### Event subscribers (Inngest functions reacting to domain events)
 
 - [ ] `appointment.booked` →
