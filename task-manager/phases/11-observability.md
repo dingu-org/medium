@@ -53,7 +53,7 @@
 ### Cost dashboards
 
 - [ ] Daily aggregation job (Inngest cron):
-  - Use OpenRouter usage accounting or generation metadata as the source of truth for per-turn AI cost and cached-token usage.
+  - Sum persisted `messages.ai_cost_microusd` and `cached_tokens`; these fields are populated from OpenRouter usage accounting across every step in an AI turn.
   - Estimate Meta conversation cost from `conversations` (each new patient conversation in 24 h window = one paid conversation).
 - [ ] Insert into a `cost_daily` rollup table.
 - [ ] Simple admin-only dashboard (server-rendered): yesterday's spend, monthly burn.
@@ -85,7 +85,7 @@
 ## Notes
 
 - Don't go overboard on dashboards. Two are enough for MVP: funnel + cost. Build more once you can name a question they'd answer.
-- OpenRouter usage accounting returns token counts, cached-token details, and total request cost. Prefer that over hand-maintained price tables.
+- OpenRouter usage accounting returns token counts, cached-token details, and total request cost. Phase 3 persists these on AI message rows; prefer those fields over hand-maintained price tables.
 - If the AI SDK provider does not expose all cost fields cleanly, persist the generation ID and reconcile via OpenRouter's generation metadata API.
 - The Meta cost model has changed multiple times; keep the calculator in `lib/billing/meta.ts` so it's easy to update.
 - Trace IDs are easy to forget when an Inngest run handles a non-trace-tagged event. Add a default trace ID = run ID when none is provided.

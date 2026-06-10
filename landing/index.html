@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Medium — asistenti që rezervon takime në WhatsApp</title>
+<meta name="description" content="Medium bisedon me pacientët tuaj në WhatsApp, cakton takime dhe i mban orët tuaja të mbushura — ndërsa ju qëndroni në kontroll." />
+<meta name="theme-color" content="#1f5d86" />
+
+<!-- Open Graph -->
+<meta property="og:title" content="Medium — asistenti që rezervon takime në WhatsApp" />
+<meta property="og:description" content="Asistenti që u përgjigjet pacientëve dhe rezervon takime në WhatsApp." />
+<meta property="og:type" content="website" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<style>
+/* ==========================================================================
+   Medium — design tokens (from the Medium Design System: colors_and_type.css)
+   ========================================================================== */
+:root {
+  /* neutral scale (cool, slight blue cast) */
+  --neutral-0:#ffffff; --neutral-50:#f7f8fa; --neutral-100:#eef0f4; --neutral-150:#e3e7ed;
+  --neutral-200:#d4dae3; --neutral-300:#b6bdc9; --neutral-400:#8d95a3; --neutral-500:#6b7280;
+  --neutral-600:#4b5563; --neutral-700:#303744; --neutral-800:#1d2330; --neutral-900:#0f1420;
+
+  /* brand — single restrained deep clinical blue */
+  --brand-50:#ecf3f9; --brand-100:#d4e3f0; --brand-200:#a6c5dc; --brand-300:#6ea1c2;
+  --brand-400:#3d7da4; --brand-500:#1f5d86; --brand-600:#174a6c; --brand-700:#113a55; --brand-800:#0c2a3e;
+
+  /* secondary accent — sage; appears only on the logo dot */
+  --sage:#7cc4a8;
+
+  /* semantic */
+  --success-500:#2f8b5a; --warning-500:#b97a08; --danger-500:#b3322b;
+
+  /* foreground / background */
+  --fg-1:var(--neutral-900); --fg-2:var(--neutral-700); --fg-3:var(--neutral-500); --fg-4:var(--neutral-400);
+  --bg-1:var(--neutral-0); --bg-2:var(--neutral-50); --bg-3:var(--neutral-100);
+  --bg-hover:var(--neutral-100); --bg-press:var(--neutral-150);
+  --border-1:var(--neutral-150); --border-2:var(--neutral-200); --border-3:var(--neutral-300);
+
+  /* type */
+  --font-display:"Inter Tight","Inter",ui-sans-serif,system-ui,sans-serif;
+  --font-sans:"Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --fs-12:12px; --fs-13:13px; --fs-14:14px; --fs-15:15px; --fs-16:16px; --fs-18:18px;
+  --fs-20:20px; --fs-24:24px; --fs-28:28px; --fs-32:32px; --fs-40:40px; --fs-56:56px;
+  --lh-tight:1.15; --lh-snug:1.3; --lh-base:1.5; --lh-loose:1.65;
+  --tr-tight:-0.02em; --tr-display:-0.025em; --tr-normal:-0.005em; --tr-eyebrow:0.08em;
+
+  /* spacing (4px base) */
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:20px; --s-6:24px;
+  --s-8:32px; --s-10:40px; --s-12:48px; --s-16:64px; --s-20:80px;
+
+  /* radius */
+  --r-sm:4px; --r-md:6px; --r-lg:10px; --r-xl:14px; --r-pill:999px;
+
+  /* shadow — low spread, hairline-first */
+  --sh-1:0 1px 0 rgba(15,20,32,.04),0 1px 2px rgba(15,20,32,.04);
+  --sh-2:0 1px 2px rgba(15,20,32,.04),0 4px 12px rgba(15,20,32,.06);
+  --sh-3:0 2px 4px rgba(15,20,32,.05),0 12px 32px rgba(15,20,32,.08);
+  --sh-focus:0 0 0 3px rgba(31,93,134,.18);
+
+  /* motion — snappy, not bouncy */
+  --ease-out:cubic-bezier(.2,.7,.2,1);
+  --dur-1:120ms; --dur-2:180ms; --dur-3:280ms;
+}
+
+/* ---------- reset ---------- */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font-sans); font-size:var(--fs-15); line-height:var(--lh-base);
+  letter-spacing:var(--tr-normal); color:var(--fg-1); background:var(--bg-2);
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+a{color:inherit;text-decoration:none}
+img,svg{display:block}
+:focus-visible{outline:none;box-shadow:var(--sh-focus);border-radius:var(--r-sm)}
+
+/* ---------- type helpers ---------- */
+.t-display{font-family:var(--font-display);font-weight:600;line-height:var(--lh-tight);letter-spacing:var(--tr-display);
+  font-size:clamp(32px,5.2vw,var(--fs-56));color:var(--fg-1)}
+.t-h2{font-family:var(--font-display);font-weight:600;line-height:var(--lh-snug);letter-spacing:var(--tr-tight);
+  font-size:clamp(24px,3.6vw,var(--fs-32))}
+.t-h3{font-family:var(--font-display);font-weight:600;font-size:var(--fs-20);line-height:var(--lh-snug);letter-spacing:var(--tr-tight)}
+.t-eyebrow{font-size:var(--fs-12);font-weight:600;line-height:1;letter-spacing:var(--tr-eyebrow);
+  text-transform:uppercase;color:var(--brand-500)}
+.t-body{font-size:var(--fs-16);line-height:var(--lh-base);color:var(--fg-2)}
+.t-caption{font-size:var(--fs-13);line-height:var(--lh-snug);color:var(--fg-3)}
+.mono{font-family:var(--font-mono);font-size:.92em;background:var(--bg-3);
+  border:1px solid var(--border-1);border-radius:var(--r-sm);padding:1px 5px;color:var(--brand-600)}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1120px;margin:0 auto;padding:0 var(--s-6)}
+section{padding:clamp(56px,9vw,var(--s-20)) 0}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);
+  height:44px;padding:0 var(--s-5);border:1px solid transparent;border-radius:var(--r-md);
+  font-family:var(--font-sans);font-size:var(--fs-15);font-weight:600;cursor:pointer;
+  transition:background var(--dur-1) var(--ease-out),transform var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out)}
+.btn svg{width:18px;height:18px}
+.btn-primary{background:var(--brand-500);color:#fff}
+.btn-primary:hover{background:var(--brand-600)}
+.btn-primary:active{background:var(--brand-700);transform:scale(.99)}
+.btn-secondary{background:var(--bg-1);color:var(--fg-2);border-color:var(--border-2)}
+.btn-secondary:hover{background:var(--bg-hover)}
+.btn-onbrand{background:#fff;color:var(--brand-700)}
+.btn-onbrand:hover{background:var(--neutral-100)}
+
+/* ---------- header ---------- */
+.site-header{position:sticky;top:0;z-index:50;background:var(--bg-1);
+  border-bottom:1px solid var(--border-1)}
+.site-header .wrap{display:flex;align-items:center;justify-content:space-between;gap:var(--s-4);height:64px}
+.brand-lockup{height:26px}
+.header-right{display:flex;align-items:center;gap:var(--s-3)}
+
+/* language toggle (segmented pill) */
+.lang{display:inline-flex;align-items:center;background:var(--bg-3);border:1px solid var(--border-1);
+  border-radius:var(--r-pill);padding:2px}
+.lang button{appearance:none;border:0;background:transparent;cursor:pointer;
+  font-family:var(--font-sans);font-size:var(--fs-13);font-weight:600;color:var(--fg-3);
+  padding:5px 12px;border-radius:var(--r-pill);transition:background var(--dur-1) var(--ease-out),color var(--dur-1) var(--ease-out)}
+.lang button[aria-pressed="true"]{background:var(--bg-1);color:var(--brand-600);box-shadow:var(--sh-1)}
+
+/* ---------- hero ---------- */
+.hero{position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(58% 48% at 72% 4%,rgba(31,93,134,.05),transparent 70%)}
+.hero .wrap{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:var(--s-12);align-items:center}
+.hero-copy{max-width:560px}
+.hero-copy .t-eyebrow{display:inline-block;margin-bottom:var(--s-4)}
+.hero h1{margin-bottom:var(--s-5)}
+.hero .lede{font-size:var(--fs-18);color:var(--fg-3);line-height:var(--lh-base);margin-bottom:var(--s-8)}
+.hero-cta{display:flex;flex-wrap:wrap;gap:var(--s-3)}
+.hero-note{margin-top:var(--s-5);display:flex;align-items:center;gap:var(--s-2);color:var(--fg-4)}
+.hero-note svg{width:15px;height:15px;color:var(--success-500)}
+.hero-visual{display:flex;justify-content:center}
+
+/* ---------- phone mock ---------- */
+.phone{width:300px;max-width:100%;background:#0f1420;border-radius:40px;padding:9px;box-shadow:var(--sh-3)}
+.phone-screen{position:relative;background:var(--bg-2);border-radius:32px;overflow:hidden;
+  height:600px;display:flex;flex-direction:column}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:26px;
+  background:#0f1420;border-bottom-left-radius:14px;border-bottom-right-radius:14px;z-index:3}
+.chat-head{display:flex;align-items:center;gap:var(--s-3);padding:30px var(--s-4) var(--s-3);
+  background:var(--bg-1);border-bottom:1px solid var(--border-1)}
+.chat-head .av{position:relative;width:36px;height:36px;border-radius:var(--r-lg);
+  background:var(--brand-500);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.chat-head .av span{font-family:var(--font-display);font-weight:600;color:#fff;font-size:var(--fs-18);line-height:1}
+.chat-head .av .dot{position:absolute;top:6px;right:6px;width:5px;height:5px;border-radius:50%;background:var(--sage)}
+.chat-head .who{flex:1;min-width:0}
+.chat-head .who b{font-family:var(--font-display);font-weight:600;font-size:var(--fs-15);color:var(--fg-1);display:block}
+.chat-head .who small{font-size:var(--fs-12);color:var(--success-500)}
+.chat-body{flex:1;padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-2);overflow:hidden;
+  background:linear-gradient(0deg,var(--bg-2),var(--bg-2))}
+.bub{max-width:80%;padding:7px 11px;font-size:var(--fs-14);line-height:1.4;border-radius:var(--r-xl);
+  box-shadow:var(--sh-1)}
+.bub-in{align-self:flex-start;background:var(--bg-1);border:1px solid var(--border-1);
+  color:var(--fg-1);border-bottom-left-radius:var(--r-sm)}
+.bub-out{align-self:flex-end;background:var(--brand-500);color:#fff;border-bottom-right-radius:var(--r-sm)}
+.bub .ts{display:block;font-size:10px;margin-top:2px;opacity:.65;font-variant-numeric:tabular-nums;text-align:right}
+.chat-foot{padding:var(--s-2) var(--s-3) var(--s-4);background:var(--bg-1);border-top:1px solid var(--border-1);
+  display:flex;align-items:center;gap:var(--s-2)}
+.chat-foot .field{flex:1;height:34px;border-radius:var(--r-pill);background:var(--bg-3);
+  border:1px solid var(--border-1);display:flex;align-items:center;padding:0 var(--s-3);
+  color:var(--fg-4);font-size:var(--fs-13)}
+.chat-foot .send{width:34px;height:34px;border-radius:50%;background:var(--brand-500);color:#fff;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.chat-foot .send svg{width:16px;height:16px}
+
+/* ---------- icon tiles ---------- */
+.tile{width:44px;height:44px;border-radius:var(--r-lg);background:var(--brand-50);
+  color:var(--brand-500);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.tile svg{width:22px;height:22px}
+
+/* ---------- steps ---------- */
+.section-head{max-width:640px;margin-bottom:var(--s-10)}
+.section-head .t-eyebrow{display:inline-block;margin-bottom:var(--s-3)}
+.section-head p{margin-top:var(--s-3);color:var(--fg-3);font-size:var(--fs-16)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-8);counter-reset:step}
+.step{position:relative}
+.step .tile{margin-bottom:var(--s-4)}
+.step h3{margin-bottom:var(--s-2)}
+.step p{color:var(--fg-3)}
+.step .num{position:absolute;top:0;right:0;font-family:var(--font-display);font-weight:600;
+  font-size:var(--fs-13);color:var(--fg-4);font-variant-numeric:tabular-nums}
+
+/* ---------- features ---------- */
+.features{background:var(--bg-1);border-top:1px solid var(--border-1);border-bottom:1px solid var(--border-1)}
+.feature-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--s-5)}
+.card{background:var(--bg-1);border:1px solid var(--border-1);border-radius:var(--r-lg);
+  padding:var(--s-6);box-shadow:var(--sh-1);transition:box-shadow var(--dur-2) var(--ease-out)}
+.card:hover{box-shadow:var(--sh-2)}
+.card .tile{margin-bottom:var(--s-4)}
+.card h3{margin-bottom:var(--s-2)}
+.card p{color:var(--fg-3);font-size:var(--fs-15)}
+
+/* ---------- who ---------- */
+.who-section{text-align:center}
+.who-section .inner{max-width:720px;margin:0 auto}
+.who-section .t-eyebrow{display:inline-block;margin-bottom:var(--s-4)}
+.who-section p{margin-top:var(--s-5);color:var(--fg-3);font-size:var(--fs-18);line-height:var(--lh-base)}
+
+/* ---------- CTA band ---------- */
+.cta-band{background:var(--brand-600);color:#fff}
+.cta-band .wrap{text-align:center;display:flex;flex-direction:column;align-items:center;gap:var(--s-5)}
+.cta-band .brand-lockup{height:28px;margin-bottom:var(--s-2)}
+.cta-band h2{color:#fff;max-width:600px}
+.cta-band p{color:rgba(255,255,255,.72);max-width:520px;font-size:var(--fs-16)}
+
+/* ---------- footer ---------- */
+.site-footer{background:var(--bg-1);border-top:1px solid var(--border-1)}
+.site-footer .wrap{padding-top:var(--s-10);padding-bottom:var(--s-10);
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-4)}
+.site-footer .brand-lockup{height:24px}
+.site-footer .meta{display:flex;flex-direction:column;gap:2px;text-align:right}
+
+/* ---------- responsive ---------- */
+@media (max-width:920px){
+  .hero .wrap{grid-template-columns:1fr;gap:var(--s-10)}
+  .hero-copy{max-width:none;text-align:center;margin:0 auto}
+  .hero-copy .hero-cta{justify-content:center}
+  .hero-copy .hero-note{justify-content:center}
+  .steps{grid-template-columns:1fr;gap:var(--s-8);max-width:480px}
+}
+@media (max-width:680px){
+  .feature-grid{grid-template-columns:1fr}
+  .site-footer .wrap{flex-direction:column;text-align:center}
+  .site-footer .meta{text-align:center}
+}
+@media (max-width:420px){
+  .header-cta-label{display:none}
+  .wrap{padding:0 var(--s-5)}
+}
+</style>
+</head>
+<body>
+
+<!-- ====================== HEADER ====================== -->
+<header class="site-header">
+  <div class="wrap">
+    <a href="#top" aria-label="Medium">
+      <!-- wordmark (Medium Design System: assets/logo-wordmark.svg) -->
+      <svg class="brand-lockup" viewBox="0 0 160 40" fill="none" aria-hidden="true" style="width:auto">
+        <rect width="40" height="40" rx="9" fill="#1F5D86"></rect>
+        <path d="M11 27V13h2.4l4.1 7.6 4.1-7.6h2.4v14h-2.2v-9.5l-3.6 6.6h-1.4l-3.6-6.6V27H11Z" fill="#fff"></path>
+        <circle cx="29.5" cy="13.5" r="1.6" fill="#7CC4A8"></circle>
+        <text x="52" y="27" font-family="Inter Tight, Inter, sans-serif" font-size="22" font-weight="600" letter-spacing="-0.02em" fill="#0F1420">Medium</text>
+      </svg>
+    </a>
+    <div class="header-right">
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="sq" aria-pressed="true">SQ</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <a class="btn btn-primary" href="https://wa.me/355694005556" data-wa>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+        <span class="header-cta-label" data-en="Get started">Fillo tani</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ====================== HERO ====================== -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-copy">
+        <span class="t-eyebrow" data-en="Appointment assistant for WhatsApp">Asistent takimesh për WhatsApp</span>
+        <h1 class="t-display" data-en="The assistant that answers clients and books their appointments.">Asistenti që u përgjigjet pacientëve dhe rezervon takimet e tyre.</h1>
+        <p class="lede" data-en="Medium talks to your clients on WhatsApp, books appointments and keeps your schedule full — while you stay in control.">Medium bisedon me pacientët tuaj në WhatsApp, cakton takime dhe i mban orët tuaja të mbushura — ndërsa ju qëndroni në kontroll.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="https://wa.me/355694005556" data-wa>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+            <span data-en="Get started">Fillo tani</span>
+          </a>
+          <a class="btn btn-secondary" href="#how">
+            <span data-en="See how it works">Shiko si funksionon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+          </a>
+        </div>
+        <div class="hero-note t-caption">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+          <span data-en="No app to install. It works inside the WhatsApp you already use.">Pa aplikacion për të instaluar. Funksionon brenda WhatsApp-it që përdorni tashmë.</span>
+        </div>
+      </div>
+
+      <div class="hero-visual">
+        <!-- phone mock: a real Medium booking conversation -->
+        <div class="phone" aria-hidden="true">
+          <div class="phone-screen">
+            <div class="notch"></div>
+            <div class="chat-head">
+              <div class="av"><span>M</span><i class="dot"></i></div>
+              <div class="who">
+                <b>Medium</b>
+                <small data-en="online">në linjë</small>
+              </div>
+              <!-- WhatsApp channel mark (brand-true, never recolored) -->
+              <svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true">
+                <path fill="#25D366" d="M16 .5C7.4.5.5 7.4.5 16c0 2.8.7 5.5 2.1 7.9L.5 31.5l7.8-2c2.3 1.3 5 1.9 7.7 1.9 8.6 0 15.5-6.9 15.5-15.5S24.6.5 16 .5z"></path>
+                <path fill="#fff" d="M23 19.2c-.4-.2-2.3-1.1-2.6-1.3-.3-.1-.6-.2-.8.2-.2.4-.9 1.3-1.1 1.5-.2.2-.4.2-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1-1.9-2.2-2.1-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.5-.6.2-.2.2-.4.4-.6.1-.2.1-.5 0-.7-.1-.2-.8-2-1.1-2.7-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.5-.3.4-1.2 1.2-1.2 2.9 0 1.7 1.2 3.3 1.4 3.6.2.2 2.4 3.7 5.9 5.1.8.4 1.5.6 2 .8.8.3 1.6.2 2.2.1.7-.1 2.3-.9 2.6-1.8.3-.9.3-1.6.2-1.8-.1-.2-.3-.2-.7-.4z"></path>
+              </svg>
+            </div>
+            <div class="chat-body">
+              <div class="bub bub-out" data-en="Hi, I would like an appointment this week.">Përshëndetje, dua një takim këtë javë.</div>
+              <div class="bub bub-in" data-en="Of course. Which service do you need — a first assessment or a follow-up session?">Sigurisht. Cili shërbim ju duhet — vlerësim i parë apo seancë vijuese?</div>
+              <div class="bub bub-out" data-en="A follow-up.">Vijuese.</div>
+              <div class="bub bub-in" data-en="I have Wednesday at 10:00 or Thursday at 14:30 free. Which suits you?">Kam të lirë të mërkurën në 10:00 ose të enjten në 14:30. Cila ju shkon?</div>
+              <div class="bub bub-out" data-en="Thursday.">Të enjten.</div>
+              <div class="bub bub-in" data-en="Done. I have booked you for Thursday 8 May at 14:30.">Mirë, ju kam rezervuar të enjten më 8 maj në orën 14:30.<span class="ts">14:30</span></div>
+            </div>
+            <div class="chat-foot">
+              <div class="field" data-en="Message">Mesazh</div>
+              <div class="send">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== HOW IT WORKS ====================== -->
+  <section id="how">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="t-eyebrow" data-en="How it works">Si funksionon</span>
+        <h2 class="t-h2" data-en="Three steps. No new habits to learn.">Tre hapa. Pa zakone të reja për të mësuar.</h2>
+        <p data-en="Medium lives where your clients already are — and quietly does the scheduling for you.">Medium qëndron aty ku janë tashmë pacientët tuaj — dhe e bën planifikimin në heshtje për ju.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <span class="num">01</span>
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          </div>
+          <h3 class="t-h3" data-en="The client messages">Pacienti shkruan</h3>
+          <p data-en="Your client sends a WhatsApp message, just like any other chat.">Pacienti dërgon një mesazh në WhatsApp, si te çdo bisedë tjetër.</p>
+        </div>
+        <div class="step">
+          <span class="num">02</span>
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg>
+          </div>
+          <h3 class="t-h3" data-en="Medium answers and books">Medium përgjigjet dhe rezervon</h3>
+          <p data-en="The assistant offers open slots, confirms the appointment and adds it to your calendar — on its own.">Asistenti propozon orë të lira, konfirmon takimin dhe e shton në kalendar — vetëm.</p>
+        </div>
+        <div class="step">
+          <span class="num">03</span>
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="16 11 18 13 22 9"></polyline></svg>
+          </div>
+          <h3 class="t-h3" data-en="You stay in control">Ti qëndron në kontroll</h3>
+          <p data-en="See every conversation in your dashboard and take over whenever you want.">Sheh çdo bisedë në panel dhe merr drejtimin kur të duash.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== FEATURES ====================== -->
+  <section class="features">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="t-eyebrow" data-en="What it does">Çfarë bën</span>
+        <h2 class="t-h2" data-en="A calm colleague for the front desk.">Një koleg i qetë për recepsionin.</h2>
+      </div>
+      <div class="feature-grid">
+        <div class="card">
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg>
+          </div>
+          <h3 class="t-h3" data-en="Autonomous booking">Rezervim automatik</h3>
+          <p data-en="Medium books appointments around the clock, even when the clinic is closed.">Medium cakton takime 24 orë në ditë, edhe kur klinika është mbyllur.</p>
+        </div>
+        <div class="card">
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+          </div>
+          <h3 class="t-h3" data-en="Take over anytime">Merr drejtimin</h3>
+          <p data-en="Step into any conversation and reply yourself with a single tap.">Hyr në çdo bisedë dhe përgjigju vetë me një prekje.</p>
+        </div>
+        <div class="card">
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          </div>
+          <h3 class="t-h3" data-en="Your hours, respected">Orët e tua, të respektuara</h3>
+          <p data-en="Set your availability and services; Medium never books outside them.">Cakto disponueshmërinë dhe shërbimet; Medium nuk rezervon kurrë jashtë tyre.</p>
+        </div>
+        <div class="card">
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+          </div>
+          <h3 class="t-h3" data-en="Automatic reminders">Kujtesa automatike</h3>
+          <p data-en='Clients get a reminder the day before and confirm with <span class="mono">KONFIRMO</span> or cancel with <span class="mono">ANULO</span>.'>Pacientët marrin një kujtesë një ditë para dhe konfirmojnë me <span class="mono">KONFIRMO</span> ose anulojnë me <span class="mono">ANULO</span>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== WHO IT'S FOR ====================== -->
+  <section class="who-section">
+    <div class="wrap">
+      <div class="inner">
+        <span class="t-eyebrow" data-en="Who it's for">Për kë është</span>
+        <h2 class="t-h2" data-en="Built for physiotherapists. Expanding to every independent professional.">Ndërtuar për fizioterapeutët. Po zgjerohet te çdo profesionist i pavarur.</h2>
+        <p data-en="Medium started with physiotherapy, where every missed appointment counts. Next it comes to everyone who lives by their calendar — dentists, trainers, consultants.">Medium nisi me fizioterapinë, ku çdo takim i humbur ka rëndësi. Më pas vjen për këdo që jeton me kalendarin e vet — dentistë, trajnerë, konsulentë.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== CTA BAND ====================== -->
+  <section class="cta-band">
+    <div class="wrap">
+      <!-- inverse wordmark (assets/logo-wordmark-inverse.svg) -->
+      <svg class="brand-lockup" viewBox="0 0 160 40" fill="none" aria-hidden="true" style="width:auto">
+        <rect width="40" height="40" rx="9" fill="#fff" fill-opacity="0.08" stroke="#fff" stroke-opacity="0.2"></rect>
+        <path d="M11 27V13h2.4l4.1 7.6 4.1-7.6h2.4v14h-2.2v-9.5l-3.6 6.6h-1.4l-3.6-6.6V27H11Z" fill="#fff"></path>
+        <circle cx="29.5" cy="13.5" r="1.6" fill="#7CC4A8"></circle>
+        <text x="52" y="27" font-family="Inter Tight, Inter, sans-serif" font-size="22" font-weight="600" letter-spacing="-0.02em" fill="#fff">Medium</text>
+      </svg>
+      <h2 class="t-h2" data-en="Let Medium handle the chats. You keep the clients.">Lëre Medium të mbajë bisedat. Ti mbaj pacientët.</h2>
+      <p data-en="Start a conversation now and see how it books an appointment.">Nis një bisedë tani dhe shih si e rezervon një takim.</p>
+      <a class="btn btn-onbrand" href="https://wa.me/355694005556" data-wa>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+        <span data-en="Get started">Fillo tani</span>
+      </a>
+    </div>
+  </section>
+
+</main>
+
+<!-- ====================== FOOTER ====================== -->
+<footer class="site-footer">
+  <div class="wrap">
+    <svg class="brand-lockup" viewBox="0 0 160 40" fill="none" aria-hidden="true" style="width:auto">
+      <rect width="40" height="40" rx="9" fill="#1F5D86"></rect>
+      <path d="M11 27V13h2.4l4.1 7.6 4.1-7.6h2.4v14h-2.2v-9.5l-3.6 6.6h-1.4l-3.6-6.6V27H11Z" fill="#fff"></path>
+      <circle cx="29.5" cy="13.5" r="1.6" fill="#7CC4A8"></circle>
+      <text x="52" y="27" font-family="Inter Tight, Inter, sans-serif" font-size="22" font-weight="600" letter-spacing="-0.02em" fill="#0F1420">Medium</text>
+    </svg>
+    <div class="meta">
+      <span class="t-caption" data-en="The medium between your business and its clients.">Mediumi mes biznesit tënd dhe klientëve të tij.</span>
+      <span class="t-caption">© 2026 Medium</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ============================================================
+   EDIT THIS: your WhatsApp number (country code + number, digits only).
+   Every "Fillo tani / Get started" button builds its wa.me link from it.
+   ============================================================ */
+const WA = "355694005556";
+
+const PREFILL = {
+  sq: "Përshëndetje, dua të provoj Medium.",
+  en: "Hi, I would like to try Medium."
+};
+
+(function () {
+  // Snapshot the in-markup Albanian (source of truth) before any swap.
+  const nodes = Array.prototype.slice.call(document.querySelectorAll("[data-en]"));
+  nodes.forEach(function (el) { el._sq = el.innerHTML; });
+
+  const langButtons = document.querySelectorAll("[data-lang]");
+  const waLinks = document.querySelectorAll("a[data-wa]");
+
+  function setLang(lang) {
+    const isEn = lang === "en";
+    document.documentElement.lang = isEn ? "en" : "sq";
+    nodes.forEach(function (el) {
+      el.innerHTML = isEn ? el.getAttribute("data-en") : el._sq;
+    });
+    waLinks.forEach(function (a) {
+      a.href = "https://wa.me/" + WA + "?text=" + encodeURIComponent(PREFILL[lang]);
+    });
+    langButtons.forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-lang") === lang));
+    });
+    try { localStorage.setItem("medium-lang", lang); } catch (e) {}
+  }
+
+  langButtons.forEach(function (b) {
+    b.addEventListener("click", function () { setLang(b.getAttribute("data-lang")); });
+  });
+
+  let saved = null;
+  try { saved = localStorage.getItem("medium-lang"); } catch (e) {}
+  setLang(saved === "en" ? "en" : "sq");
+})();
+</script>
+</body>
+</html>

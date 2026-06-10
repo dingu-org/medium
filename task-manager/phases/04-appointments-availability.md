@@ -74,7 +74,8 @@
 ### Tool wiring (replaces Phase 3 stubs)
 
 - [ ] `lib/ai/dispatcher.ts` — replace stubs with real calls into `lib/appointments`.
-- [ ] Each tool wraps in `withAuditLog` and respects the engine's `pt_id` context.
+- [ ] Implement `list_upcoming_appointments` for the engine-context patient so cancel/reschedule can resolve IDs safely.
+- [ ] Each tool wraps in `withAuditLog` and respects the engine's implicit `pt_id` + `patient_id` context.
 
 ---
 

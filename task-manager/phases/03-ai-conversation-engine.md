@@ -10,89 +10,128 @@
 
 ---
 
+## Implementation decisions (2026-06-10)
+
+- Use AI SDK `6.0.199` with `@openrouter/ai-sdk-provider` `2.9.0`.
+- The model never supplies `pt_id` or `patient_id`; both come from the validated engine context.
+- Add `list_upcoming_appointments` so cancel/reschedule calls can resolve an appointment before mutating it.
+- Add `messages.reply_to_message_id` with a unique AI-reply index for replay idempotency, plus
+  `messages.ai_cost_microusd` for OpenRouter usage accounting.
+- Deterministic safety checks handle explicit human requests plus emergency, legal, billing,
+  insurance, and severe-frustration phrases before model inference. The AI escalation tool remains
+  available for contextual cases.
+- Keep the current PT profile shape and English-only v1. Unknown phone/address details are omitted.
+- Keep patient-controlled profile names out of the system prompt; identity remains in validated database context.
+- Serialize each inbound turn with a transaction-scoped Postgres advisory lock so concurrent retries cannot execute tools twice.
+- Empty/step-limited read-only turns remain retryable. If a mutation was attempted, persist a neutral human-verification handoff instead of rerunning the mutation.
+- Completion includes a synthetic, non-PHI live smoke against the free development model only.
+
+---
+
 ## Tasks
 
 ### SDK + client
 
-- [ ] Install `ai` and `@openrouter/ai-sdk-provider`.
-- [ ] `lib/ai/client.ts` — shared AI SDK / OpenRouter wrapper; reads `OPENROUTER_API_KEY` and keeps provider routing options in one place.
-- [ ] `lib/ai/models.ts` — exports `selectModel()` returning, in order of precedence: `OPENROUTER_MODEL_OVERRIDE` if set; else `OPENROUTER_PROD_MODEL` when `NODE_ENV === 'production'`; else `OPENROUTER_DEV_MODEL`. Each branch validates its env var is set and throws on missing — no silent fallback.
-- [ ] Unit tests covering all three `selectModel()` branches plus the missing-env throw.
-- [ ] Codify the default production routing policy in one place: ZDR on, provider data collection denied, and parameter-safe routing. Apply on every paid route call.
-- [ ] Keep model selection behind `selectModel()` so swapping or A/B-testing models is an env change, not a code change.
+- [x] Install pinned `ai@6.0.199` and `@openrouter/ai-sdk-provider@2.9.0`.
+- [x] `lib/ai/client.ts` — shared AI SDK / OpenRouter wrapper; reads `OPENROUTER_API_KEY` and keeps provider routing options in one place.
+- [x] `lib/ai/models.ts` — exports `selectModel()` returning, in order of precedence: `OPENROUTER_MODEL_OVERRIDE` if set; else `OPENROUTER_PROD_MODEL` when `NODE_ENV === 'production'`; else `OPENROUTER_DEV_MODEL`. Each branch validates its env var is set and throws on missing — no silent fallback.
+- [x] Unit tests covering all three `selectModel()` branches plus the missing-env throw.
+- [x] Codify the routing policy in one place: ZDR on, provider data collection denied, parameter-safe routing, and same-model provider fallback. Apply it on every route call.
+- [x] Keep model selection behind `selectModel()` so swapping or A/B-testing models is an env change, not a code change.
 
 ### Tool schemas — `lib/ai/tools.ts`
 
 Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 
-- [ ] `get_availability(start: ISO, end: ISO, service_type?: string)` → list of `{ starts_at, ends_at }` slots.
-- [ ] `book_appointment(patient_id, starts_at, service_type, notes?)` → `{ appointment_id, status, confirmation_summary }`.
-- [ ] `reschedule_appointment(appointment_id, new_starts_at)` → updated appointment.
-- [ ] `cancel_appointment(appointment_id, reason?)` → updated appointment.
-- [ ] `escalate_to_human(reason)` → `{ ok: true }`; flips `conversations.ai_active = false`.
-- [ ] All tools take an implicit `pt_id` from the engine context — the AI never sees or supplies it.
+- [x] `get_availability(start: ISO, end: ISO, service_type?: string)` → list of `{ starts_at, ends_at }` slots.
+- [x] `book_appointment(starts_at, service_type, notes?)` → `{ appointment_id, status, confirmation_summary }`.
+- [x] `reschedule_appointment(appointment_id, new_starts_at)` → updated appointment.
+- [x] `cancel_appointment(appointment_id, reason?)` → updated appointment.
+- [x] `list_upcoming_appointments()` → upcoming appointment summaries for cancel/reschedule discovery.
+- [x] `escalate_to_human(reason)` → `{ ok: true }`; flips `conversations.ai_active = false`.
+- [x] All tools take implicit `pt_id` + `patient_id` from engine context — the AI never sees or supplies either.
 
 ### Tool dispatcher — `lib/ai/dispatcher.ts`
 
-- [ ] `dispatch(toolName, input, ctx) -> Promise<ToolResult>`.
-- [ ] Validates input against Zod schema (defence in depth).
-- [ ] Calls into `lib/appointments` (Phase 4) or `lib/conversation` (escalation).
-- [ ] Wraps in `withAuditLog` from `lib/tenancy`.
-- [ ] On error, returns a structured error result the model can recover from — never throws to the model.
+- [x] `dispatch(toolName, input, ctx) -> Promise<ToolResult>`.
+- [x] Validates input against Zod schema (defence in depth).
+- [x] Calls into Phase 3 appointment stubs or `lib/conversation` for real escalation.
+- [x] Wraps in `withAuditLog` from `lib/tenancy`.
+- [x] On error, returns a structured error result the model can recover from — never throws to the model.
 
 ### System prompt + caching — `lib/ai/prompt.ts`
 
-- [ ] Static prefix (loaded from a markdown file under `lib/ai/prompts/`):
+- [x] Static prefix (loaded from a markdown file under `lib/ai/prompts/`):
   - Persona: friendly, concise, EU PT receptionist.
   - Booking rules: never double-book; always confirm time; offer alternatives if unavailable.
   - Escalation rules: keyword (PT-configured), repeated failures, complex requests.
   - Tool-use guidelines.
-- [ ] Per-PT section (renders into the system prompt):
-  - PT name, AI name, greeting, escalation keyword, timezone, language preference, retention window.
-- [ ] Keep static + per-PT sections factored so a caching-capable model can be introduced later without rewriting the prompt builder.
-- [ ] Tool definitions live in the cached section (they're static).
+- [x] Per-PT section renders PT name, AI name, greeting, escalation keyword, timezone, and retention window. Phase 3 is English-only because the current PT profile has no language field.
+- [x] Include UTC ISO and human-readable practice-local current time; reject invalid IANA timezones instead of silently falling back.
+- [x] Exclude the patient-controlled profile name from the system prompt and instruct the assistant not to request it.
+- [x] Keep static + per-PT sections factored so a caching-capable model can be introduced later without rewriting the prompt builder.
+- [x] Keep tool definitions static so they can join the cached prefix when prompt caching is introduced.
 
 ### Conversation engine — `lib/conversation/engine.ts`
 
-- [ ] `runTurn({ ptId, conversationId, inboundMessage }) -> { outboundMessage }`.
-- [ ] Loads conversation history (last N messages — windowed, not unbounded).
-- [ ] Picks model per the escalation policy (see below).
-- [ ] Calls AI SDK `generateText` with an OpenRouter model, `system`, `tools`, `messages`, and a bounded multi-step loop (`stopWhen: stepCountIs(5)` or equivalent).
-- [ ] If a step includes tool calls, dispatches them via `lib/ai/dispatcher`, feeds the tool results back into the next step, and stops cleanly after the configured cap.
-- [ ] Persists each turn into `messages` with `tokens_in`, `tokens_out`, `model`, `provider`, and `cached_tokens`.
-- [ ] Returns the final assistant text content.
+- [x] `runTurn({ inboundMessage }) -> OutboundMessage`; tenant, patient, conversation, and message IDs are verified against persisted context.
+- [x] Loads conversation history (last N messages — windowed, not unbounded).
+- [x] Picks the model through `selectModel()`.
+- [x] Calls AI SDK `generateText` with an OpenRouter model, `system`, `tools`, `messages`, and a bounded multi-step loop (`stopWhen: stepCountIs(5)`).
+- [x] If a step includes tool calls, dispatches them via `lib/ai/dispatcher`, feeds the tool results back into the next step, and stops cleanly after the configured cap.
+- [x] Persists each AI turn into `messages` with `tokens_in`, `tokens_out`, `model`, `provider`, and `cached_tokens`.
+- [x] Persists `reply_to_message_id` and `ai_cost_microusd`; duplicate runs return the existing reply.
+- [x] Acquires a per-inbound transaction-scoped Postgres advisory lock before context reads, inference, tool execution, and persistence.
+- [x] Orders equal-timestamp history rows deterministically by message ID.
+- [x] Returns a state-aware handoff after mutation-attempted empty/step-limited turns; read-only failures remain typed and retryable.
+- [x] Exports idempotent `handoffFailedTurn({ inboundMessage })` for Phase 5 retry exhaustion.
+- [x] Returns the final assistant text content.
 
-### Model routing policy — `lib/conversation/escalation.ts`
+### Deterministic safety guard
 
-- [ ] Engine and dispatcher route every runtime turn through `selectModel()` — no model ID constants in call sites.
-- [ ] Production: `openai/gpt-4.1-mini`. Dev: `meta-llama/llama-3.3-70b-instruct:free`. `OPENROUTER_MODEL_OVERRIDE` wins when set.
-- [ ] Keep the selection behind the helper so a future runtime fallback chain (e.g., prod-model 5xx → backup) can be added without touching the engine call sites.
-- [ ] If the resolved model becomes unavailable or inadequate, fail in a way that is observable; do not silently switch to another model.
+- [x] Before inference, detect explicit HELP/human requests and configured escalation keywords.
+- [x] Detect emergency, legal, billing, insurance, and severe-frustration phrases.
+- [x] Avoid obvious fall/coverage false positives while retaining conservative escalation for explicit urgent-health and insurance language.
+- [x] Bypass OpenRouter for those cases, perform the escalation state change, and persist a concise safe response.
+
+### Model routing policy — `lib/ai/models.ts` + `lib/ai/client.ts`
+
+- [x] Engine routes every runtime turn through `selectModel()` — no model ID constants in engine call sites.
+- [x] Production: `openai/gpt-4.1-mini`. Dev: `meta-llama/llama-3.3-70b-instruct:free`. `OPENROUTER_MODEL_OVERRIDE` wins when set.
+- [x] Keep the selection behind the helper so a future runtime fallback chain can be added without touching the engine call sites.
+- [x] If the resolved model becomes unavailable or inadequate, fail observably; provider fallbacks may serve only the same resolved model under the enforced routing policy.
 
 ### Channel-agnostic shape
 
-- [ ] `lib/conversation/types.ts` — `InboundMessage { conversationId, ptId, content, channel, externalId, occurredAt }`, `OutboundMessage { conversationId, content, channel }`.
-- [ ] WhatsApp adapter (Phase 2) translates Graph API payload into this shape.
-- [ ] No code in `lib/conversation/` references "whatsapp" by name.
+- [x] `lib/conversation/types.ts` — persisted inbound/outbound shapes carry message, conversation, tenant, patient, channel, and reply-link metadata.
+- [x] Phase 5's inbound job is documented as the channel adapter-to-engine translation boundary.
+- [x] Runtime code in `lib/conversation/` has no WhatsApp dependency or channel-specific branch.
 
 ### Stubs to be replaced in Phase 4
 
-- [ ] Tool dispatcher returns canned responses for `get_availability` / `book_appointment` etc. so this phase is testable without Phase 4.
+- [x] Tool dispatcher returns canned responses for `get_availability` / `book_appointment` etc. so this phase is testable without Phase 4.
 
 ---
 
 ## Acceptance criteria
 
-- [ ] Given a fixture inbound "I'd like to book a session next week", the engine returns a coherent response that calls `get_availability` and (with stubbed slots) `book_appointment`.
-- [ ] `selectModel()` returns `OPENROUTER_DEV_MODEL` when `NODE_ENV !== 'production'`, `OPENROUTER_PROD_MODEL` when it is, and `OPENROUTER_MODEL_OVERRIDE` whenever set. Missing env throws.
-- [ ] Tool input that fails Zod validation does not throw — it surfaces as a tool result error and the model recovers on the next turn.
-- [ ] Engine is invoked with no WhatsApp imports — only the channel-agnostic shape (verified by grep on `lib/conversation/`).
+- [x] Given a fixture inbound "I'd like to book a session next week", the engine returns a coherent response that calls `get_availability` and (with stubbed slots) `book_appointment`.
+- [x] `selectModel()` returns `OPENROUTER_DEV_MODEL` when `NODE_ENV !== 'production'`, `OPENROUTER_PROD_MODEL` when it is, and `OPENROUTER_MODEL_OVERRIDE` whenever set. Missing env throws.
+- [x] Tool input that fails Zod validation does not throw — it surfaces as a tool result error and the model recovers on the next turn.
+- [x] Engine runtime has no WhatsApp imports — only the channel-agnostic shape.
+- [x] Re-running a turn for the same inbound message returns the existing AI reply.
+- [x] Two concurrent runs for one inbound message execute the model and mutating dispatcher only once.
+- [x] Patient-controlled profile names are absent from the system prompt, and practice-local current time is explicit.
+- [x] A mutation followed by no final model text escalates without retrying the mutation and preserves turn usage metadata.
+- [ ] Synthetic live smoke confirms the free dev model can call a tool without sending patient data.
+  - Attempted twice on 2026-06-10 with synthetic data only. OpenRouter reached the configured
+    model route, but Venice returned a temporary upstream rate limit before inference.
 
 ---
 
 ## Notes
 
-- AI SDK tool calls return *structured* results — never ask the model to emit JSON in prose. Tool result → next step → natural-language confirmation.
+- AI SDK tool calls return _structured_ results — never ask the model to emit JSON in prose. Tool result → next step → natural-language confirmation.
 - Keep provider-specific details inside `lib/ai/`; the rest of the app should only know about the channel-agnostic engine and model IDs.
 - OpenRouter privacy defaults are part of the contract, not a tuning nicety. If a later feature wants looser routing, make that an explicit, reviewed exception.
 - Keep the message window small (last ~10 turns) to control input tokens; the cached system prompt has the persona, not the whole history.

@@ -24,26 +24,26 @@ The stack is optimized for the constraints stated across the canvas documents:
 
 ## 2. Stack at a glance
 
-| Layer | Choice | Why |
-|---|---|---|
-| Language | **TypeScript** end-to-end | One language across PWA, backend, and jobs; best AI SDK surface for a solo dev |
-| App framework | **Next.js 15 (App Router)** | PWA + API routes (webhooks) + Server Actions in one repo; first-class PWA story |
-| UI | **React + Tailwind + shadcn/ui** | Fast to assemble the mobile-first screens from `pt-admin-pwa-screens.md` |
-| Calendar component | **Custom** (`react-day-picker` for month + a CSS grid week view, both driven by `date-fns`) | Keeps the calendar route inside the ≤3 s 3G first-load budget; FullCalendar is reserved for a specific feature that is too painful to build (e.g. drag-to-reschedule with recurring events) |
-| Database | **Postgres on Supabase (EU region)** | Row-Level Security enforces tenant isolation at the DB layer; realtime + auth + storage included |
-| ORM | **Drizzle** | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies |
-| Auth (PTs) | **Supabase Auth** (email+password, Google OAuth) | Integrates with RLS through `auth.uid()` |
-| Background jobs & scheduling | **Inngest** | Delayed jobs (24h reminders), retries, event bus — matches the docs' event-driven principle; generous free tier |
-| AI | **OpenRouter + AI SDK**, split per env: dev → `meta-llama/llama-3.3-70b-instruct:free`, prod → `openai/gpt-4.1-mini` | One model-agnostic API surface with strict privacy routing; free model keeps dev cost at €0, paid prod model gives reliable tool-calling and ZDR-compliant routing for patient-facing chat |
-| Hosting | **Vercel** (Next.js) + **Supabase EU** (DB/auth/realtime) + **Inngest Cloud** (jobs) | No infrastructure to maintain; all have EU regions |
-| Webhook runtime | Next.js Route Handler on the **Node runtime** (not Edge) | Signature verification needs `crypto`; handler just verifies + enqueues and returns 200 |
-| Realtime (live calendar/chat) | **Supabase Realtime** (Postgres changefeeds) | No extra infrastructure; scopes naturally to RLS |
-| Push notifications | **Web Push** via `web-push` + VAPID keys | Works on an installed PWA; free |
-| Service worker / offline | **Serwist** (maintained next-pwa successor) | Offline read of cached data as required by `pt-admin-pwa-screens.md §Offline handling` |
-| Error monitoring | **Vercel + Supabase logs** for MVP | Free-tier limits on Sentry are already exhausted; structured platform logs are enough to get the first PT live |
-| Logs | **Vercel + Supabase logs**, Axiom optional later | Start simple; add a dedicated log platform only if filtering pain justifies it |
-| Product analytics | **Internal events + dashboards** for MVP | Avoid third-party analytics for now; derive booking funnel and escalation rate from app data |
-| Secrets | Vercel environment variables; WA access tokens encrypted at rest via **pgcrypto** | Token compromise blast radius + GDPR |
+| Layer                         | Choice                                                                                                               | Why                                                                                                                                                                                         |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Language                      | **TypeScript** end-to-end                                                                                            | One language across PWA, backend, and jobs; best AI SDK surface for a solo dev                                                                                                              |
+| App framework                 | **Next.js 15 (App Router)**                                                                                          | PWA + API routes (webhooks) + Server Actions in one repo; first-class PWA story                                                                                                             |
+| UI                            | **React + Tailwind + shadcn/ui**                                                                                     | Fast to assemble the mobile-first screens from `pt-admin-pwa-screens.md`                                                                                                                    |
+| Calendar component            | **Custom** (`react-day-picker` for month + a CSS grid week view, both driven by `date-fns`)                          | Keeps the calendar route inside the ≤3 s 3G first-load budget; FullCalendar is reserved for a specific feature that is too painful to build (e.g. drag-to-reschedule with recurring events) |
+| Database                      | **Postgres on Supabase (EU region)**                                                                                 | Row-Level Security enforces tenant isolation at the DB layer; realtime + auth + storage included                                                                                            |
+| ORM                           | **Drizzle**                                                                                                          | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies                                                                                              |
+| Auth (PTs)                    | **Supabase Auth** (email+password, Google OAuth)                                                                     | Integrates with RLS through `auth.uid()`                                                                                                                                                    |
+| Background jobs & scheduling  | **Inngest**                                                                                                          | Delayed jobs (24h reminders), retries, event bus — matches the docs' event-driven principle; generous free tier                                                                             |
+| AI                            | **OpenRouter + AI SDK**, split per env: dev → `meta-llama/llama-3.3-70b-instruct:free`, prod → `openai/gpt-4.1-mini` | One model-agnostic API surface with strict privacy routing; free model keeps dev cost at €0, paid prod model gives reliable tool-calling and ZDR-compliant routing for patient-facing chat  |
+| Hosting                       | **Vercel** (Next.js) + **Supabase EU** (DB/auth/realtime) + **Inngest Cloud** (jobs)                                 | No infrastructure to maintain; all have EU regions                                                                                                                                          |
+| Webhook runtime               | Next.js Route Handler on the **Node runtime** (not Edge)                                                             | Signature verification needs `crypto`; handler just verifies + enqueues and returns 200                                                                                                     |
+| Realtime (live calendar/chat) | **Supabase Realtime** (Postgres changefeeds)                                                                         | No extra infrastructure; scopes naturally to RLS                                                                                                                                            |
+| Push notifications            | **Web Push** via `web-push` + VAPID keys                                                                             | Works on an installed PWA; free                                                                                                                                                             |
+| Service worker / offline      | **Serwist** (maintained next-pwa successor)                                                                          | Offline read of cached data as required by `pt-admin-pwa-screens.md §Offline handling`                                                                                                      |
+| Error monitoring              | **Vercel + Supabase logs** for MVP                                                                                   | Free-tier limits on Sentry are already exhausted; structured platform logs are enough to get the first PT live                                                                              |
+| Logs                          | **Vercel + Supabase logs**, Axiom optional later                                                                     | Start simple; add a dedicated log platform only if filtering pain justifies it                                                                                                              |
+| Product analytics             | **Internal events + dashboards** for MVP                                                                             | Avoid third-party analytics for now; derive booking funnel and escalation rate from app data                                                                                                |
+| Secrets                       | Vercel environment variables; WA access tokens encrypted at rest via **pgcrypto**                                    | Token compromise blast radius + GDPR                                                                                                                                                        |
 
 **Estimated fixed monthly cost at MVP (1–3 PTs):**
 
@@ -101,21 +101,21 @@ The **conversation engine** sees only "an inbound message on conversation X for 
 
 All tables storing patient-facing or PT-facing data carry a `pt_id` column and are covered by RLS policies. Tables:
 
-| Table | Purpose |
-|---|---|
-| `pts` | PT accounts (Supabase Auth user + profile) |
-| `whatsapp_connections` | `pt_id`, `phone_number_id`, `waba_id`, `access_token_encrypted`, `tier`, `quality_rating`, `connected_at` |
-| `patients` | `pt_id`-scoped patients: name, phone (E.164), channel identifiers, notes |
-| `conversations` | One per (patient, channel); tracks `last_inbound_at` for the 24h window, `ai_active` flag, escalation state |
-| `messages` | One row per inbound/outbound message; `external_id` unique for idempotency, `role` = patient\|ai\|pt, `channel`, `template_id` if applicable |
-| `appointments` | `pt_id`, `patient_id`, `starts_at`, `ends_at`, `service_type`, `status` (pending\|confirmed\|cancelled\|no_show\|completed\|rescheduled), `notes` |
-| `availability_rules` | Weekly availability per PT: weekday, start, end |
-| `blocked_periods` | Ad-hoc unavailability (holidays, lunch) |
-| `message_templates` | Submitted WA templates per PT with approval status from Meta |
-| `reminder_jobs` | Durable record of scheduled reminders (pairs with Inngest runs) for dashboard visibility |
-| `push_subscriptions` | PT's registered Web Push endpoints |
-| `events` | Domain event log (audit + analytics), append-only |
-| `audit_log` | Access log for GDPR (who read which patient record, when) |
+| Table                  | Purpose                                                                                                                                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pts`                  | PT accounts (Supabase Auth user + profile)                                                                                                                                                               |
+| `whatsapp_connections` | `pt_id`, `phone_number_id`, `waba_id`, `access_token_encrypted`, `tier`, `quality_rating`, `connected_at`                                                                                                |
+| `patients`             | `pt_id`-scoped patients: name, phone (E.164), channel identifiers, notes                                                                                                                                 |
+| `conversations`        | One per (patient, channel); tracks `last_inbound_at` for the 24h window, `ai_active` flag, escalation state                                                                                              |
+| `messages`             | One row per inbound/outbound message; `external_id` deduplicates inbound delivery, `reply_to_message_id` allows one AI reply per inbound message, and AI rows capture token/model/provider/cost metadata |
+| `appointments`         | `pt_id`, `patient_id`, `starts_at`, `ends_at`, `service_type`, `status` (pending\|confirmed\|cancelled\|no_show\|completed\|rescheduled), `notes`                                                        |
+| `availability_rules`   | Weekly availability per PT: weekday, start, end                                                                                                                                                          |
+| `blocked_periods`      | Ad-hoc unavailability (holidays, lunch)                                                                                                                                                                  |
+| `message_templates`    | Submitted WA templates per PT with approval status from Meta                                                                                                                                             |
+| `reminder_jobs`        | Durable record of scheduled reminders (pairs with Inngest runs) for dashboard visibility                                                                                                                 |
+| `push_subscriptions`   | PT's registered Web Push endpoints                                                                                                                                                                       |
+| `events`               | Domain event log (audit + analytics), append-only                                                                                                                                                        |
+| `audit_log`            | Access log for GDPR (who read which patient record, when)                                                                                                                                                |
 
 Every query through `lib/tenancy/` either uses the authenticated PT's session (RLS sets `auth.uid()`) or requires an explicit `pt_id` argument when running under the service role (webhooks, jobs). The helper rejects any call made without a tenant in scope.
 
@@ -196,24 +196,30 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
   2. `OPENROUTER_PROD_MODEL` (default `openai/gpt-4.1-mini`) when `NODE_ENV === 'production'`.
   3. `OPENROUTER_DEV_MODEL` (default `meta-llama/llama-3.3-70b-instruct:free`) otherwise.
 - Each branch validates its env var is set and throws on missing — there is no silent fallback.
-- Production routing uses strict privacy controls: ZDR on, provider data collection denied, and parameter-safe routing. The paid OpenRouter route enforces these reliably; the free dev model is for developer iteration only and is not exposed to patient data.
+- Every route uses strict privacy controls: ZDR on, provider data collection denied, parameter-safe routing, and same-model provider fallbacks. The free dev model is for synthetic developer iteration only and is not exposed to patient data.
 - Adding or swapping models is an env change, not a code change. Substantive changes to the routing logic remain documented planning decisions.
 
 **Structured interaction over free-form parsing:**
 
-- Availability, booking, and state changes happen through **tool use** with well-typed schemas defined in `lib/ai/tools.ts`. The model never writes JSON that the app then parses from prose.
+- Availability, appointment discovery, booking, and state changes happen through **tool use** with well-typed schemas defined in `lib/ai/tools.ts`. The model never writes JSON that the app then parses from prose.
+- `pt_id` and `patient_id` are injected from validated engine context and are never accepted from model tool input. `list_upcoming_appointments` resolves safe appointment IDs before cancellation or rescheduling.
 - Tool results are returned to the model so it can render a natural confirmation, but the authoritative state change already happened in the transactional tool call.
+- Explicit human requests plus emergency, legal/billing, insurance, and severe-frustration phrases are handled by a deterministic pre-inference guard. These messages bypass OpenRouter and immediately disable AI handling for the conversation.
+- Each inbound message turn is serialized with a transaction-scoped Postgres advisory lock before model or tool execution. The reply unique index remains the persistence backstop, while the lock prevents concurrent retries from executing scheduling tools twice.
+- If a scheduling mutation is attempted but the model returns no final text, the engine does not retry the mutation. It escalates and persists a neutral verification handoff with the original turn's usage metadata. Read-only empty or step-limited turns remain retryable for Phase 5.
 
 **Prompt structure:**
 
 - Each PT's system prompt (AI name, greeting, escalation keyword, PT-specific facts) should stay factored and stable even though the current free-model guardrail does not rely on prompt caching.
+- Include both an absolute UTC timestamp and a human-readable practice-local timestamp. Do not place the patient-controlled WhatsApp profile name in the system prompt; patient identity stays in validated channel/database context.
 - Tool definitions stay in the static prompt section so a caching-capable paid model can be introduced later without a prompt rewrite.
 
 **Cost math per PT per month:**
 
 - Production: at MVP volume (~1M tokens/PT/month at 80/20 input/output), `openai/gpt-4.1-mini` runs roughly **€0.50–1/PT/month**. Budget envelope is set at **€5/PT/month** so a chatty PT stays within plan; alerts fire well before that.
 - Development: **~€0** while the free Llama route remains available; `OPENROUTER_MODEL_OVERRIDE` is the escape hatch when iterating against a paid model.
-- Capture token and generation metadata (`tokens_in`, `tokens_out`, `model`, `provider`, `cached_tokens`) on every persisted message from day one so the cost baseline is observable and a future paid fallback can be sized against real traffic.
+- Capture token and generation metadata (`tokens_in`, `tokens_out`, `model`, `provider`, `cached_tokens`, `ai_cost_microusd`) on every persisted AI message from day one. OpenRouter usage accounting is summed across all steps in the turn.
+- Persist `reply_to_message_id` on each AI response. A partial unique index guarantees one persisted AI reply per inbound message, allowing Inngest replay to return the existing result.
 
 ---
 
@@ -242,13 +248,13 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 ## 11. Tradeoffs considered
 
-1. **Separate backend (Fastify/Hono) + separate React frontend.** *Rejected:* two deploys, two code paths, more surface for a solo dev. Reopen only if Next.js serverless cold starts cause real webhook problems.
-2. **Prisma instead of Drizzle.** *Rejected:* heavier query engine, worse on serverless cold starts, and less flexible for the raw SQL needed for RLS policies.
-3. **BullMQ + self-hosted Redis for jobs.** *Rejected:* more infrastructure to maintain; Inngest's delay and retry primitives fit "schedule reminder in 23h 47m" natively.
-4. **Python + FastAPI for the backend** (natural home for AI). *Rejected:* forces two languages across PWA and backend, doubling cognitive load on a 2–3h/day project.
-5. **Roll our own OAuth and auth service.** *Rejected:* Supabase Auth plus RLS is 1–2 days of setup versus multiple weeks of rolling a secure auth service from scratch.
-6. **Skip RLS, rely on app-layer tenancy checks only.** *Rejected:* one missed `WHERE pt_id = ?` in a future query leaks another PT's patients. Unacceptable in a healthcare-adjacent context. RLS is the backstop.
-7. **BSP (360dialog, Twilio) instead of direct Meta API.** *Already rejected* in `medium-canvas/blobs/decision-proceed-with-mvp/` on cost grounds; respecting that decision here.
+1. **Separate backend (Fastify/Hono) + separate React frontend.** _Rejected:_ two deploys, two code paths, more surface for a solo dev. Reopen only if Next.js serverless cold starts cause real webhook problems.
+2. **Prisma instead of Drizzle.** _Rejected:_ heavier query engine, worse on serverless cold starts, and less flexible for the raw SQL needed for RLS policies.
+3. **BullMQ + self-hosted Redis for jobs.** _Rejected:_ more infrastructure to maintain; Inngest's delay and retry primitives fit "schedule reminder in 23h 47m" natively.
+4. **Python + FastAPI for the backend** (natural home for AI). _Rejected:_ forces two languages across PWA and backend, doubling cognitive load on a 2–3h/day project.
+5. **Roll our own OAuth and auth service.** _Rejected:_ Supabase Auth plus RLS is 1–2 days of setup versus multiple weeks of rolling a secure auth service from scratch.
+6. **Skip RLS, rely on app-layer tenancy checks only.** _Rejected:_ one missed `WHERE pt_id = ?` in a future query leaks another PT's patients. Unacceptable in a healthcare-adjacent context. RLS is the backstop.
+7. **BSP (360dialog, Twilio) instead of direct Meta API.** _Already rejected_ in `medium-canvas/blobs/decision-proceed-with-mvp/` on cost grounds; respecting that decision here.
 
 ---
 
@@ -356,8 +362,8 @@ Local Supabase via `supabase start` (Docker-backed). The integration runner appl
 1. **RLS isolation** — for every tenant-scoped table, prove that PT A's authenticated session cannot read or mutate PT B's rows. Cases are generated from the schema's tenant-table list, so adding a new table without coverage fails the suite. This is the single most important test surface in the project.
 2. **Tenancy helpers** — `getServiceClient()` throws without a `pt_id`; `withAuditLog()` writes one `audit_log` row on success and zero on thrown error.
 3. **Idempotency** — duplicate webhooks with the same `external_id` insert one row, not two (Phase 2).
-4. **Tool schemas** — Zod schemas reject malformed model outputs (Phase 3).
-5. **Conversation engine** — `runTurn` against a stubbed model returns expected tool dispatches (Phase 3).
+4. **Tool schemas** — Zod schemas reject malformed model outputs, while dispatcher-owned validation returns recoverable tool errors to the model (Phase 3).
+5. **Conversation engine** — `runTurn` against AI SDK's mock model verifies multi-step tool dispatch, persistence metadata, safety bypasses, and replay idempotency (Phase 3).
 
 A CI assertion introspects `pg_class.relrowsecurity` to confirm RLS is enabled on every `pt_id`-bearing table. This catches the "added a tenant table, forgot to enable RLS" failure mode at PR time.
 

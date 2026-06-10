@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   boolean,
   customType,
   index,
@@ -21,11 +22,16 @@ const bytea = customType<{ data: Buffer; notNull: false; default: false }>({
   },
 });
 
-const tsTz = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
+const tsTz = (name: string) =>
+  timestamp(name, { withTimezone: true, mode: 'date' });
 const now = sql`now()`;
 const genUuid = sql`gen_random_uuid()`;
 
-export const connectionStatus = pgEnum('connection_status', ['pending', 'active', 'revoked']);
+export const connectionStatus = pgEnum('connection_status', [
+  'pending',
+  'active',
+  'revoked',
+]);
 export const messageRole = pgEnum('message_role', ['patient', 'ai', 'pt']);
 export const appointmentStatus = pgEnum('appointment_status', [
   'pending',
@@ -35,7 +41,11 @@ export const appointmentStatus = pgEnum('appointment_status', [
   'completed',
   'rescheduled',
 ]);
-export const templateStatus = pgEnum('template_status', ['pending', 'approved', 'rejected']);
+export const templateStatus = pgEnum('template_status', [
+  'pending',
+  'approved',
+  'rejected',
+]);
 export const reminderStatus = pgEnum('reminder_status', [
   'scheduled',
   'sent',
@@ -76,7 +86,9 @@ export const whatsappConnections = pgTable(
   },
   // Unique: a phone number maps to exactly one PT. Makes the webhook lookup
   // unambiguous and lets the Embedded Signup callback detect a duplicate connect.
-  (t) => [uniqueIndex('whatsapp_connections_phone_number_id_uq').on(t.phoneNumberId)],
+  (t) => [
+    uniqueIndex('whatsapp_connections_phone_number_id_uq').on(t.phoneNumberId),
+  ],
 );
 
 export const patients = pgTable(
@@ -109,7 +121,10 @@ export const conversations = pgTable(
   },
   (t) => [
     uniqueIndex('conversations_patient_channel_uq').on(t.patientId, t.channel),
-    index('conversations_pt_last_inbound_idx').on(t.ptId, t.lastInboundAt.desc()),
+    index('conversations_pt_last_inbound_idx').on(
+      t.ptId,
+      t.lastInboundAt.desc(),
+    ),
   ],
 );
 
@@ -122,6 +137,12 @@ export const messages = pgTable(
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
     externalId: text('external_id'),
+    replyToMessageId: uuid('reply_to_message_id').references(
+      (): AnyPgColumn => messages.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
     role: messageRole('role').notNull(),
     channel: text('channel').notNull(),
     content: text('content').notNull(),
@@ -131,9 +152,15 @@ export const messages = pgTable(
     cachedTokens: integer('cached_tokens'),
     model: text('model'),
     provider: text('provider'),
+    aiCostMicrousd: integer('ai_cost_microusd'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
-  (t) => [uniqueIndex('messages_external_id_uq').on(t.externalId)],
+  (t) => [
+    uniqueIndex('messages_external_id_uq').on(t.externalId),
+    uniqueIndex('messages_ai_reply_to_uq')
+      .on(t.replyToMessageId)
+      .where(sql`role = 'ai' AND reply_to_message_id IS NOT NULL`),
+  ],
 );
 
 export const appointments = pgTable(

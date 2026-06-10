@@ -29,8 +29,12 @@
 - [ ] Translate message into channel-agnostic `InboundMessage` shape.
 - [ ] Call `lib/conversation/engine.runTurn`.
 - [ ] Send the engine's outbound message via the appropriate channel adapter.
-- [ ] Idempotency: keyed on `messages.external_id`; don't re-run if the inbound is already responded to.
-- [ ] Retries: 3 attempts with exponential backoff. On final failure, mark conversation flagged + emit `conversation.failed` (handled by notifications later).
+- [ ] Idempotency: `runTurn` serializes same-inbound execution and returns the existing AI row keyed by unique `messages.reply_to_message_id`.
+- [ ] Put outbound delivery in a named `step.run`; after a successful send, store the channel message ID in the AI row's `external_id`. If that field is already set on replay, skip delivery.
+- [ ] Retry transient provider failures plus typed `empty_response` / `step_limit_reached` errors up to 3 attempts with exponential backoff.
+- [ ] Do not retry `conversation_not_found` or `conversation_inactive`.
+- [ ] Mutation-uncertain turns already return an escalated verification reply from `runTurn`; send it normally and do not retry.
+- [ ] On final retry exhaustion, call `handoffFailedTurn({ inboundMessage })`, send its idempotent fallback reply, and emit `conversation.failed` for operator visibility.
 
 #### `sendReminder` — scheduled on `appointment.booked`
 
@@ -105,7 +109,8 @@
 - [ ] Replaying the same `message.received` event yields no duplicate outbound (idempotent).
 - [ ] A booked appointment shows up in Inngest's scheduled-runs view at `starts_at - 24h`.
 - [ ] Cancelling that appointment removes the scheduled reminder run.
-- [ ] Failing one AI call retries; failing three fails the run cleanly with a structured error record.
+- [ ] A transient/read-only AI failure retries; after three failures, one human-handoff reply is persisted and sent, with a structured `conversation.failed` event.
+- [ ] A mutation followed by an empty/step-limited model response does not rerun the mutation and sends the engine's verification handoff.
 - [ ] `purgeExpiredMessages` deletes only messages older than the retention window in fixture data.
 
 ---

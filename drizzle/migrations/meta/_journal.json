@@ -43,6 +43,13 @@
       "when": 1779469016359,
       "tag": "0005_whatsapp_connection_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781092730361,
+      "tag": "0006_ai_conversation_metadata",
+      "breakpoints": true
     }
   ]
 }
