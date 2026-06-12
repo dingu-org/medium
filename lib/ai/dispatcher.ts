@@ -1,3 +1,11 @@
+import {
+  AppointmentError,
+  bookAppointment,
+  cancelAppointment,
+  getFreeSlots,
+  listUpcomingAppointments,
+  rescheduleAppointment,
+} from '@/lib/appointments';
 import { escalateConversationToHuman } from '@/lib/conversation/escalation';
 import { withAuditLog } from '@/lib/tenancy';
 import {
@@ -7,30 +15,11 @@ import {
   type ToolResult,
 } from './tools';
 
-const STUB_APPOINTMENT_ID = '00000000-0000-4000-8000-000000000001';
-
 function invalidInput(message: string): ToolResult {
   return {
     ok: false,
     error: { code: 'invalid_input', message, retryable: true },
   };
-}
-
-function stubAvailability(start: string, end: string) {
-  const startMs = new Date(start).getTime();
-  const endMs = new Date(end).getTime();
-  const candidates = [
-    startMs + 60 * 60 * 1000,
-    startMs + 24 * 60 * 60 * 1000,
-    startMs + 48 * 60 * 60 * 1000,
-  ];
-
-  return candidates
-    .filter((startsAt) => startsAt + 60 * 60 * 1000 <= endMs)
-    .map((startsAt) => ({
-      starts_at: new Date(startsAt).toISOString(),
-      ends_at: new Date(startsAt + 60 * 60 * 1000).toISOString(),
-    }));
 }
 
 async function executeTool(
@@ -39,65 +28,96 @@ async function executeTool(
   ctx: ToolExecutionContext,
 ): Promise<ToolResult> {
   if (toolName === 'get_availability') {
+    const availability = await getFreeSlots({
+      ptId: ctx.ptId,
+      start: new Date(input.start as string),
+      end: new Date(input.end as string),
+      durationMinutes: 60,
+      serviceType: input.service_type as string | undefined,
+    });
     return {
       ok: true,
       data: {
-        slots: stubAvailability(input.start as string, input.end as string),
-        stub: true,
+        timezone: availability.timezone,
+        slots: availability.slots.map((slot) => ({
+          starts_at: slot.startsAt,
+          ends_at: slot.endsAt,
+        })),
       },
     };
   }
 
   if (toolName === 'list_upcoming_appointments') {
-    const startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const upcoming = await listUpcomingAppointments({
+      ptId: ctx.ptId,
+      patientId: ctx.patientId,
+    });
     return {
       ok: true,
       data: {
-        appointments: [
-          {
-            appointment_id: STUB_APPOINTMENT_ID,
-            starts_at: startsAt.toISOString(),
-            service_type: 'Physical therapy session',
-            status: 'pending',
-          },
-        ],
-        stub: true,
+        appointments: upcoming.map((appointment) => ({
+          appointment_id: appointment.id,
+          starts_at: appointment.startsAt.toISOString(),
+          ends_at: appointment.endsAt.toISOString(),
+          service_type: appointment.serviceType,
+          status: appointment.status,
+        })),
       },
     };
   }
 
   if (toolName === 'book_appointment') {
+    const appointment = await bookAppointment({
+      ptId: ctx.ptId,
+      patientId: ctx.patientId,
+      startsAt: new Date(input.starts_at as string),
+      serviceType: input.service_type as string,
+      notes: input.notes as string | undefined,
+    });
     return {
       ok: true,
       data: {
-        appointment_id: STUB_APPOINTMENT_ID,
-        status: 'pending',
-        confirmation_summary: `${input.service_type} on ${input.starts_at}`,
-        stub: true,
+        appointment_id: appointment.id,
+        starts_at: appointment.startsAt.toISOString(),
+        ends_at: appointment.endsAt.toISOString(),
+        status: appointment.status,
+        confirmation_summary: `${appointment.serviceType ?? 'Appointment'} on ${appointment.startsAt.toISOString()}`,
       },
     };
   }
 
   if (toolName === 'reschedule_appointment') {
+    const appointment = await rescheduleAppointment({
+      ptId: ctx.ptId,
+      patientId: ctx.patientId,
+      appointmentId: input.appointment_id as string,
+      newStartsAt: new Date(input.new_starts_at as string),
+    });
     return {
       ok: true,
       data: {
-        appointment_id: input.appointment_id,
-        starts_at: input.new_starts_at,
-        status: 'rescheduled',
-        stub: true,
+        appointment_id: appointment.id,
+        starts_at: appointment.startsAt.toISOString(),
+        ends_at: appointment.endsAt.toISOString(),
+        status: appointment.status,
       },
     };
   }
 
   if (toolName === 'cancel_appointment') {
+    const appointment = await cancelAppointment({
+      ptId: ctx.ptId,
+      patientId: ctx.patientId,
+      appointmentId: input.appointment_id as string,
+      reason: input.reason as string | undefined,
+      cancelledBy: 'ai',
+    });
     return {
       ok: true,
       data: {
-        appointment_id: input.appointment_id,
-        status: 'cancelled',
-        reason: input.reason ?? null,
-        stub: true,
+        appointment_id: appointment.id,
+        status: appointment.status,
+        reason: appointment.cancellationReason,
       },
     };
   }
@@ -116,10 +136,50 @@ async function executeTool(
   return { ok: true, data: { ok: true } };
 }
 
-function auditTarget(toolName: ToolName): { table: string; targetId?: string } {
+function auditTarget(
+  toolName: ToolName,
+  input: Record<string, unknown>,
+): { table: string; targetId?: string } {
   if (toolName === 'get_availability') return { table: 'availability_rules' };
   if (toolName === 'escalate_to_human') return { table: 'conversations' };
-  return { table: 'appointments' };
+  return {
+    table: 'appointments',
+    targetId:
+      typeof input.appointment_id === 'string'
+        ? input.appointment_id
+        : undefined,
+  };
+}
+
+function appointmentErrorResult(error: AppointmentError): ToolResult {
+  if (error.code === 'invalid_input') {
+    return {
+      ok: false,
+      error: {
+        code: 'invalid_input',
+        message: error.message,
+        retryable: true,
+      },
+    };
+  }
+  if (error.code === 'not_found') {
+    return {
+      ok: false,
+      error: {
+        code: 'not_found',
+        message: error.message,
+        retryable: false,
+      },
+    };
+  }
+  return {
+    ok: false,
+    error: {
+      code: 'conflict',
+      message: error.message,
+      retryable: error.code === 'conflict' || error.code === 'unavailable',
+    },
+  };
 }
 
 export async function dispatchTool(
@@ -134,7 +194,7 @@ export async function dispatchTool(
     );
   }
 
-  const target = auditTarget(toolName);
+  const target = auditTarget(toolName, parsed.data as Record<string, unknown>);
   try {
     return await withAuditLog(
       {
@@ -147,6 +207,9 @@ export async function dispatchTool(
       () => executeTool(toolName, parsed.data as Record<string, unknown>, ctx),
     );
   } catch (error) {
+    if (error instanceof AppointmentError) {
+      return appointmentErrorResult(error);
+    }
     console.error('[ai-dispatcher] tool failed', {
       toolName,
       ptId: ctx.ptId,

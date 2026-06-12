@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   boolean,
+  check,
   customType,
   index,
   integer,
@@ -40,6 +41,11 @@ export const appointmentStatus = pgEnum('appointment_status', [
   'no_show',
   'completed',
   'rescheduled',
+]);
+export const cancellationActor = pgEnum('cancellation_actor', [
+  'patient',
+  'pt',
+  'ai',
 ]);
 export const templateStatus = pgEnum('template_status', [
   'pending',
@@ -176,31 +182,53 @@ export const appointments = pgTable(
     serviceType: text('service_type'),
     status: appointmentStatus('status').notNull().default('pending'),
     notes: text('notes'),
+    cancelledBy: cancellationActor('cancelled_by'),
+    cancellationReason: text('cancellation_reason'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
   (t) => [
+    check('appointments_valid_range', sql`${t.endsAt} > ${t.startsAt}`),
     index('appointments_pt_starts_at_idx').on(t.ptId, t.startsAt),
     index('appointments_starts_at_active_idx')
       .on(t.startsAt)
       .where(sql`status IN ('pending', 'confirmed')`),
+    uniqueIndex('appointments_active_idempotency_uq')
+      .on(t.ptId, t.patientId, t.startsAt)
+      .where(sql`status IN ('pending', 'confirmed')`),
   ],
 );
 
-export const availabilityRules = pgTable('availability_rules', {
-  id: uuid('id').primaryKey().default(genUuid),
-  ptId: ptIdRef(),
-  weekday: smallint('weekday').notNull(),
-  startTime: time('start_time').notNull(),
-  endTime: time('end_time').notNull(),
-});
+export const availabilityRules = pgTable(
+  'availability_rules',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    weekday: smallint('weekday').notNull(),
+    startTime: time('start_time').notNull(),
+    endTime: time('end_time').notNull(),
+  },
+  (t) => [
+    check(
+      'availability_rules_valid_weekday',
+      sql`${t.weekday} BETWEEN 0 AND 6`,
+    ),
+    check('availability_rules_valid_range', sql`${t.endTime} > ${t.startTime}`),
+  ],
+);
 
-export const blockedPeriods = pgTable('blocked_periods', {
-  id: uuid('id').primaryKey().default(genUuid),
-  ptId: ptIdRef(),
-  startsAt: tsTz('starts_at').notNull(),
-  endsAt: tsTz('ends_at').notNull(),
-  label: text('label'),
-});
+export const blockedPeriods = pgTable(
+  'blocked_periods',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    startsAt: tsTz('starts_at').notNull(),
+    endsAt: tsTz('ends_at').notNull(),
+    label: text('label'),
+  },
+  (t) => [
+    check('blocked_periods_valid_range', sql`${t.endsAt} > ${t.startsAt}`),
+  ],
+);
 
 export const messageTemplates = pgTable('message_templates', {
   id: uuid('id').primaryKey().default(genUuid),
@@ -244,6 +272,31 @@ export const events = pgTable(
     occurredAt: tsTz('occurred_at').notNull().default(now),
   },
   (t) => [index('events_pt_occurred_at_idx').on(t.ptId, t.occurredAt.desc())],
+);
+
+export const eventOutbox = pgTable(
+  'event_outbox',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    eventType: text('event_type').notNull(),
+    payload: jsonb('payload').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    availableAt: tsTz('available_at').notNull().default(now),
+    lockedAt: tsTz('locked_at'),
+    publishedAt: tsTz('published_at'),
+    lastError: text('last_error'),
+    createdAt: tsTz('created_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('event_outbox_event_id_uq').on(t.eventId),
+    index('event_outbox_due_idx')
+      .on(t.availableAt)
+      .where(sql`published_at IS NULL`),
+  ],
 );
 
 export const auditLog = pgTable('audit_log', {

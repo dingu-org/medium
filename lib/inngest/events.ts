@@ -1,4 +1,6 @@
-export type Events = {
+import type { AppointmentEventPayloads } from '@/lib/events/appointments';
+
+type ExistingEvents = {
   'message.received': {
     data: { messageId: string; ptId: string; conversationId: string };
   };
@@ -21,3 +23,11 @@ export type Events = {
     data: { ptId: string; templateId: string; metaId: string };
   };
 };
+
+type AppointmentEvents = {
+  [K in keyof AppointmentEventPayloads]: {
+    data: AppointmentEventPayloads[K];
+  };
+};
+
+export type Events = ExistingEvents & AppointmentEvents;

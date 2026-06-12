@@ -8,6 +8,7 @@ import {
   availabilityRules,
   blockedPeriods,
   conversations,
+  eventOutbox,
   events,
   messageTemplates,
   messages,
@@ -23,15 +24,23 @@ type SeedDeps = {
   patientId: string;
   conversationId: string;
   appointmentId: string;
+  eventId: string;
 };
 
-const seedFactories: Record<string, (deps: SeedDeps) => Record<string, unknown>> = {
+const seedFactories: Record<
+  string,
+  (deps: SeedDeps) => Record<string, unknown>
+> = {
   whatsapp_connections: ({ ptId }) => ({
     pt_id: ptId,
     phone_number_id: `pn-${ptId.slice(0, 6)}`,
     waba_id: `w-${ptId.slice(0, 6)}`,
   }),
-  patients: ({ ptId }) => ({ pt_id: ptId, name: 'P', phone: `+49${Date.now()}` }),
+  patients: ({ ptId }) => ({
+    pt_id: ptId,
+    name: 'P',
+    phone: `+49${Date.now()}`,
+  }),
   conversations: ({ ptId, patientId }) => ({
     pt_id: ptId,
     patient_id: patientId,
@@ -78,6 +87,12 @@ const seedFactories: Record<string, (deps: SeedDeps) => Record<string, unknown>>
     keys: { p256dh: 'x', auth: 'y' },
   }),
   events: ({ ptId }) => ({ pt_id: ptId, type: 'test', payload: {} }),
+  event_outbox: ({ ptId, eventId }) => ({
+    pt_id: ptId,
+    event_id: eventId,
+    event_type: 'test',
+    payload: {},
+  }),
   audit_log: ({ ptId }) => ({
     pt_id: ptId,
     actor: 'service',
@@ -101,7 +116,8 @@ async function makeUser(stamp: string): Promise<string> {
     password: 'iso-pass-1234',
     email_confirm: true,
   });
-  if (error || !data.user) throw new Error(`createUser ${stamp}: ${error?.message}`);
+  if (error || !data.user)
+    throw new Error(`createUser ${stamp}: ${error?.message}`);
   return data.user.id;
 }
 
@@ -164,7 +180,16 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     endpoint: `https://example.test/${Date.now()}-${Math.random()}`,
     keys: { p256dh: 'x', auth: 'y' },
   });
-  await db.insert(events).values({ ptId, type: 'seed', payload: {} });
+  const [event] = await db
+    .insert(events)
+    .values({ ptId, type: 'seed', payload: {} })
+    .returning({ id: events.id });
+  await db.insert(eventOutbox).values({
+    ptId,
+    eventId: event.id,
+    eventType: 'seed',
+    payload: {},
+  });
   await db.insert(auditLog).values({
     ptId,
     actor: 'svc',
@@ -172,7 +197,13 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     targetTable: 'patients',
   });
 
-  return { ptId, patientId: pat.id, conversationId: conv.id, appointmentId: appt.id };
+  return {
+    ptId,
+    patientId: pat.id,
+    conversationId: conv.id,
+    appointmentId: appt.id,
+    eventId: event.id,
+  };
 }
 
 beforeAll(async () => {
@@ -184,7 +215,10 @@ beforeAll(async () => {
   depsA = await seedFor(ptIdA);
   await seedFor(ptIdB);
 
-  userClientA = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+  userClientA = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!,
+  );
   const { error } = await userClientA.auth.signInWithPassword({
     email: `iso-a-${stamp}@example.com`,
     password: 'iso-pass-1234',
@@ -262,7 +296,10 @@ describe.each(matrixTables)('RLS isolation: %s', (table) => {
 
 describe('RLS isolation: pts', () => {
   it("SELECT as A returns 0 rows for B's pts row", async () => {
-    const { data, error } = await userClientA.from('pts').select('*').eq('id', ptIdB);
+    const { data, error } = await userClientA
+      .from('pts')
+      .select('*')
+      .eq('id', ptIdB);
     expect(error).toBeNull();
     expect(data).toEqual([]);
   });
@@ -277,4 +314,3 @@ describe('RLS isolation: pts', () => {
     expect(data).toEqual([]);
   });
 });
-

@@ -11,4 +11,5 @@ const client = postgres(url, { prepare: false });
 
 export const db = drizzle(client, { schema });
 export type DB = typeof db;
+export type DBTransaction = Parameters<Parameters<DB['transaction']>[0]>[0];
 export { schema };

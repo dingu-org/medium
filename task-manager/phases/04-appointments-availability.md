@@ -10,83 +10,94 @@
 
 ---
 
+## Implementation decisions (2026-06-12)
+
+- Reschedule updates the existing appointment row and preserves its pending/confirmed status.
+- Pending appointments may transition directly to completed or no_show.
+- MVP scheduling uses a fixed 60-minute duration and no appointment buffer.
+- Postgres enforces non-overlapping active appointments with a range exclusion constraint.
+- Domain events are transactionally paired with a durable outbox and published to Inngest with the event UUID as the idempotency ID.
+
+---
+
 ## Tasks
 
 ### Availability resolver — `lib/appointments/availability.ts`
 
-- [ ] `getFreeSlots({ ptId, start, end, durationMinutes, serviceType? })`:
-  - [ ] Load `availability_rules` for the PT (recurring weekly schedule).
-  - [ ] Materialise rules across the requested window in PT's timezone.
-  - [ ] Subtract `blocked_periods` overlapping the window.
-  - [ ] Subtract `appointments` with status in (pending, confirmed) overlapping the window.
-  - [ ] Slice into slots of `durationMinutes` (default 60; configurable per service later).
-  - [ ] Return as ISO datetimes in UTC, with PT timezone metadata for display.
-- [ ] Edge cases:
-  - [ ] DST transitions handled by date-fns-tz.
-  - [ ] Empty rules → no slots (don't crash).
-  - [ ] Window crossing midnight handled correctly.
-- [ ] Performance: query is one round trip per range, not one per day.
+- [x] `getFreeSlots({ ptId, start, end, durationMinutes, serviceType? })`:
+  - [x] Load `availability_rules` for the PT (recurring weekly schedule).
+  - [x] Materialise rules across the requested window in PT's timezone.
+  - [x] Subtract `blocked_periods` overlapping the window.
+  - [x] Subtract `appointments` with status in (pending, confirmed) overlapping the window.
+  - [x] Slice into slots of `durationMinutes` (default 60; configurable per service later).
+  - [x] Return as ISO datetimes in UTC, with PT timezone metadata for display.
+- [x] Edge cases:
+  - [x] DST transitions handled by `@date-fns/tz`.
+  - [x] Empty rules → no slots (don't crash).
+  - [x] Window crossing midnight handled correctly.
+- [x] Performance: query is one round trip per range, not one per day.
 
 ### Booking transaction — `lib/appointments/book.ts`
 
-- [ ] `bookAppointment({ ptId, patientId, startsAt, endsAt, serviceType, notes? })`:
-  - [ ] DB transaction (`BEGIN`).
-  - [ ] Check no overlapping appointment exists in (pending, confirmed). Use `SELECT … FOR UPDATE` on the row range to avoid races.
-  - [ ] Insert `appointments` with status `pending`.
-  - [ ] Insert `events` row (`appointment.booked`) with full payload.
-  - [ ] `COMMIT`.
-  - [ ] Emit Inngest event `appointment.booked` post-commit (so subscribers don't fire for rolled-back transactions).
-  - [ ] Idempotency key: `(ptId, patientId, startsAt)` — re-running returns the existing appointment, doesn't create a new one.
+- [x] `bookAppointment({ ptId, patientId, startsAt, serviceType, notes? })`:
+  - [x] DB transaction (`BEGIN`).
+  - [x] Serialize per PT and enforce active non-overlap with a Postgres exclusion constraint.
+  - [x] Insert `appointments` with status `pending`.
+  - [x] Insert `events` row (`appointment.booked`) with full payload.
+  - [x] `COMMIT`.
+  - [x] Publish through the durable outbox post-commit with the event UUID as Inngest's idempotency ID.
+  - [x] Idempotency key: `(ptId, patientId, startsAt)` — re-running returns the existing appointment, doesn't create a new one.
 
 ### Reschedule — `lib/appointments/reschedule.ts`
 
-- [ ] `rescheduleAppointment({ appointmentId, newStartsAt, newEndsAt })`:
-  - [ ] Load appointment with row lock.
-  - [ ] Guard: must be in (pending, confirmed); else throw typed error.
-  - [ ] Conflict check on the new slot.
-  - [ ] Update; status remains (pending|confirmed) but row reflects new times; previous reminder is cancelled (Phase 6).
-  - [ ] Emit `appointment.rescheduled` with `{ from, to }` payload.
+- [x] `rescheduleAppointment({ ptId, patientId?, appointmentId, newStartsAt })`:
+  - [x] Load appointment with row lock.
+  - [x] Guard: must be in (pending, confirmed); else throw typed error.
+  - [x] Conflict check on the new slot.
+  - [x] Update in place; status remains pending/confirmed and reminder rewiring remains Phase 5–6.
+  - [x] Emit `appointment.rescheduled` with `{ from, to }` payload.
 
 ### Cancel — `lib/appointments/cancel.ts`
 
-- [ ] `cancelAppointment({ appointmentId, reason?, cancelledBy: 'patient'|'pt'|'ai' })`:
-  - [ ] Guard: must not already be cancelled / completed / no_show.
-  - [ ] Set status `cancelled`, store reason + cancelledBy.
-  - [ ] Emit `appointment.cancelled`.
+- [x] `cancelAppointment({ ptId, patientId?, appointmentId, reason?, cancelledBy })`:
+  - [x] Guard terminal states through the transition table.
+  - [x] Set status `cancelled`, store reason + cancelledBy.
+  - [x] Emit `appointment.cancelled`.
 
 ### State machine
 
-- [ ] `lib/appointments/state.ts` — explicit transition table:
-  - pending → confirmed | cancelled | rescheduled
-  - confirmed → cancelled | rescheduled | completed | no_show
-  - rescheduled → confirmed | cancelled | rescheduled | completed | no_show
+- [x] `lib/appointments/state.ts` — explicit transition table:
+  - pending → confirmed | cancelled | completed | no_show
+  - confirmed → cancelled | completed | no_show
+  - rescheduled → confirmed | cancelled | completed | no_show (legacy compatibility)
   - cancelled → (terminal)
   - completed → (terminal)
   - no_show → (terminal)
-- [ ] All status changes go through `transition(appointmentId, nextStatus, ctx)` which checks legality.
+- [x] All status changes go through `transitionAppointment(...)`, which checks legality.
 
 ### Domain event types — `lib/events/appointments.ts`
 
-- [ ] `appointment.booked`, `appointment.confirmed`, `appointment.cancelled`, `appointment.rescheduled`, `appointment.completed`, `appointment.no_show`.
-- [ ] Each event has a typed payload (Zod schema). The Inngest event names use the same strings.
-- [ ] Append every event to the `events` table (DB log) in addition to emitting to Inngest.
+- [x] `appointment.booked`, `appointment.confirmed`, `appointment.cancelled`, `appointment.rescheduled`, `appointment.completed`, `appointment.no_show`.
+- [x] Each event has a typed payload (Zod schema). The Inngest event names use the same strings.
+- [x] Append every event to `events` and a transactionally paired `event_outbox` row.
+- [x] Attempt immediate post-commit delivery and retry due/expired leases every minute.
 
 ### Tool wiring (replaces Phase 3 stubs)
 
-- [ ] `lib/ai/dispatcher.ts` — replace stubs with real calls into `lib/appointments`.
-- [ ] Implement `list_upcoming_appointments` for the engine-context patient so cancel/reschedule can resolve IDs safely.
-- [ ] Each tool wraps in `withAuditLog` and respects the engine's implicit `pt_id` + `patient_id` context.
+- [x] `lib/ai/dispatcher.ts` — replace stubs with real calls into `lib/appointments`.
+- [x] Implement `list_upcoming_appointments` for the engine-context patient so cancel/reschedule can resolve IDs safely.
+- [x] Each tool wraps in `withAuditLog` and respects the engine's implicit `pt_id` + `patient_id` context.
 
 ---
 
 ## Acceptance criteria
 
-- [ ] `getFreeSlots` returns expected slots for a fixture PT with known rules + blocks + appointments.
-- [ ] Two concurrent bookings for the same slot result in exactly one success (the other gets a conflict error).
-- [ ] Re-running `bookAppointment` with the same idempotency key returns the existing appointment.
-- [ ] State transitions illegal under the table throw a typed error and don't update the row.
-- [ ] Every booking writes one `events` row and emits one Inngest event.
-- [ ] AI engine end-to-end: fixture inbound → `get_availability` returns real slots → `book_appointment` writes a real row → assistant response contains the real time.
+- [x] `getFreeSlots` returns expected slots for a fixture PT with known rules + blocks + appointments.
+- [x] Two concurrent bookings for the same slot result in exactly one success (the other gets a conflict error).
+- [x] Re-running `bookAppointment` with the same idempotency key returns the existing appointment.
+- [x] State transitions illegal under the table throw a typed error and don't update the row.
+- [x] Every booking writes one `events` row and publishes one idempotently keyed Inngest event.
+- [x] AI engine end-to-end: fixture inbound → real availability → real booking → assistant response contains the real time.
 
 ---
 

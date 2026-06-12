@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -12,12 +13,16 @@ import { MockLanguageModelV3 } from 'ai/test';
 import type { ToolResult } from '@/lib/ai/tools';
 import { db } from '@/lib/db';
 import {
+  appointments,
   auditLog,
+  availabilityRules,
   conversations,
+  events,
   messages,
   patients,
   pts,
 } from '@/lib/db/schema';
+import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
 import { ConversationEngineError } from '../errors';
 import { handoffFailedTurn, runTurnCore } from '../engine';
@@ -132,6 +137,60 @@ function bookingResponseModel(options?: {
   });
 }
 
+function phase4BookingModel() {
+  const results: MockGenerateResult[] = [
+    {
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'availability-1',
+          toolName: 'get_availability',
+          input: JSON.stringify({
+            start: '2026-07-06T09:00:00+02:00',
+            end: '2026-07-06T12:00:00+02:00',
+          }),
+        },
+      ],
+      finishReason: { unified: 'tool-calls', raw: undefined },
+      usage,
+      warnings: [],
+    },
+    {
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'book-1',
+          toolName: 'book_appointment',
+          input: JSON.stringify({
+            starts_at: '2026-07-06T09:00:00+02:00',
+            service_type: 'Initial consultation',
+          }),
+        },
+      ],
+      finishReason: { unified: 'tool-calls', raw: undefined },
+      usage,
+      warnings: [],
+    },
+    {
+      content: [
+        {
+          type: 'text',
+          text: 'Your appointment is booked for July 6 at 9:00 AM.',
+        },
+      ],
+      finishReason: { unified: 'stop', raw: undefined },
+      usage,
+      warnings: [],
+    },
+  ];
+  let index = 0;
+  return new MockLanguageModelV3({
+    provider: 'openrouter',
+    modelId: 'mock-model',
+    doGenerate: async () => results[index++] ?? results.at(-1)!,
+  });
+}
+
 let ptId = '';
 let patientId = '';
 let conversationId = '';
@@ -162,7 +221,16 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await db.delete(patients).where(eq(patients.ptId, ptId));
+  await db.delete(events).where(eq(events.ptId, ptId));
+  await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
   await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
+  await db.insert(availabilityRules).values({
+    ptId,
+    weekday: 1,
+    startTime: '09:00:00',
+    endTime: '12:00:00',
+  });
+  vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
 
   const [patient] = await db
     .insert(patients)
@@ -221,6 +289,8 @@ beforeEach(async () => {
     occurredAt: message.createdAt,
   };
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 afterAll(async () => {
   if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
@@ -349,6 +419,29 @@ describe('runTurnCore', () => {
         and(eq(messages.role, 'ai'), eq(messages.replyToMessageId, inbound.id)),
       );
     expect(replies).toHaveLength(1);
+  });
+
+  it('uses real availability and booking tools end to end', async () => {
+    const result = await runTurnCore({
+      inboundMessage: inbound,
+      model: phase4BookingModel(),
+      modelId: 'requested/model',
+      now: new Date('2026-07-01T10:00:00.000Z'),
+    });
+
+    expect(result.content).toContain('July 6 at 9:00 AM');
+    const [appointment] = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.patientId, patientId));
+    expect(appointment).toMatchObject({
+      ptId,
+      patientId,
+      serviceType: 'Initial consultation',
+      status: 'pending',
+      startsAt: new Date('2026-07-06T07:00:00.000Z'),
+      endsAt: new Date('2026-07-06T08:00:00.000Z'),
+    });
   });
 
   it('hands off after a mutation attempt ends without final text', async () => {

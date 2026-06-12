@@ -10,6 +10,14 @@
 
 ---
 
+## Phase 4 handoff (2026-06-12)
+
+- Appointment events are already written to `events` plus `event_outbox` in the appointment transaction.
+- `publishEventOutbox` attempts due delivery every minute and uses the event UUID as Inngest's idempotency ID.
+- Phase 5 subscribers should consume `appointment.*`; they must not add a second direct publisher.
+
+---
+
 ## Tasks
 
 ### Inngest setup

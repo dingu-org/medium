@@ -29,6 +29,7 @@
     ]
   },
   "dependencies": {
+    "@date-fns/tz": "1.4.1",
     "@openrouter/ai-sdk-provider": "2.9.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.3",
