@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { DBTransaction } from '@/lib/db';
-import { eventOutbox, events } from '@/lib/db/schema';
+import { appendStoredEvent } from './store';
 
 const isoDateTime = z.iso.datetime({ offset: true });
 const cancellationActor = z.enum(['patient', 'pt', 'ai']);
@@ -63,23 +63,11 @@ export async function appendAppointmentEvent(
   >;
   const payload = schema.parse(event.data);
 
-  const [stored] = await tx
-    .insert(events)
-    .values({
-      ptId: payload.ptId,
-      type: event.type,
-      payload,
-    })
-    .returning({ id: events.id });
-
-  await tx.insert(eventOutbox).values({
+  return appendStoredEvent(tx, {
     ptId: payload.ptId,
-    eventId: stored.id,
-    eventType: event.type,
+    type: event.type,
     payload,
   });
-
-  return stored.id;
 }
 
 export const eventPayloadFromAppointment = (appointment: {

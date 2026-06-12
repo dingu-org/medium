@@ -8,9 +8,13 @@ export type AuditInput = {
   action: string;
   targetTable: string;
   targetId?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
-export async function withAuditLog<T>(input: AuditInput, fn: () => Promise<T>): Promise<T> {
+export async function withAuditLog<T>(
+  input: AuditInput,
+  fn: () => Promise<T>,
+): Promise<T> {
   if (!input.ptId) {
     throw new TenancyError('withAuditLog requires a ptId');
   }
@@ -21,6 +25,7 @@ export async function withAuditLog<T>(input: AuditInput, fn: () => Promise<T>): 
     action: input.action,
     targetTable: input.targetTable,
     targetId: input.targetId ?? null,
+    metadata: input.metadata ?? null,
   });
   return result;
 }

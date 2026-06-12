@@ -1,9 +1,22 @@
 import { createHmac } from 'node:crypto';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { conversations, messages, patients, whatsappConnections } from '@/lib/db/schema';
+import {
+  conversations,
+  messages,
+  patients,
+  whatsappConnections,
+} from '@/lib/db/schema';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
 import { GET, POST } from '../route';
@@ -18,7 +31,9 @@ let externalIdCounter = 0;
 const nextExternalId = () => `wamid.${Date.now()}-${++externalIdCounter}`;
 
 function sign(body: string): string {
-  return 'sha256=' + createHmac('sha256', APP_SECRET).update(body).digest('hex');
+  return (
+    'sha256=' + createHmac('sha256', APP_SECRET).update(body).digest('hex')
+  );
 }
 
 type PayloadOpts = {
@@ -62,9 +77,14 @@ function buildPayload(opts: PayloadOpts = {}) {
   };
 }
 
-function makePost(payload: object, overrides?: { headerOverride?: string | null }): NextRequest {
+function makePost(
+  payload: object,
+  overrides?: { headerOverride?: string | null },
+): NextRequest {
   const body = JSON.stringify(payload);
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
   if (overrides?.headerOverride === undefined) {
     headers['x-hub-signature-256'] = sign(body);
   } else if (overrides.headerOverride !== null) {
@@ -78,7 +98,9 @@ function makePost(payload: object, overrides?: { headerOverride?: string | null 
 }
 
 function makeGet(qs: string): NextRequest {
-  return new Request(`http://localhost/api/webhooks/whatsapp?${qs}`) as unknown as NextRequest;
+  return new Request(
+    `http://localhost/api/webhooks/whatsapp?${qs}`,
+  ) as unknown as NextRequest;
 }
 
 beforeAll(async () => {
@@ -88,7 +110,8 @@ beforeAll(async () => {
     password: 'webhook-pass-1234',
     email_confirm: true,
   });
-  if (error || !data.user) throw new Error(`createUser failed: ${error?.message}`);
+  if (error || !data.user)
+    throw new Error(`createUser failed: ${error?.message}`);
   ptId = data.user.id;
 
   await db.insert(whatsappConnections).values({
@@ -121,7 +144,9 @@ describe('GET /api/webhooks/whatsapp', () => {
   });
 
   it('returns 403 when verify_token does not match', async () => {
-    const req = makeGet('hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=abc123');
+    const req = makeGet(
+      'hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=abc123',
+    );
     const res = await GET(req);
     expect(res.status).toBe(403);
   });
@@ -129,10 +154,17 @@ describe('GET /api/webhooks/whatsapp', () => {
 
 describe('POST /api/webhooks/whatsapp — signature failures', () => {
   it('rejects a forged signature with 401, no DB writes, no event', async () => {
-    const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
-    const res = await POST(makePost(buildPayload(), { headerOverride: 'sha256=deadbeef' }));
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
+    const res = await POST(
+      makePost(buildPayload(), { headerOverride: 'sha256=deadbeef' }),
+    );
     expect(res.status).toBe(401);
-    const rows = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.ptId, ptId));
     expect(rows).toHaveLength(0);
     expect(sendSpy).not.toHaveBeenCalled();
   });
@@ -145,10 +177,14 @@ describe('POST /api/webhooks/whatsapp — signature failures', () => {
 
 describe('POST /api/webhooks/whatsapp — happy path', () => {
   it('persists patient, conversation, and message; emits message.received', async () => {
-    const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
     const externalId = nextExternalId();
 
-    const res = await POST(makePost(buildPayload({ messageId: externalId, text: 'first ping' })));
+    const res = await POST(
+      makePost(buildPayload({ messageId: externalId, text: 'first ping' })),
+    );
     expect(res.status).toBe(200);
 
     const ps = await db
@@ -158,7 +194,10 @@ describe('POST /api/webhooks/whatsapp — happy path', () => {
     expect(ps).toHaveLength(1);
     expect(ps[0].name).toBe('Jane');
 
-    const cs = await db.select().from(conversations).where(eq(conversations.ptId, ptId));
+    const cs = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
     expect(cs).toHaveLength(1);
     expect(cs[0].lastInboundAt).toBeInstanceOf(Date);
 
@@ -170,16 +209,21 @@ describe('POST /api/webhooks/whatsapp — happy path', () => {
     expect(ms[0].channel).toBe('whatsapp');
 
     expect(sendSpy).toHaveBeenCalledTimes(1);
-    expect(sendSpy).toHaveBeenCalledWith({
-      name: 'message.received',
-      data: { messageId: ms[0].id, ptId, conversationId: cs[0].id },
-    });
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.any(String),
+        name: 'message.received',
+        data: { messageId: ms[0].id, ptId, conversationId: cs[0].id },
+      }),
+    );
   });
 });
 
 describe('POST /api/webhooks/whatsapp — idempotency', () => {
   it('produces exactly one message row and one event for duplicate deliveries', async () => {
-    const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
     const payload = buildPayload({ messageId: nextExternalId() });
 
     const first = await POST(makePost(payload));
@@ -195,11 +239,18 @@ describe('POST /api/webhooks/whatsapp — idempotency', () => {
 
 describe('POST /api/webhooks/whatsapp — unknown phone_number_id', () => {
   it('returns 200 with no writes and no event', async () => {
-    const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
-    const res = await POST(makePost(buildPayload({ phoneNumberId: 'PNI_UNKNOWN_999' })));
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
+    const res = await POST(
+      makePost(buildPayload({ phoneNumberId: 'PNI_UNKNOWN_999' })),
+    );
     expect(res.status).toBe(200);
 
-    const rows = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.ptId, ptId));
     expect(rows).toHaveLength(0);
     expect(sendSpy).not.toHaveBeenCalled();
   });
@@ -207,11 +258,16 @@ describe('POST /api/webhooks/whatsapp — unknown phone_number_id', () => {
 
 describe('POST /api/webhooks/whatsapp — non-text message type', () => {
   it('skips non-text messages, returns 200, emits nothing', async () => {
-    const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
     const res = await POST(makePost(buildPayload({ messageType: 'image' })));
     expect(res.status).toBe(200);
 
-    const rows = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.ptId, ptId));
     expect(rows).toHaveLength(0);
     expect(sendSpy).not.toHaveBeenCalled();
   });
@@ -222,14 +278,20 @@ describe('POST /api/webhooks/whatsapp — conversation bump', () => {
     vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
 
     await POST(makePost(buildPayload({ messageId: nextExternalId() })));
-    const cs1 = await db.select().from(conversations).where(eq(conversations.ptId, ptId));
+    const cs1 = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
     expect(cs1).toHaveLength(1);
     const firstStamp = cs1[0].lastInboundAt!.getTime();
 
     await new Promise((r) => setTimeout(r, 15));
 
     await POST(makePost(buildPayload({ messageId: nextExternalId() })));
-    const cs2 = await db.select().from(conversations).where(eq(conversations.ptId, ptId));
+    const cs2 = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
     expect(cs2).toHaveLength(1);
     expect(cs2[0].id).toBe(cs1[0].id);
     expect(cs2[0].lastInboundAt!.getTime()).toBeGreaterThan(firstStamp);

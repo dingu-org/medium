@@ -1,8 +1,14 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { conversations, messageTemplates, patients, whatsappConnections } from '@/lib/db/schema';
+import {
+  conversations,
+  messageTemplates,
+  patients,
+  whatsappConnections,
+} from '@/lib/db/schema';
 import { decryptToken } from '@/lib/db/crypto';
-import { inngest } from '@/lib/inngest/client';
+import { appendBackgroundEvent } from '@/lib/events/background';
+import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { graphFetch } from './graph';
 import {
   ConnectionRevokedError,
@@ -51,32 +57,46 @@ async function markRevoked(
   ptId: string,
   reason: 'unauthorized' | 'forbidden',
 ): Promise<void> {
-  await db
-    .update(whatsappConnections)
-    .set({ status: 'revoked' })
-    .where(eq(whatsappConnections.id, connectionId));
+  const eventId = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(whatsappConnections)
+      .set({ status: 'revoked' })
+      .where(
+        and(
+          eq(whatsappConnections.id, connectionId),
+          eq(whatsappConnections.status, 'active'),
+        ),
+      )
+      .returning({ id: whatsappConnections.id });
+    if (!updated) return null;
 
-  try {
-    await inngest.send({ name: 'wa.connection.revoked', data: { ptId, connectionId, reason } });
-  } catch (err) {
-    console.warn('[wa-client] inngest.send wa.connection.revoked failed', {
-      connectionId,
-      err: err instanceof Error ? err.message : String(err),
+    return appendBackgroundEvent(tx, {
+      type: 'wa.connection.revoked',
+      data: { ptId, connectionId, reason },
     });
-  }
+  });
+  if (eventId) await tryPublishOutboxEvent(eventId);
 }
 
 /** Graph call that turns an auth failure into a revoked connection. Token never logged. */
 async function authedGraph<T>(
   conn: ActiveConnection,
   path: string,
-  opts: { method?: 'GET' | 'POST'; searchParams?: Record<string, string>; body?: unknown } = {},
+  opts: {
+    method?: 'GET' | 'POST';
+    searchParams?: Record<string, string>;
+    body?: unknown;
+  } = {},
 ): Promise<T> {
   try {
     return await graphFetch<T>(path, { token: conn.token, ...opts });
   } catch (err) {
     if (err instanceof GraphApiError && err.isAuthError) {
-      await markRevoked(conn.id, conn.ptId, err.status === 401 ? 'unauthorized' : 'forbidden');
+      await markRevoked(
+        conn.id,
+        conn.ptId,
+        err.status === 401 ? 'unauthorized' : 'forbidden',
+      );
       throw new ConnectionRevokedError();
     }
     throw err;
@@ -115,10 +135,14 @@ export async function sendFreeForm(
     throw new OutsideWindowError();
   }
 
-  const res = await authedGraph<SendResponse>(conn, `${conn.phoneNumberId}/messages`, {
-    method: 'POST',
-    body: { messaging_product: 'whatsapp', to, type: 'text', text: { body } },
-  });
+  const res = await authedGraph<SendResponse>(
+    conn,
+    `${conn.phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      body: { messaging_product: 'whatsapp', to, type: 'text', text: { body } },
+    },
+  );
   return { messageId: res.messages?.[0]?.id ?? null };
 }
 
@@ -153,18 +177,31 @@ export async function sendTemplate(
 
   const components =
     variables.length > 0
-      ? [{ type: 'body', parameters: variables.map((text) => ({ type: 'text', text })) }]
+      ? [
+          {
+            type: 'body',
+            parameters: variables.map((text) => ({ type: 'text', text })),
+          },
+        ]
       : undefined;
 
-  const res = await authedGraph<SendResponse>(conn, `${conn.phoneNumberId}/messages`, {
-    method: 'POST',
-    body: {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'template',
-      template: { name: templateName, language: { code: language }, ...(components && { components }) },
+  const res = await authedGraph<SendResponse>(
+    conn,
+    `${conn.phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      body: {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: language },
+          ...(components && { components }),
+        },
+      },
     },
-  });
+  );
   return { messageId: res.messages?.[0]?.id ?? null };
 }
 
@@ -181,7 +218,12 @@ export async function submitTemplate(
     `${conn.wabaId}/message_templates`,
     {
       method: 'POST',
-      body: { name, language, category: 'UTILITY', components: [{ type: 'BODY', text: body }] },
+      body: {
+        name,
+        language,
+        category: 'UTILITY',
+        components: [{ type: 'BODY', text: body }],
+      },
     },
   );
   return { metaId: res.id, status: res.status ?? 'PENDING' };
@@ -198,8 +240,19 @@ export async function getTemplateStatus(
   });
 }
 
-// Deferred to Phase 5 (polling/throttling concerns, per tech doc §6/§7):
-//   - getQualityRating(connectionId): periodic Graph poll of the number's rating.
-//   - rate-limit throttling: read whatsapp_connections.tier + a rolling 24h count
-//     from `messages` to gate the reminder dispatcher.
-// The auth-error path above already covers token revocation via wa.connection.revoked.
+export async function getQualityRating(connectionId: string): Promise<{
+  qualityRating: string;
+  tier: string | null;
+}> {
+  const conn = await getConnection(connectionId);
+  const result = await authedGraph<{
+    quality_rating?: string;
+    messaging_limit_tier?: string;
+  }>(conn, conn.phoneNumberId, {
+    searchParams: { fields: 'quality_rating,messaging_limit_tier' },
+  });
+  return {
+    qualityRating: result.quality_rating?.toUpperCase() || 'UNKNOWN',
+    tier: result.messaging_limit_tier ?? null,
+  };
+}

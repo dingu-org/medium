@@ -1,10 +1,19 @@
 import { type NextRequest } from 'next/server';
 import { sql, eq, and } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { conversations, messages, patients, whatsappConnections } from '@/lib/db/schema';
-import { inngest } from '@/lib/inngest/client';
+import {
+  conversations,
+  messages,
+  patients,
+  whatsappConnections,
+} from '@/lib/db/schema';
+import { appendBackgroundEvent } from '@/lib/events/background';
+import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { verifySignature } from '@/lib/channels/whatsapp/signature';
-import { whatsappWebhookPayload, type WhatsappChangeValue } from '@/lib/channels/whatsapp/payload';
+import {
+  whatsappWebhookPayload,
+  type WhatsappChangeValue,
+} from '@/lib/channels/whatsapp/payload';
 
 export const runtime = 'nodejs';
 
@@ -34,7 +43,9 @@ export async function POST(req: NextRequest) {
   const header = req.headers.get('x-hub-signature-256');
 
   if (!verifySignature({ rawBody, header, secret: APP_SECRET })) {
-    console.warn('[whatsapp-webhook] rejected: bad signature', { hasHeader: header !== null });
+    console.warn('[whatsapp-webhook] rejected: bad signature', {
+      hasHeader: header !== null,
+    });
     return new Response('Invalid signature', { status: 401 });
   }
 
@@ -48,7 +59,9 @@ export async function POST(req: NextRequest) {
 
   const parsed = whatsappWebhookPayload.safeParse(json);
   if (!parsed.success) {
-    console.warn('[whatsapp-webhook] rejected: schema mismatch', { issues: parsed.error.issues });
+    console.warn('[whatsapp-webhook] rejected: schema mismatch', {
+      issues: parsed.error.issues,
+    });
     return new Response('Bad payload', { status: 400 });
   }
 
@@ -71,7 +84,9 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
     .limit(1);
 
   if (!connection) {
-    console.warn('[whatsapp-webhook] unknown phone_number_id', { phoneNumberId });
+    console.warn('[whatsapp-webhook] unknown phone_number_id', {
+      phoneNumberId,
+    });
     return;
   }
   const { ptId } = connection;
@@ -101,7 +116,9 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
         .limit(1);
 
       if (!patient) {
-        throw new Error(`[whatsapp-webhook] patient row missing after upsert (wa_id=${msg.from})`);
+        throw new Error(
+          `[whatsapp-webhook] patient row missing after upsert (wa_id=${msg.from})`,
+        );
       }
 
       const [conversation] = await tx
@@ -131,23 +148,23 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
         .onConflictDoNothing({ target: messages.externalId })
         .returning({ id: messages.id });
 
-      return inserted.length === 1
-        ? { fresh: true as const, messageId: inserted[0].id, conversationId: conversation.id }
-        : { fresh: false as const };
+      if (inserted.length !== 1) return { fresh: false as const };
+
+      const messageId = inserted[0].id;
+      const eventId = await appendBackgroundEvent(tx, {
+        type: 'message.received',
+        data: { messageId, ptId, conversationId: conversation.id },
+      });
+      return {
+        fresh: true as const,
+        messageId,
+        conversationId: conversation.id,
+        eventId,
+      };
     });
 
     if (result.fresh) {
-      try {
-        await inngest.send({
-          name: 'message.received',
-          data: { messageId: result.messageId, ptId, conversationId: result.conversationId },
-        });
-      } catch (err) {
-        console.warn('[whatsapp-webhook] inngest.send failed (message still persisted)', {
-          messageId: result.messageId,
-          err: err instanceof Error ? err.message : String(err),
-        });
-      }
+      await tryPublishOutboxEvent(result.eventId);
     }
   }
 }

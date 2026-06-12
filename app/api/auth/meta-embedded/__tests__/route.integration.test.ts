@@ -1,4 +1,13 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
@@ -27,7 +36,9 @@ function okFetch(): typeof fetch {
   return vi.fn(async (input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes('/oauth/access_token')) {
-      return new Response(JSON.stringify({ access_token: BIZ_TOKEN }), { status: 200 });
+      return new Response(JSON.stringify({ access_token: BIZ_TOKEN }), {
+        status: 200,
+      });
     }
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   }) as unknown as typeof fetch;
@@ -37,16 +48,24 @@ function okFetch(): typeof fetch {
 function fetchWith(match: string, status: number, body: unknown): typeof fetch {
   return vi.fn(async (input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.includes(match)) return new Response(JSON.stringify(body), { status });
+    if (url.includes(match))
+      return new Response(JSON.stringify(body), { status });
     if (url.includes('/oauth/access_token')) {
-      return new Response(JSON.stringify({ access_token: BIZ_TOKEN }), { status: 200 });
+      return new Response(JSON.stringify({ access_token: BIZ_TOKEN }), {
+        status: 200,
+      });
     }
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   }) as unknown as typeof fetch;
 }
 
-function makePost(body: object, opts?: { origin?: string | null }): NextRequest {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+function makePost(
+  body: object,
+  opts?: { origin?: string | null },
+): NextRequest {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
   const origin = opts && 'origin' in opts ? opts.origin : APP_URL;
   if (origin != null) headers.origin = origin;
   return new Request(`${APP_URL}/api/auth/meta-embedded`, {
@@ -69,7 +88,8 @@ beforeAll(async () => {
     password: 'embed-pass-1234',
     email_confirm: true,
   });
-  if (a.error || !a.data.user) throw new Error(`createUser failed: ${a.error?.message}`);
+  if (a.error || !a.data.user)
+    throw new Error(`createUser failed: ${a.error?.message}`);
   ptId = a.data.user.id;
 
   const b = await supabase.auth.admin.createUser({
@@ -77,7 +97,8 @@ beforeAll(async () => {
     password: 'embed-pass-1234',
     email_confirm: true,
   });
-  if (b.error || !b.data.user) throw new Error(`createUser failed: ${b.error?.message}`);
+  if (b.error || !b.data.user)
+    throw new Error(`createUser failed: ${b.error?.message}`);
   otherPtId = b.data.user.id;
 });
 
@@ -88,7 +109,9 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await db.delete(whatsappConnections).where(inArray(whatsappConnections.ptId, [ptId, otherPtId]));
+  await db
+    .delete(whatsappConnections)
+    .where(inArray(whatsappConnections.ptId, [ptId, otherPtId]));
   getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
   vi.stubGlobal('fetch', okFetch());
 });
@@ -100,8 +123,12 @@ afterEach(() => {
 
 describe('POST /api/auth/meta-embedded — auth & CSRF', () => {
   it('rejects a mismatched Origin with 403, no event', async () => {
-    const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
-    const res = await POST(makePost(validBody(nextPni()), { origin: 'https://evil.example' }));
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
+    const res = await POST(
+      makePost(validBody(nextPni()), { origin: 'https://evil.example' }),
+    );
     expect(res.status).toBe(403);
     expect(sendSpy).not.toHaveBeenCalled();
   });
@@ -120,7 +147,9 @@ describe('POST /api/auth/meta-embedded — auth & CSRF', () => {
 
 describe('POST /api/auth/meta-embedded — happy path', () => {
   it('persists an encrypted connection and emits wa.connection.created', async () => {
-    const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
     const phoneNumberId = nextPni();
 
     const res = await POST(makePost(validBody(phoneNumberId)));
@@ -138,10 +167,19 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     expect(row.accessTokenEncrypted).toBeInstanceOf(Buffer);
     expect(await decryptToken(row.accessTokenEncrypted!)).toBe(BIZ_TOKEN);
 
-    expect(sendSpy).toHaveBeenCalledWith({
-      name: 'wa.connection.created',
-      data: { ptId, connectionId: row.id, phoneNumberId, wabaId: 'WABA_123' },
-    });
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.any(String),
+        name: 'wa.connection.created',
+        data: {
+          ptId,
+          connectionId: row.id,
+          phoneNumberId,
+          wabaId: 'WABA_123',
+        },
+      }),
+    );
+    expect(row.tokenExpiresAt).not.toBeNull();
   });
 
   it('reconnect by the same PT updates the existing row, no duplicate', async () => {
@@ -161,7 +199,10 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
 
   it('still saves the connection when phone register fails (best-effort)', async () => {
     vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
-    vi.stubGlobal('fetch', fetchWith('/register', 500, { error: { message: 'nope' } }));
+    vi.stubGlobal(
+      'fetch',
+      fetchWith('/register', 500, { error: { message: 'nope' } }),
+    );
     const phoneNumberId = nextPni();
 
     const res = await POST(makePost(validBody(phoneNumberId)));
@@ -179,11 +220,17 @@ describe('POST /api/auth/meta-embedded — failures', () => {
     vi.stubGlobal('fetch', fetchWith('/oauth/access_token', 200, {}));
     const res = await POST(makePost(validBody(nextPni())));
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ ok: false, error: 'token_exchange_failed' });
+    expect(await res.json()).toEqual({
+      ok: false,
+      error: 'token_exchange_failed',
+    });
   });
 
   it('returns 502 graph_error when app subscription fails', async () => {
-    vi.stubGlobal('fetch', fetchWith('/subscribed_apps', 500, { error: { message: 'boom' } }));
+    vi.stubGlobal(
+      'fetch',
+      fetchWith('/subscribed_apps', 500, { error: { message: 'boom' } }),
+    );
     const res = await POST(makePost(validBody(nextPni())));
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ ok: false, error: 'graph_error' });

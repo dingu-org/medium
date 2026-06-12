@@ -4,11 +4,16 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { whatsappConnections } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
+import { appendBackgroundEvent } from '@/lib/events/background';
+import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { getServiceClient } from '@/lib/tenancy';
 import { createServerClient } from '@/lib/supabase/server';
-import { inngest } from '@/lib/inngest/client';
 import { graphFetch } from '@/lib/channels/whatsapp/graph';
-import { GraphApiError, MetaSignupError, type MetaSignupErrorKind } from '@/lib/channels/whatsapp/errors';
+import {
+  GraphApiError,
+  MetaSignupError,
+  type MetaSignupErrorKind,
+} from '@/lib/channels/whatsapp/errors';
 
 export const runtime = 'nodejs';
 
@@ -44,7 +49,9 @@ const STATUS_BY_KIND: Record<MetaSignupErrorKind, number> = {
  */
 export async function POST(req: NextRequest) {
   if (req.headers.get('origin') !== APP_URL) {
-    console.warn('[meta-embedded] rejected: bad origin', { origin: req.headers.get('origin') });
+    console.warn('[meta-embedded] rejected: bad origin', {
+      origin: req.headers.get('origin'),
+    });
     return new Response('Forbidden', { status: 403 });
   }
 
@@ -66,31 +73,32 @@ export async function POST(req: NextRequest) {
   const { code, phoneNumberId, wabaId } = payload;
 
   try {
-    const accessToken = await exchangeCodeForToken(code);
+    const token = await exchangeCodeForToken(code);
 
-    await registerPhoneNumber(phoneNumberId, accessToken);
-    await subscribeApp(wabaId, accessToken); // also validates the token before we persist
+    await registerPhoneNumber(phoneNumberId, token.accessToken);
+    await subscribeApp(wabaId, token.accessToken); // also validates the token before we persist
 
-    const encrypted = await encryptToken(accessToken);
-    const connectionId = await persistConnection({ ptId, phoneNumberId, wabaId, encrypted });
-
-    try {
-      await inngest.send({
-        name: 'wa.connection.created',
-        data: { ptId, connectionId, phoneNumberId, wabaId },
-      });
-    } catch (err) {
-      console.warn('[meta-embedded] inngest.send failed (connection still saved)', {
-        connectionId,
-        err: err instanceof Error ? err.message : String(err),
-      });
-    }
+    const encrypted = await encryptToken(token.accessToken);
+    const tokenExpiresAt = new Date(
+      Date.now() + (token.expiresInSeconds ?? 60 * 24 * 60 * 60) * 1000,
+    );
+    const { eventId } = await persistConnection({
+      ptId,
+      phoneNumberId,
+      wabaId,
+      encrypted,
+      tokenExpiresAt,
+    });
+    await tryPublishOutboxEvent(eventId);
 
     return Response.json({ ok: true, status: 'active' }, { status: 200 });
   } catch (err) {
     if (err instanceof MetaSignupError) {
       console.warn('[meta-embedded] signup failed', { kind: err.kind, ptId });
-      return Response.json({ ok: false, error: err.kind }, { status: STATUS_BY_KIND[err.kind] });
+      return Response.json(
+        { ok: false, error: err.kind },
+        { status: STATUS_BY_KIND[err.kind] },
+      );
     }
     console.error('[meta-embedded] unexpected error', {
       ptId,
@@ -101,8 +109,10 @@ export async function POST(req: NextRequest) {
 }
 
 /** Exchange the Embedded Signup auth code for the long-lived business token. */
-async function exchangeCodeForToken(code: string): Promise<string> {
-  let res: { access_token?: string };
+async function exchangeCodeForToken(
+  code: string,
+): Promise<{ accessToken: string; expiresInSeconds?: number }> {
+  let res: { access_token?: string; expires_in?: number };
   try {
     res = await graphFetch<{ access_token?: string }>('oauth/access_token', {
       searchParams: { client_id: APP_ID, client_secret: APP_SECRET, code },
@@ -114,16 +124,28 @@ async function exchangeCodeForToken(code: string): Promise<string> {
     );
   }
   if (!res.access_token) {
-    throw new MetaSignupError('token_exchange_failed', 'No access_token in response');
+    throw new MetaSignupError(
+      'token_exchange_failed',
+      'No access_token in response',
+    );
   }
-  return res.access_token;
+  return {
+    accessToken: res.access_token,
+    expiresInSeconds:
+      typeof res.expires_in === 'number' && res.expires_in > 0
+        ? res.expires_in
+        : undefined,
+  };
 }
 
 /**
  * Enable Cloud API for the number. Best-effort: Embedded Signup numbers are
  * usually pre-registered, so a failure here should not block the connection.
  */
-async function registerPhoneNumber(phoneNumberId: string, token: string): Promise<void> {
+async function registerPhoneNumber(
+  phoneNumberId: string,
+  token: string,
+): Promise<void> {
   const pin = String(Math.floor(100000 + Math.random() * 900000));
   try {
     await graphFetch(`${phoneNumberId}/register`, {
@@ -173,23 +195,36 @@ async function persistConnection(args: {
   phoneNumberId: string;
   wabaId: string;
   encrypted: Buffer;
-}): Promise<string> {
-  const { ptId, phoneNumberId, wabaId, encrypted } = args;
+  tokenExpiresAt: Date;
+}): Promise<{ connectionId: string; eventId: string }> {
+  const { ptId, phoneNumberId, wabaId, encrypted, tokenExpiresAt } = args;
   const svc = getServiceClient(ptId);
 
   try {
-    const [row] = await svc.db
-      .insert(whatsappConnections)
-      .values({
-        ptId,
-        phoneNumberId,
-        wabaId,
-        accessTokenEncrypted: encrypted,
-        status: 'active',
-        connectedAt: sql`now()`,
-      })
-      .returning({ id: whatsappConnections.id });
-    return row.id;
+    return await svc.db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(whatsappConnections)
+        .values({
+          ptId,
+          phoneNumberId,
+          wabaId,
+          accessTokenEncrypted: encrypted,
+          status: 'active',
+          connectedAt: sql`now()`,
+          tokenExpiresAt,
+        })
+        .returning({ id: whatsappConnections.id });
+      const eventId = await appendBackgroundEvent(tx, {
+        type: 'wa.connection.created',
+        data: {
+          ptId,
+          connectionId: row.id,
+          phoneNumberId,
+          wabaId,
+        },
+      });
+      return { connectionId: row.id, eventId };
+    });
   } catch (err) {
     if (!isUniqueViolation(err)) throw err;
 
@@ -203,15 +238,28 @@ async function persistConnection(args: {
       throw new MetaSignupError('duplicate_number');
     }
 
-    await db
-      .update(whatsappConnections)
-      .set({
-        wabaId,
-        accessTokenEncrypted: encrypted,
-        status: 'active',
-        connectedAt: sql`now()`,
-      })
-      .where(eq(whatsappConnections.id, existing.id));
-    return existing.id;
+    return db.transaction(async (tx) => {
+      await tx
+        .update(whatsappConnections)
+        .set({
+          wabaId,
+          accessTokenEncrypted: encrypted,
+          status: 'active',
+          connectedAt: sql`now()`,
+          tokenExpiresAt,
+          expiryWarningSentAt: null,
+        })
+        .where(eq(whatsappConnections.id, existing.id));
+      const eventId = await appendBackgroundEvent(tx, {
+        type: 'wa.connection.created',
+        data: {
+          ptId,
+          connectionId: existing.id,
+          phoneNumberId,
+          wabaId,
+        },
+      });
+      return { connectionId: existing.id, eventId };
+    });
   }
 }

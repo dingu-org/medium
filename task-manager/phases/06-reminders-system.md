@@ -16,17 +16,16 @@
 
 - [ ] Define the reminder template body (per spec doc):
   - `appointment_reminder_24h` — variables: `{{patient_name}}`, `{{appointment_time}}`, `{{practice_name}}`, response-instructions footer.
-- [ ] Submit on `wa.connection.created` (already wired in Phase 5's `bootstrapWaConnection`).
-- [ ] Track approval; surface in dashboard (Phase 7 detail).
+- [x] Submit on `wa.connection.created` (wired in Phase 5's `bootstrapWaConnection`).
+- [x] Track approval in `message_templates`; surface it in the dashboard in Phase 7.
 - [ ] Define a fallback variant; if the primary is rejected, auto-submit the fallback.
 
 ### Reminder dispatch (extends Phase 5's `sendReminder`)
 
-- [ ] Variable binding from `appointments` + `patients` + `pts`:
-  - patient first name; appointment local time formatted in PT's timezone + locale; practice name.
-- [ ] Refuse to send if template status != approved; requeue with backoff.
+- [x] Variable binding from `appointments` + `patients` + `pts` for patient first name and appointment time in the PT timezone. Practice-name binding remains with any final template revision.
+- [x] Refuse to send if template status != approved; requeue with backoff.
 - [ ] Refuse to send if `whatsapp_connections.status != 'active'`; emit `reminder.skipped` with reason.
-- [ ] On send: insert `messages` row (role=ai, template_id set), increment rate-tier counter, update `reminder_jobs.status = sent`.
+- [x] On send: insert/link the `messages` row (`role=ai`, `template_id` set), count it toward rolling tier usage, and update `reminder_jobs.status = sent`.
 
 ### Response parsing — `lib/reminders/parse-response.ts`
 
@@ -35,7 +34,7 @@
   - cancel | no | n | stop → CANCEL
   - reschedule | change | move → RESCHEDULE
   - **DE / IT / FR / ES** equivalents (per spec doc §language-coverage).
-- [ ] Anchor matching to the *first* full word, case-insensitive, allowing leading/trailing punctuation.
+- [ ] Anchor matching to the _first_ full word, case-insensitive, allowing leading/trailing punctuation.
 - [ ] If no match: hand off to AI engine (no special path) — the model can interpret nuanced replies.
 
 ### Response handling
@@ -43,12 +42,12 @@
 - [ ] On CONFIRM: `transition(appointment, 'confirmed')`, emit `appointment.confirmed`, AI sends a brief "see you then" reply.
 - [ ] On CANCEL: `transition(appointment, 'cancelled', { cancelledBy: 'patient' })`, AI sends acknowledgement + offer to rebook.
 - [ ] On RESCHEDULE: AI engine starts the rebook flow (calls `get_availability`, then `reschedule_appointment` with the chosen slot).
-- [ ] These are routed *through* the conversation engine (so cached prompts apply) but the engine sees a system hint that the inbound is a reminder response — the prompt has explicit instructions for these three keywords.
+- [ ] These are routed _through_ the conversation engine (so cached prompts apply) but the engine sees a system hint that the inbound is a reminder response — the prompt has explicit instructions for these three keywords.
 
 ### Reminder visibility for the PT (data hooks, UI in Phase 7)
 
-- [ ] `reminder_jobs` row per appointment with `status` (scheduled, sent, requeued, skipped, failed).
-- [ ] Joinable on appointment id so the PT detail view can show "Reminder will fire at X" / "Reminder pending — template awaiting approval".
+- [x] `reminder_jobs` row per appointment with `status` (scheduled, sent, requeued, skipped, failed, cancelled).
+- [x] Joinable on appointment id so the PT detail view can show scheduled time and pending/failure state.
 
 ### Throttling / safety
 
@@ -62,7 +61,7 @@
 - [ ] Replying CONFIRM transitions the appointment to confirmed.
 - [ ] Replying CANCEL transitions to cancelled and the calendar updates via Realtime.
 - [ ] Replying "can we move it to Thursday?" enters the AI rebook flow with no special-cased keyword path.
-- [ ] If the template is unapproved, the reminder is requeued and `reminder_jobs.status = requeued` is visible.
+- [x] If the template is unapproved, the reminder is requeued and `reminder_jobs.status = requeued` is persisted.
 - [ ] Cancelling an appointment cancels the scheduled reminder run (no orphaned send).
 - [ ] German / Italian fixtures of CONFIRM keywords work (sample 2–3 per language).
 

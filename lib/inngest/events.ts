@@ -1,28 +1,5 @@
 import type { AppointmentEventPayloads } from '@/lib/events/appointments';
-
-type ExistingEvents = {
-  'message.received': {
-    data: { messageId: string; ptId: string; conversationId: string };
-  };
-  'wa.connection.created': {
-    data: {
-      ptId: string;
-      connectionId: string;
-      phoneNumberId: string;
-      wabaId: string;
-    };
-  };
-  'wa.connection.revoked': {
-    data: {
-      ptId: string;
-      connectionId: string;
-      reason: 'unauthorized' | 'forbidden';
-    };
-  };
-  'wa.template.approved': {
-    data: { ptId: string; templateId: string; metaId: string };
-  };
-};
+import type { BackgroundEventPayloads } from '@/lib/events/background';
 
 type AppointmentEvents = {
   [K in keyof AppointmentEventPayloads]: {
@@ -30,4 +7,10 @@ type AppointmentEvents = {
   };
 };
 
-export type Events = ExistingEvents & AppointmentEvents;
+type BackgroundEvents = {
+  [K in keyof BackgroundEventPayloads]: {
+    data: BackgroundEventPayloads[K];
+  };
+};
+
+export type Events = BackgroundEvents & AppointmentEvents;

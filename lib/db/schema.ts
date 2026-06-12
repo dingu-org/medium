@@ -54,7 +54,9 @@ export const templateStatus = pgEnum('template_status', [
 ]);
 export const reminderStatus = pgEnum('reminder_status', [
   'scheduled',
+  'requeued',
   'sent',
+  'skipped',
   'failed',
   'cancelled',
 ]);
@@ -87,6 +89,8 @@ export const whatsappConnections = pgTable(
     tier: text('tier'),
     qualityRating: text('quality_rating'),
     connectedAt: tsTz('connected_at'),
+    tokenExpiresAt: tsTz('token_expires_at'),
+    expiryWarningSentAt: tsTz('expiry_warning_sent_at'),
     status: connectionStatus('status').notNull().default('pending'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
@@ -143,6 +147,7 @@ export const messages = pgTable(
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
     externalId: text('external_id'),
+    sourceEventId: uuid('source_event_id'),
     replyToMessageId: uuid('reply_to_message_id').references(
       (): AnyPgColumn => messages.id,
       {
@@ -166,6 +171,9 @@ export const messages = pgTable(
     uniqueIndex('messages_ai_reply_to_uq')
       .on(t.replyToMessageId)
       .where(sql`role = 'ai' AND reply_to_message_id IS NOT NULL`),
+    uniqueIndex('messages_source_event_id_uq')
+      .on(t.sourceEventId)
+      .where(sql`source_event_id IS NOT NULL`),
   ],
 );
 
@@ -241,17 +249,28 @@ export const messageTemplates = pgTable('message_templates', {
   lastStatusAt: tsTz('last_status_at'),
 });
 
-export const reminderJobs = pgTable('reminder_jobs', {
-  id: uuid('id').primaryKey().default(genUuid),
-  ptId: ptIdRef(),
-  appointmentId: uuid('appointment_id')
-    .notNull()
-    .references(() => appointments.id, { onDelete: 'cascade' }),
-  scheduledFor: tsTz('scheduled_for').notNull(),
-  inngestRunId: text('inngest_run_id'),
-  status: reminderStatus('status').notNull().default('scheduled'),
-  createdAt: tsTz('created_at').notNull().default(now),
-});
+export const reminderJobs = pgTable(
+  'reminder_jobs',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    appointmentId: uuid('appointment_id')
+      .notNull()
+      .references(() => appointments.id, { onDelete: 'cascade' }),
+    scheduledFor: tsTz('scheduled_for').notNull(),
+    inngestRunId: text('inngest_run_id'),
+    status: reminderStatus('status').notNull().default('scheduled'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    skippedReason: text('skipped_reason'),
+    sentAt: tsTz('sent_at'),
+    messageId: uuid('message_id').references(() => messages.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: tsTz('created_at').notNull().default(now),
+  },
+  (t) => [uniqueIndex('reminder_jobs_appointment_id_uq').on(t.appointmentId)],
+);
 
 export const pushSubscriptions = pgTable('push_subscriptions', {
   id: uuid('id').primaryKey().default(genUuid),
@@ -306,5 +325,6 @@ export const auditLog = pgTable('audit_log', {
   action: text('action').notNull(),
   targetTable: text('target_table').notNull(),
   targetId: uuid('target_id'),
+  metadata: jsonb('metadata'),
   occurredAt: tsTz('occurred_at').notNull().default(now),
 });

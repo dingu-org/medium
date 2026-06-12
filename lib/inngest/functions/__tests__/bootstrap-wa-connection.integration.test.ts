@@ -1,10 +1,23 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { messageTemplates, whatsappConnections } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
 import { createServiceClient } from '@/lib/supabase/service';
-import { REMINDER_TEMPLATE, bootstrapWaConnectionCore } from '../bootstrap-wa-connection';
+import {
+  REMINDER_TEMPLATE,
+  applyTemplateStatus,
+  bootstrapWaConnectionCore,
+} from '../bootstrap-wa-connection';
 
 const META_TEMPLATE_ID = 'TEMPLATE_META_ID_123';
 
@@ -17,9 +30,12 @@ function submitFetch(): typeof fetch {
   return vi.fn(async (input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes('/message_templates')) {
-      return new Response(JSON.stringify({ id: META_TEMPLATE_ID, status: 'PENDING' }), {
-        status: 200,
-      });
+      return new Response(
+        JSON.stringify({ id: META_TEMPLATE_ID, status: 'PENDING' }),
+        {
+          status: 200,
+        },
+      );
     }
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   }) as unknown as typeof fetch;
@@ -32,7 +48,8 @@ beforeAll(async () => {
     password: 'wa-boot-1234',
     email_confirm: true,
   });
-  if (error || !data.user) throw new Error(`createUser failed: ${error?.message}`);
+  if (error || !data.user)
+    throw new Error(`createUser failed: ${error?.message}`);
   ptId = data.user.id;
 });
 
@@ -42,7 +59,9 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await db.delete(messageTemplates).where(eq(messageTemplates.ptId, ptId));
-  await db.delete(whatsappConnections).where(eq(whatsappConnections.ptId, ptId));
+  await db
+    .delete(whatsappConnections)
+    .where(eq(whatsappConnections.ptId, ptId));
 
   const encrypted = await encryptToken('PT_TOKEN');
   const [conn] = await db
@@ -89,7 +108,36 @@ describe('bootstrapWaConnectionCore', () => {
     expect(second.created).toBe(false);
     expect(second.templateId).toBe(first.templateId);
 
-    const rows = await db.select().from(messageTemplates).where(eq(messageTemplates.ptId, ptId));
+    const rows = await db
+      .select()
+      .from(messageTemplates)
+      .where(eq(messageTemplates.ptId, ptId));
     expect(rows).toHaveLength(1);
+  });
+
+  it('normalizes Meta approval and rejection statuses', async () => {
+    const created = await bootstrapWaConnectionCore({ ptId, connectionId });
+
+    await expect(
+      applyTemplateStatus({
+        ptId,
+        templateId: created.templateId,
+        status: 'APPROVED',
+      }),
+    ).resolves.toBe('approved');
+    await expect(
+      applyTemplateStatus({
+        ptId,
+        templateId: created.templateId,
+        status: 'REJECTED',
+      }),
+    ).resolves.toBe('rejected');
+
+    const [row] = await db
+      .select()
+      .from(messageTemplates)
+      .where(eq(messageTemplates.id, created.templateId));
+    expect(row.status).toBe('rejected');
+    expect(row.lastStatusAt).not.toBeNull();
   });
 });

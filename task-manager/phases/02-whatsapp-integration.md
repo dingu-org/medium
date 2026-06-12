@@ -12,9 +12,9 @@
 
 ## Foundation already in place (2026-05-14)
 
-- Inngest client + `EventSchemas` typed for all four Phase 2 events (`message.received`, `wa.connection.created`, `wa.connection.revoked`, `wa.template.approved`) — `lib/inngest/{events,client,functions}.ts`.
-- `serve({ client, functions })` exposed at `app/api/inngest/route.ts` (GET / POST / PUT, Node runtime); `functions` is the empty registry — real handlers land in Phases 5–6.
-- Verified locally: `GET /api/inngest` returns `{ has_event_key: true, has_signing_key: true, function_count: 0, mode: 'dev' }`.
+- Inngest client + typed event schemas — `lib/inngest/{events,client,functions}.ts` and `lib/events/`.
+- `serve({ client, functions })` exposed at `app/api/inngest/route.ts` (GET / POST / PUT, Node runtime); the Phase 5 function registry is now populated.
+- Phase 5 update: the registry now contains 9 functions; the local endpoint reports 11 handlers including two generated failure handlers.
 
 The remaining task lists below assume this wiring exists — any task that emits an event will `import { inngest } from '@/lib/inngest/client'` and call `inngest.send(...)`.
 
@@ -30,7 +30,7 @@ The remaining task lists below assume this wiring exists — any task that emits
   - [x] Verify `x-hub-signature-256` against `META_APP_SECRET` using HMAC-SHA256 + `timingSafeEqual` (extracted to `lib/channels/whatsapp/signature.ts`). Reject 401 on mismatch.
   - [x] For each message: idempotent upsert chain (patient → conversation → message) in a per-message transaction; message insert uses `ON CONFLICT (external_id) DO NOTHING RETURNING id` and only emits when `returning()` is non-empty.
   - [x] Conversation upsert keyed on `(patient_id, channel)` bumps `last_inbound_at` to `now()`.
-  - [x] Emit `message.received` Inngest event with `{ messageId, ptId, conversationId }` only when the message was newly persisted (skips on re-delivery).
+  - [x] Append `message.received` to the durable event/outbox transaction only when the message was newly persisted, then attempt immediate delivery.
   - [x] Return 200 immediately (`EVENT_RECEIVED`).
 - [x] Force Node runtime (`export const runtime = 'nodejs'`); needed for `crypto.createHmac` + `timingSafeEqual`.
 - [x] Log every rejected signature as a structured warning (also: unknown `phone_number_id`, non-text message types, Inngest dispatch failures).
@@ -47,7 +47,7 @@ Implemented via Meta's current JS-SDK popup flow (2026-05-22 decision log), whic
   - [x] Encrypt token via `encryptToken` (`pgp_sym_encrypt`).
   - [x] Insert `whatsapp_connections` row via `getServiceClient` (duplicate number → 409; same-PT reconnect → update).
   - [x] Subscribe WABA to webhook (`POST /<wabaId>/subscribed_apps`) + best-effort `POST /<phoneNumberId>/register`.
-  - [x] Emit `wa.connection.created` event.
+  - [x] Append `wa.connection.created` to the durable event/outbox transaction and attempt immediate delivery.
 - [x] Error UI per spec doc §9 — rejection / duplicate number / abandoned flow (toast keyed on the typed error kind; abandoned = no `authResponse`).
 - [x] Unique index on `whatsapp_connections.phone_number_id` (migration `0005`) backs the 409 path + the unambiguous webhook lookup.
 
@@ -60,9 +60,9 @@ Shared plumbing landed too: `constants.ts` (`GRAPH_VERSION = v25.0`), `graph.ts`
   - [x] `sendTemplate(connectionId, to, templateName, language, variables)` — used outside the 24 h window; refuses if no approved template.
   - [x] `submitTemplate(connectionId, name, language, body, variables)` — Business Management API.
   - [x] `getTemplateStatus(connectionId, templateId)` — for polling (consumed in Phase 5).
-  - [ ] `getQualityRating(connectionId)` — periodic poll. **Deferred to Phase 5.**
+  - [x] `getQualityRating(connectionId)` — quality rating + messaging-tier API consumed by the Phase 5 daily poll.
 - [x] Auth-error handler: on 401/403 from Graph API, mark `whatsapp_connections.status = 'revoked'`, emit `wa.connection.revoked`. The PWA picks this up and shows "Reconnect WhatsApp".
-- [ ] Rate-limit awareness: read `whatsapp_connections.tier` and a rolling 24h count from `messages` to throttle outbound sends. **Deferred to Phase 5.**
+- [x] Rate-limit awareness: Phase 5 reminders read `whatsapp_connections.tier` and use the rolling 24 h delivered-template count, stopping at 95% of the tier.
 
 ### Token encryption helpers
 
@@ -74,9 +74,9 @@ Shared plumbing landed too: `constants.ts` (`GRAPH_VERSION = v25.0`), `graph.ts`
 
 - `bootstrapWaConnection` registered on `wa.connection.created` (`lib/inngest/functions/bootstrap-wa-connection.ts`):
   - [x] Creates `appointment_reminder_24h` template via Graph API (`submitTemplate`) + writes a `pending` `message_templates` row (idempotent on reconnect).
-  - [ ] Polls approval status every hour for up to 72 h. **Phase 5.**
-  - [ ] Updates `message_templates.status` accordingly. **Phase 5.**
-  - [ ] On approval, emit `wa.template.approved`. **Phase 5.**
+  - [x] Polls approval status every hour for up to 72 h.
+  - [x] Updates `message_templates.status` accordingly.
+  - [x] Emits approved, rejected, or timed-out template lifecycle events.
 
 ---
 
@@ -97,6 +97,6 @@ Shared plumbing landed too: `constants.ts` (`GRAPH_VERSION = v25.0`), `graph.ts`
 - For local dev, use ngrok or Cloudflare Tunnel pointing at `localhost:3000/api/webhooks/whatsapp`. Configure a separate Meta test app so prod isn't routed through your laptop.
 - Embedded Signup dev testing: the backend (token exchange → encrypt → persist → `wa.connection.created`) and the adapter guards are fully covered by mocked-`fetch` integration tests — that's the iteration loop. The interactive `FB.login` popup can only be exercised against a public HTTPS origin (Vercel preview or a tunnel) registered in the test app's Allowed Domains + Valid OAuth Redirect URIs, signed in as an app-role user, using the Meta test WABA + test number. The popup handshake itself can't be automated.
 - Meta's current Embedded Signup flow requires the app-role dev path to be wired before coding is useful: Facebook Login for Business settings, allowed domains, valid redirect URIs, a saved `config_id`, and `messages` + `account_update` webhook subscriptions.
-- The 24 h window is checked at *send* time, not receive time, because by the time the Inngest job runs the window may have closed.
+- The 24 h window is checked at _send_ time, not receive time, because by the time the Inngest job runs the window may have closed.
 - Quality rating is polled, not pushed — schedule in Phase 5.
 - Don't use a queue here for inbound persistence. Insert + emit is fast enough; Inngest does the heavy lifting downstream.
