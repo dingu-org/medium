@@ -8,7 +8,9 @@ import {
   it,
   vi,
 } from 'vitest';
+import { APICallError } from 'ai';
 import { eq } from 'drizzle-orm';
+import { NonRetriableError } from 'inngest';
 import { db } from '@/lib/db';
 import {
   conversations,
@@ -144,6 +146,57 @@ describe('handleInboundMessage cores', () => {
       kind: 'skipped',
       reason: 'conversation_inactive',
     });
+  });
+
+  it('stops Inngest retries for non-retryable provider failures', async () => {
+    const context = (await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    }))!;
+    const providerError = new APICallError({
+      message: 'No endpoints match the account data policy',
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      requestBodyValues: {},
+      statusCode: 404,
+      isRetryable: false,
+    });
+    const runTurnFn = vi.fn(async () => {
+      throw providerError;
+    });
+
+    await expect(runInboundTurn(context, runTurnFn)).rejects.toEqual(
+      expect.objectContaining({
+        name: 'NonRetriableError',
+        message: providerError.message,
+        cause: providerError,
+      }),
+    );
+    await expect(runInboundTurn(context, runTurnFn)).rejects.toBeInstanceOf(
+      NonRetriableError,
+    );
+  });
+
+  it('keeps retryable provider failures eligible for Inngest retries', async () => {
+    const context = (await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    }))!;
+    const providerError = new APICallError({
+      message: 'Provider temporarily unavailable',
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      requestBodyValues: {},
+      statusCode: 503,
+      isRetryable: true,
+    });
+    const runTurnFn = vi.fn(async () => {
+      throw providerError;
+    });
+
+    await expect(runInboundTurn(context, runTurnFn)).rejects.toBe(
+      providerError,
+    );
   });
 
   it('persists the Graph message ID and skips duplicate delivery on replay', async () => {

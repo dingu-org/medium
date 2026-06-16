@@ -1,9 +1,4 @@
-import { readFileSync } from 'node:fs';
-
-const STATIC_PROMPT = readFileSync(
-  new URL('./prompts/scheduling-assistant.md', import.meta.url),
-  'utf8',
-).trim();
+import { SCHEDULING_ASSISTANT_PROMPT } from './prompts/scheduling-assistant';
 
 export type PromptContext = {
   practiceName: string | null;
@@ -39,7 +34,7 @@ export function buildSystemPrompt(context: PromptContext): string {
   const escalationKeyword = context.escalationKeyword?.trim() || 'HELP';
   const now = context.now ?? new Date();
 
-  return `${STATIC_PROMPT}
+  return `${SCHEDULING_ASSISTANT_PROMPT}
 
 ## Practice context
 

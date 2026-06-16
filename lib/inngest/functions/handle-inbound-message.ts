@@ -1,5 +1,6 @@
 import { and, eq, isNull } from 'drizzle-orm';
-import type { GetStepTools } from 'inngest';
+import { APICallError } from 'ai';
+import { NonRetriableError, type GetStepTools } from 'inngest';
 import { db } from '@/lib/db';
 import {
   conversations,
@@ -111,6 +112,9 @@ export async function runInboundTurn(
         error.code === 'conversation_inactive')
     ) {
       return { kind: 'skipped', reason: error.code };
+    }
+    if (APICallError.isInstance(error) && !error.isRetryable) {
+      throw new NonRetriableError(error.message, { cause: error });
     }
     throw error;
   }

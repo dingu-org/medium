@@ -11,7 +11,6 @@ if (!apiKey) {
 export const OPENROUTER_MODEL_SETTINGS = {
   provider: {
     allow_fallbacks: true,
-    require_parameters: true,
     data_collection: 'deny',
     zdr: true,
   },

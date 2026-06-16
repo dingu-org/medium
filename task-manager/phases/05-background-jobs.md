@@ -25,9 +25,9 @@
 - [x] Install `inngest`.
 - [x] Typed Inngest client and Zod-derived event union in `lib/inngest/` + `lib/events/`.
 - [x] `app/api/inngest/route.ts` — serves all functions.
-- [ ] Set Inngest signing key + event key in env; verify in Inngest dashboard the app shows up.
+- [x] Set Inngest signing key + event key in env; verify in Inngest dashboard the app shows up.
 - [x] Local route verification: `GET /api/inngest` reports 11 registered handlers (9 functions plus 2 generated failure handlers).
-- [ ] Production: deploy and verify registration in Inngest Cloud.
+- [x] Production: deploy and verify registration in Inngest Cloud.
 
 ### Functions
 
@@ -124,7 +124,35 @@
 - [x] A mutation followed by an empty/step-limited model response does not rerun the mutation and sends the engine's verification handoff.
 - [x] `purgeExpiredMessages` deletes only messages older than the retention window in fixture data.
 
-The three remaining acceptance checks require a deployed app connected to Inngest Cloud so the run history and scheduled-run cancellation can be inspected directly.
+Production registration and event delivery were verified on 2026-06-15. A live
+`message.received` event started `handle-inbound-message`; the primary run
+exhausted its retries and invoked the generated failure handler. The failure was
+traced to `lib/ai/prompt.ts` reading a Markdown prompt through
+`new URL(..., import.meta.url)`: the Next.js server bundle produced a webpack URL
+object that Vercel's Node runtime rejected in `readFileSync`. The prompt is now
+compiled into the bundle as TypeScript data, with a regression test that forbids
+runtime filesystem loading. Local verification passes with 199 tests, typecheck,
+lint, and a production build. The fix was deployed to production as Vercel
+deployment `dpl_BgK5QgK3JvDN2tfHwfR96eVwmbgk`; repeat the inbound test to verify
+the successful outbound path. The next live run reached
+`openai/gpt-4.1-mini`, but OpenRouter first rejected it for missing credits and
+then for effective account/workspace guardrails excluding the model. After the
+guardrails were adjusted, the remaining failure was traced to the app-level
+`require_parameters: true` routing policy, documented below. Non-retryable AI
+API failures now stop Inngest retries and proceed directly to the existing safe
+handoff. The scheduled reminder and cancellation checks could not be exercised
+and remain open. Verification after the retry hardening: 201 tests, typecheck,
+lint, and production build pass. The hardening is deployed as Vercel deployment
+`dpl_FmyfriN3WGDaa5bEDLbdokHJjAzb` at `medium.emae.events`.
+
+Follow-up diagnosis on 2026-06-16: once guardrails were adjusted,
+`/models/user` included `openai/gpt-4.1-mini` and a production-shaped request
+succeeded through Azure ZDR only after removing `require_parameters: true`.
+The OpenRouter AI SDK sends `maxOutputTokens` as `max_tokens`; Azure's ZDR
+endpoint advertises `max_completion_tokens`, so strict parameter filtering
+excluded the only ZDR-eligible provider. The privacy guarantees remain enforced
+by `data_collection='deny'` plus `zdr=true`. The routing-policy fix is deployed
+as Vercel deployment `dpl_6vsSuqBFrFBsWox5mWPrhNKStma7`.
 
 ---
 

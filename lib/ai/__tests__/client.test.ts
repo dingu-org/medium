@@ -14,13 +14,12 @@ describe('OpenRouter client', () => {
     process.env.OPENROUTER_API_KEY = original;
   });
 
-  it('locks privacy, parameter support, fallbacks, and usage accounting', async () => {
+  it('locks privacy, fallbacks, and usage accounting', async () => {
     process.env.OPENROUTER_API_KEY = 'test';
     const { OPENROUTER_MODEL_SETTINGS } = await import('../client');
     expect(OPENROUTER_MODEL_SETTINGS).toEqual({
       provider: {
         allow_fallbacks: true,
-        require_parameters: true,
         data_collection: 'deny',
         zdr: true,
       },
