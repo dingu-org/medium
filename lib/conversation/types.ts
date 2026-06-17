@@ -16,3 +16,11 @@ export type OutboundMessage = {
   content: string;
   channel: string;
 };
+
+export type ReminderTurnContext = {
+  reason: 'unclear_reply' | 'reschedule_followup' | 'ambiguous_reminders';
+  appointmentId?: string;
+  appointmentStartsAt?: string;
+  timezone?: string;
+  practiceName?: string | null;
+};

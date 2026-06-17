@@ -110,7 +110,7 @@ async function executeTool(
       patientId: ctx.patientId,
       appointmentId: input.appointment_id as string,
       reason: input.reason as string | undefined,
-      cancelledBy: 'ai',
+      cancelledBy: ctx.cancellationActor ?? 'ai',
     });
     return {
       ok: true,

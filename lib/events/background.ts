@@ -81,6 +81,11 @@ export const backgroundEventSchemas = {
     appointmentId: z.uuid(),
     reason: z.string().min(1),
   }),
+  'reminder.skipped': z.object({
+    ptId: z.uuid(),
+    appointmentId: z.uuid(),
+    reason: z.string().min(1),
+  }),
 } as const;
 
 export type BackgroundEventName = keyof typeof backgroundEventSchemas;

@@ -57,6 +57,7 @@ export type ToolExecutionContext = {
   ptId: string;
   patientId: string;
   conversationId: string;
+  cancellationActor?: 'ai' | 'patient';
 };
 
 type Dispatch = (

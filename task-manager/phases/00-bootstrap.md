@@ -33,7 +33,7 @@
 - [x] **Supabase** — new project in Frankfurt (EU). Note `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
 - [x] **Vercel** — create project, link GitHub repo, set serverless region to Frankfurt (`fra1`).
 - [x] **Inngest** — create app; note signing key + event key.
-- [x] **OpenRouter** — create `OPENROUTER_API_KEY`; pin the current guardrail to `meta-llama/llama-3.3-70b-instruct:free`; keep prompt logging and product-use opt-ins disabled.
+- [x] **OpenRouter** — create `OPENROUTER_API_KEY`; pin the current guardrail to `nex-agi/nex-n2-pro:free`; keep prompt logging and product-use opt-ins disabled.
 - [x] **Sentry** — intentionally skipped for the current MVP; free-tier exhausted. Use platform logs and manual smoke checks instead.
 - [x] **PostHog EU** — intentionally skipped for the current MVP; free-tier exhausted. Derive funnel metrics from app data and internal dashboards instead.
 

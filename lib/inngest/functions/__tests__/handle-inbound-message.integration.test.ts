@@ -25,6 +25,7 @@ import {
   loadInboundJobContext,
   persistInboundReplyDelivery,
   runInboundTurn,
+  runReminderFallbackTurn,
   sendInboundReply,
 } from '../handle-inbound-message';
 
@@ -246,5 +247,44 @@ describe('handleInboundMessage cores', () => {
       alreadyDelivered: true,
     });
     expect(sendFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs reminder-aware AI turns with reminder context', async () => {
+    const context = (await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    }))!;
+    const runReminderTurnFn = vi.fn(async () => ({
+      id: '00000000-0000-4000-8000-000000000001',
+      conversationId,
+      replyToMessageId: inboundMessageId,
+      content: 'Which time works best?',
+      channel: 'whatsapp',
+    }));
+    const reminder = {
+      reason: 'unclear_reply' as const,
+      appointmentId: '00000000-0000-4000-8000-000000000002',
+      appointmentStartsAt: '2026-07-01T10:00:00.000Z',
+      timezone: 'Europe/Tirane',
+      practiceName: 'Move Well',
+    };
+
+    await expect(
+      runReminderFallbackTurn(context, reminder, runReminderTurnFn),
+    ).resolves.toEqual({
+      kind: 'outbound',
+      outbound: expect.objectContaining({
+        content: 'Which time works best?',
+      }),
+    });
+    expect(runReminderTurnFn).toHaveBeenCalledWith({
+      inboundMessage: expect.objectContaining({
+        id: inboundMessageId,
+        ptId,
+        conversationId,
+      }),
+      reminder,
+    });
   });
 });

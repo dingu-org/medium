@@ -60,6 +60,12 @@ export const reminderStatus = pgEnum('reminder_status', [
   'failed',
   'cancelled',
 ]);
+export const reminderResponseType = pgEnum('reminder_response_type', [
+  'confirm',
+  'cancel',
+  'reschedule_requested',
+  'opt_out',
+]);
 
 export const pts = pgTable('pts', {
   id: uuid('id').primaryKey(),
@@ -110,6 +116,7 @@ export const patients = pgTable(
     phone: text('phone').notNull(),
     waId: text('wa_id'),
     notes: text('notes'),
+    reminderOptedOutAt: tsTz('reminder_opted_out_at'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
   (t) => [uniqueIndex('patients_pt_wa_id_uq').on(t.ptId, t.waId)],
@@ -267,9 +274,22 @@ export const reminderJobs = pgTable(
     messageId: uuid('message_id').references(() => messages.id, {
       onDelete: 'set null',
     }),
+    responseType: reminderResponseType('response_type'),
+    respondedAt: tsTz('responded_at'),
+    responseMessageId: uuid('response_message_id').references(
+      () => messages.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
     createdAt: tsTz('created_at').notNull().default(now),
   },
-  (t) => [uniqueIndex('reminder_jobs_appointment_id_uq').on(t.appointmentId)],
+  (t) => [
+    uniqueIndex('reminder_jobs_appointment_id_uq').on(t.appointmentId),
+    uniqueIndex('reminder_jobs_response_message_id_uq')
+      .on(t.responseMessageId)
+      .where(sql`response_message_id IS NOT NULL`),
+  ],
 );
 
 export const pushSubscriptions = pgTable('push_subscriptions', {

@@ -23,6 +23,7 @@ export type AppointmentJobContext = {
     | 'completed'
     | 'rescheduled';
   patientName: string;
+  reminderOptedOutAt: Date | null;
   recipient: string | null;
   conversationId: string | null;
   timezone: string;
@@ -44,6 +45,7 @@ export async function loadAppointmentJobContext(args: {
       serviceType: appointments.serviceType,
       status: appointments.status,
       patientName: patients.name,
+      reminderOptedOutAt: patients.reminderOptedOutAt,
       recipient: patients.waId,
       timezone: pts.timezone,
       practiceName: pts.practiceName,

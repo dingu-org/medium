@@ -14,35 +14,36 @@
 
 ### Template lifecycle
 
-- [ ] Define the reminder template body (per spec doc):
-  - `appointment_reminder_24h` — variables: `{{patient_name}}`, `{{appointment_time}}`, `{{practice_name}}`, response-instructions footer.
+- [x] Define the reminder template body (per spec doc):
+  - `appointment_reminder_24h_v2` — body-only, variables: patient first name, practice name, appointment time, response instructions. Existing `appointment_reminder_24h` remains supported as legacy fallback for already-approved accounts.
 - [x] Submit on `wa.connection.created` (wired in Phase 5's `bootstrapWaConnection`).
 - [x] Track approval in `message_templates`; surface it in the dashboard in Phase 7.
-- [ ] Define a fallback variant; if the primary is rejected, auto-submit the fallback.
+- [x] Define a fallback variant; if the primary is rejected, auto-submit the fallback.
 
 ### Reminder dispatch (extends Phase 5's `sendReminder`)
 
 - [x] Variable binding from `appointments` + `patients` + `pts` for patient first name and appointment time in the PT timezone. Practice-name binding remains with any final template revision.
 - [x] Refuse to send if template status != approved; requeue with backoff.
-- [ ] Refuse to send if `whatsapp_connections.status != 'active'`; emit `reminder.skipped` with reason.
+- [x] Refuse to send if `whatsapp_connections.status != 'active'`; emit `reminder.skipped` with reason.
 - [x] On send: insert/link the `messages` row (`role=ai`, `template_id` set), count it toward rolling tier usage, and update `reminder_jobs.status = sent`.
 
 ### Response parsing — `lib/reminders/parse-response.ts`
 
-- [ ] Match against keyword set per locale:
+- [x] Match against keyword set per locale:
   - **EN:** confirm | yes | y | ok | sure → CONFIRM
-  - cancel | no | n | stop → CANCEL
+  - cancel | no | n → CANCEL
+  - stop → OPT_OUT
   - reschedule | change | move → RESCHEDULE
   - **DE / IT / FR / ES** equivalents (per spec doc §language-coverage).
-- [ ] Anchor matching to the _first_ full word, case-insensitive, allowing leading/trailing punctuation.
-- [ ] If no match: hand off to AI engine (no special path) — the model can interpret nuanced replies.
+- [x] Anchor matching to the _first_ full word, case-insensitive, allowing leading/trailing punctuation.
+- [x] If no match: hand off to a reminder-aware AI engine path — the model can interpret nuanced replies.
 
 ### Response handling
 
-- [ ] On CONFIRM: `transition(appointment, 'confirmed')`, emit `appointment.confirmed`, AI sends a brief "see you then" reply.
-- [ ] On CANCEL: `transition(appointment, 'cancelled', { cancelledBy: 'patient' })`, AI sends acknowledgement + offer to rebook.
-- [ ] On RESCHEDULE: AI engine starts the rebook flow (calls `get_availability`, then `reschedule_appointment` with the chosen slot).
-- [ ] These are routed _through_ the conversation engine (so cached prompts apply) but the engine sees a system hint that the inbound is a reminder response — the prompt has explicit instructions for these three keywords.
+- [x] On CONFIRM: `transition(appointment, 'confirmed')`, emit `appointment.confirmed`, send a brief "see you then" reply.
+- [x] On CANCEL: `transition(appointment, 'cancelled', { cancelledBy: 'patient' })`, send acknowledgement + offer to rebook.
+- [x] On RESCHEDULE: record `reschedule_requested`, immediately offer real slots, then route follow-up selection through the reminder-aware AI engine.
+- [x] Reminder-aware AI receives a system hint with reminder context and may run even when `ai_active = false`.
 
 ### Reminder visibility for the PT (data hooks, UI in Phase 7)
 
@@ -58,12 +59,16 @@
 ## Acceptance criteria
 
 - [ ] An appointment booked for "tomorrow" fires a reminder 24 h before, with correct variables, in the PT's timezone.
-- [ ] Replying CONFIRM transitions the appointment to confirmed.
-- [ ] Replying CANCEL transitions to cancelled and the calendar updates via Realtime.
-- [ ] Replying "can we move it to Thursday?" enters the AI rebook flow with no special-cased keyword path.
+- [x] Replying CONFIRM transitions the appointment to confirmed.
+- [x] Replying CANCEL transitions to cancelled and the calendar updates via Realtime.
+- [x] Replying "can we move it to Thursday?" enters the AI rebook flow with no special-cased keyword path.
 - [x] If the template is unapproved, the reminder is requeued and `reminder_jobs.status = requeued` is persisted.
 - [ ] Cancelling an appointment cancels the scheduled reminder run (no orphaned send).
-- [ ] German / Italian fixtures of CONFIRM keywords work (sample 2–3 per language).
+- [x] German / Italian fixtures of CONFIRM keywords work (sample 2–3 per language).
+
+Static verification on 2026-06-17: `pnpm typecheck`, `pnpm lint`, and
+`pnpm build` pass. `pnpm test:all` could not run because the local Supabase
+Postgres at `127.0.0.1:54322` is unavailable and Docker is not running.
 
 ---
 

@@ -1,4 +1,4 @@
-import { and, count, eq, gte, isNotNull, isNull } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { addHours, addMinutes, subHours } from 'date-fns';
 import { db } from '@/lib/db';
 import {
@@ -9,7 +9,10 @@ import {
 } from '@/lib/db/schema';
 import { sendTemplate } from '@/lib/channels/whatsapp/client';
 import { inngest } from '../client';
-import { REMINDER_TEMPLATE } from './bootstrap-wa-connection';
+import {
+  REMINDER_TEMPLATE_PRIORITY,
+  type ReminderTemplateDefinition,
+} from './bootstrap-wa-connection';
 import {
   formatAppointmentTime,
   loadAppointmentJobContext,
@@ -19,6 +22,8 @@ const SHORT_NOTICE_MINUTES = 5;
 const MINIMUM_NOTICE_HOURS = 2;
 const TEMPLATE_RETRY_HOURS = 6;
 const MAX_TEMPLATE_ATTEMPTS = 3;
+
+type ApprovedReminderTemplate = ReminderTemplateDefinition & { id: string };
 
 export function computeReminderSchedule(
   startsAt: Date,
@@ -123,6 +128,36 @@ async function hasRateCapacity(args: {
   return usage.value < Math.max(1, Math.floor(limit * 0.95));
 }
 
+async function selectApprovedReminderTemplate(
+  ptId: string,
+): Promise<ApprovedReminderTemplate | null> {
+  const rows = await db
+    .select({
+      id: messageTemplates.id,
+      name: messageTemplates.name,
+      language: messageTemplates.language,
+      status: messageTemplates.status,
+    })
+    .from(messageTemplates)
+    .where(
+      and(
+        eq(messageTemplates.ptId, ptId),
+        eq(messageTemplates.language, 'en_US'),
+        eq(messageTemplates.status, 'approved'),
+        inArray(
+          messageTemplates.name,
+          REMINDER_TEMPLATE_PRIORITY.map((template) => template.name),
+        ),
+      ),
+    );
+
+  for (const template of REMINDER_TEMPLATE_PRIORITY) {
+    const row = rows.find((candidate) => candidate.name === template.name);
+    if (row) return { ...template, id: row.id };
+  }
+  return null;
+}
+
 export async function loadReminderAttempt(args: {
   ptId: string;
   appointmentId: string;
@@ -135,7 +170,7 @@ export async function loadReminderAttempt(args: {
       context: NonNullable<
         Awaited<ReturnType<typeof loadAppointmentJobContext>>
       >;
-      templateId: string;
+      template: ApprovedReminderTemplate;
     }
   | { kind: 'skipped'; reason: string }
   | { kind: 'retry'; reason: string }
@@ -159,6 +194,9 @@ export async function loadReminderAttempt(args: {
   if (context.status !== 'pending' && context.status !== 'confirmed') {
     return { kind: 'skipped', reason: `appointment_${context.status}` };
   }
+  if (context.reminderOptedOutAt) {
+    return { kind: 'skipped', reason: 'patient_opted_out' };
+  }
   if (context.startsAt <= now) {
     return { kind: 'skipped', reason: 'appointment_started' };
   }
@@ -181,25 +219,33 @@ export async function loadReminderAttempt(args: {
     return { kind: 'retry', reason: 'rate_tier_near_limit' };
   }
 
-  const [template] = await db
-    .select({
-      id: messageTemplates.id,
-      status: messageTemplates.status,
-    })
-    .from(messageTemplates)
-    .where(
-      and(
-        eq(messageTemplates.ptId, args.ptId),
-        eq(messageTemplates.name, REMINDER_TEMPLATE.name),
-        eq(messageTemplates.language, REMINDER_TEMPLATE.language),
-      ),
-    )
-    .limit(1);
-  if (!template || template.status !== 'approved') {
+  const template = await selectApprovedReminderTemplate(args.ptId);
+  if (!template) {
     return { kind: 'retry', reason: 'template_not_approved' };
   }
 
-  return { kind: 'ready', context, templateId: template.id };
+  return { kind: 'ready', context, template };
+}
+
+function patientFirstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || 'there';
+}
+
+function templateVariables(args: {
+  template: ApprovedReminderTemplate;
+  patientName: string;
+  practiceName: string | null;
+  localTime: string;
+}): string[] {
+  const firstName = patientFirstName(args.patientName);
+  if (args.template.variableSet === 'legacy') {
+    return [firstName, args.localTime];
+  }
+  return [
+    firstName,
+    args.practiceName?.trim() || 'the practice',
+    args.localTime,
+  ];
 }
 
 async function prepareReminderMessage(args: {
@@ -396,6 +442,10 @@ export const sendReminder = inngest.createFunction(
             },
           });
       });
+      await step.sendEvent('emit-short-notice-reminder-skipped', {
+        name: 'reminder.skipped',
+        data: { ptId, appointmentId, reason: schedule.reason },
+      });
       return { skipped: schedule.reason };
     }
 
@@ -431,6 +481,10 @@ export const sendReminder = inngest.createFunction(
             skippedReason: state.reason,
           }),
         );
+        await step.sendEvent(`emit-reminder-skipped-${attempt}`, {
+          name: 'reminder.skipped',
+          data: { ptId, appointmentId, reason: state.reason },
+        });
         return { skipped: state.reason };
       }
 
@@ -473,13 +527,14 @@ export const sendReminder = inngest.createFunction(
         new Date(state.context.startsAt),
         state.context.timezone,
       );
-      const content = `Reminder: ${state.context.patientName}, your appointment is ${localTime}.`;
+      const practiceName = state.context.practiceName?.trim() || 'the practice';
+      const content = `Reminder: ${patientFirstName(state.context.patientName)}, your appointment with ${practiceName} is ${localTime}.`;
       const message = await step.run('prepare-reminder-message', () =>
         prepareReminderMessage({
           ptId,
           appointmentId,
           conversationId: state.context.conversationId!,
-          templateId: state.templateId,
+          templateId: state.template.id,
           content,
         }),
       );
@@ -488,9 +543,14 @@ export const sendReminder = inngest.createFunction(
         const result = await sendTemplate(
           state.context.connectionId!,
           state.context.recipient!,
-          REMINDER_TEMPLATE.name,
-          REMINDER_TEMPLATE.language,
-          [state.context.patientName.split(/\s+/)[0] || 'there', localTime],
+          state.template.name,
+          state.template.language,
+          templateVariables({
+            template: state.template,
+            patientName: state.context.patientName,
+            practiceName: state.context.practiceName,
+            localTime,
+          }),
         );
         if (!result.messageId) {
           throw new Error(

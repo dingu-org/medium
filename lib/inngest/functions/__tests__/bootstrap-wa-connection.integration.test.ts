@@ -14,6 +14,7 @@ import { messageTemplates, whatsappConnections } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
+  FALLBACK_REMINDER_TEMPLATE,
   REMINDER_TEMPLATE,
   applyTemplateStatus,
   bootstrapWaConnectionCore,
@@ -98,6 +99,27 @@ describe('bootstrapWaConnectionCore', () => {
     expect(row.status).toBe('pending');
     expect(row.metaId).toBe(META_TEMPLATE_ID);
     expect(row.body).toBe(REMINDER_TEMPLATE.body);
+  });
+
+  it('can submit the fallback reminder template after a primary rejection', async () => {
+    await bootstrapWaConnectionCore({ ptId, connectionId });
+    const fallback = await bootstrapWaConnectionCore({
+      ptId,
+      connectionId,
+      template: FALLBACK_REMINDER_TEMPLATE,
+    });
+
+    expect(fallback.created).toBe(true);
+    expect(fallback.name).toBe(FALLBACK_REMINDER_TEMPLATE.name);
+
+    const rows = await db
+      .select()
+      .from(messageTemplates)
+      .where(eq(messageTemplates.ptId, ptId));
+    expect(rows.map((row) => row.name).sort()).toEqual([
+      FALLBACK_REMINDER_TEMPLATE.name,
+      REMINDER_TEMPLATE.name,
+    ]);
   });
 
   it('is idempotent — a second run does not duplicate the template', async () => {

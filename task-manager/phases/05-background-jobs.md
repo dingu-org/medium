@@ -116,10 +116,10 @@
 
 ## Acceptance criteria
 
-- [ ] Inbound test message → AI responds → outbound sent → all four steps visible in Inngest run history.
+- [x] Inbound test message → AI responds → outbound sent. Live WhatsApp path confirmed on 2026-06-17; escalation also confirmed.
 - [x] Replaying the same `message.received` event yields no duplicate outbound (integration-tested).
-- [ ] A booked appointment shows up in Inngest's scheduled-runs view at `starts_at - 24h`.
-- [ ] Cancelling that appointment removes the scheduled reminder run.
+- [ ] A booked appointment shows up in Inngest's scheduled-runs view at `starts_at - 24h`. Gated as of 2026-06-17: the current main/direct test connection has no configured slots; test after an external WhatsApp Business account is registered in Medium and availability is configured.
+- [ ] Cancelling that appointment removes the scheduled reminder run. Gated on the same external account / configured availability path as the booking-created reminder check.
 - [x] A transient/read-only AI failure retries; after three failures, one human-handoff reply is persisted and sent, with a structured `conversation.failed` event.
 - [x] A mutation followed by an empty/step-limited model response does not rerun the mutation and sends the engine's verification handoff.
 - [x] `purgeExpiredMessages` deletes only messages older than the retention window in fixture data.
@@ -153,6 +153,13 @@ endpoint advertises `max_completion_tokens`, so strict parameter filtering
 excluded the only ZDR-eligible provider. The privacy guarantees remain enforced
 by `data_collection='deny'` plus `zdr=true`. The routing-policy fix is deployed
 as Vercel deployment `dpl_6vsSuqBFrFBsWox5mWPrhNKStma7`.
+
+Live confirmation on 2026-06-17: WhatsApp messages sent to the number connected
+directly to the app receive AI answers, and escalation works. Booking cannot yet
+be exercised on that path because no availability slots are configured for the
+main/direct test connection. The booked-appointment scheduled-run check and the
+cancellation check remain open until an external WhatsApp Business account is
+registered in Medium and availability is configured.
 
 ---
 

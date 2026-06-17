@@ -25,6 +25,11 @@ import {
 import { encryptToken } from '@/lib/db/crypto';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
+  FALLBACK_REMINDER_TEMPLATE,
+  LEGACY_REMINDER_TEMPLATE,
+  REMINDER_TEMPLATE,
+} from '../bootstrap-wa-connection';
+import {
   persistAppointmentConfirmation,
   prepareAppointmentConfirmation,
   sendAppointmentConfirmation,
@@ -227,10 +232,10 @@ describe('reminder scheduling and guards', () => {
       .insert(messageTemplates)
       .values({
         ptId,
-        name: 'appointment_reminder_24h',
+        name: REMINDER_TEMPLATE.name,
         language: 'en_US',
         status: 'pending',
-        body: 'Reminder',
+        body: REMINDER_TEMPLATE.body,
       })
       .returning({ id: messageTemplates.id });
 
@@ -264,6 +269,7 @@ describe('reminder scheduling and guards', () => {
         conversationId,
         connectionId,
       });
+      expect(ready.template.name).toBe(REMINDER_TEMPLATE.name);
     }
 
     await expect(
@@ -274,5 +280,100 @@ describe('reminder scheduling and guards', () => {
         scheduledFor,
       }),
     ).resolves.toEqual({ kind: 'skipped', reason: 'stale_run' });
+  });
+
+  it('chooses approved templates in v2, fallback, legacy order', async () => {
+    const scheduledFor = subHours(startsAt, 24);
+    await upsertReminderSchedule({
+      ptId,
+      appointmentId,
+      scheduledFor,
+      runId: 'run-template-priority',
+    });
+
+    await db.insert(messageTemplates).values([
+      {
+        ptId,
+        name: LEGACY_REMINDER_TEMPLATE.name,
+        language: LEGACY_REMINDER_TEMPLATE.language,
+        status: 'approved',
+        body: LEGACY_REMINDER_TEMPLATE.body,
+      },
+      {
+        ptId,
+        name: FALLBACK_REMINDER_TEMPLATE.name,
+        language: FALLBACK_REMINDER_TEMPLATE.language,
+        status: 'approved',
+        body: FALLBACK_REMINDER_TEMPLATE.body,
+      },
+    ]);
+    const fallbackReady = await loadReminderAttempt({
+      ptId,
+      appointmentId,
+      runId: 'run-template-priority',
+      scheduledFor,
+    });
+    expect(fallbackReady.kind).toBe('ready');
+    if (fallbackReady.kind === 'ready') {
+      expect(fallbackReady.template.name).toBe(FALLBACK_REMINDER_TEMPLATE.name);
+    }
+
+    await db.insert(messageTemplates).values({
+      ptId,
+      name: REMINDER_TEMPLATE.name,
+      language: REMINDER_TEMPLATE.language,
+      status: 'approved',
+      body: REMINDER_TEMPLATE.body,
+    });
+    const primaryReady = await loadReminderAttempt({
+      ptId,
+      appointmentId,
+      runId: 'run-template-priority',
+      scheduledFor,
+    });
+    expect(primaryReady.kind).toBe('ready');
+    if (primaryReady.kind === 'ready') {
+      expect(primaryReady.template.name).toBe(REMINDER_TEMPLATE.name);
+    }
+  });
+
+  it('skips reminders for opted-out patients and inactive connections', async () => {
+    const scheduledFor = subHours(startsAt, 24);
+    await upsertReminderSchedule({
+      ptId,
+      appointmentId,
+      scheduledFor,
+      runId: 'run-skip-guards',
+    });
+
+    await db
+      .update(patients)
+      .set({ reminderOptedOutAt: new Date() })
+      .where(eq(patients.id, patientId));
+    await expect(
+      loadReminderAttempt({
+        ptId,
+        appointmentId,
+        runId: 'run-skip-guards',
+        scheduledFor,
+      }),
+    ).resolves.toEqual({ kind: 'skipped', reason: 'patient_opted_out' });
+
+    await db
+      .update(patients)
+      .set({ reminderOptedOutAt: null })
+      .where(eq(patients.id, patientId));
+    await db
+      .update(whatsappConnections)
+      .set({ status: 'revoked' })
+      .where(eq(whatsappConnections.id, connectionId));
+    await expect(
+      loadReminderAttempt({
+        ptId,
+        appointmentId,
+        runId: 'run-skip-guards',
+        scheduledFor,
+      }),
+    ).resolves.toEqual({ kind: 'skipped', reason: 'connection_inactive' });
   });
 });

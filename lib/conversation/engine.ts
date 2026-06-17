@@ -24,7 +24,11 @@ import {
   safetyEscalationResponse,
   type SafetyEscalationReason,
 } from './safety';
-import type { InboundMessage, OutboundMessage } from './types';
+import type {
+  InboundMessage,
+  OutboundMessage,
+  ReminderTurnContext,
+} from './types';
 
 const HISTORY_LIMIT = 20;
 const STEP_LIMIT = 5;
@@ -383,6 +387,9 @@ async function runTurnCoreUnlocked(args: {
   modelId: string;
   now?: Date;
   dispatch?: Dispatch;
+  allowInactive?: boolean;
+  systemAddendum?: string;
+  cancellationActor?: 'ai' | 'patient';
 }): Promise<OutboundMessage> {
   const context = await withAuditLog(
     {
@@ -397,7 +404,7 @@ async function runTurnCoreUnlocked(args: {
   const existing = await findExistingReply(context.inbound);
   if (existing) return existing;
 
-  if (!context.conversationAiActive) {
+  if (!context.conversationAiActive && !args.allowInactive) {
     throw new ConversationEngineError(
       'conversation_inactive',
       'AI is inactive because the conversation is assigned to a human',
@@ -413,7 +420,7 @@ async function runTurnCoreUnlocked(args: {
   }
 
   const history = await loadHistory(context.inbound);
-  const system = buildSystemPrompt({
+  const baseSystem = buildSystemPrompt({
     practiceName: context.practiceName,
     timezone: context.timezone,
     aiName: context.aiName,
@@ -422,6 +429,9 @@ async function runTurnCoreUnlocked(args: {
     retentionDays: context.retentionDays,
     now: args.now,
   });
+  const system = args.systemAddendum
+    ? `${baseSystem}\n\n${args.systemAddendum}`
+    : baseSystem;
   const result = await runModelTurn({
     model: args.model,
     system,
@@ -430,6 +440,7 @@ async function runTurnCoreUnlocked(args: {
       ptId: context.inbound.ptId,
       patientId: context.inbound.patientId,
       conversationId: context.inbound.conversationId,
+      cancellationActor: args.cancellationActor,
     },
     dispatch: args.dispatch,
   });
@@ -459,10 +470,72 @@ export async function runTurnCore(args: {
   modelId: string;
   now?: Date;
   dispatch?: Dispatch;
+  allowInactive?: boolean;
+  systemAddendum?: string;
+  cancellationActor?: 'ai' | 'patient';
 }): Promise<OutboundMessage> {
   return withAdvisoryLock(`ai-turn:${args.inboundMessage.id}`, () =>
     runTurnCoreUnlocked(args),
   );
+}
+
+function reminderSystemAddendum(context: ReminderTurnContext): string {
+  const details = [
+    '# Reminder response context',
+    '',
+    'The latest patient message is related to an appointment reminder.',
+    'Reminder replies may be handled even if the PT has taken over the conversation.',
+    'If the patient wants to cancel in this reminder context, call `cancel_appointment`; the system will record it as patient-cancelled.',
+    'If the patient wants to reschedule, use `list_upcoming_appointments`, `get_availability`, and `reschedule_appointment` as needed.',
+  ];
+  if (context.appointmentId) {
+    details.push(`- Reminder appointment ID: ${context.appointmentId}`);
+  }
+  if (context.appointmentStartsAt) {
+    details.push(`- Reminder appointment start: ${context.appointmentStartsAt}`);
+  }
+  if (context.timezone) {
+    details.push(`- Reminder appointment timezone: ${context.timezone}`);
+  }
+  if (context.practiceName?.trim()) {
+    details.push(`- Practice name: ${context.practiceName.trim()}`);
+  }
+  if (context.reason === 'ambiguous_reminders') {
+    details.push(
+      '- Multiple reminder candidates may exist. Do not guess; ask a clarifying question or list upcoming appointments before changing anything.',
+    );
+  }
+  return details.join('\n');
+}
+
+export async function runReminderTurn(args: {
+  inboundMessage: InboundMessage;
+  reminder: ReminderTurnContext;
+}): Promise<OutboundMessage> {
+  const modelId = selectModel();
+  try {
+    return await runTurnCore({
+      inboundMessage: args.inboundMessage,
+      modelId,
+      model: getOpenRouterModel(modelId),
+      allowInactive: true,
+      systemAddendum: reminderSystemAddendum(args.reminder),
+      cancellationActor: 'patient',
+    });
+  } catch (error) {
+    console.error('[conversation-engine] reminder turn failed', {
+      ptId: args.inboundMessage.ptId,
+      conversationId: args.inboundMessage.conversationId,
+      messageId: args.inboundMessage.id,
+      model: modelId,
+      errorCode:
+        error instanceof ConversationEngineError
+          ? error.code
+          : 'unhandled_error',
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+    throw error;
+  }
 }
 
 export async function handoffFailedTurn(args: {

@@ -10,10 +10,17 @@ import {
 } from '@/lib/db/schema';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
 import { ConversationEngineError } from '@/lib/conversation/errors';
-import type { InboundMessage, OutboundMessage } from '@/lib/conversation/types';
+import type {
+  InboundMessage,
+  OutboundMessage,
+  ReminderTurnContext,
+} from '@/lib/conversation/types';
+import { handleReminderResponse } from '@/lib/reminders/response-handler';
 import { inngest } from '../client';
 
 type RunTurn = typeof import('@/lib/conversation/engine').runTurn;
+type RunReminderTurn =
+  typeof import('@/lib/conversation/engine').runReminderTurn;
 
 export type InboundJobContext = {
   inbound: Omit<InboundMessage, 'occurredAt'> & { occurredAt: string };
@@ -118,6 +125,21 @@ export async function runInboundTurn(
     }
     throw error;
   }
+}
+
+export async function runReminderFallbackTurn(
+  context: InboundJobContext,
+  reminder: ReminderTurnContext,
+  runReminderTurnFn?: RunReminderTurn,
+): Promise<{ kind: 'outbound'; outbound: OutboundMessage }> {
+  const executeTurn =
+    runReminderTurnFn ??
+    (await import('@/lib/conversation/engine')).runReminderTurn;
+  const outbound = await executeTurn({
+    inboundMessage: hydrateInbound(context.inbound),
+    reminder,
+  });
+  return { kind: 'outbound', outbound };
 }
 
 export async function sendInboundReply(args: {
@@ -228,12 +250,47 @@ export const handleInboundMessage = inngest.createFunction(
       loadInboundJobContext(event.data),
     );
     if (!context) return { skipped: 'conversation_not_found' };
-    if (!context.aiActive) return { skipped: 'conversation_inactive' };
     if (!context.connectionId || !context.recipient) {
       return { skipped: 'delivery_context_missing' };
     }
 
-    const turn = await step.run('run-ai-turn', () => runInboundTurn(context));
+    const reminder = await step.run('handle-reminder-response', () =>
+      handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
+    );
+    if (reminder.kind === 'outbound') {
+      const delivery = await step.run('send-reminder-response', () =>
+        sendInboundReply({
+          outbound: reminder.outbound,
+          connectionId: context.connectionId!,
+          recipient: context.recipient!,
+        }),
+      );
+      await step.run('persist-reminder-response-delivery', () =>
+        persistInboundReplyDelivery({
+          outboundId: reminder.outbound.id,
+          messageId: delivery.messageId,
+        }),
+      );
+
+      return {
+        outboundMessageId: reminder.outbound.id,
+        externalId: delivery.messageId,
+        replay: delivery.alreadyDelivered,
+        reminder: true,
+      };
+    }
+
+    let turn:
+      | { kind: 'outbound'; outbound: OutboundMessage }
+      | { kind: 'skipped'; reason: string };
+    if (reminder.kind === 'fallback') {
+      turn = await step.run('run-reminder-ai-turn', () =>
+        runReminderFallbackTurn(context, reminder.reminder),
+      );
+    } else {
+      if (!context.aiActive) return { skipped: 'conversation_inactive' };
+      turn = await step.run('run-ai-turn', () => runInboundTurn(context));
+    }
     if (turn.kind === 'skipped') return { skipped: turn.reason };
 
     const delivery = await step.run('send-outbound', () =>

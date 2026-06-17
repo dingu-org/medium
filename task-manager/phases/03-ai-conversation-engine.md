@@ -1,6 +1,6 @@
 # Phase 3 — AI conversation engine
 
-**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through OpenRouter — `meta-llama/llama-3.3-70b-instruct:free` in dev and `openai/gpt-4.1-mini` in prod via the env-driven `selectModel()` helper — and emits the model's chosen tool calls to the appointments layer.
+**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through OpenRouter — `nex-agi/nex-n2-pro:free` in dev and `openai/gpt-4.1-mini` in prod via the env-driven `selectModel()` helper — and emits the model's chosen tool calls to the appointments layer.
 
 **Source.** Tech doc §3 (module boundaries), §8 (AI orchestration); product spec `docs/medium-canvas/documents/ai-conversation-behavior.md`.
 
@@ -97,7 +97,7 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 ### Model routing policy — `lib/ai/models.ts` + `lib/ai/client.ts`
 
 - [x] Engine routes every runtime turn through `selectModel()` — no model ID constants in engine call sites.
-- [x] Production: `openai/gpt-4.1-mini`. Dev: `meta-llama/llama-3.3-70b-instruct:free`. `OPENROUTER_MODEL_OVERRIDE` wins when set.
+- [x] Production: `openai/gpt-4.1-mini`. Dev: `nex-agi/nex-n2-pro:free`. `OPENROUTER_MODEL_OVERRIDE` wins when set.
 - [x] Keep the selection behind the helper so a future runtime fallback chain can be added without touching the engine call sites.
 - [x] If the resolved model becomes unavailable or inadequate, fail observably; provider fallbacks may serve only the same resolved model under the enforced routing policy.
 
@@ -123,9 +123,13 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 - [x] Two concurrent runs for one inbound message execute the model and mutating dispatcher only once.
 - [x] Patient-controlled profile names are absent from the system prompt, and practice-local current time is explicit.
 - [x] A mutation followed by no final model text escalates without retrying the mutation and preserves turn usage metadata.
-- [ ] Synthetic live smoke confirms the free dev model can call a tool without sending patient data.
+- [x] Synthetic live smoke confirms the free dev model can call a tool without sending patient data.
   - Attempted twice on 2026-06-10 with synthetic data only. OpenRouter reached the configured
     model route, but Venice returned a temporary upstream rate limit before inference.
+  - Retried on 2026-06-17. The Venice-backed Llama route still returned an upstream rate limit;
+    `openai/gpt-oss-20b:free` had no ZDR-matching endpoint. Switched the dev default to
+    `nex-agi/nex-n2-pro:free`; `pnpm ai:smoke` passed through SiliconFlow with one
+    `get_availability` tool call and no patient data.
 
 ---
 
