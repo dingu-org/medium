@@ -76,6 +76,12 @@ export const pts = pgTable('pts', {
   aiGreeting: text('ai_greeting'),
   aiEscalationKeyword: text('ai_escalation_keyword'),
   retentionDays: integer('retention_days').notNull().default(90),
+  // Web Push notification preferences (event type → enabled). Wired in Phase 9;
+  // the settings UI persists the toggles now. Null = use defaults.
+  notificationPrefs: jsonb('notification_prefs'),
+  // Watermark for the notification bell unread count: events with
+  // occurred_at > this are "unread". "Mark all read" sets it to now().
+  notificationsSeenAt: tsTz('notifications_seen_at'),
   createdAt: tsTz('created_at').notNull().default(now),
 });
 

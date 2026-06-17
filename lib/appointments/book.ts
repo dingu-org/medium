@@ -21,6 +21,10 @@ type BookAppointmentInput = {
   startsAt: Date;
   serviceType: string;
   notes?: string;
+  // PT-initiated manual bookings may fall outside working hours / blocked
+  // periods. Double-booking is still prevented by the active-overlap exclusion
+  // constraint, so we only skip the availability-window check here.
+  allowOutsideAvailability?: boolean;
 };
 
 async function findExisting(input: BookAppointmentInput) {
@@ -76,22 +80,24 @@ export async function bookAppointment(
     if (existing) return existing;
 
     const endsAt = addMinutes(input.startsAt, APPOINTMENT_DURATION_MINUTES);
-    const availability = await getFreeSlotsInternal({
-      ptId: input.ptId,
-      start: input.startsAt,
-      end: endsAt,
-      durationMinutes: APPOINTMENT_DURATION_MINUTES,
-      serviceType: input.serviceType,
-    });
-    if (
-      !availability.slots.some(
-        (slot) => slot.startsAt === input.startsAt.toISOString(),
-      )
-    ) {
-      throw new AppointmentError(
-        'unavailable',
-        'The selected appointment time is no longer available.',
-      );
+    if (!input.allowOutsideAvailability) {
+      const availability = await getFreeSlotsInternal({
+        ptId: input.ptId,
+        start: input.startsAt,
+        end: endsAt,
+        durationMinutes: APPOINTMENT_DURATION_MINUTES,
+        serviceType: input.serviceType,
+      });
+      if (
+        !availability.slots.some(
+          (slot) => slot.startsAt === input.startsAt.toISOString(),
+        )
+      ) {
+        throw new AppointmentError(
+          'unavailable',
+          'The selected appointment time is no longer available.',
+        );
+      }
     }
 
     try {

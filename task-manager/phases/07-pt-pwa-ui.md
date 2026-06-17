@@ -105,3 +105,52 @@
 - Use shadcn's Sheet component for the appointment detail; it's the right shape for mobile.
 - The Realtime channel must respect RLS — Supabase enforces this on the channel level, but verify by trying to subscribe to another PT's appointments and confirm zero events arrive.
 - Chat input pattern: keep the input stuck to the bottom on iOS Safari (use `100dvh` not `100vh`).
+
+---
+
+## Implementation status (2026-06-17)
+
+**Shipped (code complete, statically verified — `pnpm typecheck`, `pnpm lint`,
+`pnpm build` all pass):**
+
+- **Shared infra:** migration `0010_phase7_realtime` (adds `pts.notifications_seen_at`
+  + `pts.notification_prefs`, the `supabase_realtime` publication for
+  `appointments/messages/conversations/events`, and `REPLICA IDENTITY FULL` on
+  those tables). Realtime hooks `lib/hooks/realtime.ts` (`useRealtimeChannel`,
+  `useRealtimeRefresh`, `useMessages`, `useOnlineStatus`) — the browser client is
+  **lazy-loaded** so supabase-realtime stays out of every route's initial bundle.
+  Shared `components/states` (Loading/Empty/Error), `components/realtime-refresher`.
+- **App shell:** top-bar notification bell (unread badge from `events` vs
+  `notifications_seen_at`, sheet feed, mark-all-read) + online/offline sync
+  indicator. Bottom nav unchanged (Calendar/Chat/Settings, per decision).
+- **Settings:** practice + AI + notification prefs + retention form (Server
+  Action writing `pts`), availability link, WhatsApp card, danger zone
+  (disconnect WhatsApp, delete account via service-role admin delete).
+- **Availability:** weekly editor (per-day switch + times, copy-to-all) writing
+  `availability_rules`; blocked-periods list/add/delete (tz-correct via TZDate).
+- **Chat:** conversation list (lateral last-message), realtime thread, takeover
+  toggle (`ai_active` + `conversation.taken_over` event), send-as-PT
+  (`sendFreeForm` + persist), 24h-window banner, revoked/no-connection handling.
+- **Appointment detail sheet:** bottom Sheet with patient (tel/wa.me/chat link),
+  PT-tz times, inline notes, reminder badge, reschedule (slot picker), cancel
+  (reason), mark complete/no-show.
+- **Calendar:** week vertical agenda (default) + month picker, realtime refresh,
+  status dots, reminder badges, tap→sheet, today/week-nav/view toggle, FAB
+  (block time + manual add appointment with patient search / add-patient).
+  Backend: `bookAppointment` gained `allowOutsideAvailability` for manual books
+  (overlap still enforced by the exclusion constraint).
+- **Onboarding:** `/onboarding` (outside the dashboard layout to avoid a gate
+  loop) — steps derived from data state, progress bar, completion CTA; soft gate
+  in the dashboard layout (skippable via cookie).
+
+**Gated / not yet verified (need an environment, not more code):**
+
+- `pnpm test:all` + new `lib/format/__tests__/name.test.ts` — blocked by the
+  Vitest global setup requiring local Supabase (Docker unavailable).
+- Apply migration `0010` to hosted Supabase (after the Phase 6 `0009` cleanup).
+- Live realtime two-tab check + RLS-on-channel check; confirm the browser client
+  sets the realtime auth token before subscribing (RLS gotcha).
+- Lighthouse mobile run against a signed-in `pnpm build && pnpm start` session.
+
+**Critical-path First Load JS after lazy-loading realtime:** calendar ~168 kB,
+chat list ~180 kB, conversation ~139 kB (was 231/244/202 kB).
