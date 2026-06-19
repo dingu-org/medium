@@ -147,20 +147,24 @@ export function ChatThread({
 }
 
 function MessageBubble({ message }: { message: LiveMessage }) {
-  const mine = message.role === 'pt';
+  const isPt = message.role === 'pt';
   const isAi = message.role === 'ai';
+  const outbound = isPt || isAi;
   return (
-    <div className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
+    <div className={cn('flex', outbound ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
           'max-w-[80%] rounded-2xl px-3 py-2 text-sm',
-          mine
-            ? 'rounded-br-sm bg-primary text-primary-foreground'
-            : 'rounded-bl-sm bg-muted',
+          isAi && 'rounded-br-sm bg-primary text-primary-foreground',
+          isPt && 'rounded-br-sm bg-emerald-600 text-white',
+          !outbound && 'rounded-bl-sm bg-muted',
         )}
       >
         {isAi && (
-          <Badge variant="secondary" className="mb-1 text-[10px]">
+          <Badge
+            variant="secondary"
+            className="mb-1 border-transparent bg-primary-foreground/15 text-[10px] text-primary-foreground"
+          >
             Auto
           </Badge>
         )}
@@ -168,7 +172,9 @@ function MessageBubble({ message }: { message: LiveMessage }) {
         <p
           className={cn(
             'mt-1 text-[10px]',
-            mine ? 'text-primary-foreground/70' : 'text-muted-foreground',
+            isAi && 'text-primary-foreground/70',
+            isPt && 'text-white/75',
+            !outbound && 'text-muted-foreground',
           )}
         >
           {format(new Date(message.createdAt), 'HH:mm')}
