@@ -77,7 +77,6 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
         return; // non-JSON message — ignore
       }
       if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
-      console.info('[connect-whatsapp] embedded-signup event:', data.event, data.data);
       // FINISH carries phone_number_id + waba_id; FINISH_ONLY_WABA omits the number.
       if (typeof data.event === 'string' && data.event.startsWith('FINISH')) {
         sessionInfo.current = {
@@ -125,12 +124,6 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
       const code = loginResp.authResponse?.code;
       const { phoneNumberId, wabaId } = sessionInfo.current;
       if (!code || !phoneNumberId || !wabaId) {
-        console.warn('[connect-whatsapp] incomplete — missing data after popup', {
-          loginStatus: loginResp.status,
-          hasCode: Boolean(code),
-          phoneNumberId,
-          wabaId,
-        });
         toast.info('Connection incomplete — you can resume anytime.');
         return;
       }
@@ -150,8 +143,7 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
 
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       toast.error(errorMessage(body.error));
-    } catch (err) {
-      console.error('[connect-whatsapp]', err);
+    } catch {
       toast.error('Something went wrong connecting WhatsApp. Please try again.');
     } finally {
       setPending(false);

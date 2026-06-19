@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { createBrowserClient } from '@/lib/supabase/browser';
 
@@ -16,7 +17,7 @@ export function GoogleSignInButton({ label = 'Continue with Google' }: { label?:
     });
     if (error) {
       setPending(false);
-      console.error('Google sign-in error:', error);
+      toast.error('Could not start Google sign-in. Please try again.');
     }
     // On success the browser is redirected by Supabase before this resolves.
   };

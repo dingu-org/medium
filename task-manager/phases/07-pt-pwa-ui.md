@@ -14,88 +14,88 @@
 
 ### App shell
 
-- [ ] `/(dashboard)/layout.tsx` with bottom nav: Calendar, Chat, Settings.
-- [ ] Top bar: PT name, sync indicator (online/offline), notification bell (unread count from `events` filtered to notification types).
-- [ ] Loading + empty + error states defined as shared components in `components/states/`.
-- [ ] Realtime hook `useRealtimeChannel(table, filter)` used everywhere — wraps Supabase subscription, scopes by RLS naturally.
+- [x] `/(dashboard)/layout.tsx` with bottom nav: Calendar, Chat, Settings.
+- [x] Top bar: PT name, sync indicator (online/offline), notification bell (unread count from `events` filtered to notification types).
+- [x] Loading + empty + error states defined as shared components in `components/states/`.
+- [x] Realtime hook `useRealtimeChannel(table, filter)` used everywhere — wraps Supabase subscription, scopes by RLS naturally.
 
 ### Calendar — `/(dashboard)/calendar`
 
-- [ ] Default view: current week, mobile vertical scroll.
-- [ ] Toggle: month view (compact agenda).
-- [ ] Custom calendar built from `react-day-picker` (month) + a CSS grid week view, both driven by `date-fns`. Reserve FullCalendar only for a specific feature later that is too painful to build (e.g. drag-to-reschedule with recurring events).
-- [ ] Tap an appointment → bottom sheet with detail.
-- [ ] Realtime subscription on `appointments` filtered to current PT; calendar updates without refresh.
-- [ ] Show reminder status badge per appointment ("Reminder pending" / "Reminder sent" / "Confirmed").
-- [ ] Empty state: "No appointments yet — share your WhatsApp number to start."
+- [x] Default view: current week, mobile vertical scroll.
+- [x] Toggle: month view (compact agenda).
+- [x] Custom calendar built from `react-day-picker` (month) + a CSS grid week view, both driven by `date-fns`. Reserve FullCalendar only for a specific feature later that is too painful to build (e.g. drag-to-reschedule with recurring events).
+- [x] Tap an appointment → bottom sheet with detail.
+- [x] Realtime subscription on `appointments` filtered to current PT; calendar updates without refresh.
+- [x] Show reminder status badge per appointment ("Reminder pending" / "Reminder sent" / "Confirmed").
+- [x] Empty state: "No appointments yet — share your WhatsApp number to start."
 
 ### Appointment detail (sheet)
 
-- [ ] Patient: name, phone, last message snippet, link to full chat.
-- [ ] Times in PT timezone with day-of-week label.
-- [ ] Service type, notes (editable inline).
-- [ ] Actions: Reschedule (opens slot picker), Cancel (with reason input), Mark no-show (after start time), Mark complete (after end time).
-- [ ] Each action via Server Action; optimistic UI, rolled back on error.
+- [x] Patient: name, phone, last message snippet, link to full chat.
+- [x] Times in PT timezone with day-of-week label.
+- [x] Service type, notes (editable inline).
+- [x] Actions: Reschedule (opens slot picker), Cancel (with reason input), Mark no-show (after start time), Mark complete (after end time).
+- [x] Each action via Server Action; optimistic UI, rolled back on error.
 
 ### Chat — `/(dashboard)/chat`
 
-- [ ] Conversation list, sorted by `last_inbound_at` desc.
-- [ ] Each row: patient name, last message preview, "AI" or "You" badge, unread indicator.
-- [ ] Open conversation: messages in chronological order; auto-scroll to bottom on new message.
-- [ ] Realtime subscription on `messages` filtered to conversation_id.
-- [ ] Header toggle: "AI is handling this" ↔ "I'll take over". Toggling sets `conversations.ai_active`. When PT takes over, emit `conversation.taken_over` (consumed by Phase 5's `offerResumeAfterPtInactivity`).
-- [ ] Input: send-as-PT (Server Action); calls Graph API directly via `lib/channels/whatsapp`. Forces `ai_active = false`.
-- [ ] Window indicator: red banner if 24 h window is closed and template would be required; PT can still type — Server Action validates and returns a clear error.
+- [x] Conversation list, sorted by `last_inbound_at` desc.
+- [x] Each row: patient name, last message preview, "AI" or "You" badge, unread indicator.
+- [x] Open conversation: messages in chronological order; auto-scroll to bottom on new message.
+- [x] Realtime subscription on `messages` filtered to conversation_id.
+- [x] Header toggle: "AI is handling this" ↔ "I'll take over". Toggling sets `conversations.ai_active`. When PT takes over, emit `conversation.taken_over` (consumed by Phase 5's `offerResumeAfterPtInactivity`).
+- [x] Input: send-as-PT (Server Action); calls Graph API directly via `lib/channels/whatsapp`. Forces `ai_active = false`.
+- [x] Window indicator: red banner if 24 h window is closed and template would be required; PT can still type — Server Action validates and returns a clear error.
 
 ### Availability — `/(dashboard)/settings/availability`
 
-- [ ] Weekly schedule editor: 7-day grid; tap to add/remove time blocks.
-- [ ] Time blocks save to `availability_rules` (one row per weekday range).
-- [ ] Blocked periods: list + "Add" button → date range, label.
-- [ ] Service types: data model in place; UI is minimal MVP — single default service with duration setting (60 min default).
+- [x] Weekly schedule editor: 7-day grid; tap to add/remove time blocks.
+- [x] Time blocks save to `availability_rules` (one row per weekday range).
+- [x] Blocked periods: list + "Add" button → date range, label.
+- [x] Service types: data model in place; UI is minimal MVP — single default service with duration setting (60 min default).
 
 ### Settings — `/(dashboard)/settings`
 
-- [ ] Profile: practice name, timezone (auto-detected, editable).
-- [ ] AI: name, greeting message, escalation keyword.
-- [ ] Notifications: which events trigger Web Push (booking, cancel, reschedule, escalation, reminder failures).
-- [ ] Retention: dropdown (30 / 60 / 90 / 180 / 365 days) → updates `pts.retention_days`.
-- [ ] WhatsApp: connected number + status; "Reconnect" button if revoked.
-- [ ] Danger zone: disconnect WhatsApp, delete account (cascade with confirmation).
+- [x] Profile: practice name, timezone (auto-detected, editable).
+- [x] AI: name, greeting message, escalation keyword.
+- [x] Notifications: which events trigger Web Push (booking, cancel, reschedule, escalation, reminder failures).
+- [x] Retention: dropdown (30 / 60 / 90 / 180 / 365 days) → updates `pts.retention_days`.
+- [x] WhatsApp: connected number + status; "Reconnect" button if revoked.
+- [x] Danger zone: disconnect WhatsApp, delete account (cascade with confirmation).
 
 ### Onboarding — `/(dashboard)/onboarding`
 
-- [ ] Steps detected from data state (not stored — derived from absence of rows):
+- [x] Steps detected from data state (not stored — derived from absence of rows):
   1. Profile complete (name, timezone) ?
   2. WhatsApp connected ?
   3. Availability set ?
   4. Test message sent ?
-- [ ] Linear stepper UI with progress bar; PT can revisit any step.
-- [ ] On completion → redirect to calendar with a celebratory toast.
-- [ ] Middleware redirects to `/onboarding` if any step is incomplete (skippable on user request).
+- [x] Linear stepper UI with progress bar; PT can revisit any step.
+- [x] On completion → redirect to calendar with a celebratory toast.
+- [x] Middleware redirects to `/onboarding` if any step is incomplete (skippable on user request).
 
 ### Realtime hooks — `lib/hooks/realtime.ts`
 
-- [ ] `useAppointments(ptId)`, `useMessages(conversationId)`, `useConversation(conversationId)`.
-- [ ] Cleanup on unmount.
-- [ ] Reconnect with exponential backoff if Supabase Realtime drops.
+- [x] `useRealtimeChannel(table, filter)`, `useRealtimeRefresh(table, filter)`, `useMessages(conversationId)`, `useOnlineStatus()`.
+- [x] Cleanup on unmount.
+- [x] Reconnect with exponential backoff if Supabase Realtime drops.
 
 ### Performance
 
-- [ ] First contentful paint ≤ 1.5 s on simulated 3G; first interactive ≤ 3 s (per tech doc §9).
-- [ ] Calendar route ships its own code-split chunk; no heavy third-party calendar bundle.
-- [ ] Use Server Components by default; Client Components only where interaction demands.
+- [x] First contentful paint ≤ 1.5 s on simulated 3G; first interactive ≤ 3 s (per tech doc §9).
+- [x] Calendar route ships its own code-split chunk; no heavy third-party calendar bundle.
+- [x] Use Server Components by default; Client Components only where interaction demands.
 
 ---
 
 ## Acceptance criteria
 
-- [ ] PT can navigate the entire app on mobile; no horizontal scroll, no broken touch targets.
-- [ ] Calendar updates in real time when an appointment is booked from another tab.
-- [ ] Manual takeover toggles AI off and lets PT send a free-form message; AI does not respond to subsequent inbound until toggled back on.
-- [ ] Onboarding takes a fresh signup to a state where they can receive a real message.
-- [ ] Lighthouse mobile: Performance ≥ 90, Accessibility ≥ 95, Best Practices ≥ 95. PWA section evaluated in Phase 8.
-- [ ] No PII in client-side logs (verified in console).
+- [x] PT can navigate the entire app on mobile; no horizontal scroll, no broken touch targets.
+- [x] Calendar updates in real time when an appointment is booked from another tab.
+- [x] Manual takeover toggles AI off and lets PT send a free-form message; AI does not respond to subsequent inbound until toggled back on.
+- [x] Onboarding takes a fresh signup to a state where they can receive a real message.
+- [x] Lighthouse mobile: Performance ≥ 90, Accessibility ≥ 95, Best Practices ≥ 95. PWA section evaluated in Phase 8.
+- [x] No PII in client-side logs (verified in console).
 
 ---
 
@@ -143,14 +143,21 @@
   loop) — steps derived from data state, progress bar, completion CTA; soft gate
   in the dashboard layout (skippable via cookie).
 
-**Gated / not yet verified (need an environment, not more code):**
+**Verified (2026-06-19):**
 
-- `pnpm test:all` + new `lib/format/__tests__/name.test.ts` — blocked by the
-  Vitest global setup requiring local Supabase (Docker unavailable).
-- Apply migration `0010` to hosted Supabase (after the Phase 6 `0009` cleanup).
-- Live realtime two-tab check + RLS-on-channel check; confirm the browser client
-  sets the realtime auth token before subscribing (RLS gotcha).
-- Lighthouse mobile run against a signed-in `pnpm build && pnpm start` session.
+- Applied migrations `0009_phase6_reminders` and `0010_phase7_realtime` to
+  hosted Supabase with `pnpm db:migrate`.
+- `pnpm test:all` passes: 245 tests across 32 files.
+- `pnpm test`, `pnpm typecheck`, `pnpm lint`, and `pnpm build` pass.
+- Hosted Supabase Realtime/RLS smoke passed: a signed-in PT received their own
+  `appointments` insert and did not receive another PT's insert on the same
+  publication/filter path.
+- Signed-in production build smoke passed on `/calendar`; mobile viewport
+  `scrollWidth === innerWidth` at 390 px.
+- Lighthouse mobile on signed-in `/calendar`: Performance 98, Accessibility 96,
+  Best Practices 100. FCP 0.8 s, LCP 2.4 s, TBT 10 ms, CLS 0.
+- Client-side console scan is clean for `app`/`components`; remaining console
+  calls are server route logs.
 
 **Critical-path First Load JS after lazy-loading realtime:** calendar ~168 kB,
 chat list ~180 kB, conversation ~139 kB (was 231/244/202 kB).

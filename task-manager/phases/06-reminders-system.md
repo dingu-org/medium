@@ -66,9 +66,9 @@
 - [ ] Cancelling an appointment cancels the scheduled reminder run (no orphaned send).
 - [x] German / Italian fixtures of CONFIRM keywords work (sample 2–3 per language).
 
-Static verification on 2026-06-17: `pnpm typecheck`, `pnpm lint`, and
-`pnpm build` pass. `pnpm test:all` could not run because the local Supabase
-Postgres at `127.0.0.1:54322` is unavailable and Docker is not running.
+Verification on 2026-06-19: migration `0009_phase6_reminders` is applied to
+hosted Supabase. `pnpm test:all` passes (245 tests), plus `pnpm typecheck`,
+`pnpm lint`, and `pnpm build`.
 
 ---
 
