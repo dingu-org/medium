@@ -14,6 +14,7 @@ import {
   messages,
   patients,
   pushSubscriptions,
+  pwaMutations,
   reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
@@ -85,6 +86,12 @@ const seedFactories: Record<
     pt_id: ptId,
     endpoint: `https://example.test/${Date.now()}`,
     keys: { p256dh: 'x', auth: 'y' },
+  }),
+  pwa_mutations: ({ ptId }) => ({
+    pt_id: ptId,
+    client_mutation_id: `rls-${Date.now()}-${Math.random()}`,
+    type: 'test',
+    status: 'success',
   }),
   events: ({ ptId }) => ({ pt_id: ptId, type: 'test', payload: {} }),
   event_outbox: ({ ptId, eventId }) => ({
@@ -179,6 +186,12 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     ptId,
     endpoint: `https://example.test/${Date.now()}-${Math.random()}`,
     keys: { p256dh: 'x', auth: 'y' },
+  });
+  await db.insert(pwaMutations).values({
+    ptId,
+    clientMutationId: `seed-${Date.now()}-${Math.random()}`,
+    type: 'seed',
+    status: 'success',
   });
   const [event] = await db
     .insert(events)

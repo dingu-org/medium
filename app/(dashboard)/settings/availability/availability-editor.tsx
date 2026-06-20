@@ -16,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { useOnlineStatus } from '@/lib/hooks/realtime';
 import {
   addBlockedPeriod,
   deleteBlockedPeriod,
@@ -64,6 +65,7 @@ export function AvailabilityEditor({
   const [saving, startSave] = useTransition();
   const [adding, startAdd] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const online = useOnlineStatus();
 
   // Blocked-period form
   const [date, setDate] = useState('');
@@ -88,6 +90,10 @@ export function AvailabilityEditor({
   }
 
   function onSave() {
+    if (!online) {
+      toast.error('Availability requires a connection.');
+      return;
+    }
     const rules = DAYS.filter((d) => days[d.weekday].enabled).map((d) => ({
       weekday: d.weekday,
       start: days[d.weekday].start,
@@ -110,6 +116,10 @@ export function AvailabilityEditor({
   }
 
   function onAddBlock() {
+    if (!online) {
+      toast.error('Blocked periods require a connection.');
+      return;
+    }
     if (!date) {
       toast.error('Pick a date to block.');
       return;
@@ -133,6 +143,10 @@ export function AvailabilityEditor({
   }
 
   function onDeleteBlock(id: string) {
+    if (!online) {
+      toast.error('Blocked periods require a connection.');
+      return;
+    }
     setDeletingId(id);
     startAdd(async () => {
       await deleteBlockedPeriod(id);
@@ -151,6 +165,11 @@ export function AvailabilityEditor({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!online && (
+            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              Availability changes require a connection.
+            </p>
+          )}
           {DAYS.map(({ weekday, label }) => {
             const day = days[weekday];
             return (
@@ -165,6 +184,7 @@ export function AvailabilityEditor({
                   <Switch
                     id={`day-${weekday}`}
                     checked={day.enabled}
+                    disabled={!online}
                     onCheckedChange={(checked) =>
                       update(weekday, { enabled: checked })
                     }
@@ -177,6 +197,7 @@ export function AvailabilityEditor({
                       aria-label={`${label} start time`}
                       value={day.start}
                       onChange={(e) => update(weekday, { start: e.target.value })}
+                      disabled={!online}
                       className="w-auto"
                     />
                     <span className="text-muted-foreground">–</span>
@@ -185,6 +206,7 @@ export function AvailabilityEditor({
                       aria-label={`${label} end time`}
                       value={day.end}
                       onChange={(e) => update(weekday, { end: e.target.value })}
+                      disabled={!online}
                       className="w-auto"
                     />
                     <Button
@@ -193,6 +215,7 @@ export function AvailabilityEditor({
                       size="sm"
                       className="ml-auto"
                       onClick={() => copyToAll(weekday)}
+                      disabled={!online}
                     >
                       Copy to all
                     </Button>
@@ -205,7 +228,7 @@ export function AvailabilityEditor({
             type="button"
             className="w-full"
             onClick={onSave}
-            disabled={saving}
+            disabled={saving || !online}
           >
             {saving ? 'Saving…' : 'Save availability'}
           </Button>
@@ -220,6 +243,11 @@ export function AvailabilityEditor({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!online && (
+            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              Blocked periods require a connection.
+            </p>
+          )}
           {blocks.length === 0 ? (
             <EmptyState title="No blocked periods" />
           ) : (
@@ -241,7 +269,7 @@ export function AvailabilityEditor({
                     size="icon-sm"
                     aria-label="Delete blocked period"
                     onClick={() => onDeleteBlock(b.id)}
-                    disabled={deletingId === b.id}
+                    disabled={deletingId === b.id || !online}
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </Button>
@@ -258,6 +286,7 @@ export function AvailabilityEditor({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
+                disabled={!online}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -266,6 +295,7 @@ export function AvailabilityEditor({
                 aria-label="Block start time"
                 value={blockStart}
                 onChange={(e) => setBlockStart(e.target.value)}
+                disabled={!online}
                 className="w-auto"
               />
               <span className="text-muted-foreground">–</span>
@@ -274,6 +304,7 @@ export function AvailabilityEditor({
                 aria-label="Block end time"
                 value={blockEnd}
                 onChange={(e) => setBlockEnd(e.target.value)}
+                disabled={!online}
                 className="w-auto"
               />
             </div>
@@ -284,6 +315,7 @@ export function AvailabilityEditor({
                 value={blockLabel}
                 onChange={(e) => setBlockLabel(e.target.value)}
                 placeholder="e.g. Holiday"
+                disabled={!online}
               />
             </div>
             <Button
@@ -291,7 +323,7 @@ export function AvailabilityEditor({
               variant="outline"
               className="w-full"
               onClick={onAddBlock}
-              disabled={adding}
+              disabled={adding || !online}
             >
               Add blocked period
             </Button>

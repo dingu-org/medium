@@ -78,6 +78,13 @@
       "when": 1781719423832,
       "tag": "0010_phase7_realtime",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781884244708,
+      "tag": "0011_phase8_pwa",
+      "breakpoints": true
     }
   ]
 }

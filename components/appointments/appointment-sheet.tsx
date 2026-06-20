@@ -5,15 +5,11 @@ import { format } from 'date-fns';
 import { MessageSquare, Phone } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import {
-  cancelAppointmentAction,
   getUpcomingSlots,
-  rescheduleAppointmentAction,
   type SlotsByDay,
-  transitionAppointmentAction,
-  updateAppointmentNotes,
 } from '@/app/(dashboard)/calendar/actions';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +19,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { useOnlineStatus } from '@/lib/hooks/realtime';
+import {
+  listPendingMutations,
+  type PendingMutation,
+  subscribeToQueueChanges,
+} from '@/lib/pwa/client-store';
+import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
+import { cn } from '@/lib/utils';
 import { ReminderBadge, StatusBadge } from './badges';
 import type { AppointmentView } from './types';
 
@@ -42,6 +46,7 @@ export function AppointmentSheet({
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('detail');
   const [pending, startTransition] = useTransition();
+  const online = useOnlineStatus();
 
   // Notes editing
   const [notes, setNotes] = useState('');
@@ -49,6 +54,7 @@ export function AppointmentSheet({
   const [reason, setReason] = useState('');
   // Reschedule slots
   const [slots, setSlots] = useState<SlotsByDay[] | null>(null);
+  const [localMutations, setLocalMutations] = useState<PendingMutation[]>([]);
 
   useEffect(() => {
     setMode('detail');
@@ -56,6 +62,32 @@ export function AppointmentSheet({
     setReason('');
     setSlots(null);
   }, [appointment]);
+
+  useEffect(() => {
+    let active = true;
+    async function refreshPending() {
+      try {
+        const items = await listPendingMutations();
+        if (active) setLocalMutations(items);
+      } catch {
+        // IndexedDB can be blocked; action buttons still use the online path.
+      }
+    }
+    void refreshPending();
+    const unsubscribe = subscribeToQueueChanges(refreshPending);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const appointmentMutations = useMemo(() => {
+    if (!appointment) return [];
+    return localMutations.filter(
+      (mutation) => appointmentIdFromMutation(mutation) === appointment.id,
+    );
+  }, [appointment, localMutations]);
+  const pendingLabel = getPendingAppointmentLabel(appointmentMutations);
 
   if (!appointment) return null;
 
@@ -72,17 +104,28 @@ export function AppointmentSheet({
   }
 
   function run(
-    fn: () => Promise<{ ok: boolean; error?: string }>,
+    input: Parameters<typeof queueAppointmentMutation>[0],
     successMsg: string,
   ) {
     startTransition(async () => {
-      const res = await fn();
-      if (res.ok) {
-        toast.success(successMsg);
-        router.refresh();
-        close();
-      } else {
-        toast.error(res.error ?? 'Something went wrong.');
+      try {
+        const res = await queueAppointmentMutation(input);
+        if (res.status === 'sent') {
+          toast.success(successMsg);
+          router.refresh();
+          close();
+          return;
+        }
+        if (res.status === 'queued') {
+          toast.success('Change queued. It will sync when you’re online.');
+          close();
+          return;
+        }
+        toast.error(res.error);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Could not queue change.',
+        );
       }
     });
   }
@@ -90,15 +133,36 @@ export function AppointmentSheet({
   function saveNotes() {
     const id = appointment!.id;
     startTransition(async () => {
-      await updateAppointmentNotes(id, notes);
-      toast.success('Notes saved.');
-      router.refresh();
+      try {
+        const res = await queueAppointmentMutation({
+          action: 'notes',
+          appointmentId: id,
+          notes,
+        });
+        if (res.status === 'sent') {
+          toast.success('Notes saved.');
+          router.refresh();
+        } else if (res.status === 'queued') {
+          toast.success('Notes queued. They will sync when you’re online.');
+        } else {
+          toast.error(res.error);
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Could not queue notes.',
+        );
+      }
     });
   }
 
   function openReschedule() {
     setMode('reschedule');
     if (!slots) {
+      if (!online) {
+        toast.error('Loading available slots requires a connection.');
+        setSlots([]);
+        return;
+      }
       startTransition(async () => {
         const res = await getUpcomingSlots();
         setSlots(res.days);
@@ -136,6 +200,18 @@ export function AppointmentSheet({
                     </span>
                   )}
                   <ReminderBadge reminder={appointment.reminder} />
+                  {pendingLabel && (
+                    <span
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[11px] font-medium',
+                        appointmentMutations.some((m) => m.status === 'failed')
+                          ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                          : 'border-amber-200 bg-amber-50 text-amber-800',
+                      )}
+                    >
+                      {pendingLabel}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -207,11 +283,11 @@ export function AppointmentSheet({
                       variant="outline"
                       onClick={() =>
                         run(
-                          () =>
-                            transitionAppointmentAction(
-                              appointment.id,
-                              'completed',
-                            ),
+                          {
+                            action: 'transition',
+                            appointmentId: appointment.id,
+                            nextStatus: 'completed',
+                          },
                           'Marked complete.',
                         )
                       }
@@ -225,11 +301,11 @@ export function AppointmentSheet({
                       variant="outline"
                       onClick={() =>
                         run(
-                          () =>
-                            transitionAppointmentAction(
-                              appointment.id,
-                              'no_show',
-                            ),
+                          {
+                            action: 'transition',
+                            appointmentId: appointment.id,
+                            nextStatus: 'no_show',
+                          },
                           'Marked as no-show.',
                         )
                       }
@@ -276,7 +352,11 @@ export function AppointmentSheet({
                   className="flex-1"
                   onClick={() =>
                     run(
-                      () => cancelAppointmentAction(appointment.id, reason),
+                      {
+                        action: 'cancel',
+                        appointmentId: appointment.id,
+                        reason,
+                      },
                       'Appointment cancelled.',
                     )
                   }
@@ -304,7 +384,9 @@ export function AppointmentSheet({
                 <p className="text-sm text-muted-foreground">Loading slots…</p>
               ) : slots.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No free slots in the next 14 days. Check your availability.
+                  {online
+                    ? 'No free slots in the next 14 days. Check your availability.'
+                    : 'Reconnect to load available slots.'}
                 </p>
               ) : (
                 <div className="space-y-4">
@@ -320,11 +402,11 @@ export function AppointmentSheet({
                             disabled={pending}
                             onClick={() =>
                               run(
-                                () =>
-                                  rescheduleAppointmentAction(
-                                    appointment.id,
-                                    iso,
-                                  ),
+                                {
+                                  action: 'reschedule',
+                                  appointmentId: appointment.id,
+                                  newStartsAt: iso,
+                                },
                                 'Appointment rescheduled.',
                               )
                             }
@@ -343,4 +425,23 @@ export function AppointmentSheet({
       </SheetContent>
     </Sheet>
   );
+}
+
+function appointmentIdFromMutation(mutation: PendingMutation): string | null {
+  if (!mutation.type.startsWith('appointment.')) return null;
+  const body = mutation.body as { appointmentId?: unknown } | null;
+  return typeof body?.appointmentId === 'string' ? body.appointmentId : null;
+}
+
+function getPendingAppointmentLabel(mutations: PendingMutation[]): string | null {
+  if (mutations.length === 0) return null;
+  if (mutations.some((m) => m.status === 'failed')) return 'Sync failed';
+  const actions = new Set(
+    mutations.map((m) => (m.body as { action?: unknown } | null)?.action),
+  );
+  if (actions.has('cancel')) return 'Cancel pending';
+  if (actions.has('reschedule')) return 'Move pending';
+  if (actions.has('notes')) return 'Notes pending';
+  if (actions.has('transition')) return 'Status pending';
+  return 'Sync pending';
 }

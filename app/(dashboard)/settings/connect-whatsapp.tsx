@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { useOnlineStatus } from '@/lib/hooks/realtime';
 
 type Props = {
   appId: string;
@@ -63,6 +64,7 @@ function errorMessage(kind: unknown): string {
 export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const online = useOnlineStatus();
   // Meta delivers phone_number_id + waba_id via a postMessage during the popup,
   // separately from the FB.login auth code — capture it here.
   const sessionInfo = useRef<{ phoneNumberId?: string; wabaId?: string }>({});
@@ -90,6 +92,10 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
   }, []);
 
   const handleClick = useCallback(async () => {
+    if (!online) {
+      toast.error('WhatsApp signup requires a connection.');
+      return;
+    }
     if (!appId || !configId) {
       toast.error('WhatsApp signup is not configured.');
       return;
@@ -148,11 +154,26 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
     } finally {
       setPending(false);
     }
-  }, [appId, configId, graphVersion, router]);
+  }, [appId, configId, graphVersion, online, router]);
 
   return (
-    <Button type="button" onClick={handleClick} disabled={pending || !appId || !configId}>
-      {pending ? 'Connecting…' : connected ? 'Reconnect WhatsApp' : 'Connect WhatsApp'}
-    </Button>
+    <div className="space-y-2">
+      <Button
+        type="button"
+        onClick={handleClick}
+        disabled={pending || !appId || !configId || !online}
+      >
+        {pending
+          ? 'Connecting…'
+          : connected
+            ? 'Reconnect WhatsApp'
+            : 'Connect WhatsApp'}
+      </Button>
+      {!online && (
+        <p className="text-xs text-muted-foreground">
+          WhatsApp signup requires a connection.
+        </p>
+      )}
+    </div>
   );
 }

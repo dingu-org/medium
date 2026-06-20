@@ -307,6 +307,28 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   createdAt: tsTz('created_at').notNull().default(now),
 });
 
+export const pwaMutations = pgTable(
+  'pwa_mutations',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    clientMutationId: text('client_mutation_id').notNull(),
+    type: text('type').notNull(),
+    status: text('status').notNull().default('processing'),
+    result: jsonb('result'),
+    error: text('error'),
+    createdAt: tsTz('created_at').notNull().default(now),
+    updatedAt: tsTz('updated_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('pwa_mutations_pt_client_id_uq').on(
+      t.ptId,
+      t.clientMutationId,
+    ),
+    index('pwa_mutations_pt_status_idx').on(t.ptId, t.status, t.createdAt),
+  ],
+);
+
 export const events = pgTable(
   'events',
   {

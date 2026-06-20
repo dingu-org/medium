@@ -1,25 +1,14 @@
-import { sql } from 'drizzle-orm';
 import { MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { EmptyState } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
-import { db } from '@/lib/db';
 import { privacyName } from '@/lib/format/name';
+import { getChatListSnapshot } from '@/lib/pwa/read-models';
 import { createServerClient } from '@/lib/supabase/server';
 
 export const metadata = { title: 'Chat · Medium' };
-
-type Row = {
-  id: string;
-  ai_active: boolean;
-  escalation_state: string;
-  patient_name: string;
-  last_content: string | null;
-  last_role: 'patient' | 'ai' | 'pt' | null;
-  last_at: string | null;
-};
 
 export default async function ChatPage() {
   const supabase = await createServerClient();
@@ -29,28 +18,7 @@ export default async function ChatPage() {
   if (!user) redirect('/sign-in');
   const ptId = user.id;
 
-  const rows = await db.execute<Row>(sql`
-    SELECT
-      c.id,
-      c.ai_active,
-      c.escalation_state,
-      p.name AS patient_name,
-      m.content AS last_content,
-      m.role AS last_role,
-      m.created_at AS last_at
-    FROM conversations c
-    JOIN patients p ON p.id = c.patient_id
-    LEFT JOIN LATERAL (
-      SELECT content, role, created_at
-      FROM messages
-      WHERE messages.conversation_id = c.id
-      ORDER BY created_at DESC
-      LIMIT 1
-    ) m ON true
-    WHERE c.pt_id = ${ptId}
-    ORDER BY COALESCE(c.last_inbound_at, c.created_at) DESC
-    LIMIT 50
-  `);
+  const rows = await getChatListSnapshot(ptId);
 
   return (
     <div className="space-y-3">

@@ -10,19 +10,32 @@ if (!url.includes('127.0.0.1') && !url.includes('localhost')) {
 
 const conn = postgres(url, { prepare: false, max: 1 });
 
-try {
-  await conn`DROP SCHEMA IF EXISTS public CASCADE`;
-  await conn`CREATE SCHEMA public`;
-  await conn`GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role`;
-  await conn`GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role`;
-  await conn`GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, anon, authenticated, service_role`;
-  await conn`GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role`;
+async function main() {
+  try {
+    await conn`DROP SCHEMA IF EXISTS drizzle CASCADE`;
+    await conn`DROP SCHEMA IF EXISTS public CASCADE`;
+    await conn`CREATE SCHEMA public`;
+    await conn`GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role`;
+    await conn`GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role`;
+    await conn`GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, anon, authenticated, service_role`;
+    await conn`GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role`;
 
-  await migrate(drizzle(conn), { migrationsFolder: './drizzle/migrations' });
+    await migrate(drizzle(conn), { migrationsFolder: './drizzle/migrations' });
 
-  await conn`DELETE FROM auth.users`;
+    await conn`GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role`;
+    await conn`GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role`;
+    await conn`GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, anon, authenticated, service_role`;
+    await conn`GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role`;
 
-  console.log('Local DB reset and migrated.');
-} finally {
-  await conn.end({ timeout: 1 });
+    await conn`DELETE FROM auth.users`;
+
+    console.log('Local DB reset and migrated.');
+  } finally {
+    await conn.end({ timeout: 1 });
+  }
 }
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

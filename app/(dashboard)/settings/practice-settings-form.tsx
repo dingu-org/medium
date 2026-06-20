@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useActionState, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { updateSettings } from './actions';
 import {
   NOTIFICATION_PREF_KEYS,
@@ -77,6 +78,7 @@ export function PracticeSettingsForm(props: Props) {
   const [timezone, setTimezone] = useState(props.timezone);
   const [retentionDays, setRetentionDays] = useState(String(props.retentionDays));
   const [prefs, setPrefs] = useState<NotificationPrefs>(props.notificationPrefs);
+  const online = useOnlineStatus();
   const timezones = useTimezones(props.timezone);
 
   useEffect(() => {
@@ -84,8 +86,14 @@ export function PracticeSettingsForm(props: Props) {
     if (state.error) toast.error(state.error);
   }, [state]);
 
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    if (online) return;
+    event.preventDefault();
+    toast.error('Settings require a connection.');
+  }
+
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} onSubmit={onSubmit} className="space-y-4">
       {/* Hidden inputs carry the controlled Select/Checkbox values into FormData. */}
       <input type="hidden" name="timezone" value={timezone} />
       <input type="hidden" name="retentionDays" value={retentionDays} />
@@ -236,9 +244,14 @@ export function PracticeSettingsForm(props: Props) {
         </CardContent>
       </Card>
 
-      <Button type="submit" className="w-full" disabled={pending}>
+      <Button type="submit" className="w-full" disabled={pending || !online}>
         {pending ? 'Saving…' : 'Save settings'}
       </Button>
+      {!online && (
+        <p className="text-center text-xs text-muted-foreground">
+          Settings changes require a connection.
+        </p>
+      )}
     </form>
   );
 }

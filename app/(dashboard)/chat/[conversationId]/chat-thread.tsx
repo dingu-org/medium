@@ -4,14 +4,20 @@ import { format } from 'date-fns';
 import { ChevronLeft, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { type LiveMessage, useMessages } from '@/lib/hooks/realtime';
+import {
+  PWA_MUTATION_FAILED_EVENT,
+  PWA_MUTATION_SYNCED_EVENT,
+} from '@/lib/pwa/client-store';
+import { queueMessageSend } from '@/lib/pwa/mutation-client';
 import { cn } from '@/lib/utils';
-import { sendPtMessage, setTakeover } from '../actions';
+import { setTakeover } from '../actions';
 
 type Props = {
   conversationId: string;
@@ -19,6 +25,12 @@ type Props = {
   initialMessages: LiveMessage[];
   aiActive: boolean;
   windowOpen: boolean;
+};
+
+type OptimisticMessage = LiveMessage & {
+  clientMutationId: string;
+  pending?: boolean;
+  failed?: boolean;
 };
 
 export function ChatThread({
@@ -33,14 +45,51 @@ export function ChatThread({
   const [aiActive, setAiActive] = useState(initialAiActive);
   const [windowClosed, setWindowClosed] = useState(!initialWindowOpen);
   const [draft, setDraft] = useState('');
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    OptimisticMessage[]
+  >([]);
   const [sending, startSend] = useTransition();
   const [, startToggle] = useTransition();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const visibleMessages = useMemo(
+    () =>
+      [...messages, ...optimisticMessages].sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      ),
+    [messages, optimisticMessages],
+  );
 
   // Auto-scroll to the newest message.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages.length]);
+  }, [visibleMessages.length]);
+
+  useEffect(() => {
+    function onSynced(event: Event) {
+      const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+      if (!id) return;
+      setOptimisticMessages((items) =>
+        items.filter((item) => item.clientMutationId !== id),
+      );
+    }
+    function onFailed(event: Event) {
+      const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+      if (!id) return;
+      setOptimisticMessages((items) =>
+        items.map((item) =>
+          item.clientMutationId === id
+            ? { ...item, pending: false, failed: true }
+            : item,
+        ),
+      );
+    }
+    window.addEventListener(PWA_MUTATION_SYNCED_EVENT, onSynced);
+    window.addEventListener(PWA_MUTATION_FAILED_EVENT, onFailed);
+    return () => {
+      window.removeEventListener(PWA_MUTATION_SYNCED_EVENT, onSynced);
+      window.removeEventListener(PWA_MUTATION_FAILED_EVENT, onFailed);
+    };
+  }, []);
 
   function onToggle(checked: boolean) {
     setAiActive(checked);
@@ -53,28 +102,77 @@ export function ChatThread({
   function onSend() {
     const body = draft.trim();
     if (!body) return;
+    const clientMutationId = crypto.randomUUID();
+    setDraft('');
+    setOptimisticMessages((items) => [
+      ...items,
+      {
+        id: `pending-${clientMutationId}`,
+        clientMutationId,
+        role: 'pt',
+        content: body,
+        createdAt: new Date().toISOString(),
+        pending: true,
+      },
+    ]);
     startSend(async () => {
-      const res = await sendPtMessage(conversationId, body);
-      if (res.ok) {
-        setDraft('');
-        setAiActive(false);
-        setWindowClosed(false);
-        router.refresh();
-        return;
-      }
-      if (res.reason === 'outside_window') {
-        setWindowClosed(true);
-        toast.error('The 24-hour reply window is closed.');
-      } else if (res.reason === 'revoked' || res.reason === 'no_connection') {
-        toast.error('WhatsApp isn’t connected. Reconnect in Settings.');
-      } else {
-        toast.error('Couldn’t send message. Try again.');
+      try {
+        const res = await queueMessageSend({
+          clientMutationId,
+          conversationId,
+          body,
+        });
+        if (res.status === 'sent') {
+          setOptimisticMessages((items) =>
+            items.filter((item) => item.clientMutationId !== clientMutationId),
+          );
+          setAiActive(false);
+          setWindowClosed(false);
+          router.refresh();
+          return;
+        }
+        if (res.status === 'queued') {
+          setAiActive(false);
+          toast.success('Message queued. It will send when you’re online.');
+          return;
+        }
+        setOptimisticMessages((items) =>
+          items.map((item) =>
+            item.clientMutationId === clientMutationId
+              ? { ...item, pending: false, failed: true }
+              : item,
+          ),
+        );
+        if (res.error.includes('24-hour')) setWindowClosed(true);
+        toast.error(res.error);
+      } catch (error) {
+        setOptimisticMessages((items) =>
+          items.map((item) =>
+            item.clientMutationId === clientMutationId
+              ? { ...item, pending: false, failed: true }
+              : item,
+          ),
+        );
+        toast.error(
+          error instanceof Error ? error.message : 'Could not queue message.',
+        );
       }
     });
   }
 
   return (
     <div className="flex flex-col">
+      <SnapshotCache
+        cacheKey={`chat:${conversationId}`}
+        kind="chat"
+        payload={{
+          conversationId,
+          patientName,
+          initialMessages: messages,
+          aiActive,
+          windowOpen: !windowClosed,
+        }}
+      />
       {/* Sub-header */}
       <div className="sticky top-[57px] z-10 -mx-4 flex items-center gap-3 border-b border-border bg-background/90 px-4 py-2 backdrop-blur">
         <Link
@@ -109,7 +207,7 @@ export function ChatThread({
 
       {/* Messages */}
       <div className="flex-1 space-y-2 py-4">
-        {messages.map((m) => (
+        {visibleMessages.map((m) => (
           <MessageBubble key={m.id} message={m} />
         ))}
         <div ref={bottomRef} className="h-20" />
@@ -146,7 +244,11 @@ export function ChatThread({
   );
 }
 
-function MessageBubble({ message }: { message: LiveMessage }) {
+function MessageBubble({
+  message,
+}: {
+  message: LiveMessage & { pending?: boolean; failed?: boolean };
+}) {
   const isPt = message.role === 'pt';
   const isAi = message.role === 'ai';
   const outbound = isPt || isAi;
@@ -169,6 +271,16 @@ function MessageBubble({ message }: { message: LiveMessage }) {
           </Badge>
         )}
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        {(message.pending || message.failed) && (
+          <p
+            className={cn(
+              'mt-1 text-[10px]',
+              message.failed ? 'text-destructive-foreground' : 'text-white/75',
+            )}
+          >
+            {message.failed ? 'Needs attention' : 'Pending sync'}
+          </p>
+        )}
         <p
           className={cn(
             'mt-1 text-[10px]',

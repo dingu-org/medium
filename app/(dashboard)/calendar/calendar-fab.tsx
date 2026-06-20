@@ -16,12 +16,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import { useOnlineStatus } from '@/lib/hooks/realtime';
+import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
 import { cn } from '@/lib/utils';
-import {
-  bookManualAppointment,
-  type PatientOption,
-  searchPatients,
-} from './actions';
+import { type PatientOption, searchPatients } from './actions';
 
 type Mode = 'menu' | 'block' | 'appointment';
 
@@ -29,6 +27,7 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('menu');
+  const online = useOnlineStatus();
 
   function reset() {
     setMode('menu');
@@ -100,6 +99,7 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
           {mode === 'block' && (
             <BlockTimeForm
               defaultDate={defaultDate}
+              online={online}
               onDone={() => {
                 setOpen(false);
                 reset();
@@ -111,6 +111,7 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
           {mode === 'appointment' && (
             <AppointmentForm
               defaultDate={defaultDate}
+              online={online}
               onDone={() => {
                 setOpen(false);
                 reset();
@@ -126,9 +127,11 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
 
 function BlockTimeForm({
   defaultDate,
+  online,
   onDone,
 }: {
   defaultDate: string;
+  online: boolean;
   onDone: () => void;
 }) {
   const [date, setDate] = useState(defaultDate);
@@ -138,18 +141,26 @@ function BlockTimeForm({
   const [pending, startTransition] = useTransition();
 
   function submit() {
+    if (!online) {
+      toast.error('Block time requires a connection.');
+      return;
+    }
     startTransition(async () => {
-      const res = await addBlockedPeriod({
-        date,
-        startTime: start,
-        endTime: end,
-        label: label.trim() || undefined,
-      });
-      if (res.ok) {
-        toast.success('Time blocked.');
-        onDone();
-      } else {
-        toast.error(res.error ?? 'Could not block time.');
+      try {
+        const res = await addBlockedPeriod({
+          date,
+          startTime: start,
+          endTime: end,
+          label: label.trim() || undefined,
+        });
+        if (res.ok) {
+          toast.success('Time blocked.');
+          onDone();
+        } else {
+          toast.error(res.error ?? 'Could not block time.');
+        }
+      } catch {
+        toast.error('Could not block time.');
       }
     });
   }
@@ -191,7 +202,12 @@ function BlockTimeForm({
           placeholder="e.g. Lunch"
         />
       </div>
-      <Button className="w-full" onClick={submit} disabled={pending}>
+      {!online && (
+        <p className="text-xs text-muted-foreground">
+          Block time requires a connection.
+        </p>
+      )}
+      <Button className="w-full" onClick={submit} disabled={pending || !online}>
         {pending ? 'Saving…' : 'Block time'}
       </Button>
     </div>
@@ -200,9 +216,11 @@ function BlockTimeForm({
 
 function AppointmentForm({
   defaultDate,
+  online,
   onDone,
 }: {
   defaultDate: string;
+  online: boolean;
   onDone: () => void;
 }) {
   const [tab, setTab] = useState<'existing' | 'new'>('existing');
@@ -221,6 +239,7 @@ function AppointmentForm({
   function onQuery(value: string) {
     setQuery(value);
     setSelected(null);
+    if (!online) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       startSearch(async () => {
@@ -239,21 +258,33 @@ function AppointmentForm({
       return;
     }
     startTransition(async () => {
-      const res = await bookManualAppointment({
-        patientId: tab === 'existing' ? selected?.id : undefined,
-        newPatient:
-          tab === 'new'
-            ? { name: newName.trim(), phone: newPhone.trim() }
-            : undefined,
-        date,
-        time,
-        serviceType: serviceType.trim() || undefined,
-      });
-      if (res.ok) {
-        toast.success('Appointment booked.');
-        onDone();
-      } else {
-        toast.error(res.error ?? 'Could not book.');
+      try {
+        const res = await queueAppointmentMutation({
+          action: 'manual_book',
+          patientId: tab === 'existing' ? selected?.id : undefined,
+          newPatient:
+            tab === 'new'
+              ? { name: newName.trim(), phone: newPhone.trim() }
+              : undefined,
+          date,
+          time,
+          serviceType: serviceType.trim() || undefined,
+        });
+        if (res.status === 'sent') {
+          toast.success('Appointment booked.');
+          onDone();
+        } else if (res.status === 'queued') {
+          toast.success('Appointment queued. It will sync when you’re online.');
+          onDone();
+        } else {
+          toast.error(res.error);
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : 'Could not queue appointment.',
+        );
       }
     });
   }
@@ -293,7 +324,14 @@ function AppointmentForm({
             placeholder="Search name or phone…"
             value={query}
             onChange={(e) => onQuery(e.target.value)}
+            disabled={!online}
           />
+          {!online && (
+            <p className="text-xs text-muted-foreground">
+              Existing-patient search requires a connection. Add a new patient
+              to queue the appointment offline.
+            </p>
+          )}
           {selected ? (
             <p className="text-sm">
               Selected: <span className="font-medium">{selected.name}</span>{' '}

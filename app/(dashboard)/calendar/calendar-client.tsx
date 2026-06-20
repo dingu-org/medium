@@ -3,14 +3,20 @@
 import { addDays, format } from 'date-fns';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { ReminderBadge } from '@/components/appointments/badges';
 import { AppointmentSheet } from '@/components/appointments/appointment-sheet';
 import type { AppointmentView } from '@/components/appointments/types';
+import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { EmptyState } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import {
+  listPendingMutations,
+  type PendingMutation,
+  subscribeToQueueChanges,
+} from '@/lib/pwa/client-store';
 import { cn } from '@/lib/utils';
 import { CalendarFab } from './calendar-fab';
 
@@ -60,6 +66,27 @@ export function CalendarClient({
   const [selected, setSelected] = useState<CalendarAppointment | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState(anchorKey);
+  const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>(
+    [],
+  );
+
+  useEffect(() => {
+    let active = true;
+    async function refreshPending() {
+      try {
+        const items = await listPendingMutations();
+        if (active) setPendingMutations(items);
+      } catch {
+        // The dashboard still works if IndexedDB is unavailable.
+      }
+    }
+    void refreshPending();
+    const unsubscribe = subscribeToQueueChanges(refreshPending);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarAppointment[]>();
@@ -75,6 +102,18 @@ export function CalendarClient({
     () => [...new Set(appointments.map((a) => a.dayKey))].map(dateFromKey),
     [appointments],
   );
+
+  const pendingByAppointmentId = useMemo(() => {
+    const map = new Map<string, PendingMutation[]>();
+    for (const mutation of pendingMutations) {
+      const appointmentId = appointmentIdFromMutation(mutation);
+      if (!appointmentId) continue;
+      const list = map.get(appointmentId) ?? [];
+      list.push(mutation);
+      map.set(appointmentId, list);
+    }
+    return map;
+  }, [pendingMutations]);
 
   function navigate(dateKey: string, nextView: 'week' | 'month') {
     router.push(`/calendar?date=${dateKey}&view=${nextView}`, {
@@ -93,6 +132,20 @@ export function CalendarClient({
 
   return (
     <div className="space-y-4">
+      <SnapshotCache
+        cacheKey={`calendar:${anchorKey}:${view}`}
+        kind="calendar"
+        payload={{
+          ptId,
+          timezone,
+          view,
+          anchorKey,
+          todayKey,
+          monthLabel,
+          weekDays,
+          appointments,
+        }}
+      />
       <RealtimeRefresher table="appointments" filter={`pt_id=eq.${ptId}`} />
 
       {/* Header: view toggle + today */}
@@ -183,6 +236,9 @@ export function CalendarClient({
                       <AppointmentRow
                         key={appt.id}
                         appt={appt}
+                        pendingMutations={
+                          pendingByAppointmentId.get(appt.id) ?? []
+                        }
                         onOpen={openAppt}
                       />
                     ))}
@@ -219,7 +275,12 @@ export function CalendarClient({
             ) : (
               <ul className="space-y-1.5">
                 {(byDay.get(selectedDay) ?? []).map((appt) => (
-                  <AppointmentRow key={appt.id} appt={appt} onOpen={openAppt} />
+                  <AppointmentRow
+                    key={appt.id}
+                    appt={appt}
+                    pendingMutations={pendingByAppointmentId.get(appt.id) ?? []}
+                    onOpen={openAppt}
+                  />
                 ))}
               </ul>
             )}
@@ -240,11 +301,14 @@ export function CalendarClient({
 
 function AppointmentRow({
   appt,
+  pendingMutations,
   onOpen,
 }: {
   appt: CalendarAppointment;
+  pendingMutations: PendingMutation[];
   onOpen: (a: CalendarAppointment) => void;
 }) {
+  const pendingLabel = getPendingAppointmentLabel(pendingMutations);
   return (
     <li>
       <button
@@ -267,8 +331,39 @@ function AppointmentRow({
             </span>
           )}
         </span>
+        {pendingLabel && (
+          <span
+            className={cn(
+              'shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+              pendingMutations.some((m) => m.status === 'failed')
+                ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                : 'border-amber-200 bg-amber-50 text-amber-800',
+            )}
+          >
+            {pendingLabel}
+          </span>
+        )}
         <ReminderBadge reminder={appt.reminder} />
       </button>
     </li>
   );
+}
+
+function appointmentIdFromMutation(mutation: PendingMutation): string | null {
+  if (!mutation.type.startsWith('appointment.')) return null;
+  const body = mutation.body as { appointmentId?: unknown } | null;
+  return typeof body?.appointmentId === 'string' ? body.appointmentId : null;
+}
+
+function getPendingAppointmentLabel(mutations: PendingMutation[]): string | null {
+  if (mutations.length === 0) return null;
+  if (mutations.some((m) => m.status === 'failed')) return 'Sync failed';
+  const actions = new Set(
+    mutations.map((m) => (m.body as { action?: unknown } | null)?.action),
+  );
+  if (actions.has('cancel')) return 'Cancel pending';
+  if (actions.has('reschedule')) return 'Move pending';
+  if (actions.has('notes')) return 'Notes pending';
+  if (actions.has('transition')) return 'Status pending';
+  return 'Sync pending';
 }

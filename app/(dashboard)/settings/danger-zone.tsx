@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { deleteAccount, disconnectWhatsApp } from './actions';
 
 export function DangerZone({ connected }: { connected: boolean }) {
@@ -30,8 +31,13 @@ export function DangerZone({ connected }: { connected: boolean }) {
   const [disconnecting, startDisconnect] = useTransition();
   const [deleting, startDelete] = useTransition();
   const [confirmText, setConfirmText] = useState('');
+  const online = useOnlineStatus();
 
   function onDisconnect() {
+    if (!online) {
+      toast.error('Disconnecting WhatsApp requires a connection.');
+      return;
+    }
     startDisconnect(async () => {
       try {
         await disconnectWhatsApp();
@@ -44,6 +50,10 @@ export function DangerZone({ connected }: { connected: boolean }) {
   }
 
   function onDelete() {
+    if (!online) {
+      toast.error('Deleting your account requires a connection.');
+      return;
+    }
     startDelete(async () => {
       try {
         await deleteAccount();
@@ -60,10 +70,15 @@ export function DangerZone({ connected }: { connected: boolean }) {
         <CardDescription>These actions cannot be undone.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {!online && (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Account and WhatsApp connection actions require a connection.
+          </p>
+        )}
         {connected && (
           <Dialog>
             <DialogTrigger asChild>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" disabled={!online}>
                 Disconnect WhatsApp
               </Button>
             </DialogTrigger>
@@ -82,7 +97,7 @@ export function DangerZone({ connected }: { connected: boolean }) {
                 <Button
                   variant="destructive"
                   onClick={onDisconnect}
-                  disabled={disconnecting}
+                  disabled={disconnecting || !online}
                 >
                   {disconnecting ? 'Disconnecting…' : 'Disconnect'}
                 </Button>
@@ -93,7 +108,7 @@ export function DangerZone({ connected }: { connected: boolean }) {
 
         <Dialog onOpenChange={() => setConfirmText('')}>
           <DialogTrigger asChild>
-            <Button variant="destructive" className="w-full">
+            <Button variant="destructive" className="w-full" disabled={!online}>
               Delete account
             </Button>
           </DialogTrigger>
@@ -124,7 +139,7 @@ export function DangerZone({ connected }: { connected: boolean }) {
               <Button
                 variant="destructive"
                 onClick={onDelete}
-                disabled={deleting || confirmText !== 'DELETE'}
+                disabled={deleting || !online || confirmText !== 'DELETE'}
               >
                 {deleting ? 'Deleting…' : 'Delete account'}
               </Button>

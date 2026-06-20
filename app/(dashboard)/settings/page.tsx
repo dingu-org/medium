@@ -1,7 +1,7 @@
-import { desc, eq } from 'drizzle-orm';
 import { CalendarClock, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { Badge } from '@/components/ui/badge';
 import {
   Card,
@@ -11,13 +11,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { GRAPH_VERSION } from '@/lib/channels/whatsapp/constants';
-import { db } from '@/lib/db';
-import { pts, whatsappConnections } from '@/lib/db/schema';
+import { getSettingsSnapshot } from '@/lib/pwa/read-models';
 import { createServerClient } from '@/lib/supabase/server';
-import {
-  NOTIFICATION_PREF_KEYS,
-  type NotificationPrefs,
-} from './constants';
 import { ConnectWhatsApp } from './connect-whatsapp';
 import { DangerZone } from './danger-zone';
 import { PracticeSettingsForm } from './practice-settings-form';
@@ -32,16 +27,6 @@ function ConnectionBadge({ status }: { status: string | null }) {
   return <Badge variant="outline">Not connected</Badge>;
 }
 
-function resolvePrefs(raw: unknown): NotificationPrefs {
-  const value = (raw ?? {}) as Record<string, unknown>;
-  return Object.fromEntries(
-    NOTIFICATION_PREF_KEYS.map((key) => [
-      key,
-      value[key] === undefined ? true : value[key] === true,
-    ]),
-  ) as NotificationPrefs;
-}
-
 export default async function SettingsPage() {
   const supabase = await createServerClient();
   const {
@@ -49,46 +34,23 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
 
-  const [[pt], [connection]] = await Promise.all([
-    db
-      .select({
-        practiceName: pts.practiceName,
-        timezone: pts.timezone,
-        aiName: pts.aiName,
-        aiGreeting: pts.aiGreeting,
-        aiEscalationKeyword: pts.aiEscalationKeyword,
-        retentionDays: pts.retentionDays,
-        notificationPrefs: pts.notificationPrefs,
-      })
-      .from(pts)
-      .where(eq(pts.id, user.id))
-      .limit(1),
-    db
-      .select({
-        status: whatsappConnections.status,
-        phoneNumberId: whatsappConnections.phoneNumberId,
-      })
-      .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, user.id))
-      .orderBy(desc(whatsappConnections.createdAt))
-      .limit(1),
-  ]);
-
-  const status = connection?.status ?? null;
+  const snapshot = await getSettingsSnapshot(user.id);
+  const status = snapshot.whatsappStatus;
   const connected = status === 'active';
   const appId = process.env.NEXT_PUBLIC_META_APP_ID ?? '';
   const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID ?? '';
 
   return (
     <div className="space-y-4">
+      <SnapshotCache cacheKey="settings" kind="settings" payload={snapshot} />
       <PracticeSettingsForm
-        practiceName={pt?.practiceName ?? ''}
-        timezone={pt?.timezone ?? 'Europe/Berlin'}
-        aiName={pt?.aiName ?? ''}
-        aiGreeting={pt?.aiGreeting ?? ''}
-        aiEscalationKeyword={pt?.aiEscalationKeyword ?? ''}
-        retentionDays={pt?.retentionDays ?? 90}
-        notificationPrefs={resolvePrefs(pt?.notificationPrefs)}
+        practiceName={snapshot.practiceName}
+        timezone={snapshot.timezone}
+        aiName={snapshot.aiName}
+        aiGreeting={snapshot.aiGreeting}
+        aiEscalationKeyword={snapshot.aiEscalationKeyword}
+        retentionDays={snapshot.retentionDays}
+        notificationPrefs={snapshot.notificationPrefs}
       />
 
       <Link href="/settings/availability" className="block">
@@ -130,10 +92,12 @@ export default async function SettingsPage() {
               messaging.
             </p>
           )}
-          {connected && connection?.phoneNumberId && (
+          {connected && snapshot.whatsappPhoneNumberId && (
             <p className="text-muted-foreground text-sm">
               Connected number ID:{' '}
-              <span className="font-mono">{connection.phoneNumberId}</span>
+              <span className="font-mono">
+                {snapshot.whatsappPhoneNumberId}
+              </span>
             </p>
           )}
           <ConnectWhatsApp

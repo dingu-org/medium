@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { ONBOARDING_SKIP_COOKIE } from '@/app/onboarding/constants';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { TopHeader } from '@/components/dashboard/top-header';
+import { PwaProvider } from '@/components/pwa/pwa-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
@@ -48,6 +49,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         unreadCount={notifications.unreadCount}
         notifications={notifications.items}
       />
+      <PwaProvider />
       <main className="mx-auto max-w-md px-4 pt-4 pb-20">{children}</main>
       <BottomNav />
       <Toaster />
