@@ -38,9 +38,11 @@ type QueueCounts = {
   total: number;
 };
 
+export type QueueReason = 'offline' | 'retryable';
+
 type SendResult =
   | { status: 'sent'; response: unknown }
-  | { status: 'queued'; mutation: PendingMutation }
+  | { status: 'queued'; mutation: PendingMutation; reason: QueueReason }
   | { status: 'failed'; error: string; statusCode?: number };
 
 interface MediumPwaDb extends DBSchema {
@@ -180,6 +182,7 @@ export async function sendOrQueueMutation(input: {
     return {
       status: 'queued',
       mutation: await enqueueMutation(input),
+      reason: 'offline',
     };
   }
 
@@ -197,11 +200,9 @@ export async function sendOrQueueMutation(input: {
       };
     }
     return {
-      status: 'queued',
-      mutation: await enqueueMutation({
-        ...input,
-        lastError: response.error,
-      }),
+      status: 'failed',
+      error: response.error,
+      statusCode: response.status,
     };
   } catch (error) {
     return {
@@ -211,6 +212,7 @@ export async function sendOrQueueMutation(input: {
         lastError:
           error instanceof Error ? error.message : 'Network unavailable.',
       }),
+      reason: navigator.onLine ? 'retryable' : 'offline',
     };
   }
 }

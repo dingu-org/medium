@@ -85,6 +85,13 @@
       "when": 1781884244708,
       "tag": "0011_phase8_pwa",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782004187545,
+      "tag": "0012_whatsapp_coexistence",
+      "breakpoints": true
     }
   ]
 }

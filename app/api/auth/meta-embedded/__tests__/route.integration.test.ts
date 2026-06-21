@@ -75,10 +75,14 @@ function makePost(
   }) as unknown as NextRequest;
 }
 
-const validBody = (phoneNumberId: string) => ({
+const validBody = (
+  phoneNumberId: string,
+  mode: 'cloud_api' | 'coexistence' = 'coexistence',
+) => ({
   code: 'AUTH_CODE_xyz',
   phoneNumberId,
   wabaId: 'WABA_123',
+  mode,
 });
 
 beforeAll(async () => {
@@ -151,6 +155,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
       .spyOn(inngest, 'send')
       .mockResolvedValue({ ids: [] } as never);
     const phoneNumberId = nextPni();
+    const fetchSpy = vi.mocked(fetch);
 
     const res = await POST(makePost(validBody(phoneNumberId)));
     expect(res.status).toBe(200);
@@ -162,10 +167,16 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
       .where(eq(whatsappConnections.ptId, ptId));
     expect(row.phoneNumberId).toBe(phoneNumberId);
     expect(row.wabaId).toBe('WABA_123');
+    expect(row.mode).toBe('coexistence');
+    expect(row.coexistenceSyncStatus).toBe('pending');
+    expect(row.coexistenceSyncDeadlineAt).toBeInstanceOf(Date);
     expect(row.status).toBe('active');
     expect(row.connectedAt).toBeInstanceOf(Date);
     expect(row.accessTokenEncrypted).toBeInstanceOf(Buffer);
     expect(await decryptToken(row.accessTokenEncrypted!)).toBe(BIZ_TOKEN);
+    expect(
+      fetchSpy.mock.calls.some(([input]) => String(input).includes('/register')),
+    ).toBe(false);
 
     expect(sendSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -176,10 +187,67 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
           connectionId: row.id,
           phoneNumberId,
           wabaId: 'WABA_123',
+          mode: 'coexistence',
         },
       }),
     );
     expect(row.tokenExpiresAt).not.toBeNull();
+  });
+
+  it('resolves the phone number from the WABA when coexistence only returns waba_id', async () => {
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
+    const phoneNumberId = nextPni();
+    const fetchSpy = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes('/oauth/access_token')) {
+        return new Response(JSON.stringify({ access_token: BIZ_TOKEN }), {
+          status: 200,
+        });
+      }
+      if (url.includes('/WABA_123/phone_numbers')) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: phoneNumberId,
+                display_phone_number: '+15551234567',
+                platform_type: 'CLOUD_API',
+                is_on_biz_app: true,
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
+
+    const res = await POST(
+      makePost({ code: 'AUTH_CODE_xyz', wabaId: 'WABA_123' }),
+    );
+    expect(res.status).toBe(200);
+
+    const [row] = await db
+      .select()
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+    expect(row.phoneNumberId).toBe(phoneNumberId);
+    expect(row.mode).toBe('coexistence');
+    expect(
+      fetchSpy.mock.calls.some(([input]) => String(input).includes('/register')),
+    ).toBe(false);
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'wa.connection.created',
+        data: expect.objectContaining({
+          phoneNumberId,
+          mode: 'coexistence',
+        }),
+      }),
+    );
   });
 
   it('reconnect by the same PT updates the existing row, no duplicate', async () => {
@@ -205,13 +273,15 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     );
     const phoneNumberId = nextPni();
 
-    const res = await POST(makePost(validBody(phoneNumberId)));
+    const res = await POST(makePost(validBody(phoneNumberId, 'cloud_api')));
     expect(res.status).toBe(200);
     const rows = await db
       .select()
       .from(whatsappConnections)
       .where(eq(whatsappConnections.ptId, ptId));
     expect(rows).toHaveLength(1);
+    expect(rows[0].mode).toBe('cloud_api');
+    expect(rows[0].coexistenceSyncStatus).toBe('not_applicable');
   });
 });
 

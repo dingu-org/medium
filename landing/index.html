@@ -220,6 +220,8 @@ section{padding:clamp(56px,9vw,var(--s-20)) 0}
   display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-4)}
 .site-footer .brand-lockup{height:24px}
 .site-footer .meta{display:flex;flex-direction:column;gap:2px;text-align:right}
+.footer-links{display:flex;justify-content:flex-end;gap:var(--s-3);font-size:var(--fs-13);color:var(--fg-3)}
+.footer-links a:hover{color:var(--fg-1);text-decoration:underline}
 
 /* ---------- responsive ---------- */
 @media (max-width:920px){
@@ -233,6 +235,7 @@ section{padding:clamp(56px,9vw,var(--s-20)) 0}
   .feature-grid{grid-template-columns:1fr}
   .site-footer .wrap{flex-direction:column;text-align:center}
   .site-footer .meta{text-align:center}
+  .footer-links{justify-content:center}
 }
 @media (max-width:420px){
   .header-cta-label{display:none}
@@ -449,6 +452,10 @@ section{padding:clamp(56px,9vw,var(--s-20)) 0}
     </svg>
     <div class="meta">
       <span class="t-caption" data-en="The medium between your business and its clients.">Mediumi mes biznesit tënd dhe klientëve të tij.</span>
+      <span class="footer-links">
+        <a href="/privacy" data-en="Privacy policy">Politika e privatësisë</a>
+        <a href="/terms" data-en="Terms of service">Kushtet e shërbimit</a>
+      </span>
       <span class="t-caption">© 2026 Medium</span>
     </div>
   </div>

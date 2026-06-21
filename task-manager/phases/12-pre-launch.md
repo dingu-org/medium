@@ -60,8 +60,8 @@ Run on a fresh staging environment with a real WhatsApp number:
 ### Public docs
 
 - [ ] Landing page (basic — single page is fine).
-- [ ] Privacy policy (final version reflecting Phase 10 work).
-- [ ] Terms of service.
+- [x] Privacy policy (draft route at `/privacy`, reflecting Phase 10 controller/processor, retention, AI, and subprocessors).
+- [x] Terms of service (draft route at `/terms`).
 - [ ] Onboarding help: 3 short pages — "Connect your WhatsApp", "Set your availability", "How the AI handles bookings".
 - [ ] Contact / support email.
 

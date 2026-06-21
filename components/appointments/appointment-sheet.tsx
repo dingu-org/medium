@@ -117,7 +117,11 @@ export function AppointmentSheet({
           return;
         }
         if (res.status === 'queued') {
-          toast.success('Change queued. It will sync when you’re online.');
+          toast.success(
+            res.reason === 'offline'
+              ? 'Change queued. It will sync when you’re online.'
+              : 'Change queued. It will retry automatically.',
+          );
           close();
           return;
         }
@@ -143,7 +147,11 @@ export function AppointmentSheet({
           toast.success('Notes saved.');
           router.refresh();
         } else if (res.status === 'queued') {
-          toast.success('Notes queued. They will sync when you’re online.');
+          toast.success(
+            res.reason === 'offline'
+              ? 'Notes queued. They will sync when you’re online.'
+              : 'Notes queued. They will retry automatically.',
+          );
         } else {
           toast.error(res.error);
         }

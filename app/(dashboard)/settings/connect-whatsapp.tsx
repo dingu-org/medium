@@ -52,7 +52,7 @@ function loadFbSdk(appId: string, version: string): Promise<void> {
 function errorMessage(kind: unknown): string {
   switch (kind) {
     case 'duplicate_number':
-      return 'That number is already connected elsewhere. Disconnect it from regular WhatsApp first, then retry.';
+      return 'That number is already connected to another provider. Disconnect it there, then retry.';
     case 'rejected':
       return 'Meta could not verify the business. Check your details and try again.';
     case 'token_exchange_failed':
@@ -123,13 +123,17 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
           config_id: configId,
           response_type: 'code',
           override_default_response_type: true,
-          extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+          extras: {
+            setup: {},
+            featureType: 'whatsapp_business_app_onboarding',
+            sessionInfoVersion: '3',
+          },
         });
       });
 
       const code = loginResp.authResponse?.code;
       const { phoneNumberId, wabaId } = sessionInfo.current;
-      if (!code || !phoneNumberId || !wabaId) {
+      if (!code || !wabaId) {
         toast.info('Connection incomplete — you can resume anytime.');
         return;
       }
@@ -138,11 +142,16 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ code, phoneNumberId, wabaId }),
+        body: JSON.stringify({
+          code,
+          phoneNumberId,
+          wabaId,
+          mode: 'coexistence',
+        }),
       });
 
       if (res.ok) {
-        toast.success('WhatsApp connected.');
+        toast.success('WhatsApp Business app connected. Sync is starting.');
         router.refresh();
         return;
       }
@@ -166,8 +175,8 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
         {pending
           ? 'Connecting…'
           : connected
-            ? 'Reconnect WhatsApp'
-            : 'Connect WhatsApp'}
+            ? 'Reconnect WhatsApp Business app'
+            : 'Connect WhatsApp Business app'}
       </Button>
       {!online && (
         <p className="text-xs text-muted-foreground">

@@ -164,10 +164,16 @@ export function PwaProvider() {
   }, []);
 
   const statusText = useMemo(() => {
-    if (!online) return "You're offline. Showing last loaded data.";
+    if (!online) {
+      const queueText =
+        counts.pending > 0
+          ? ` ${counts.pending} changes will sync when online.`
+          : '';
+      return `You're offline. Showing last loaded data.${queueText}`;
+    }
     if (counts.failed > 0) return `${counts.failed} changes need attention.`;
     if (counts.pending > 0) {
-      return `${counts.pending} changes will sync when online.`;
+      return `${counts.pending} changes are waiting to sync.`;
     }
     return null;
   }, [counts.failed, counts.pending, online]);

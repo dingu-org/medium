@@ -133,7 +133,11 @@ export function ChatThread({
         }
         if (res.status === 'queued') {
           setAiActive(false);
-          toast.success('Message queued. It will send when you’re online.');
+          toast.success(
+            res.reason === 'offline'
+              ? 'Message queued. It will send when you’re online.'
+              : 'Message queued. It will retry automatically.',
+          );
           return;
         }
         setOptimisticMessages((items) =>

@@ -33,6 +33,18 @@ export const connectionStatus = pgEnum('connection_status', [
   'active',
   'revoked',
 ]);
+export const whatsappConnectionMode = pgEnum('whatsapp_connection_mode', [
+  'cloud_api',
+  'coexistence',
+]);
+export const coexistenceSyncStatus = pgEnum('coexistence_sync_status', [
+  'not_applicable',
+  'pending',
+  'syncing',
+  'complete',
+  'failed',
+  'history_declined',
+]);
 export const messageRole = pgEnum('message_role', ['patient', 'ai', 'pt']);
 export const appointmentStatus = pgEnum('appointment_status', [
   'pending',
@@ -98,6 +110,17 @@ export const whatsappConnections = pgTable(
     phoneNumberId: text('phone_number_id').notNull(),
     wabaId: text('waba_id').notNull(),
     accessTokenEncrypted: bytea('access_token_encrypted'),
+    mode: whatsappConnectionMode('mode').notNull().default('cloud_api'),
+    coexistenceSyncStatus: coexistenceSyncStatus(
+      'coexistence_sync_status',
+    )
+      .notNull()
+      .default('not_applicable'),
+    coexistenceSyncDeadlineAt: tsTz('coexistence_sync_deadline_at'),
+    coexistenceContactsRequestId: text('coexistence_contacts_request_id'),
+    coexistenceHistoryRequestId: text('coexistence_history_request_id'),
+    coexistenceLastProgress: integer('coexistence_last_progress'),
+    coexistenceLastError: text('coexistence_last_error'),
     tier: text('tier'),
     qualityRating: text('quality_rating'),
     connectedAt: tsTz('connected_at'),
@@ -110,6 +133,28 @@ export const whatsappConnections = pgTable(
   // unambiguous and lets the Embedded Signup callback detect a duplicate connect.
   (t) => [
     uniqueIndex('whatsapp_connections_phone_number_id_uq').on(t.phoneNumberId),
+  ],
+);
+
+export const whatsappContacts = pgTable(
+  'whatsapp_contacts',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    phone: text('phone').notNull(),
+    waId: text('wa_id'),
+    fullName: text('full_name'),
+    firstName: text('first_name'),
+    sourceAction: text('source_action'),
+    lastSyncedAt: tsTz('last_synced_at').notNull().default(now),
+    deletedAt: tsTz('deleted_at'),
+    createdAt: tsTz('created_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('whatsapp_contacts_pt_phone_uq').on(t.ptId, t.phone),
+    uniqueIndex('whatsapp_contacts_pt_wa_id_uq')
+      .on(t.ptId, t.waId)
+      .where(sql`${t.waId} IS NOT NULL`),
   ],
 );
 
@@ -139,6 +184,8 @@ export const conversations = pgTable(
     channel: text('channel').notNull(),
     lastInboundAt: tsTz('last_inbound_at'),
     aiActive: boolean('ai_active').notNull().default(true),
+    aiPausedUntil: tsTz('ai_paused_until'),
+    aiPauseReason: text('ai_pause_reason'),
     escalationState: text('escalation_state').notNull().default('idle'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
@@ -148,6 +195,9 @@ export const conversations = pgTable(
       t.ptId,
       t.lastInboundAt.desc(),
     ),
+    index('conversations_ai_pause_idx')
+      .on(t.ptId, t.aiPausedUntil)
+      .where(sql`${t.aiPausedUntil} IS NOT NULL`),
   ],
 );
 

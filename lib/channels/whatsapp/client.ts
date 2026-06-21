@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/schema';
 import { decryptToken } from '@/lib/db/crypto';
 import { appendBackgroundEvent } from '@/lib/events/background';
+import type { BackgroundEventPayloads } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { graphFetch } from './graph';
 import {
@@ -28,6 +29,9 @@ type ActiveConnection = {
 };
 
 export type SendResult = { messageId: string | null };
+export type CoexistenceSyncType = 'smb_app_state_sync' | 'history';
+type RevocationReason =
+  BackgroundEventPayloads['wa.connection.revoked']['reason'];
 
 /** Load an active connection and decrypt its token at the call site. */
 async function getConnection(connectionId: string): Promise<ActiveConnection> {
@@ -55,7 +59,7 @@ async function getConnection(connectionId: string): Promise<ActiveConnection> {
 async function markRevoked(
   connectionId: string,
   ptId: string,
-  reason: 'unauthorized' | 'forbidden',
+  reason: RevocationReason,
 ): Promise<void> {
   const eventId = await db.transaction(async (tx) => {
     const [updated] = await tx
@@ -76,6 +80,14 @@ async function markRevoked(
     });
   });
   if (eventId) await tryPublishOutboxEvent(eventId);
+}
+
+export async function markConnectionRevoked(args: {
+  connectionId: string;
+  ptId: string;
+  reason: RevocationReason;
+}): Promise<void> {
+  await markRevoked(args.connectionId, args.ptId, args.reason);
 }
 
 /** Graph call that turns an auth failure into a revoked connection. Token never logged. */
@@ -255,4 +267,19 @@ export async function getQualityRating(connectionId: string): Promise<{
     qualityRating: result.quality_rating?.toUpperCase() || 'UNKNOWN',
     tier: result.messaging_limit_tier ?? null,
   };
+}
+
+export async function requestCoexistenceSync(
+  connectionId: string,
+  syncType: CoexistenceSyncType,
+): Promise<{ requestId: string | null }> {
+  const conn = await getConnection(connectionId);
+  const result = await authedGraph<{
+    messaging_product?: string;
+    request_id?: string;
+  }>(conn, `${conn.phoneNumberId}/smb_app_data`, {
+    method: 'POST',
+    body: { messaging_product: 'whatsapp', sync_type: syncType },
+  });
+  return { requestId: result.request_id ?? null };
 }

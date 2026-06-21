@@ -15,11 +15,23 @@ export const backgroundEventSchemas = {
     connectionId: z.uuid(),
     phoneNumberId: z.string().min(1),
     wabaId: z.string().min(1),
+    mode: z.enum(['cloud_api', 'coexistence']).default('cloud_api'),
   }),
   'wa.connection.revoked': z.object({
     ptId: z.uuid(),
     connectionId: z.uuid(),
-    reason: z.enum(['unauthorized', 'forbidden']),
+    reason: z.enum([
+      'unauthorized',
+      'forbidden',
+      'partner_removed',
+      'account_disconnected',
+      'primary_inactivity',
+      'companion_inactivity',
+      'user_re_registered',
+      'change_number',
+      'business_downgrade',
+      'unknown',
+    ]),
   }),
   'wa.connection.expiring': z.object({
     ptId: z.uuid(),
@@ -63,6 +75,13 @@ export const backgroundEventSchemas = {
     ptId: z.uuid(),
     conversationId: z.uuid(),
     patientId: z.uuid(),
+  }),
+  'conversation.ai_paused': z.object({
+    ptId: z.uuid(),
+    conversationId: z.uuid(),
+    patientId: z.uuid(),
+    pausedUntil: isoDateTime,
+    reason: z.literal('whatsapp_business_app_echo'),
   }),
   'notification.requested': z.object({
     ptId: z.uuid(),

@@ -29,8 +29,9 @@ const APP_URL = requireEnv('NEXT_PUBLIC_APP_URL');
 
 const bodySchema = z.object({
   code: z.string().min(1),
-  phoneNumberId: z.string().min(1),
+  phoneNumberId: z.string().min(1).optional(),
   wabaId: z.string().min(1),
+  mode: z.enum(['cloud_api', 'coexistence']).default('coexistence'),
 });
 
 const STATUS_BY_KIND: Record<MetaSignupErrorKind, number> = {
@@ -70,12 +71,20 @@ export async function POST(req: NextRequest) {
   } catch {
     return new Response('Bad request', { status: 400 });
   }
-  const { code, phoneNumberId, wabaId } = payload;
+  const { code, wabaId, mode } = payload;
 
   try {
     const token = await exchangeCodeForToken(code);
+    const phoneNumberId = await resolvePhoneNumberId({
+      wabaId,
+      token: token.accessToken,
+      providedPhoneNumberId: payload.phoneNumberId,
+      mode,
+    });
 
-    await registerPhoneNumber(phoneNumberId, token.accessToken);
+    if (mode === 'cloud_api') {
+      await registerPhoneNumber(phoneNumberId, token.accessToken);
+    }
     await subscribeApp(wabaId, token.accessToken); // also validates the token before we persist
 
     const encrypted = await encryptToken(token.accessToken);
@@ -86,6 +95,7 @@ export async function POST(req: NextRequest) {
       ptId,
       phoneNumberId,
       wabaId,
+      mode,
       encrypted,
       tokenExpiresAt,
     });
@@ -106,6 +116,54 @@ export async function POST(req: NextRequest) {
     });
     return Response.json({ ok: false, error: 'graph_error' }, { status: 502 });
   }
+}
+
+async function resolvePhoneNumberId(args: {
+  wabaId: string;
+  token: string;
+  providedPhoneNumberId?: string;
+  mode: 'cloud_api' | 'coexistence';
+}): Promise<string> {
+  if (args.providedPhoneNumberId) return args.providedPhoneNumberId;
+  if (args.mode === 'cloud_api') {
+    throw new MetaSignupError(
+      'rejected',
+      'Cloud API signup did not provide a phone_number_id',
+    );
+  }
+
+  let res: {
+    data?: {
+      id?: string;
+      platform_type?: string;
+      is_on_biz_app?: boolean;
+      display_phone_number?: string;
+    }[];
+  };
+  try {
+    res = await graphFetch(args.wabaId + '/phone_numbers', {
+      token: args.token,
+      searchParams: {
+        fields: 'id,display_phone_number,platform_type,is_on_biz_app',
+      },
+    });
+  } catch (err) {
+    throw new MetaSignupError(
+      'graph_error',
+      err instanceof Error ? err.message : undefined,
+    );
+  }
+
+  const numbers = (res.data ?? []).filter((row) => row.id);
+  const appNumbers = numbers.filter((row) => row.is_on_biz_app === true);
+  const chosen = appNumbers.length === 1 ? appNumbers[0] : numbers[0];
+  if (!chosen?.id || (appNumbers.length !== 1 && numbers.length !== 1)) {
+    throw new MetaSignupError(
+      'rejected',
+      'Could not resolve a unique WhatsApp Business app phone number',
+    );
+  }
+  return chosen.id;
 }
 
 /** Exchange the Embedded Signup auth code for the long-lived business token. */
@@ -194,11 +252,13 @@ async function persistConnection(args: {
   ptId: string;
   phoneNumberId: string;
   wabaId: string;
+  mode: 'cloud_api' | 'coexistence';
   encrypted: Buffer;
   tokenExpiresAt: Date;
 }): Promise<{ connectionId: string; eventId: string }> {
-  const { ptId, phoneNumberId, wabaId, encrypted, tokenExpiresAt } = args;
+  const { ptId, phoneNumberId, wabaId, mode, encrypted, tokenExpiresAt } = args;
   const svc = getServiceClient(ptId);
+  const coexistence = mode === 'coexistence';
 
   try {
     return await svc.db.transaction(async (tx) => {
@@ -209,6 +269,15 @@ async function persistConnection(args: {
           phoneNumberId,
           wabaId,
           accessTokenEncrypted: encrypted,
+          mode,
+          coexistenceSyncStatus: coexistence ? 'pending' : 'not_applicable',
+          coexistenceSyncDeadlineAt: coexistence
+            ? sql`now() + interval '24 hours'`
+            : null,
+          coexistenceContactsRequestId: null,
+          coexistenceHistoryRequestId: null,
+          coexistenceLastProgress: null,
+          coexistenceLastError: null,
           status: 'active',
           connectedAt: sql`now()`,
           tokenExpiresAt,
@@ -221,6 +290,7 @@ async function persistConnection(args: {
           connectionId: row.id,
           phoneNumberId,
           wabaId,
+          mode,
         },
       });
       return { connectionId: row.id, eventId };
@@ -244,6 +314,15 @@ async function persistConnection(args: {
         .set({
           wabaId,
           accessTokenEncrypted: encrypted,
+          mode,
+          coexistenceSyncStatus: coexistence ? 'pending' : 'not_applicable',
+          coexistenceSyncDeadlineAt: coexistence
+            ? sql`now() + interval '24 hours'`
+            : null,
+          coexistenceContactsRequestId: null,
+          coexistenceHistoryRequestId: null,
+          coexistenceLastProgress: null,
+          coexistenceLastError: null,
           status: 'active',
           connectedAt: sql`now()`,
           tokenExpiresAt,
@@ -257,6 +336,7 @@ async function persistConnection(args: {
           connectionId: existing.id,
           phoneNumberId,
           wabaId,
+          mode,
         },
       });
       return { connectionId: existing.id, eventId };

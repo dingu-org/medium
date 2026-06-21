@@ -130,6 +130,51 @@ describe('handleInboundMessage cores', () => {
     });
   });
 
+  it('keeps AI inactive while a Business app echo pause is current', async () => {
+    await db
+      .update(conversations)
+      .set({
+        aiActive: false,
+        aiPausedUntil: new Date(Date.now() + 60 * 60 * 1000),
+        aiPauseReason: 'whatsapp_business_app_echo',
+      })
+      .where(eq(conversations.id, conversationId));
+
+    const context = await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    });
+
+    expect(context?.aiActive).toBe(false);
+  });
+
+  it('clears an expired Business app echo pause before processing inbound AI', async () => {
+    await db
+      .update(conversations)
+      .set({
+        aiActive: false,
+        aiPausedUntil: new Date(Date.now() - 60_000),
+        aiPauseReason: 'whatsapp_business_app_echo',
+      })
+      .where(eq(conversations.id, conversationId));
+
+    const context = await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    });
+
+    expect(context?.aiActive).toBe(true);
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conversation.aiActive).toBe(true);
+    expect(conversation.aiPausedUntil).toBeNull();
+    expect(conversation.aiPauseReason).toBeNull();
+  });
+
   it('translates non-retriable engine states into skips', async () => {
     const context = (await loadInboundJobContext({
       messageId: inboundMessageId,

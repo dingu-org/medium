@@ -7,7 +7,10 @@ type StoredMutation = {
   status: string;
   result: unknown;
   error: string | null;
+  updatedAt: Date;
 };
+
+const STALE_PROCESSING_MS = 2 * 60 * 1000;
 
 export type MutationStart =
   | { kind: 'new'; id: string }
@@ -39,6 +42,7 @@ export async function beginPwaMutation(input: {
       status: pwaMutations.status,
       result: pwaMutations.result,
       error: pwaMutations.error,
+      updatedAt: pwaMutations.updatedAt,
     })
     .from(pwaMutations)
     .where(
@@ -48,6 +52,20 @@ export async function beginPwaMutation(input: {
       ),
     )
     .limit(1);
+
+  if (isStaleProcessing(existing)) {
+    await db
+      .update(pwaMutations)
+      .set({ updatedAt: new Date(), result: null, error: null })
+      .where(
+        and(
+          eq(pwaMutations.ptId, input.ptId),
+          eq(pwaMutations.clientMutationId, input.clientMutationId),
+          eq(pwaMutations.status, 'processing'),
+        ),
+      );
+    return { kind: 'new', id: existing.id };
+  }
 
   return existingState(existing);
 }
@@ -61,6 +79,13 @@ function existingState(existing: StoredMutation | undefined): MutationStart {
     return { kind: 'failed', error: existing.error ?? 'Mutation failed.' };
   }
   return { kind: 'processing' };
+}
+
+function isStaleProcessing(existing: StoredMutation | undefined): existing is StoredMutation {
+  return (
+    existing?.status === 'processing' &&
+    Date.now() - existing.updatedAt.getTime() > STALE_PROCESSING_MS
+  );
 }
 
 export async function completePwaMutation(input: {

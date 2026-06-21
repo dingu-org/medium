@@ -50,6 +50,8 @@ export async function loadInboundJobContext(args: {
       createdAt: messages.createdAt,
       conversationId: conversations.id,
       aiActive: conversations.aiActive,
+      aiPausedUntil: conversations.aiPausedUntil,
+      aiPauseReason: conversations.aiPauseReason,
       patientId: patients.id,
       waId: patients.waId,
     })
@@ -69,6 +71,35 @@ export async function loadInboundJobContext(args: {
     .limit(1);
 
   if (!row) return null;
+
+  let aiActive = row.aiActive;
+  if (
+    row.aiPauseReason === 'whatsapp_business_app_echo' &&
+    row.aiPausedUntil
+  ) {
+    if (row.aiPausedUntil.getTime() <= Date.now()) {
+      const [updated] = await db
+        .update(conversations)
+        .set({
+          aiActive: true,
+          aiPausedUntil: null,
+          aiPauseReason: null,
+          escalationState: 'idle',
+        })
+        .where(
+          and(
+            eq(conversations.id, row.conversationId),
+            eq(conversations.ptId, args.ptId),
+            eq(conversations.aiPauseReason, 'whatsapp_business_app_echo'),
+            eq(conversations.aiPausedUntil, row.aiPausedUntil),
+          ),
+        )
+        .returning({ id: conversations.id });
+      aiActive = Boolean(updated);
+    } else {
+      aiActive = false;
+    }
+  }
 
   const [connection] = await db
     .select({ id: whatsappConnections.id })
@@ -92,7 +123,7 @@ export async function loadInboundJobContext(args: {
       externalId: row.externalId,
       occurredAt: row.createdAt.toISOString(),
     },
-    aiActive: row.aiActive,
+    aiActive,
     connectionId: connection?.id ?? null,
     recipient: row.waId,
   };

@@ -96,7 +96,11 @@ export async function sendPtMessage(
     });
     await tx
       .update(conversations)
-      .set({ aiActive: false })
+      .set({
+        aiActive: false,
+        aiPausedUntil: null,
+        aiPauseReason: null,
+      })
       .where(
         and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
       );
@@ -121,8 +125,17 @@ export async function setTakeover(
       .update(conversations)
       .set(
         takeover
-          ? { aiActive: false }
-          : { aiActive: true, escalationState: 'idle' },
+          ? {
+              aiActive: false,
+              aiPausedUntil: null,
+              aiPauseReason: null,
+            }
+          : {
+              aiActive: true,
+              aiPausedUntil: null,
+              aiPauseReason: null,
+              escalationState: 'idle',
+            },
       )
       .where(
         and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),

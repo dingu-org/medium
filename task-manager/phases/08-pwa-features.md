@@ -83,5 +83,7 @@
 
 ## Browser verification notes
 
+- 2026-06-21: Applied missing live Supabase migration `0011_phase8_pwa` with `pnpm db:migrate`. Verified live Drizzle journal has all 12 local hashes, `public.pwa_mutations` exists, indexes `pwa_mutations_pt_client_id_uq` and `pwa_mutations_pt_status_idx` exist, RLS is enabled, and tenant policy `pwa_mutations_tenant_isolation` exists.
+- 2026-06-21: Fixed chat/offline false-positive behavior reported from real use. Direct online PWA mutation server responses now fail visibly instead of being queued with "when online" copy; thrown fetch/network failures retain queue behavior with `offline` vs `retryable` reasons. Message mutation route now records WhatsApp send failures instead of leaving `pwa_mutations` stuck in `processing`, and stale processing rows can be reclaimed after two minutes. Verified `pnpm test:all` (267/267), `pnpm typecheck`, `pnpm lint`, and `pnpm build`.
 - 2026-06-19: Production-mode local smoke with `.env.test` passed for generated `/sw.js`, manifest, icon serving, cached `/calendar` and `/chat/:id` route fallback with `next start` stopped, appointment notes queueing while the server was stopped, appointment replay after restart/reload, and database persistence of the replayed notes mutation.
 - 2026-06-19: Manual PT chat send queued while the server was stopped and showed the optimistic outbound bubble plus pending banner. Replay success was not claimed locally because message replay requires a real active WhatsApp Graph send path.

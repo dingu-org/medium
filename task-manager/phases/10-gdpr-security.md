@@ -17,7 +17,7 @@
 - [ ] Verify `purgeExpiredMessages` (Phase 5) deletes messages older than `pts.retention_days`.
 - [ ] Test with fixture: PT with `retention_days = 30`, message dated 31 days ago → deleted.
 - [ ] Aggregate metrics (counts) retained indefinitely in `events` (anonymised — no patient PII).
-- [ ] Document the policy in the privacy page (Phase 12 ships the page; copy is drafted here).
+- [x] Document the policy in the privacy page (Phase 12 ships the page; copy is drafted here).
 
 ### Right to erasure (per-patient)
 
@@ -71,7 +71,7 @@
 
 ### Controller / processor split
 
-- [ ] Privacy policy reflects PT as data controller, Medium as processor.
+- [x] Privacy policy reflects PT as data controller, Medium as processor.
 - [ ] DPA template ready for PT customers (not blocking MVP, but should exist).
 - [ ] Subprocessor list: Supabase, Vercel, OpenRouter, Inngest, Meta, plus whichever upstream AI providers OpenRouter uses in production.
 
@@ -89,7 +89,7 @@
 - [ ] Per-patient export returns expected JSON shape; matches what a DSAR (data subject access request) would expect.
 - [ ] Audit log shows entries for every read, write, and erasure of patient data.
 - [ ] EU-hosted system-of-record services are confirmed, and any non-EU AI processing is documented accurately in privacy/subprocessor materials.
-- [ ] Privacy policy + ToS drafts exist (final version ships with Phase 12).
+- [x] Privacy policy + ToS drafts exist (final version ships with Phase 12).
 - [ ] Token encryption round-trip works under a new key (rotation procedure tested on a fixture).
 
 ---
@@ -98,5 +98,5 @@
 
 - "Right to erasure" is a hard requirement — make sure cascade deletes truly cascade. A scheduled Inngest run for a deleted appointment that fires anyway is a leak.
 - Don't keep "anonymised" data that's actually re-identifiable. Counts per day per PT are fine; counts per patient per day are not.
-- The audit log itself shouldn't contain PII in payloads — it records *that* a row was accessed, by whom, when. Not the row contents.
+- The audit log itself shouldn't contain PII in payloads — it records _that_ a row was accessed, by whom, when. Not the row contents.
 - This phase doesn't need a special phase ordering; sprinkle work into earlier phases as obligations arise. The dedicated phase is for verification + polish + final docs.

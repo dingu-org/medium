@@ -11,6 +11,7 @@ import {
 } from 'vitest';
 import { POST as postAppointment } from '@/app/api/pwa/mutations/appointment/route';
 import { POST as postMessage } from '@/app/api/pwa/mutations/message/route';
+import { GraphApiError } from '@/lib/channels/whatsapp/errors';
 import { db } from '@/lib/db';
 import {
   appointments,
@@ -212,6 +213,88 @@ describe('PWA message mutation API', () => {
         ),
       );
     expect(storedMessages).toHaveLength(1);
+  });
+
+  it('records WhatsApp send failures instead of leaving mutations processing', async () => {
+    await seedConnection(ptId);
+    const { conversationId } = await seedConversation(ptId);
+    const clientMutationId = nextId();
+    const body = {
+      clientMutationId,
+      conversationId,
+      body: 'Queued hello',
+    };
+    sendFreeFormMock.mockRejectedValueOnce(
+      new GraphApiError({ status: 500, message: 'Meta unavailable' }),
+    );
+
+    const first = await postMessage(
+      makePost('/api/pwa/mutations/message', body),
+    );
+    const second = await postMessage(
+      makePost('/api/pwa/mutations/message', body),
+    );
+
+    expect(first.status).toBe(502);
+    await expect(first.json()).resolves.toMatchObject({
+      ok: false,
+      error:
+        'WhatsApp could not send the message. Try again or reconnect WhatsApp.',
+    });
+    expect(second.status).toBe(409);
+    expect(sendFreeFormMock).toHaveBeenCalledTimes(1);
+
+    const [storedMutation] = await db
+      .select({ status: pwaMutations.status, error: pwaMutations.error })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      )
+      .limit(1);
+    expect(storedMutation).toEqual({
+      status: 'failed',
+      error:
+        'WhatsApp could not send the message. Try again or reconnect WhatsApp.',
+    });
+  });
+
+  it('retries stale processing message mutations', async () => {
+    await seedConnection(ptId);
+    const { conversationId } = await seedConversation(ptId);
+    const clientMutationId = nextId();
+    await db.insert(pwaMutations).values({
+      ptId,
+      clientMutationId,
+      type: 'message.send',
+      status: 'processing',
+      updatedAt: new Date(Date.now() - 5 * 60 * 1000),
+    });
+
+    const res = await postMessage(
+      makePost('/api/pwa/mutations/message', {
+        clientMutationId,
+        conversationId,
+        body: 'Recovered hello',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(sendFreeFormMock).toHaveBeenCalledTimes(1);
+
+    const [storedMutation] = await db
+      .select({ status: pwaMutations.status, error: pwaMutations.error })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      )
+      .limit(1);
+    expect(storedMutation).toEqual({ status: 'success', error: null });
   });
 });
 

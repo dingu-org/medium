@@ -17,6 +17,7 @@ import {
   pwaMutations,
   reminderJobs,
   whatsappConnections,
+  whatsappContacts,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 
@@ -36,6 +37,11 @@ const seedFactories: Record<
     pt_id: ptId,
     phone_number_id: `pn-${ptId.slice(0, 6)}`,
     waba_id: `w-${ptId.slice(0, 6)}`,
+  }),
+  whatsapp_contacts: ({ ptId }) => ({
+    pt_id: ptId,
+    phone: `+1555${Date.now()}`,
+    wa_id: `1555${Date.now()}`,
   }),
   patients: ({ ptId }) => ({
     pt_id: ptId,
@@ -152,6 +158,11 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     ptId,
     phoneNumberId: `pn-${ptId.slice(0, 6)}`,
     wabaId: `w-${ptId.slice(0, 6)}`,
+  });
+  await db.insert(whatsappContacts).values({
+    ptId,
+    phone: `+1555${Date.now()}${Math.random()}`,
+    waId: `1555${Date.now()}${Math.random()}`,
   });
   await db.insert(availabilityRules).values({
     ptId,

@@ -193,17 +193,77 @@ describe('PWA client mutation queue', () => {
     ]);
   });
 
+  it('does not queue online server responses from direct sends', async () => {
+    installBrowserStubs({ online: true });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Server failed.' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { queueMessageSend } = await import('@/lib/pwa/mutation-client');
+    const { listPendingMutations } = await import('@/lib/pwa/client-store');
+
+    const result = await queueMessageSend({
+      clientMutationId: 'message-online-failure',
+      conversationId: 'conversation-1',
+      body: 'See you tomorrow',
+    });
+
+    expect(result).toEqual({
+      status: 'failed',
+      clientMutationId: 'message-online-failure',
+      error: 'Server failed.',
+    });
+    expect(await listPendingMutations()).toEqual([]);
+  });
+
+  it('queues thrown online requests as retryable instead of offline', async () => {
+    installBrowserStubs({ online: true });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+    );
+    const { queueMessageSend } = await import('@/lib/pwa/mutation-client');
+    const { listPendingMutations } = await import('@/lib/pwa/client-store');
+
+    const result = await queueMessageSend({
+      clientMutationId: 'message-retryable',
+      conversationId: 'conversation-1',
+      body: 'See you tomorrow',
+    });
+
+    expect(result).toEqual({
+      status: 'queued',
+      clientMutationId: 'message-retryable',
+      reason: 'retryable',
+    });
+    expect(await listPendingMutations()).toMatchObject([
+      {
+        id: 'message-retryable',
+        status: 'pending',
+        lastError: 'Failed to fetch',
+      },
+    ]);
+  });
+
   it('queues offline message sends without persisting request headers or cookies', async () => {
     installBrowserStubs({ online: false });
     const { queueMessageSend } = await import('@/lib/pwa/mutation-client');
     const { listPendingMutations } = await import('@/lib/pwa/client-store');
 
-    await queueMessageSend({
+    const result = await queueMessageSend({
       clientMutationId: 'message-1',
       conversationId: 'conversation-1',
       body: 'See you tomorrow',
     });
 
+    expect(result).toEqual({
+      status: 'queued',
+      clientMutationId: 'message-1',
+      reason: 'offline',
+    });
     const [queued] = await listPendingMutations();
     expect(queued).toMatchObject({
       id: 'message-1',

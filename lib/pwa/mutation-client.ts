@@ -1,10 +1,10 @@
 'use client';
 
-import { sendOrQueueMutation } from './client-store';
+import { sendOrQueueMutation, type QueueReason } from './client-store';
 
 export type QueueMutationResult =
   | { status: 'sent'; response: unknown; clientMutationId: string }
-  | { status: 'queued'; clientMutationId: string }
+  | { status: 'queued'; clientMutationId: string; reason: QueueReason }
   | { status: 'failed'; error: string; clientMutationId: string };
 
 export async function queueMessageSend(input: {
@@ -71,6 +71,8 @@ function normalize(
   if (result.status === 'sent') {
     return { status: 'sent', response: result.response, clientMutationId };
   }
-  if (result.status === 'queued') return { status: 'queued', clientMutationId };
+  if (result.status === 'queued') {
+    return { status: 'queued', clientMutationId, reason: result.reason };
+  }
   return { status: 'failed', error: result.error, clientMutationId };
 }

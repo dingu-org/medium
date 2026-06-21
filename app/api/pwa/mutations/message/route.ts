@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
 import {
   ConnectionRevokedError,
+  GraphApiError,
   OutsideWindowError,
 } from '@/lib/channels/whatsapp/errors';
 import { db } from '@/lib/db';
@@ -51,12 +52,23 @@ export async function POST(request: Request) {
     return jsonError('Mutation is still processing.', 503);
   }
 
-  const result = await sendMessage({
-    ptId,
-    clientMutationId: input.clientMutationId,
-    conversationId: input.conversationId,
-    body: input.body,
-  });
+  let result: Awaited<ReturnType<typeof sendMessage>>;
+  try {
+    result = await sendMessage({
+      ptId,
+      clientMutationId: input.clientMutationId,
+      conversationId: input.conversationId,
+      body: input.body,
+    });
+  } catch (error) {
+    const failure = messageFor(error);
+    await failPwaMutation({
+      ptId,
+      clientMutationId: input.clientMutationId,
+      error: failure.error,
+    });
+    return jsonError(failure.error, failure.status);
+  }
 
   if (!result.ok) {
     await failPwaMutation({
@@ -155,7 +167,11 @@ async function sendMessage(input: {
 
     await tx
       .update(conversations)
-      .set({ aiActive: false })
+      .set({
+        aiActive: false,
+        aiPausedUntil: null,
+        aiPauseReason: null,
+      })
       .where(
         and(
           eq(conversations.id, conversation.id),
@@ -173,4 +189,23 @@ async function sendMessage(input: {
   });
 
   return { ok: true, messageId: externalMessageId, localMessageId };
+}
+
+function messageFor(error: unknown): { error: string; status: number } {
+  if (error instanceof GraphApiError) {
+    if (error.status === 429) {
+      return {
+        error: 'WhatsApp is rate limiting messages. Try again in a moment.',
+        status: 429,
+      };
+    }
+    return {
+      error: 'WhatsApp could not send the message. Try again or reconnect WhatsApp.',
+      status: error.status >= 500 ? 502 : 409,
+    };
+  }
+  return {
+    error: 'Could not send the WhatsApp message. Please try again.',
+    status: 500,
+  };
 }

@@ -274,7 +274,11 @@ function AppointmentForm({
           toast.success('Appointment booked.');
           onDone();
         } else if (res.status === 'queued') {
-          toast.success('Appointment queued. It will sync when you’re online.');
+          toast.success(
+            res.reason === 'offline'
+              ? 'Appointment queued. It will sync when you’re online.'
+              : 'Appointment queued. It will retry automatically.',
+          );
           onDone();
         } else {
           toast.error(res.error);
