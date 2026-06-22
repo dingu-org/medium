@@ -9,12 +9,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { t } from '@/lib/i18n';
 import { getOnboardingState } from '@/lib/onboarding/state';
 import { createServerClient } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils';
 import { dismissAndGo } from './actions';
 
-export const metadata = { title: 'Get started · Medium' };
+export const metadata = { title: t.onboarding.metaTitle };
 
 type Step = {
   key: string;
@@ -37,33 +38,32 @@ export default async function OnboardingPage() {
   const steps: Step[] = [
     {
       key: 'profile',
-      title: 'Complete your profile',
-      description: 'Add your practice name and timezone.',
+      title: t.onboarding.steps.profileTitle,
+      description: t.onboarding.steps.profileSub,
       done: state.profile,
       href: '/settings',
-      cta: 'Set up profile',
+      cta: t.onboarding.steps.profileCta,
     },
     {
       key: 'whatsapp',
-      title: 'Connect WhatsApp',
-      description: 'Link your WhatsApp Business number so patients can message you.',
+      title: t.onboarding.steps.whatsappTitle,
+      description: t.onboarding.steps.whatsappSub,
       done: state.whatsapp,
       href: '/settings',
-      cta: 'Connect',
+      cta: t.onboarding.steps.whatsappCta,
     },
     {
       key: 'availability',
-      title: 'Set your availability',
-      description: 'Tell the assistant when patients can book.',
+      title: t.onboarding.steps.availabilityTitle,
+      description: t.onboarding.steps.availabilitySub,
       done: state.availability,
       href: '/settings/availability',
-      cta: 'Set hours',
+      cta: t.onboarding.steps.availabilityCta,
     },
     {
       key: 'testMessage',
-      title: 'Send a test message',
-      description:
-        'Message your connected WhatsApp number to see the assistant reply.',
+      title: t.onboarding.steps.testMessageTitle,
+      description: t.onboarding.steps.testMessageSub,
       done: state.testMessage,
     },
   ];
@@ -73,9 +73,9 @@ export default async function OnboardingPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">Welcome to Medium</h1>
+        <h1 className="text-2xl font-semibold">{t.onboarding.welcomeTitle}</h1>
         <p className="text-muted-foreground">
-          A few steps to get your practice ready.
+          {t.onboarding.welcomeSub}
         </p>
         <div className="h-2 overflow-hidden rounded-full bg-muted">
           <div
@@ -88,7 +88,7 @@ export default async function OnboardingPage() {
           />
         </div>
         <p className="text-xs text-muted-foreground">
-          {state.completedCount} of {state.total} complete
+          {t.onboarding.progress(state.completedCount, state.total)}
         </p>
       </div>
 
@@ -97,15 +97,15 @@ export default async function OnboardingPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PartyPopper className="h-5 w-5" aria-hidden="true" />
-              You&apos;re all set
+              {t.onboarding.allSetTitle}
             </CardTitle>
             <CardDescription>
-              Your practice is ready to take bookings over WhatsApp.
+              {t.onboarding.allSetSub}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild className="w-full">
-              <Link href="/calendar">Go to calendar</Link>
+              <Link href="/today">{t.onboarding.goToApp}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -148,14 +148,14 @@ export default async function OnboardingPage() {
 
       {!state.complete && (
         <form action={dismissAndGo} className="text-center">
-          <input type="hidden" name="href" value="/calendar" />
+          <input type="hidden" name="href" value="/today" />
           <Button
             type="submit"
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
           >
-            Skip for now
+            {t.onboarding.skip}
           </Button>
         </form>
       )}

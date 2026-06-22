@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server';
 
 function safeNext(next: string | null): string {
   if (!next || !next.startsWith('/') || next.startsWith('//')) {
-    return '/calendar';
+    return '/today';
   }
   return next;
 }

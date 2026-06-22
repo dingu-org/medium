@@ -3,6 +3,7 @@
 import { addDays, format } from 'date-fns';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { t, formatWeekdayDate } from '@/lib/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { ReminderBadge } from '@/components/appointments/badges';
@@ -12,6 +13,8 @@ import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { EmptyState } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { SegmentedControl } from '@/components/ui/segmented-control';
+import { StatusPill } from '@/components/ui/status-pill';
 import {
   listPendingMutations,
   type PendingMutation,
@@ -37,10 +40,12 @@ function statusDot(appt: CalendarAppointment): string {
   if (appt.status === 'no_show') return 'bg-destructive';
   const r = appt.reminder;
   if (r?.responseType === 'cancel' || r?.responseType === 'reschedule_requested')
-    return 'bg-red-500';
-  if (appt.status === 'confirmed') return 'bg-emerald-500';
-  if (r && r.status === 'sent' && !r.responseType) return 'bg-orange-500';
-  return 'bg-amber-500';
+    return 'bg-destructive';
+  if (appt.status === 'confirmed') return 'bg-[var(--success-500)]';
+  // Reminder sent, patient hasn't replied → needs your attention (orange).
+  if (r && r.status === 'sent' && !r.responseType)
+    return 'bg-[var(--attention-500)]';
+  return 'bg-[var(--warning-500)]';
 }
 
 export function CalendarClient({
@@ -150,38 +155,21 @@ export function CalendarClient({
 
       {/* Header: view toggle + today */}
       <div className="flex items-center justify-between gap-2">
-        <div className="inline-flex rounded-md border border-border p-0.5">
-          <button
-            type="button"
-            onClick={() => navigate(anchorKey, 'week')}
-            className={cn(
-              'rounded px-3 py-1 text-sm',
-              view === 'week'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground',
-            )}
-          >
-            Week
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate(anchorKey, 'month')}
-            className={cn(
-              'rounded px-3 py-1 text-sm',
-              view === 'month'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground',
-            )}
-          >
-            Month
-          </button>
-        </div>
+        <SegmentedControl
+          ariaLabel={t.calendar.title}
+          value={view}
+          onValueChange={(nextView) => navigate(anchorKey, nextView)}
+          options={[
+            { value: 'week', label: t.calendar.views.week },
+            { value: 'month', label: t.calendar.views.month },
+          ]}
+        />
         <Button
           variant="outline"
           size="sm"
           onClick={() => navigate(todayKey, view)}
         >
-          Today
+          {t.calendar.todayBtn}
         </Button>
       </div>
 
@@ -191,7 +179,7 @@ export function CalendarClient({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Previous week"
+              aria-label={t.calendar.prevWeek}
               onClick={() => shiftWeek(-7)}
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -200,7 +188,7 @@ export function CalendarClient({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Next week"
+              aria-label={t.calendar.nextWeek}
               onClick={() => shiftWeek(7)}
             >
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -210,8 +198,8 @@ export function CalendarClient({
           {appointments.length === 0 && (
             <EmptyState
               icon={CalendarDays}
-              title="No appointments yet"
-              description="Share your WhatsApp number to start taking bookings."
+              title={t.calendar.weekEmpty}
+              description={t.calendar.weekEmptyDesc}
             />
           )}
 
@@ -226,7 +214,7 @@ export function CalendarClient({
                   )}
                 >
                   {day.label}
-                  {day.isToday && ' · Today'}
+                  {day.isToday && ` ${t.calendar.todayLabel}`}
                 </p>
                 {list.length === 0 ? (
                   <p className="text-sm text-muted-foreground/60">—</p>
@@ -266,11 +254,11 @@ export function CalendarClient({
           />
           <div className="space-y-2">
             <p className="text-sm font-medium">
-              {format(dateFromKey(selectedDay), 'EEEE d MMMM')}
+              {formatWeekdayDate(dateFromKey(selectedDay))}
             </p>
             {(byDay.get(selectedDay) ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No appointments this day.
+                {t.calendar.monthDayEmpty}
               </p>
             ) : (
               <ul className="space-y-1.5">
@@ -332,16 +320,16 @@ function AppointmentRow({
           )}
         </span>
         {pendingLabel && (
-          <span
-            className={cn(
-              'shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+          <StatusPill
+            tone={
               pendingMutations.some((m) => m.status === 'failed')
-                ? 'border-destructive/30 bg-destructive/10 text-destructive'
-                : 'border-amber-200 bg-amber-50 text-amber-800',
-            )}
+                ? 'danger'
+                : 'warning'
+            }
+            mono
           >
             {pendingLabel}
-          </span>
+          </StatusPill>
         )}
         <ReminderBadge reminder={appt.reminder} />
       </button>
@@ -357,13 +345,13 @@ function appointmentIdFromMutation(mutation: PendingMutation): string | null {
 
 function getPendingAppointmentLabel(mutations: PendingMutation[]): string | null {
   if (mutations.length === 0) return null;
-  if (mutations.some((m) => m.status === 'failed')) return 'Sync failed';
+  if (mutations.some((m) => m.status === 'failed')) return t.calendar.syncFailed;
   const actions = new Set(
     mutations.map((m) => (m.body as { action?: unknown } | null)?.action),
   );
-  if (actions.has('cancel')) return 'Cancel pending';
-  if (actions.has('reschedule')) return 'Move pending';
-  if (actions.has('notes')) return 'Notes pending';
-  if (actions.has('transition')) return 'Status pending';
-  return 'Sync pending';
+  if (actions.has('cancel')) return t.calendar.cancelPending;
+  if (actions.has('reschedule')) return t.calendar.movePending;
+  if (actions.has('notes')) return t.calendar.notesPending;
+  if (actions.has('transition')) return t.calendar.statusPending;
+  return t.calendar.syncPending;
 }

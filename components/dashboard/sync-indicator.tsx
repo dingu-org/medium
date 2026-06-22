@@ -1,6 +1,7 @@
 'use client';
 
 import { useOnlineStatus } from '@/lib/hooks/realtime';
+import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 /** Small online/offline dot in the top bar. */
@@ -19,7 +20,7 @@ export function SyncIndicator() {
         )}
         aria-hidden="true"
       />
-      <span className="sr-only">{online ? 'Online' : 'Offline'}</span>
+      <span className="sr-only">{online ? t.sync.online : t.sync.offline}</span>
     </span>
   );
 }

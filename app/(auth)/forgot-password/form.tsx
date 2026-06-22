@@ -5,6 +5,7 @@ import { useActionState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { t } from '@/lib/i18n';
 import { type ForgotPasswordState, requestPasswordReset } from './actions';
 
 const initialState: ForgotPasswordState = { error: null, fieldErrors: null, success: false };
@@ -15,14 +16,12 @@ export function ForgotPasswordForm() {
   if (state.success) {
     return (
       <div className="space-y-4">
-        <p className="text-sm">
-          If an account exists for that email, we&apos;ve sent a password reset link. Check your inbox.
-        </p>
+        <p className="text-sm">{t.auth.forgot.sent}</p>
         <Link
           href="/sign-in"
           className="block text-center text-sm font-medium text-foreground hover:underline"
         >
-          Back to sign in
+          {t.auth.forgot.backToSignIn}
         </Link>
       </div>
     );
@@ -31,7 +30,7 @@ export function ForgotPasswordForm() {
   return (
     <form action={action} className="space-y-4" noValidate>
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t.auth.signIn.email}</Label>
         <Input id="email" name="email" type="email" autoComplete="email" required />
         {state.fieldErrors?.email && (
           <p className="text-sm text-destructive">{state.fieldErrors.email[0]}</p>
@@ -39,13 +38,13 @@ export function ForgotPasswordForm() {
       </div>
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
       <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? 'Sending…' : 'Send reset link'}
+        {pending ? t.auth.forgot.submitting : t.auth.forgot.submit}
       </Button>
       <Link
         href="/sign-in"
         className="block text-center text-sm text-muted-foreground hover:text-foreground"
       >
-        Back to sign in
+        {t.auth.forgot.backToSignIn}
       </Link>
     </form>
   );

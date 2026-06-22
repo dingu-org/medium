@@ -22,6 +22,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import { t } from '@/lib/i18n';
 import { useRealtimeRefresh } from '@/lib/hooks/realtime';
 import type { NotificationView } from '@/lib/notifications/format';
 import { cn } from '@/lib/utils';
@@ -84,8 +85,8 @@ export function NotificationBell({
           className="relative"
           aria-label={
             unreadCount > 0
-              ? `Notifications, ${unreadCount} unread`
-              : 'Notifications'
+              ? t.notifications.unread(unreadCount)
+              : t.notifications.title
           }
         >
           <Bell className="h-5 w-5" aria-hidden="true" />
@@ -98,9 +99,9 @@ export function NotificationBell({
       </SheetTrigger>
       <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-sm">
         <SheetHeader>
-          <SheetTitle>Notifications</SheetTitle>
+          <SheetTitle>{t.notifications.title}</SheetTitle>
           <SheetDescription className="sr-only">
-            Recent activity in your practice
+            {t.notifications.recentActivity}
           </SheetDescription>
         </SheetHeader>
 
@@ -112,7 +113,7 @@ export function NotificationBell({
               onClick={markRead}
               disabled={pending || unreadCount === 0}
             >
-              Mark all read
+              {t.notifications.markAllRead}
             </Button>
           </div>
         )}
@@ -121,8 +122,8 @@ export function NotificationBell({
           {items.length === 0 ? (
             <EmptyState
               icon={Bell}
-              title="No notifications yet"
-              description="Bookings, cancellations, and alerts will show up here."
+              title={t.notifications.empty}
+              description={t.notifications.emptyDescription}
               className="mt-6"
             />
           ) : (

@@ -16,7 +16,13 @@ declare const self: ServiceWorkerGlobalScope &
     __SW_MANIFEST: (PrecacheEntry | string)[];
   };
 
-const DASHBOARD_NAVIGATION_PREFIXES = ['/calendar', '/chat', '/settings'];
+const DASHBOARD_NAVIGATION_PREFIXES = [
+  '/today',
+  '/calendar',
+  '/chat',
+  '/clients',
+  '/settings',
+];
 const NEVER_CACHE_PREFIXES = [
   '/api/webhooks',
   '/api/inngest',

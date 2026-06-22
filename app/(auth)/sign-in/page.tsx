@@ -1,8 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { t } from '@/lib/i18n';
 import { SignInForm } from './form';
 
 export const metadata = {
-  title: 'Sign in · Medium',
+  title: `${t.auth.signIn.title} · ${t.appName}`,
 };
 
 export default async function SignInPage({
@@ -14,8 +15,8 @@ export default async function SignInPage({
   return (
     <Card>
       <CardHeader className="text-center">
-        <CardTitle>Welcome back</CardTitle>
-        <CardDescription>Sign in to manage your practice.</CardDescription>
+        <CardTitle>{t.auth.signIn.title}</CardTitle>
+        <CardDescription>{t.auth.signIn.subtitle}</CardDescription>
       </CardHeader>
       <CardContent>
         <SignInForm confirmHint={confirm === '1'} />

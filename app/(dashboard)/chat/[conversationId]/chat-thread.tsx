@@ -1,14 +1,16 @@
 'use client';
 
-import { format } from 'date-fns';
-import { ChevronLeft, Send } from 'lucide-react';
+import { ChevronLeft, Clock, Send } from 'lucide-react';
 import Link from 'next/link';
+import { t } from '@/lib/i18n';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { SnapshotCache } from '@/components/pwa/snapshot-cache';
-import { Badge } from '@/components/ui/badge';
+import { AppBanner } from '@/components/ui/app-banner';
 import { Button } from '@/components/ui/button';
+import { ChatBubble } from '@/components/ui/chat-bubble';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Switch } from '@/components/ui/switch';
 import { type LiveMessage, useMessages } from '@/lib/hooks/realtime';
 import {
@@ -16,7 +18,6 @@ import {
   PWA_MUTATION_SYNCED_EVENT,
 } from '@/lib/pwa/client-store';
 import { queueMessageSend } from '@/lib/pwa/mutation-client';
-import { cn } from '@/lib/utils';
 import { setTakeover } from '../actions';
 
 type Props = {
@@ -135,8 +136,8 @@ export function ChatThread({
           setAiActive(false);
           toast.success(
             res.reason === 'offline'
-              ? 'Message queued. It will send when you’re online.'
-              : 'Message queued. It will retry automatically.',
+              ? t.chat.msgQueued
+              : t.chat.msgQueuedRetry,
           );
           return;
         }
@@ -158,7 +159,7 @@ export function ChatThread({
           ),
         );
         toast.error(
-          error instanceof Error ? error.message : 'Could not queue message.',
+          error instanceof Error ? error.message : t.chat.msgQueueError,
         );
       }
     });
@@ -181,38 +182,53 @@ export function ChatThread({
       <div className="sticky top-[57px] z-10 -mx-4 flex items-center gap-3 border-b border-border bg-background/90 px-4 py-2 backdrop-blur">
         <Link
           href="/chat"
-          aria-label="Back to chats"
+          aria-label={t.chat.backToChats}
           className="text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-5 w-5" aria-hidden="true" />
         </Link>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{patientName}</p>
+          <div className="flex items-center gap-2">
+            <p className="truncate font-medium">{patientName}</p>
+            <StatusPill tone={aiActive ? 'brand' : 'success'} dot>
+              {aiActive ? t.chat.aiBadge : t.chat.youBadge}
+            </StatusPill>
+          </div>
           <p className="text-xs text-muted-foreground">
-            {aiActive ? 'AI is handling this' : "You're chatting"}
+            {aiActive ? t.chat.aiHandlingDesc : t.chat.youHandlingDesc}
           </p>
         </div>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="hidden sm:inline">Let AI respond</span>
+          <span className="hidden sm:inline">{t.chat.letAiRespond}</span>
           <Switch
             checked={aiActive}
             onCheckedChange={onToggle}
-            aria-label="Let AI respond"
+            aria-label={t.chat.letAiRespond}
           />
         </label>
       </div>
 
       {windowClosed && (
-        <div className="-mx-4 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-          The 24-hour reply window is closed. The patient must message again
-          before you can send a free-form reply.
-        </div>
+        <AppBanner
+          tone="danger"
+          icon={Clock}
+          className="-mx-4 border-x-0 border-t-0 text-xs"
+        >
+          {t.chat.windowClosedText}
+        </AppBanner>
       )}
 
       {/* Messages */}
       <div className="flex-1 space-y-2 py-4">
         {visibleMessages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <ChatBubble
+            key={m.id}
+            role={m.role}
+            content={m.content}
+            createdAt={m.createdAt}
+            pending={'pending' in m ? m.pending === true : false}
+            failed={'failed' in m ? m.failed === true : false}
+          />
         ))}
         <div ref={bottomRef} className="h-20" />
       </div>
@@ -230,71 +246,19 @@ export function ChatThread({
               }
             }}
             rows={1}
-            placeholder="Type your message…"
-            className="max-h-32 min-h-10 flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder={t.chat.messagePlaceholder}
+            className="max-h-32 min-h-10 flex-1 resize-none rounded-full border border-input bg-card px-4 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
           />
           <Button
             type="button"
             size="icon"
             onClick={onSend}
             disabled={sending || draft.trim().length === 0}
-            aria-label="Send message"
+            aria-label={t.chat.sendMessage}
           >
             <Send className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function MessageBubble({
-  message,
-}: {
-  message: LiveMessage & { pending?: boolean; failed?: boolean };
-}) {
-  const isPt = message.role === 'pt';
-  const isAi = message.role === 'ai';
-  const outbound = isPt || isAi;
-  return (
-    <div className={cn('flex', outbound ? 'justify-end' : 'justify-start')}>
-      <div
-        className={cn(
-          'max-w-[80%] rounded-2xl px-3 py-2 text-sm',
-          isAi && 'rounded-br-sm bg-primary text-primary-foreground',
-          isPt && 'rounded-br-sm bg-emerald-600 text-white',
-          !outbound && 'rounded-bl-sm bg-muted',
-        )}
-      >
-        {isAi && (
-          <Badge
-            variant="secondary"
-            className="mb-1 border-transparent bg-primary-foreground/15 text-[10px] text-primary-foreground"
-          >
-            Auto
-          </Badge>
-        )}
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        {(message.pending || message.failed) && (
-          <p
-            className={cn(
-              'mt-1 text-[10px]',
-              message.failed ? 'text-destructive-foreground' : 'text-white/75',
-            )}
-          >
-            {message.failed ? 'Needs attention' : 'Pending sync'}
-          </p>
-        )}
-        <p
-          className={cn(
-            'mt-1 text-[10px]',
-            isAi && 'text-primary-foreground/70',
-            isPt && 'text-white/75',
-            !outbound && 'text-muted-foreground',
-          )}
-        >
-          {format(new Date(message.createdAt), 'HH:mm')}
-        </p>
       </div>
     </div>
   );

@@ -7,5 +7,5 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  redirect(user ? '/calendar' : '/sign-in');
+  redirect(user ? '/today' : '/sign-in');
 }

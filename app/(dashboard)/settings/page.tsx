@@ -1,8 +1,6 @@
-import { CalendarClock, ChevronRight } from 'lucide-react';
-import Link from 'next/link';
+import { CalendarClock } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { SnapshotCache } from '@/components/pwa/snapshot-cache';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -10,21 +8,38 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { GroupedList, GroupedListRow } from '@/components/ui/grouped-list';
+import { StatusPill } from '@/components/ui/status-pill';
 import { GRAPH_VERSION } from '@/lib/channels/whatsapp/constants';
+import { t } from '@/lib/i18n';
 import { getSettingsSnapshot } from '@/lib/pwa/read-models';
 import { createServerClient } from '@/lib/supabase/server';
 import { ConnectWhatsApp } from './connect-whatsapp';
 import { DangerZone } from './danger-zone';
 import { PracticeSettingsForm } from './practice-settings-form';
 
-export const metadata = { title: 'Settings · Medium' };
+export const metadata = { title: `${t.settings.title} · Medium` };
 
 function ConnectionBadge({ status }: { status: string | null }) {
-  if (status === 'active') return <Badge>Connected</Badge>;
+  if (status === 'active')
+    return (
+      <StatusPill tone="success" dot>
+        {t.settings.connected}
+      </StatusPill>
+    );
   if (status === 'revoked')
-    return <Badge variant="destructive">Action needed</Badge>;
-  if (status === 'pending') return <Badge variant="secondary">Pending</Badge>;
-  return <Badge variant="outline">Not connected</Badge>;
+    return (
+      <StatusPill tone="danger" dot>
+        {t.settings.connectionBadgeActionNeeded}
+      </StatusPill>
+    );
+  if (status === 'pending')
+    return (
+      <StatusPill tone="warning" dot>
+        {t.settings.connectionBadgePending}
+      </StatusPill>
+    );
+  return <StatusPill tone="neutral">{t.settings.connectionBadgeNotConnected}</StatusPill>;
 }
 
 export default async function SettingsPage() {
@@ -53,26 +68,14 @@ export default async function SettingsPage() {
         notificationPrefs={snapshot.notificationPrefs}
       />
 
-      <Link href="/settings/availability" className="block">
-        <Card className="transition-colors hover:bg-muted/50">
-          <CardContent className="flex items-center gap-3 py-4">
-            <CalendarClock
-              className="h-5 w-5 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <div className="flex-1">
-              <p className="font-medium">Availability</p>
-              <p className="text-sm text-muted-foreground">
-                Working hours, blocked dates, and appointment length.
-              </p>
-            </div>
-            <ChevronRight
-              className="h-5 w-5 text-muted-foreground"
-              aria-hidden="true"
-            />
-          </CardContent>
-        </Card>
-      </Link>
+      <GroupedList>
+        <GroupedListRow
+          href="/settings/availability"
+          icon={CalendarClock}
+          title={t.settings.availability}
+          description={t.settings.availabilitySub}
+        />
+      </GroupedList>
 
       <Card>
         <CardHeader>
@@ -81,20 +84,18 @@ export default async function SettingsPage() {
             <ConnectionBadge status={status} />
           </CardTitle>
           <CardDescription>
-            Connect your WhatsApp Business number so patients can message your
-            practice.
+            {t.settings.whatsappCardSub}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {status === 'revoked' && (
             <p className="text-destructive text-sm">
-              Your WhatsApp connection was revoked. Reconnect to resume
-              messaging.
+              {t.settings.whatsappRevoked}
             </p>
           )}
           {connected && snapshot.whatsappPhoneNumberId && (
             <p className="text-muted-foreground text-sm">
-              Connected number ID:{' '}
+              {t.settings.whatsappConnectedId}{' '}
               <span className="font-mono">
                 {snapshot.whatsappPhoneNumberId}
               </span>
@@ -108,8 +109,7 @@ export default async function SettingsPage() {
           />
           {(!appId || !configId) && (
             <p className="text-muted-foreground text-xs">
-              Set NEXT_PUBLIC_META_APP_ID and NEXT_PUBLIC_META_CONFIG_ID to
-              enable signup.
+              {t.settings.whatsappEnvNote}
             </p>
           )}
         </CardContent>

@@ -25,13 +25,13 @@ describe('PWA manifest', () => {
     expect(manifest).toMatchObject({
       name: 'Medium',
       short_name: 'Medium',
-      start_url: '/calendar',
+      start_url: '/today',
       scope: '/',
       display: 'standalone',
       background_color: '#ffffff',
       theme_color: '#242424',
       orientation: 'portrait',
-      lang: 'en',
+      lang: 'sq',
       dir: 'ltr',
     });
 

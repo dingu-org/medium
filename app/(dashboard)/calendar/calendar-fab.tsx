@@ -2,6 +2,7 @@
 
 import { CalendarPlus, Plus, Clock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { t } from '@/lib/i18n';
 import { useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { addBlockedPeriod } from '@/app/(dashboard)/settings/availability/actions';
@@ -45,7 +46,7 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
         <Button
           size="icon-lg"
           className="fixed bottom-20 right-4 z-20 h-14 w-14 rounded-full shadow-lg"
-          aria-label="Add"
+          aria-label={t.calendar.addLabel}
         >
           <Plus className="h-6 w-6" aria-hidden="true" />
         </Button>
@@ -54,13 +55,13 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
         <SheetHeader>
           <SheetTitle>
             {mode === 'block'
-              ? 'Block time'
+              ? t.calendar.blockTime
               : mode === 'appointment'
-                ? 'New appointment'
-                : 'Add'}
+                ? t.calendar.newAppointment
+                : t.calendar.addLabel}
           </SheetTitle>
           <SheetDescription className="sr-only">
-            Block time or add an appointment
+            {t.calendar.blockTime}
           </SheetDescription>
         </SheetHeader>
 
@@ -74,9 +75,9 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
               >
                 <CalendarPlus className="h-5 w-5" aria-hidden="true" />
                 <span className="text-left">
-                  <span className="block font-medium">Add appointment</span>
+                  <span className="block font-medium">{t.calendar.addApptTitle}</span>
                   <span className="block text-xs text-muted-foreground">
-                    Manually book for a patient
+                    {t.calendar.addApptDesc}
                   </span>
                 </span>
               </Button>
@@ -87,9 +88,9 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
               >
                 <Clock className="h-5 w-5" aria-hidden="true" />
                 <span className="text-left">
-                  <span className="block font-medium">Block time</span>
+                  <span className="block font-medium">{t.calendar.blockTime}</span>
                   <span className="block text-xs text-muted-foreground">
-                    Holidays or personal time
+                    {t.calendar.blockTimeDesc}
                   </span>
                 </span>
               </Button>
@@ -142,7 +143,7 @@ function BlockTimeForm({
 
   function submit() {
     if (!online) {
-      toast.error('Block time requires a connection.');
+      toast.error(t.calendar.blockOnlineRequired);
       return;
     }
     startTransition(async () => {
@@ -154,13 +155,13 @@ function BlockTimeForm({
           label: label.trim() || undefined,
         });
         if (res.ok) {
-          toast.success('Time blocked.');
+          toast.success(t.calendar.timeBlocked);
           onDone();
         } else {
-          toast.error(res.error ?? 'Could not block time.');
+          toast.error(res.error ?? t.calendar.blockOnlineError);
         }
       } catch {
-        toast.error('Could not block time.');
+        toast.error(t.calendar.blockOnlineError);
       }
     });
   }
@@ -168,7 +169,7 @@ function BlockTimeForm({
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <Label htmlFor="fab-block-date">Date</Label>
+        <Label htmlFor="fab-block-date">{t.calendar.blockDate}</Label>
         <Input
           id="fab-block-date"
           type="date"
@@ -179,7 +180,7 @@ function BlockTimeForm({
       <div className="flex items-center gap-2">
         <Input
           type="time"
-          aria-label="Start time"
+          aria-label="Ora e fillimit"
           value={start}
           onChange={(e) => setStart(e.target.value)}
           className="w-auto"
@@ -187,28 +188,27 @@ function BlockTimeForm({
         <span className="text-muted-foreground">–</span>
         <Input
           type="time"
-          aria-label="End time"
+          aria-label="Ora e mbarimit"
           value={end}
           onChange={(e) => setEnd(e.target.value)}
           className="w-auto"
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="fab-block-label">Label (optional)</Label>
+        <Label htmlFor="fab-block-label">{t.calendar.blockLabelField}</Label>
         <Input
           id="fab-block-label"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="e.g. Lunch"
         />
       </div>
       {!online && (
         <p className="text-xs text-muted-foreground">
-          Block time requires a connection.
+          {t.calendar.blockOnlineRequired}
         </p>
       )}
       <Button className="w-full" onClick={submit} disabled={pending || !online}>
-        {pending ? 'Saving…' : 'Block time'}
+        {pending ? t.calendar.saving : t.calendar.blockTime}
       </Button>
     </div>
   );
@@ -250,11 +250,11 @@ function AppointmentForm({
 
   function submit() {
     if (tab === 'existing' && !selected) {
-      toast.error('Pick a patient.');
+      toast.error(t.calendar.pickPatient);
       return;
     }
     if (tab === 'new' && (!newName.trim() || !newPhone.trim())) {
-      toast.error('Enter the patient name and phone.');
+      toast.error(t.calendar.enterPatientDetails);
       return;
     }
     startTransition(async () => {
@@ -271,13 +271,13 @@ function AppointmentForm({
           serviceType: serviceType.trim() || undefined,
         });
         if (res.status === 'sent') {
-          toast.success('Appointment booked.');
+          toast.success(t.calendar.apptBooked);
           onDone();
         } else if (res.status === 'queued') {
           toast.success(
             res.reason === 'offline'
-              ? 'Appointment queued. It will sync when you’re online.'
-              : 'Appointment queued. It will retry automatically.',
+              ? t.calendar.apptQueued
+              : t.calendar.apptQueuedRetry,
           );
           onDone();
         } else {
@@ -287,7 +287,7 @@ function AppointmentForm({
         toast.error(
           error instanceof Error
             ? error.message
-            : 'Could not queue appointment.',
+            : t.calendar.apptQueueError,
         );
       }
     });
@@ -306,7 +306,7 @@ function AppointmentForm({
               : 'text-muted-foreground',
           )}
         >
-          Existing patient
+          {t.calendar.existingPatient}
         </button>
         <button
           type="button"
@@ -318,39 +318,39 @@ function AppointmentForm({
               : 'text-muted-foreground',
           )}
         >
-          New patient
+          {t.calendar.newPatient}
         </button>
       </div>
 
       {tab === 'existing' ? (
         <div className="space-y-2">
           <Input
-            placeholder="Search name or phone…"
+            placeholder={t.calendar.searchNamePhone}
             value={query}
             onChange={(e) => onQuery(e.target.value)}
             disabled={!online}
           />
           {!online && (
             <p className="text-xs text-muted-foreground">
-              Existing-patient search requires a connection. Add a new patient
-              to queue the appointment offline.
+              {t.calendar.offlineSearch}
             </p>
           )}
           {selected ? (
             <p className="text-sm">
-              Selected: <span className="font-medium">{selected.name}</span>{' '}
+              {t.calendar.selectedLabel}{' '}
+              <span className="font-medium">{selected.name}</span>{' '}
               <button
                 type="button"
                 className="text-xs text-muted-foreground underline"
                 onClick={() => setSelected(null)}
               >
-                change
+                {t.calendar.changeLink}
               </button>
             </p>
           ) : (
             <ul className="max-h-40 space-y-1 overflow-y-auto">
               {searching && (
-                <li className="text-sm text-muted-foreground">Searching…</li>
+                <li className="text-sm text-muted-foreground">{t.calendar.searching}</li>
               )}
               {!searching &&
                 results.map((p) => (
@@ -367,7 +367,7 @@ function AppointmentForm({
                 ))}
               {!searching && query && results.length === 0 && (
                 <li className="text-sm text-muted-foreground">
-                  No matches — try “New patient”.
+                  {t.calendar.noMatches}
                 </li>
               )}
             </ul>
@@ -376,7 +376,7 @@ function AppointmentForm({
       ) : (
         <div className="space-y-2">
           <div className="space-y-2">
-            <Label htmlFor="fab-new-name">Name</Label>
+            <Label htmlFor="fab-new-name">{t.appointment.patientName}</Label>
             <Input
               id="fab-new-name"
               value={newName}
@@ -384,7 +384,7 @@ function AppointmentForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="fab-new-phone">Phone</Label>
+            <Label htmlFor="fab-new-phone">{t.appointment.patientPhone}</Label>
             <Input
               id="fab-new-phone"
               type="tel"
@@ -397,7 +397,7 @@ function AppointmentForm({
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="fab-appt-date">Date</Label>
+        <Label htmlFor="fab-appt-date">{t.appointment.date}</Label>
         <Input
           id="fab-appt-date"
           type="date"
@@ -406,7 +406,7 @@ function AppointmentForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="fab-appt-time">Time</Label>
+        <Label htmlFor="fab-appt-time">{t.appointment.time}</Label>
         <Input
           id="fab-appt-time"
           type="time"
@@ -416,16 +416,16 @@ function AppointmentForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="fab-appt-service">Service (optional)</Label>
+        <Label htmlFor="fab-appt-service">{t.calendar.serviceOptional}</Label>
         <Input
           id="fab-appt-service"
           value={serviceType}
           onChange={(e) => setServiceType(e.target.value)}
-          placeholder="e.g. Physio session"
+          placeholder={t.calendar.servicePlaceholder}
         />
       </div>
       <Button className="w-full" onClick={submit} disabled={pending}>
-        {pending ? 'Booking…' : 'Book appointment'}
+        {pending ? t.calendar.booking : t.calendar.bookAppt}
       </Button>
     </div>
   );

@@ -4,6 +4,7 @@ import { Download, RefreshCcw, Share, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { AppBanner } from '@/components/ui/app-banner';
 import { Button } from '@/components/ui/button';
 import {
   listPendingMutations,
@@ -16,7 +17,6 @@ import {
   retryMutation,
   subscribeToQueueChanges,
 } from '@/lib/pwa/client-store';
-import { cn } from '@/lib/utils';
 
 const INSTALL_DISMISSED_KEY = 'medium:pwa-install-dismissed-at';
 const DASHBOARD_VISITS_KEY = 'medium:pwa-dashboard-visits';
@@ -266,34 +266,35 @@ function StatusBanner({
 }) {
   if (!text) return null;
   return (
-    <div
-      className={cn(
-        'border-b px-4 py-2 text-center text-xs',
-        tone === 'error'
-          ? 'border-destructive/30 bg-destructive/10 text-destructive'
-          : 'border-border bg-muted text-muted-foreground',
-      )}
+    <AppBanner
+      tone={tone === 'error' ? 'danger' : 'neutral'}
+      className="border-x-0 border-t-0 px-4 py-2 text-center text-xs"
     >
       {text}
-    </div>
+    </AppBanner>
   );
 }
 
 function UpdateBanner({ worker }: { worker: ServiceWorker | null }) {
   if (!worker) return null;
   return (
-    <div className="flex items-center justify-center gap-2 border-b border-border bg-background px-4 py-2 text-xs">
-      <span>New version available.</span>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => worker.postMessage({ type: 'SKIP_WAITING' })}
-      >
-        <RefreshCcw className="h-3.5 w-3.5" aria-hidden="true" />
-        Refresh
-      </Button>
-    </div>
+    <AppBanner
+      tone="info"
+      icon={RefreshCcw}
+      className="border-x-0 border-t-0 px-4 py-2 text-xs"
+      action={
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => worker.postMessage({ type: 'SKIP_WAITING' })}
+        >
+          Refresh
+        </Button>
+      }
+    >
+      New version available.
+    </AppBanner>
   );
 }
 
@@ -308,37 +309,40 @@ function InstallBanner({
 }) {
   if (!installEvent && !isIos) return null;
   return (
-    <div className="flex items-center gap-3 border-b border-border bg-background px-4 py-2 text-xs">
-      <Download className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <p className="min-w-0 flex-1 text-muted-foreground">
-        {isIos
-          ? 'Install from Safari: Share, then Add to Home Screen.'
-          : 'Install Medium for faster access.'}
-      </p>
-      {isIos ? (
-        <Share className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            await installEvent?.prompt();
-            onDismiss();
-          }}
-        >
-          Install
-        </Button>
-      )}
-      <button
-        type="button"
-        className="text-muted-foreground hover:text-foreground"
-        aria-label="Dismiss install prompt"
-        onClick={onDismiss}
-      >
-        <X className="h-4 w-4" aria-hidden="true" />
-      </button>
-    </div>
+    <AppBanner
+      tone="info"
+      icon={isIos ? Share : Download}
+      className="border-x-0 border-t-0 px-4 py-2 text-xs"
+      action={
+        <div className="flex items-center gap-2">
+          {!isIos && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await installEvent?.prompt();
+                onDismiss();
+              }}
+            >
+              Instalo
+            </Button>
+          )}
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Mbyll ftesën për instalim"
+            onClick={onDismiss}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      }
+    >
+      {isIos
+        ? 'Install from Safari: Share, then Add to Home Screen.'
+        : 'Install Medium for faster access.'}
+    </AppBanner>
   );
 }
 

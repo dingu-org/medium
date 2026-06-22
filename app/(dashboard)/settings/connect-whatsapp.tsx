@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { t } from '@/lib/i18n';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 
 type Props = {
@@ -93,19 +94,17 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
 
   const handleClick = useCallback(async () => {
     if (!online) {
-      toast.error('WhatsApp signup requires a connection.');
+      toast.error(t.settings.whatsappRequiresConnection);
       return;
     }
     if (!appId || !configId) {
-      toast.error('WhatsApp signup is not configured.');
+      toast.error(t.settings.whatsappNotConfigured);
       return;
     }
     // Facebook blocks FB.login on http:// pages. Local dev is http://localhost,
     // so signup must be exercised over HTTPS (Vercel preview or an HTTPS tunnel).
     if (window.location.protocol !== 'https:') {
-      toast.error(
-        'WhatsApp signup requires HTTPS — Facebook blocks it on http:// pages. Open the app over HTTPS (the Vercel preview or an HTTPS tunnel).',
-      );
+      toast.error(t.settings.whatsappRequiresHttps);
       return;
     }
     setPending(true);
@@ -134,7 +133,7 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
       const code = loginResp.authResponse?.code;
       const { phoneNumberId, wabaId } = sessionInfo.current;
       if (!code || !wabaId) {
-        toast.info('Connection incomplete — you can resume anytime.');
+        toast.info(t.settings.whatsappIncomplete);
         return;
       }
 
@@ -151,7 +150,7 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
       });
 
       if (res.ok) {
-        toast.success('WhatsApp Business app connected. Sync is starting.');
+        toast.success(t.settings.whatsappSuccess);
         router.refresh();
         return;
       }
@@ -159,7 +158,7 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       toast.error(errorMessage(body.error));
     } catch {
-      toast.error('Something went wrong connecting WhatsApp. Please try again.');
+      toast.error(t.settings.whatsappFailed);
     } finally {
       setPending(false);
     }

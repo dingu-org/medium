@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { createBrowserClient } from '@/lib/supabase/browser';
+import { t } from '@/lib/i18n';
 
-export function GoogleSignInButton({ label = 'Continue with Google' }: { label?: string }) {
+export function GoogleSignInButton({ label = t.auth.signIn.google }: { label?: string }) {
   const [pending, setPending] = useState(false);
 
   const handleClick = async () => {
@@ -17,7 +18,7 @@ export function GoogleSignInButton({ label = 'Continue with Google' }: { label?:
     });
     if (error) {
       setPending(false);
-      toast.error('Could not start Google sign-in. Please try again.');
+      toast.error(t.auth.errors.oauthFailed);
     }
     // On success the browser is redirected by Supabase before this resolves.
   };

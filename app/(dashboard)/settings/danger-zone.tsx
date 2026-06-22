@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { t } from '@/lib/i18n';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { deleteAccount, disconnectWhatsApp } from './actions';
 
@@ -35,30 +36,30 @@ export function DangerZone({ connected }: { connected: boolean }) {
 
   function onDisconnect() {
     if (!online) {
-      toast.error('Disconnecting WhatsApp requires a connection.');
+      toast.error(t.settings.disconnectRequiresConnection);
       return;
     }
     startDisconnect(async () => {
       try {
         await disconnectWhatsApp();
-        toast.success('WhatsApp disconnected.');
+        toast.success(t.settings.disconnectedToast);
         router.refresh();
       } catch {
-        toast.error('Could not disconnect. Please try again.');
+        toast.error(t.settings.disconnectFailed);
       }
     });
   }
 
   function onDelete() {
     if (!online) {
-      toast.error('Deleting your account requires a connection.');
+      toast.error(t.settings.deleteRequiresConnection);
       return;
     }
     startDelete(async () => {
       try {
         await deleteAccount();
       } catch {
-        toast.error('Could not delete account. Please try again.');
+        toast.error(t.settings.deleteFailed);
       }
     });
   }
@@ -66,40 +67,39 @@ export function DangerZone({ connected }: { connected: boolean }) {
   return (
     <Card className="border-destructive/30">
       <CardHeader>
-        <CardTitle className="text-destructive">Danger zone</CardTitle>
-        <CardDescription>These actions cannot be undone.</CardDescription>
+        <CardTitle className="text-destructive">{t.settings.dangerZone}</CardTitle>
+        <CardDescription>{t.settings.dangerNote}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {!online && (
           <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            Account and WhatsApp connection actions require a connection.
+            {t.settings.accountAndWhatsappRequireConnection}
           </p>
         )}
         {connected && (
           <Dialog>
             <DialogTrigger asChild>
               <Button variant="outline" className="w-full" disabled={!online}>
-                Disconnect WhatsApp
+                {t.settings.disconnectWhatsapp}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Disconnect WhatsApp?</DialogTitle>
+                <DialogTitle>{t.settings.disconnectTitle}</DialogTitle>
                 <DialogDescription>
-                  Patients won&apos;t be able to message your practice until you
-                  reconnect. Your appointments and history are kept.
+                  {t.settings.disconnectBody}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <DialogClose asChild>
-                  <Button variant="ghost">Cancel</Button>
+                  <Button variant="ghost">{t.actions.cancel}</Button>
                 </DialogClose>
                 <Button
                   variant="destructive"
                   onClick={onDisconnect}
                   disabled={disconnecting || !online}
                 >
-                  {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                  {disconnecting ? t.settings.disconnecting : t.settings.disconnectConfirm}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -109,21 +109,19 @@ export function DangerZone({ connected }: { connected: boolean }) {
         <Dialog onOpenChange={() => setConfirmText('')}>
           <DialogTrigger asChild>
             <Button variant="destructive" className="w-full" disabled={!online}>
-              Delete account
+              {t.settings.deleteAccount}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete your account?</DialogTitle>
+              <DialogTitle>{t.settings.deleteTitle}</DialogTitle>
               <DialogDescription>
-                This permanently deletes your practice, patients, appointments,
-                conversations, and WhatsApp connection. This cannot be undone.
+                {t.settings.deleteBody}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
               <Label htmlFor="confirm-delete">
-                Type <span className="font-mono font-semibold">DELETE</span> to
-                confirm
+                {t.settings.deleteTypePrompt}
               </Label>
               <Input
                 id="confirm-delete"
@@ -134,14 +132,14 @@ export function DangerZone({ connected }: { connected: boolean }) {
             </div>
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="ghost">Cancel</Button>
+                <Button variant="ghost">{t.actions.cancel}</Button>
               </DialogClose>
               <Button
                 variant="destructive"
                 onClick={onDelete}
                 disabled={deleting || !online || confirmText !== 'DELETE'}
               >
-                {deleting ? 'Deleting…' : 'Delete account'}
+                {deleting ? t.settings.deleting : t.settings.deleteConfirm}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -2,9 +2,10 @@
 
 import { z } from 'zod';
 import { createServerClient } from '@/lib/supabase/server';
+import { t } from '@/lib/i18n';
 
 const schema = z.object({
-  email: z.string().email('Enter a valid email'),
+  email: z.string().email(t.auth.errors.emailInvalid),
 });
 
 export type ForgotPasswordState = {

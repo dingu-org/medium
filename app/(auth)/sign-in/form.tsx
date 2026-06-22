@@ -5,6 +5,7 @@ import { useActionState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { t } from '@/lib/i18n';
 import { type SignInState, signIn } from './actions';
 import { GoogleSignInButton } from './oauth-buttons';
 
@@ -17,13 +18,13 @@ export function SignInForm({ confirmHint }: { confirmHint?: boolean }) {
     <div className="space-y-6">
       {confirmHint && (
         <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-          Check your email to confirm your account, then sign in.
+          {t.auth.signIn.confirmHint}
         </div>
       )}
 
       <form action={action} className="space-y-4" noValidate>
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t.auth.signIn.email}</Label>
           <Input id="email" name="email" type="email" autoComplete="email" required />
           {state.fieldErrors?.email && (
             <p className="text-sm text-destructive">{state.fieldErrors.email[0]}</p>
@@ -31,12 +32,12 @@ export function SignInForm({ confirmHint }: { confirmHint?: boolean }) {
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t.auth.signIn.password}</Label>
             <Link
               href="/forgot-password"
               className="text-xs text-muted-foreground hover:text-foreground"
             >
-              Forgot password?
+              {t.auth.signIn.forgot}
             </Link>
           </div>
           <Input id="password" name="password" type="password" autoComplete="current-password" required />
@@ -46,18 +47,18 @@ export function SignInForm({ confirmHint }: { confirmHint?: boolean }) {
         </div>
         {state.error && <p className="text-sm text-destructive">{state.error}</p>}
         <Button type="submit" className="w-full" disabled={pending}>
-          {pending ? 'Signing in…' : 'Sign in'}
+          {pending ? t.auth.signIn.submitting : t.auth.signIn.submit}
         </Button>
       </form>
 
-      <Separator label="or" />
+      <Separator label={t.auth.signIn.or} />
 
-      <GoogleSignInButton />
+      <GoogleSignInButton label={t.auth.signIn.google} />
 
       <p className="text-center text-sm text-muted-foreground">
-        Don&apos;t have an account?{' '}
+        {t.auth.signIn.footerQuestion}{' '}
         <Link href="/sign-up" className="font-medium text-foreground hover:underline">
-          Sign up
+          {t.auth.signIn.footerAction}
         </Link>
       </p>
     </div>

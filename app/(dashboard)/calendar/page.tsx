@@ -3,7 +3,9 @@ import { getCalendarSnapshot } from '@/lib/pwa/read-models';
 import { createServerClient } from '@/lib/supabase/server';
 import { CalendarClient } from './calendar-client';
 
-export const metadata = { title: 'Calendar · Medium' };
+import { t } from '@/lib/i18n';
+
+export const metadata = { title: `${t.calendar.title} · Medium` };
 
 export default async function CalendarPage({
   searchParams,

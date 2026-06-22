@@ -3,6 +3,7 @@
 import { useTransition } from 'react';
 import { signOut } from '@/lib/auth/actions';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { t } from '@/lib/i18n';
 import { clearPwaData } from '@/lib/pwa/client-store';
 
 export function SignOutMenuItem() {
@@ -21,7 +22,7 @@ export function SignOutMenuItem() {
           });
         }}
       >
-        Sign out
+        {t.account.signOut}
       </button>
     </DropdownMenuItem>
   );

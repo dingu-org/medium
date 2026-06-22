@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { t } from '@/lib/i18n';
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -9,10 +10,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </main>
       <footer className="text-muted-foreground mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs">
         <Link href="/privacy" className="hover:text-foreground">
-          Privacy policy
+          {t.auth.layout.privacyPolicy}
         </Link>
         <Link href="/terms" className="hover:text-foreground">
-          Terms of service
+          {t.auth.layout.termsOfService}
         </Link>
       </footer>
     </div>

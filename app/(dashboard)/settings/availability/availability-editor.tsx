@@ -1,10 +1,11 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
+import { Trash2, WifiOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/states';
+import { AppBanner } from '@/components/ui/app-banner';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -17,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
+import { t } from '@/lib/i18n';
 import {
   addBlockedPeriod,
   deleteBlockedPeriod,
@@ -25,13 +27,13 @@ import {
 
 // Display Monday-first; store JS getDay() numbers (0 = Sunday).
 const DAYS: { weekday: number; label: string }[] = [
-  { weekday: 1, label: 'Monday' },
-  { weekday: 2, label: 'Tuesday' },
-  { weekday: 3, label: 'Wednesday' },
-  { weekday: 4, label: 'Thursday' },
-  { weekday: 5, label: 'Friday' },
-  { weekday: 6, label: 'Saturday' },
-  { weekday: 0, label: 'Sunday' },
+  { weekday: 1, label: 'E hënë' },
+  { weekday: 2, label: 'E martë' },
+  { weekday: 3, label: 'E mërkurë' },
+  { weekday: 4, label: 'E enjte' },
+  { weekday: 5, label: 'E premte' },
+  { weekday: 6, label: 'E shtunë' },
+  { weekday: 0, label: 'E diel' },
 ];
 
 type DayState = { enabled: boolean; start: string; end: string };
@@ -86,12 +88,12 @@ export function AvailabilityEditor({
       }
       return next;
     });
-    toast.info('Copied hours to all enabled days.');
+    toast.info('Orari u kopjua te të gjitha ditët aktive.');
   }
 
   function onSave() {
     if (!online) {
-      toast.error('Availability requires a connection.');
+      toast.error('Disponueshmëria kërkon lidhje interneti.');
       return;
     }
     const rules = DAYS.filter((d) => days[d.weekday].enabled).map((d) => ({
@@ -101,27 +103,27 @@ export function AvailabilityEditor({
     }));
     const invalid = rules.find((r) => r.end <= r.start);
     if (invalid) {
-      toast.error('End time must be after start time.');
+      toast.error('Ora e mbarimit duhet të jetë pas asaj të fillimit.');
       return;
     }
     startSave(async () => {
       const res = await saveAvailability({ rules });
       if (res.ok) {
-        toast.success('Availability saved.');
+        toast.success('Disponueshmëria u ruajt.');
         router.refresh();
       } else {
-        toast.error(res.error ?? 'Could not save.');
+        toast.error(res.error ?? 'Nuk u ruajt dot.');
       }
     });
   }
 
   function onAddBlock() {
     if (!online) {
-      toast.error('Blocked periods require a connection.');
+      toast.error('Bllokimi i periudhave kërkon lidhje interneti.');
       return;
     }
     if (!date) {
-      toast.error('Pick a date to block.');
+      toast.error('Zgjidh një datë për ta bllokuar.');
       return;
     }
     startAdd(async () => {
@@ -132,19 +134,19 @@ export function AvailabilityEditor({
         label: blockLabel.trim() || undefined,
       });
       if (res.ok) {
-        toast.success('Blocked period added.');
+        toast.success('Periudha u bllokua.');
         setDate('');
         setBlockLabel('');
         router.refresh();
       } else {
-        toast.error(res.error ?? 'Could not add blocked period.');
+        toast.error(res.error ?? 'Nuk u shtua dot periudha e bllokuar.');
       }
     });
   }
 
   function onDeleteBlock(id: string) {
     if (!online) {
-      toast.error('Blocked periods require a connection.');
+      toast.error('Bllokimi i periudhave kërkon lidhje interneti.');
       return;
     }
     setDeletingId(id);
@@ -159,16 +161,16 @@ export function AvailabilityEditor({
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Weekly hours</CardTitle>
+          <CardTitle>{t.availability.daysAndHours}</CardTitle>
           <CardDescription>
-            When patients can book. Appointments are 60 minutes.
+            Kur mund të rezervojnë pacientët. Takimet zgjasin 60 minuta.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!online && (
-            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              Availability changes require a connection.
-            </p>
+            <AppBanner tone="neutral" icon={WifiOff} className="rounded-[10px] text-xs">
+              Ndryshimet e disponueshmërisë kërkojnë lidhje interneti.
+            </AppBanner>
           )}
           {DAYS.map(({ weekday, label }) => {
             const day = days[weekday];
@@ -194,7 +196,7 @@ export function AvailabilityEditor({
                   <div className="flex items-center gap-2">
                     <Input
                       type="time"
-                      aria-label={`${label} start time`}
+                      aria-label={`${label} — ora e fillimit`}
                       value={day.start}
                       onChange={(e) => update(weekday, { start: e.target.value })}
                       disabled={!online}
@@ -203,7 +205,7 @@ export function AvailabilityEditor({
                     <span className="text-muted-foreground">–</span>
                     <Input
                       type="time"
-                      aria-label={`${label} end time`}
+                      aria-label={`${label} — ora e mbarimit`}
                       value={day.end}
                       onChange={(e) => update(weekday, { end: e.target.value })}
                       disabled={!online}
@@ -217,7 +219,7 @@ export function AvailabilityEditor({
                       onClick={() => copyToAll(weekday)}
                       disabled={!online}
                     >
-                      Copy to all
+                      {t.availability.copyToAll}
                     </Button>
                   </div>
                 )}
@@ -230,26 +232,26 @@ export function AvailabilityEditor({
             onClick={onSave}
             disabled={saving || !online}
           >
-            {saving ? 'Saving…' : 'Save availability'}
+            {saving ? t.actions.saving : 'Ruaj disponueshmërinë'}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Blocked periods</CardTitle>
+          <CardTitle>{t.availability.blockedPeriods}</CardTitle>
           <CardDescription>
-            Holidays or personal time when you can&apos;t take appointments.
+            Pushime ose kohë personale kur nuk pranon takime.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!online && (
-            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              Blocked periods require a connection.
-            </p>
+            <AppBanner tone="neutral" icon={WifiOff} className="rounded-[10px] text-xs">
+              Bllokimi i periudhave kërkon lidhje interneti.
+            </AppBanner>
           )}
           {blocks.length === 0 ? (
-            <EmptyState title="No blocked periods" />
+            <EmptyState title="Asnjë periudhë e bllokuar" />
           ) : (
             <ul className="space-y-2">
               {blocks.map((b) => (
@@ -267,7 +269,7 @@ export function AvailabilityEditor({
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    aria-label="Delete blocked period"
+                    aria-label="Fshi periudhën e bllokuar"
                     onClick={() => onDeleteBlock(b.id)}
                     disabled={deletingId === b.id || !online}
                   >
@@ -280,7 +282,7 @@ export function AvailabilityEditor({
 
           <div className="space-y-3 rounded-lg border border-dashed border-border p-3">
             <div className="space-y-2">
-              <Label htmlFor="block-date">Date</Label>
+              <Label htmlFor="block-date">Data</Label>
               <Input
                 id="block-date"
                 type="date"
@@ -292,7 +294,7 @@ export function AvailabilityEditor({
             <div className="flex items-center gap-2">
               <Input
                 type="time"
-                aria-label="Block start time"
+                aria-label="Ora e fillimit"
                 value={blockStart}
                 onChange={(e) => setBlockStart(e.target.value)}
                 disabled={!online}
@@ -301,7 +303,7 @@ export function AvailabilityEditor({
               <span className="text-muted-foreground">–</span>
               <Input
                 type="time"
-                aria-label="Block end time"
+                aria-label="Ora e mbarimit"
                 value={blockEnd}
                 onChange={(e) => setBlockEnd(e.target.value)}
                 disabled={!online}
@@ -309,12 +311,12 @@ export function AvailabilityEditor({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="block-label">Label (optional)</Label>
+              <Label htmlFor="block-label">Etiketa (jo e detyrueshme)</Label>
               <Input
                 id="block-label"
                 value={blockLabel}
                 onChange={(e) => setBlockLabel(e.target.value)}
-                placeholder="e.g. Holiday"
+                placeholder="p.sh. Pushim"
                 disabled={!online}
               />
             </div>
@@ -325,7 +327,7 @@ export function AvailabilityEditor({
               onClick={onAddBlock}
               disabled={adding || !online}
             >
-              Add blocked period
+              {t.availability.addBlocked}
             </Button>
           </div>
         </CardContent>

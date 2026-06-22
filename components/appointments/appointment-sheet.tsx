@@ -1,7 +1,6 @@
 'use client';
 
 import { TZDate } from '@date-fns/tz';
-import { format } from 'date-fns';
 import { MessageSquare, Phone } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -19,14 +18,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { StatusPill } from '@/components/ui/status-pill';
+import { Textarea } from '@/components/ui/textarea';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
+import { formatTime, formatWeekdayDate, t } from '@/lib/i18n';
 import {
   listPendingMutations,
   type PendingMutation,
   subscribeToQueueChanges,
 } from '@/lib/pwa/client-store';
 import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
-import { cn } from '@/lib/utils';
 import { ReminderBadge, StatusBadge } from './badges';
 import type { AppointmentView } from './types';
 
@@ -119,8 +120,8 @@ export function AppointmentSheet({
         if (res.status === 'queued') {
           toast.success(
             res.reason === 'offline'
-              ? 'Change queued. It will sync when you’re online.'
-              : 'Change queued. It will retry automatically.',
+              ? t.appointment.changeQueued
+              : t.appointment.changeQueuedRetry,
           );
           close();
           return;
@@ -128,7 +129,7 @@ export function AppointmentSheet({
         toast.error(res.error);
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : 'Could not queue change.',
+          error instanceof Error ? error.message : t.appointment.changeQueueError,
         );
       }
     });
@@ -144,20 +145,20 @@ export function AppointmentSheet({
           notes,
         });
         if (res.status === 'sent') {
-          toast.success('Notes saved.');
+          toast.success(t.appointment.notesSaved);
           router.refresh();
         } else if (res.status === 'queued') {
           toast.success(
             res.reason === 'offline'
-              ? 'Notes queued. They will sync when you’re online.'
-              : 'Notes queued. They will retry automatically.',
+              ? t.appointment.notesQueued
+              : t.appointment.notesQueuedRetry,
           );
         } else {
           toast.error(res.error);
         }
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : 'Could not queue notes.',
+          error instanceof Error ? error.message : t.appointment.notesQueueError,
         );
       }
     });
@@ -167,7 +168,7 @@ export function AppointmentSheet({
     setMode('reschedule');
     if (!slots) {
       if (!online) {
-        toast.error('Loading available slots requires a connection.');
+        toast.error(t.appointment.slotsRequireConnection);
         setSlots([]);
         return;
       }
@@ -187,7 +188,7 @@ export function AppointmentSheet({
             <StatusBadge status={appointment.status} />
           </SheetTitle>
           <SheetDescription className="sr-only">
-            Appointment details
+            {t.appointment.detailsTitle}
           </SheetDescription>
         </SheetHeader>
 
@@ -195,11 +196,9 @@ export function AppointmentSheet({
           {mode === 'detail' && (
             <>
               <div className="rounded-lg border border-border p-3">
-                <p className="text-lg font-semibold">
-                  {format(start, 'EEEE d MMM')}
-                </p>
+                <p className="text-lg font-semibold">{formatWeekdayDate(start)}</p>
                 <p className="text-muted-foreground">
-                  {format(start, 'HH:mm')}–{format(end, 'HH:mm')}
+                  {formatTime(start)}–{formatTime(end)}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {appointment.serviceType && (
@@ -209,16 +208,16 @@ export function AppointmentSheet({
                   )}
                   <ReminderBadge reminder={appointment.reminder} />
                   {pendingLabel && (
-                    <span
-                      className={cn(
-                        'rounded-full border px-2 py-0.5 text-[11px] font-medium',
+                    <StatusPill
+                      tone={
                         appointmentMutations.some((m) => m.status === 'failed')
-                          ? 'border-destructive/30 bg-destructive/10 text-destructive'
-                          : 'border-amber-200 bg-amber-50 text-amber-800',
-                      )}
+                          ? 'danger'
+                          : 'warning'
+                      }
+                      mono
                     >
                       {pendingLabel}
-                    </span>
+                    </StatusPill>
                   )}
                 </div>
               </div>
@@ -227,7 +226,7 @@ export function AppointmentSheet({
                 <Button asChild variant="outline" size="sm">
                   <a href={`tel:${appointment.patientPhone}`}>
                     <Phone className="h-4 w-4" aria-hidden="true" />
-                    Call
+                    {t.appointment.call}
                   </a>
                 </Button>
                 {appointment.patientWaId && (
@@ -238,14 +237,14 @@ export function AppointmentSheet({
                       rel="noopener noreferrer"
                     >
                       <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                      WhatsApp
+                      {t.appointment.whatsapp}
                     </a>
                   </Button>
                 )}
                 {appointment.conversationId && (
                   <Button asChild variant="outline" size="sm">
                     <Link href={`/chat/${appointment.conversationId}`}>
-                      Open chat
+                      {t.appointment.openChat}
                     </Link>
                   </Button>
                 )}
@@ -253,15 +252,15 @@ export function AppointmentSheet({
 
               <div className="space-y-2">
                 <label htmlFor="appt-notes" className="text-sm font-medium">
-                  Notes
+                  {t.appointment.privateNote}
                 </label>
-                <textarea
+                <Textarea
                   id="appt-notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
-                  className="w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  placeholder="Add a private note…"
+                  className="resize-none"
+                  placeholder={t.appointment.notePlaceholder}
                 />
                 {notes !== (appointment.notes ?? '') && (
                   <Button
@@ -270,7 +269,7 @@ export function AppointmentSheet({
                     onClick={saveNotes}
                     disabled={pending}
                   >
-                    Save notes
+                    {t.appointment.saveNote}
                   </Button>
                 )}
               </div>
@@ -283,7 +282,7 @@ export function AppointmentSheet({
                       onClick={openReschedule}
                       disabled={pending}
                     >
-                      Reschedule
+                      {t.appointment.reschedule}
                     </Button>
                   )}
                   {ended && (
@@ -296,12 +295,12 @@ export function AppointmentSheet({
                             appointmentId: appointment.id,
                             nextStatus: 'completed',
                           },
-                          'Marked complete.',
+                          t.appointment.markedComplete,
                         )
                       }
                       disabled={pending}
                     >
-                      Mark complete
+                      {t.appointment.markComplete}
                     </Button>
                   )}
                   {started && (
@@ -314,12 +313,12 @@ export function AppointmentSheet({
                             appointmentId: appointment.id,
                             nextStatus: 'no_show',
                           },
-                          'Marked as no-show.',
+                          t.appointment.markedNoShow,
                         )
                       }
                       disabled={pending}
                     >
-                      Mark no-show
+                      {t.appointment.markNoShow}
                     </Button>
                   )}
                   <Button
@@ -327,7 +326,7 @@ export function AppointmentSheet({
                     onClick={() => setMode('cancel')}
                     disabled={pending}
                   >
-                    Cancel appointment
+                    {t.appointment.cancel}
                   </Button>
                 </div>
               )}
@@ -336,15 +335,13 @@ export function AppointmentSheet({
 
           {mode === 'cancel' && (
             <div className="space-y-3">
-              <p className="text-sm">
-                Cancel this appointment? The patient will be notified.
-              </p>
-              <textarea
+              <p className="text-sm">{t.appointment.cancelBodyAlt}</p>
+              <Textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={2}
-                placeholder="Reason (optional)"
-                className="w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                placeholder={t.appointment.cancelReasonPlaceholder}
+                className="resize-none"
               />
               <div className="flex gap-2">
                 <Button
@@ -353,7 +350,7 @@ export function AppointmentSheet({
                   onClick={() => setMode('detail')}
                   disabled={pending}
                 >
-                  Back
+                  {t.appointment.back}
                 </Button>
                 <Button
                   variant="destructive"
@@ -365,12 +362,12 @@ export function AppointmentSheet({
                         appointmentId: appointment.id,
                         reason,
                       },
-                      'Appointment cancelled.',
+                      t.appointment.cancelled,
                     )
                   }
                   disabled={pending}
                 >
-                  Confirm cancel
+                  {t.appointment.cancelConfirm}
                 </Button>
               </div>
             </div>
@@ -379,22 +376,24 @@ export function AppointmentSheet({
           {mode === 'reschedule' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Pick a new time</p>
+                <p className="text-sm font-medium">{t.appointment.pickNewTime}</p>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setMode('detail')}
                 >
-                  Back
+                  {t.appointment.back}
                 </Button>
               </div>
               {slots === null ? (
-                <p className="text-sm text-muted-foreground">Loading slots…</p>
+                <p className="text-sm text-muted-foreground">
+                  {t.appointment.loadingSlots}
+                </p>
               ) : slots.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {online
-                    ? 'No free slots in the next 14 days. Check your availability.'
-                    : 'Reconnect to load available slots.'}
+                    ? t.appointment.noSlotsOnline
+                    : t.appointment.noSlotsOffline}
                 </p>
               ) : (
                 <div className="space-y-4">
@@ -415,11 +414,11 @@ export function AppointmentSheet({
                                   appointmentId: appointment.id,
                                   newStartsAt: iso,
                                 },
-                                'Appointment rescheduled.',
+                                t.appointment.rescheduled,
                               )
                             }
                           >
-                            {format(new TZDate(new Date(iso), timezone), 'HH:mm')}
+                            {formatTime(new TZDate(new Date(iso), timezone))}
                           </Button>
                         ))}
                       </div>
@@ -443,13 +442,14 @@ function appointmentIdFromMutation(mutation: PendingMutation): string | null {
 
 function getPendingAppointmentLabel(mutations: PendingMutation[]): string | null {
   if (mutations.length === 0) return null;
-  if (mutations.some((m) => m.status === 'failed')) return 'Sync failed';
+  if (mutations.some((m) => m.status === 'failed'))
+    return t.appointment.syncFailed;
   const actions = new Set(
     mutations.map((m) => (m.body as { action?: unknown } | null)?.action),
   );
-  if (actions.has('cancel')) return 'Cancel pending';
-  if (actions.has('reschedule')) return 'Move pending';
-  if (actions.has('notes')) return 'Notes pending';
-  if (actions.has('transition')) return 'Status pending';
-  return 'Sync pending';
+  if (actions.has('cancel')) return t.appointment.cancelPending;
+  if (actions.has('reschedule')) return t.appointment.movePending;
+  if (actions.has('notes')) return t.appointment.notesPending;
+  if (actions.has('transition')) return t.appointment.statusPending;
+  return t.appointment.syncPending;
 }

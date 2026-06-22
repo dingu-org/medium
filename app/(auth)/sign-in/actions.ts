@@ -3,10 +3,11 @@
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { createServerClient } from '@/lib/supabase/server';
+import { t } from '@/lib/i18n';
 
 const schema = z.object({
-  email: z.string().email('Enter a valid email'),
-  password: z.string().min(1, 'Password is required'),
+  email: z.string().email(t.auth.errors.emailInvalid),
+  password: z.string().min(1, t.auth.errors.passwordRequired),
 });
 
 export type SignInState = {
@@ -27,8 +28,8 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
-    return { error: 'Invalid email or password', fieldErrors: null };
+    return { error: t.auth.signIn.wrong, fieldErrors: null };
   }
 
-  redirect('/calendar');
+  redirect('/today');
 }

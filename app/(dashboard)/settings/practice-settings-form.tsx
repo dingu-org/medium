@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { t } from '@/lib/i18n';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { updateSettings } from './actions';
 import {
@@ -31,11 +32,11 @@ import {
 } from './constants';
 
 const PREF_LABELS: Record<keyof NotificationPrefs, string> = {
-  booking: 'New bookings',
-  cancellation: 'Cancellations',
-  reschedule: 'Reschedules',
-  escalation: 'Patient asks for you (escalation)',
-  reminderFailure: 'Reminder failures',
+  booking: t.settings.notifNewBookings,
+  cancellation: t.settings.notifCancellations,
+  reschedule: t.settings.notifReschedules,
+  escalation: t.settings.notifEscalations,
+  reminderFailure: t.settings.notifReminderFailure,
 };
 
 const initialState: SettingsState = {
@@ -82,14 +83,14 @@ export function PracticeSettingsForm(props: Props) {
   const timezones = useTimezones(props.timezone);
 
   useEffect(() => {
-    if (state.success) toast.success('Settings saved.');
+    if (state.success) toast.success(t.settings.savedToast);
     if (state.error) toast.error(state.error);
   }, [state]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     if (online) return;
     event.preventDefault();
-    toast.error('Settings require a connection.');
+    toast.error(t.settings.settingsRequireConnection);
   }
 
   return (
@@ -108,12 +109,12 @@ export function PracticeSettingsForm(props: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Practice</CardTitle>
-          <CardDescription>Your practice name and timezone.</CardDescription>
+          <CardTitle>{t.settings.practiceCard}</CardTitle>
+          <CardDescription>{t.settings.practiceCardSub}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="practiceName">Practice name</Label>
+            <Label htmlFor="practiceName">{t.settings.practiceName}</Label>
             <Input
               id="practiceName"
               name="practiceName"
@@ -127,10 +128,10 @@ export function PracticeSettingsForm(props: Props) {
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="timezone">Timezone</Label>
+            <Label htmlFor="timezone">{t.settings.timezone}</Label>
             <Select value={timezone} onValueChange={setTimezone}>
               <SelectTrigger id="timezone" className="w-full">
-                <SelectValue placeholder="Select timezone" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {timezones.map((tz) => (
@@ -151,41 +152,39 @@ export function PracticeSettingsForm(props: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>AI assistant</CardTitle>
-          <CardDescription>
-            How the assistant introduces itself and when it hands off to you.
-          </CardDescription>
+          <CardTitle>{t.settings.aiCard}</CardTitle>
+          <CardDescription>{t.settings.aiCardSub}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="aiName">Assistant name</Label>
+            <Label htmlFor="aiName">{t.settings.aiNameLabel}</Label>
             <Input
               id="aiName"
               name="aiName"
               defaultValue={props.aiName}
-              placeholder="e.g. Mia"
+              placeholder="p.sh. Mia"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="aiGreeting">Greeting message</Label>
+            <Label htmlFor="aiGreeting">{t.settings.aiGreetingLabel}</Label>
             <Textarea
               id="aiGreeting"
               name="aiGreeting"
               defaultValue={props.aiGreeting}
               rows={3}
-              placeholder="Hi! Thanks for messaging…"
+              placeholder={t.settings.aiGreetingPlaceholder}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="aiEscalationKeyword">Escalation keyword</Label>
+            <Label htmlFor="aiEscalationKeyword">{t.settings.aiEscalationLabel}</Label>
             <Input
               id="aiEscalationKeyword"
               name="aiEscalationKeyword"
               defaultValue={props.aiEscalationKeyword}
-              placeholder="HELP"
+              placeholder={t.ops.help}
             />
             <p className="text-xs text-muted-foreground">
-              When a patient sends this word, the AI hands the chat to you.
+              {t.settings.aiEscalationHint}
             </p>
           </div>
         </CardContent>
@@ -193,10 +192,8 @@ export function PracticeSettingsForm(props: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Notifications</CardTitle>
-          <CardDescription>
-            Which events send you a push notification.
-          </CardDescription>
+          <CardTitle>{t.settings.sectionNotifications}</CardTitle>
+          <CardDescription>{t.settings.notifCardSub}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {NOTIFICATION_PREF_KEYS.map((key) => (
@@ -216,17 +213,15 @@ export function PracticeSettingsForm(props: Props) {
             </label>
           ))}
           <p className="text-xs text-muted-foreground">
-            Email notifications — coming soon.
+            {t.settings.emailComingSoon}
           </p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Data retention</CardTitle>
-          <CardDescription>
-            How long patient messages and history are kept.
-          </CardDescription>
+          <CardTitle>{t.settings.retention}</CardTitle>
+          <CardDescription>{t.settings.retentionCardSub}</CardDescription>
         </CardHeader>
         <CardContent>
           <Select value={retentionDays} onValueChange={setRetentionDays}>
@@ -236,7 +231,7 @@ export function PracticeSettingsForm(props: Props) {
             <SelectContent>
               {RETENTION_OPTIONS.map((days) => (
                 <SelectItem key={days} value={String(days)}>
-                  {days} days
+                  {t.settings.retentionDays(days)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -245,11 +240,11 @@ export function PracticeSettingsForm(props: Props) {
       </Card>
 
       <Button type="submit" className="w-full" disabled={pending || !online}>
-        {pending ? 'Saving…' : 'Save settings'}
+        {pending ? t.actions.saving : t.settings.saveSettings}
       </Button>
       {!online && (
         <p className="text-center text-xs text-muted-foreground">
-          Settings changes require a connection.
+          {t.settings.requiresConnection}
         </p>
       )}
     </form>

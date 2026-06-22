@@ -11,7 +11,7 @@ import { ONBOARDING_SKIP_COOKIE } from './constants';
  */
 export async function dismissAndGo(formData: FormData): Promise<void> {
   const raw = formData.get('href');
-  const href = typeof raw === 'string' && raw.startsWith('/') ? raw : '/calendar';
+  const href = typeof raw === 'string' && raw.startsWith('/') ? raw : '/today';
 
   const store = await cookies();
   store.set(ONBOARDING_SKIP_COOKIE, '1', {

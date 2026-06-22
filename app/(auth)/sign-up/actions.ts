@@ -3,10 +3,11 @@
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { createServerClient } from '@/lib/supabase/server';
+import { t } from '@/lib/i18n';
 
 const schema = z.object({
-  email: z.string().email('Enter a valid email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  email: z.string().email(t.auth.errors.emailInvalid),
+  password: z.string().min(8, t.auth.errors.passwordMin),
 });
 
 export type SignUpState = {

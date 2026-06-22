@@ -1,20 +1,25 @@
-import { Badge } from '@/components/ui/badge';
+import {
+  StatusPill,
+  type StatusPillTone,
+} from '@/components/ui/status-pill';
+import { t } from '@/lib/i18n';
 import type { AppointmentStatus } from '@/lib/appointments';
 
-type Variant = 'default' | 'secondary' | 'destructive' | 'outline';
-
-const STATUS: Record<AppointmentStatus, { label: string; variant: Variant }> = {
-  pending: { label: 'Pending', variant: 'secondary' },
-  confirmed: { label: 'Confirmed', variant: 'default' },
-  cancelled: { label: 'Cancelled', variant: 'destructive' },
-  completed: { label: 'Completed', variant: 'outline' },
-  no_show: { label: 'No-show', variant: 'destructive' },
-  rescheduled: { label: 'Rescheduled', variant: 'secondary' },
+const STATUS_TONE: Record<AppointmentStatus, StatusPillTone> = {
+  pending: 'warning',
+  confirmed: 'success',
+  cancelled: 'danger',
+  completed: 'neutral',
+  no_show: 'danger',
+  rescheduled: 'brand',
 };
 
 export function StatusBadge({ status }: { status: AppointmentStatus }) {
-  const s = STATUS[status];
-  return <Badge variant={s.variant}>{s.label}</Badge>;
+  return (
+    <StatusPill tone={STATUS_TONE[status]} dot>
+      {t.status[status]}
+    </StatusPill>
+  );
 }
 
 export type ReminderInfo = {
@@ -24,24 +29,24 @@ export type ReminderInfo = {
 
 export function reminderBadge(
   r: ReminderInfo,
-): { label: string; variant: Variant } | null {
+): { label: string; tone: StatusPillTone } | null {
   if (!r) return null;
   switch (r.status) {
     case 'scheduled':
     case 'requeued':
-      return { label: 'Reminder pending', variant: 'secondary' };
+      return { label: t.reminder.pending, tone: 'warning' };
     case 'sent':
       if (r.responseType === 'confirm')
-        return { label: 'Confirmed', variant: 'default' };
+        return { label: t.reminder.confirmed, tone: 'success' };
       if (r.responseType === 'cancel')
-        return { label: 'Cancelled by patient', variant: 'destructive' };
+        return { label: t.reminder.cancelledByPatient, tone: 'danger' };
       if (r.responseType === 'reschedule_requested')
-        return { label: 'Wants to reschedule', variant: 'secondary' };
-      return { label: 'Reminder sent', variant: 'outline' };
+        return { label: t.reminder.wantsReschedule, tone: 'warning' };
+      return { label: t.reminder.sent, tone: 'neutral' };
     case 'skipped':
-      return { label: 'Reminder skipped', variant: 'outline' };
+      return { label: t.reminder.skipped, tone: 'neutral' };
     case 'failed':
-      return { label: 'Reminder failed', variant: 'destructive' };
+      return { label: t.reminder.failed, tone: 'danger' };
     default:
       return null;
   }
@@ -50,5 +55,5 @@ export function reminderBadge(
 export function ReminderBadge({ reminder }: { reminder: ReminderInfo }) {
   const badge = reminderBadge(reminder);
   if (!badge) return null;
-  return <Badge variant={badge.variant}>{badge.label}</Badge>;
+  return <StatusPill tone={badge.tone}>{badge.label}</StatusPill>;
 }

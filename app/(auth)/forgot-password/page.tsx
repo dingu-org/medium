@@ -1,16 +1,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { t } from '@/lib/i18n';
 import { ForgotPasswordForm } from './form';
 
 export const metadata = {
-  title: 'Reset password · Medium',
+  title: `${t.auth.forgot.title} · ${t.appName}`,
 };
 
 export default function ForgotPasswordPage() {
   return (
     <Card>
       <CardHeader className="text-center">
-        <CardTitle>Reset your password</CardTitle>
-        <CardDescription>Enter your email and we&apos;ll send a reset link.</CardDescription>
+        <CardTitle>{t.auth.forgot.title}</CardTitle>
+        <CardDescription>{t.auth.forgot.subtitle}</CardDescription>
       </CardHeader>
       <CardContent>
         <ForgotPasswordForm />

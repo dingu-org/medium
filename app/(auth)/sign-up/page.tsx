@@ -1,16 +1,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { t } from '@/lib/i18n';
 import { SignUpForm } from './form';
 
 export const metadata = {
-  title: 'Sign up · Medium',
+  title: `${t.auth.signUp.title} · ${t.appName}`,
 };
 
 export default function SignUpPage() {
   return (
     <Card>
       <CardHeader className="text-center">
-        <CardTitle>Create your account</CardTitle>
-        <CardDescription>Set up your practice in a few minutes.</CardDescription>
+        <CardTitle>{t.auth.signUp.title}</CardTitle>
+        <CardDescription>{t.auth.signUp.subtitle}</CardDescription>
       </CardHeader>
       <CardContent>
         <SignUpForm />

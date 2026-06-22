@@ -5,6 +5,7 @@ import { useActionState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { t } from '@/lib/i18n';
 import { GoogleSignInButton } from '../sign-in/oauth-buttons';
 import { type SignUpState, signUp } from './actions';
 
@@ -17,14 +18,14 @@ export function SignUpForm() {
     <div className="space-y-6">
       <form action={action} className="space-y-4" noValidate>
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" autoComplete="email" required />
+          <Label htmlFor="email">{t.auth.signIn.email}</Label>
+          <Input id="email" name="email" type="email" autoComplete="email" required placeholder={t.auth.signUp.emailPlaceholder} />
           {state.fieldErrors?.email && (
             <p className="text-sm text-destructive">{state.fieldErrors.email[0]}</p>
           )}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t.auth.signIn.password}</Label>
           <Input
             id="password"
             name="password"
@@ -32,6 +33,7 @@ export function SignUpForm() {
             autoComplete="new-password"
             required
             minLength={8}
+            placeholder={t.auth.signUp.passwordPlaceholder}
           />
           {state.fieldErrors?.password && (
             <p className="text-sm text-destructive">{state.fieldErrors.password[0]}</p>
@@ -39,18 +41,18 @@ export function SignUpForm() {
         </div>
         {state.error && <p className="text-sm text-destructive">{state.error}</p>}
         <Button type="submit" className="w-full" disabled={pending}>
-          {pending ? 'Creating account…' : 'Sign up'}
+          {pending ? t.auth.signUp.submitting : t.auth.signUp.submit}
         </Button>
       </form>
 
-      <Separator label="or" />
+      <Separator label={t.auth.signIn.or} />
 
-      <GoogleSignInButton label="Continue with Google" />
+      <GoogleSignInButton label={t.auth.signIn.google} />
 
       <p className="text-center text-sm text-muted-foreground">
-        Already have an account?{' '}
+        {t.auth.signUp.footerQuestion}{' '}
         <Link href="/sign-in" className="font-medium text-foreground hover:underline">
-          Sign in
+          {t.auth.signUp.footerAction}
         </Link>
       </p>
     </div>
