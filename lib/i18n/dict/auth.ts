@@ -8,6 +8,7 @@ export const auth = {
     forgot: 'Harrove?',
     submit: 'Hyr',
     submitting: 'Po hyn…',
+    redirecting: 'Po ridrejtohesh…',
     google: 'Vazhdo me Google',
     or: 'ose',
     footerQuestion: 'Nuk ke llogari?',
@@ -37,11 +38,25 @@ export const auth = {
     backToSignIn: 'Kthehu te hyrja',
   },
 
+  reset: {
+    title: 'Zgjidh fjalëkalim të ri',
+    subtitle: 'Përdor të paktën 8 karaktere.',
+    password: 'Fjalëkalimi i ri',
+    confirm: 'Përsërit fjalëkalimin',
+    submit: 'Ruaj fjalëkalimin',
+    submitting: 'Po ruhet…',
+    mismatch: 'Fjalëkalimet nuk përputhen.',
+    complete: 'Fjalëkalimi u ndryshua. Mund të hysh tani.',
+  },
+
   errors: {
     emailInvalid: 'Shkruaj një email të vlefshëm.',
     passwordRequired: 'Fjalëkalimi është i detyrueshëm.',
     passwordMin: 'Fjalëkalimi duhet të ketë të paktën 8 karaktere.',
     oauthFailed: 'Nuk mund të fillojë hyrja me Google. Provo sërish.',
+    callbackFailed:
+      'Lidhja e hyrjes ka skaduar ose nuk është e vlefshme. Provo sërish.',
+    signUpFailed: 'Llogaria nuk u krijua. Provo sërish.',
   },
 
   layout: {

@@ -15,7 +15,13 @@ const items = [
   { href: '/settings', label: t.nav.you, icon: Settings },
 ];
 
-export function BottomNav({ unreadChats = false }: { unreadChats?: boolean }) {
+export function BottomNav({
+  unreadChats = false,
+  unreadCount = 0,
+}: {
+  unreadChats?: boolean;
+  unreadCount?: number;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -32,7 +38,7 @@ export function BottomNav({ unreadChats = false }: { unreadChats?: boolean }) {
   }
 
   return (
-    <nav className="fixed right-0 bottom-0 left-0 z-10 border-t border-border bg-card pb-[env(safe-area-inset-bottom)]">
+    <nav className="border-border bg-card fixed right-0 bottom-0 left-0 z-10 border-t pb-[env(safe-area-inset-bottom)]">
       <ul className="mx-auto flex max-w-md items-stretch justify-around">
         {items.map(({ href, label, icon: Icon, badge }) => {
           const displayPathname = pendingHref ?? pathname;
@@ -62,10 +68,9 @@ export function BottomNav({ unreadChats = false }: { unreadChats?: boolean }) {
                 <span className="relative">
                   <Icon className="h-5 w-5" aria-hidden />
                   {showDot && (
-                    <span
-                      className="absolute -top-0.5 -right-1 h-2.5 w-2.5 rounded-full border-2 border-card bg-destructive"
-                      aria-hidden
-                    />
+                    <span className="border-card bg-destructive absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full border px-1 text-[9px] leading-none font-semibold text-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
                   )}
                 </span>
                 <span>{label}</span>

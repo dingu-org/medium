@@ -13,13 +13,14 @@ import { AppointmentError } from './errors';
 import { withAppointmentLock } from './lock';
 import type { AppointmentRecord } from './types';
 
-const APPOINTMENT_DURATION_MINUTES = 60;
+const DEFAULT_APPOINTMENT_DURATION_MINUTES = 60;
 
 type BookAppointmentInput = {
   ptId: string;
   patientId: string;
   startsAt: Date;
   serviceType: string;
+  durationMinutes?: number;
   notes?: string;
   // PT-initiated manual bookings may fall outside working hours / blocked
   // periods. Double-booking is still prevented by the active-overlap exclusion
@@ -72,6 +73,18 @@ export async function bookAppointment(
   if (!input.serviceType.trim()) {
     throw new AppointmentError('invalid_input', 'A service type is required.');
   }
+  const durationMinutes =
+    input.durationMinutes ?? DEFAULT_APPOINTMENT_DURATION_MINUTES;
+  if (
+    !Number.isInteger(durationMinutes) ||
+    durationMinutes < 5 ||
+    durationMinutes > 480
+  ) {
+    throw new AppointmentError(
+      'invalid_input',
+      'Appointment duration must be between 5 and 480 minutes.',
+    );
+  }
 
   return withAppointmentLock(input.ptId, async () => {
     await assertPatientBelongsToPractice(input.ptId, input.patientId);
@@ -79,13 +92,13 @@ export async function bookAppointment(
     const existing = await findExisting(input);
     if (existing) return existing;
 
-    const endsAt = addMinutes(input.startsAt, APPOINTMENT_DURATION_MINUTES);
+    const endsAt = addMinutes(input.startsAt, durationMinutes);
     if (!input.allowOutsideAvailability) {
       const availability = await getFreeSlotsInternal({
         ptId: input.ptId,
         start: input.startsAt,
         end: endsAt,
-        durationMinutes: APPOINTMENT_DURATION_MINUTES,
+        durationMinutes,
         serviceType: input.serviceType,
       });
       if (

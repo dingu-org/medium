@@ -21,7 +21,8 @@ const jetBrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   applicationName: 'Medium',
   title: 'Medium',
-  description: 'WhatsApp scheduling assistant for physical therapists.',
+  description:
+    'Asistent për menaxhimin e takimeve në WhatsApp për fizioterapistë.',
   manifest: '/manifest.json',
   icons: {
     icon: [
@@ -52,7 +53,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="sq"
       className={`${inter.variable} ${interTight.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
       <body

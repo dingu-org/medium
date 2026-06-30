@@ -18,9 +18,17 @@ type Props = {
 declare global {
   interface Window {
     FB?: {
-      init(params: { appId: string; cookie?: boolean; xfbml?: boolean; version: string }): void;
+      init(params: {
+        appId: string;
+        cookie?: boolean;
+        xfbml?: boolean;
+        version: string;
+      }): void;
       login(
-        cb: (resp: { authResponse?: { code?: string } | null; status?: string }) => void,
+        cb: (resp: {
+          authResponse?: { code?: string } | null;
+          status?: string;
+        }) => void,
         opts: Record<string, unknown>,
       ): void;
     };
@@ -53,16 +61,21 @@ function loadFbSdk(appId: string, version: string): Promise<void> {
 function errorMessage(kind: unknown): string {
   switch (kind) {
     case 'duplicate_number':
-      return 'That number is already connected to another provider. Disconnect it there, then retry.';
+      return 'Ky numër është lidhur me një ofrues tjetër. Shkëpute atje dhe provo sërish.';
     case 'rejected':
-      return 'Meta could not verify the business. Check your details and try again.';
+      return 'Meta nuk e verifikoi biznesin. Kontrollo të dhënat dhe provo sërish.';
     case 'token_exchange_failed':
     default:
-      return 'Could not complete the connection. Please try again.';
+      return 'Lidhja nuk u përfundua. Provo sërish.';
   }
 }
 
-export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Props) {
+export function ConnectWhatsApp({
+  appId,
+  configId,
+  graphVersion,
+  connected,
+}: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const online = useOnlineStatus();
@@ -73,9 +86,14 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (!event.origin.endsWith('facebook.com')) return;
-      let data: { type?: string; event?: string; data?: Record<string, unknown> };
+      let data: {
+        type?: string;
+        event?: string;
+        data?: Record<string, unknown>;
+      };
       try {
-        data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        data =
+          typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
       } catch {
         return; // non-JSON message — ignore
       }
@@ -178,7 +196,7 @@ export function ConnectWhatsApp({ appId, configId, graphVersion, connected }: Pr
             : 'Connect WhatsApp Business app'}
       </Button>
       {!online && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           WhatsApp signup requires a connection.
         </p>
       )}

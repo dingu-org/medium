@@ -96,7 +96,7 @@ export async function loadAppointmentJobContext(args: {
 }
 
 export function formatAppointmentTime(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('en', {
+  return new Intl.DateTimeFormat('sq-AL', {
     timeZone: timezone,
     dateStyle: 'full',
     timeStyle: 'short',

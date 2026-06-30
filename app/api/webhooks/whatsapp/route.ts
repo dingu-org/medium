@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { sql, eq, and, or } from 'drizzle-orm';
+import { sql, eq, and, or, isNull } from 'drizzle-orm';
 import { db, type DBTransaction } from '@/lib/db';
 import {
   conversations,
@@ -159,6 +159,7 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
     const content = msg.text.body;
 
     const result = await db.transaction(async (tx) => {
+      await linkManualPatient(tx, ptId, msg.from);
       await tx
         .insert(patients)
         .values({ ptId, name, phone: msg.from, waId: msg.from })
@@ -186,7 +187,12 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
         })
         .onConflictDoUpdate({
           target: [conversations.patientId, conversations.channel],
-          set: { lastInboundAt: sql`now()` },
+          set: {
+            lastInboundAt: sql`now()`,
+            closedAt: null,
+            aiActive: sql`CASE WHEN ${conversations.closedAt} IS NOT NULL THEN true ELSE ${conversations.aiActive} END`,
+            escalationState: sql`CASE WHEN ${conversations.closedAt} IS NOT NULL THEN 'idle' ELSE ${conversations.escalationState} END`,
+          },
         })
         .returning({ id: conversations.id });
 
@@ -224,6 +230,45 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
   }
 }
 
+async function linkManualPatient(
+  tx: DBTransaction,
+  ptId: string,
+  waId: string,
+): Promise<void> {
+  const [existing] = await tx
+    .select({ id: patients.id })
+    .from(patients)
+    .where(and(eq(patients.ptId, ptId), eq(patients.waId, waId)))
+    .limit(1);
+  if (existing) return;
+
+  const digits = waId.replace(/\D/g, '');
+  if (!digits) return;
+  const [manual] = await tx
+    .select({ id: patients.id })
+    .from(patients)
+    .where(
+      and(
+        eq(patients.ptId, ptId),
+        isNull(patients.waId),
+        sql`regexp_replace(${patients.phone}, '[^0-9]', '', 'g') = ${digits}`,
+      ),
+    )
+    .limit(1);
+  if (!manual) return;
+
+  await tx
+    .update(patients)
+    .set({ waId })
+    .where(
+      and(
+        eq(patients.id, manual.id),
+        eq(patients.ptId, ptId),
+        isNull(patients.waId),
+      ),
+    );
+}
+
 function progressValue(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -251,11 +296,8 @@ async function handleHistoryChange(value: WhatsappChangeValue): Promise<void> {
   );
   if (!connection) return;
 
-  let syncStatus:
-    | 'syncing'
-    | 'complete'
-    | 'failed'
-    | 'history_declined' = 'syncing';
+  let syncStatus: 'syncing' | 'complete' | 'failed' | 'history_declined' =
+    'syncing';
   let maxProgress: number | null = null;
   let lastError: string | null = null;
 
@@ -374,6 +416,7 @@ async function ensureWhatsappConversation(
     pauseUntil?: Date;
   },
 ): Promise<{ patientId: string; conversationId: string }> {
+  await linkManualPatient(tx, args.ptId, args.waId);
   await tx
     .insert(patients)
     .values({
@@ -411,7 +454,12 @@ async function ensureWhatsappConversation(
       : {}),
   };
   const updateValues = args.lastInboundAt
-    ? { lastInboundAt: sql`now()` }
+    ? {
+        lastInboundAt: sql`now()`,
+        closedAt: null,
+        aiActive: sql`CASE WHEN ${conversations.closedAt} IS NOT NULL THEN true ELSE ${conversations.aiActive} END`,
+        escalationState: sql`CASE WHEN ${conversations.closedAt} IS NOT NULL THEN 'idle' ELSE ${conversations.escalationState} END`,
+      }
     : args.pauseUntil
       ? {
           aiActive: false,

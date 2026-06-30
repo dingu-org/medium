@@ -9,11 +9,18 @@ export async function GET(
   { params }: { params: Promise<{ conversationId: string }> },
 ) {
   const ptId = await getPwaPtId();
-  if (!ptId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!ptId)
+    return NextResponse.json(
+      { code: 'UNAUTHORIZED', error: 'Pa autorizim' },
+      { status: 401 },
+    );
   const { conversationId } = await params;
   const snapshot = await getChatThreadSnapshot(ptId, conversationId);
   if (!snapshot) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json(
+      { code: 'NOT_FOUND', error: 'Biseda nuk u gjet' },
+      { status: 404 },
+    );
   }
   return NextResponse.json(snapshot);
 }

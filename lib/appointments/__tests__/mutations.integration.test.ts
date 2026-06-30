@@ -32,8 +32,10 @@ let ptId = '';
 let patientId = '';
 let otherPatientId = '';
 
-const mondayAt = (hour: number) =>
-  new Date(`2026-07-06T${String(hour - 2).padStart(2, '0')}:00:00.000Z`);
+const mondayAt = (hour: number, minute = 0) =>
+  new Date(
+    `2026-07-06T${String(hour - 2).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`,
+  );
 const tuesdayAt = (hour: number) =>
   new Date(`2026-07-07T${String(hour - 2).padStart(2, '0')}:00:00.000Z`);
 
@@ -188,8 +190,9 @@ describe('appointment mutations', () => {
     const booked = await bookAppointment({
       ptId,
       patientId,
-      startsAt: mondayAt(11),
+      startsAt: mondayAt(11, 15),
       serviceType: 'Treatment',
+      durationMinutes: 45,
     });
     const moved = await rescheduleAppointment({
       ptId,
@@ -201,6 +204,9 @@ describe('appointment mutations', () => {
     expect(moved.id).toBe(booked.id);
     expect(moved.status).toBe('pending');
     expect(moved.startsAt).toEqual(tuesdayAt(12));
+    expect(moved.endsAt).toEqual(
+      new Date(tuesdayAt(12).getTime() + 45 * 60_000),
+    );
 
     const rows = await db
       .select()
@@ -212,7 +218,7 @@ describe('appointment mutations', () => {
     expect(rows[0].payload).toMatchObject({
       appointmentId: booked.id,
       status: 'pending',
-      from: { startsAt: mondayAt(11).toISOString() },
+      from: { startsAt: mondayAt(11, 15).toISOString() },
       to: { startsAt: tuesdayAt(12).toISOString() },
     });
   });

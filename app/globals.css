@@ -1,6 +1,6 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -71,11 +71,16 @@
   --brand-700: #113a55;
   --brand-800: #0c2a3e;
   --success-50: #ecf6f0;
+  --success-100: #d8eee1;
+  --success-200: #b6ddc7;
   --success-500: #2f8b5a;
   --success-600: #246e47;
+  --success-700: #1d583a;
   --warning-50: #fcf4e6;
+  --warning-200: #efd39e;
   --warning-500: #b97a08;
   --warning-600: #8c5c06;
+  --warning-700: #684405;
   --danger-50: #fbecec;
   --danger-500: #b3322b;
   --danger-600: #8a2622;
@@ -86,6 +91,7 @@
   --attention-100: #fce7c8;
   --attention-500: #d97706;
   --attention-600: #b45309;
+  --attention-700: #92400e;
   --background: var(--neutral-50);
   --foreground: var(--neutral-900);
   --card: var(--neutral-0);
@@ -119,10 +125,8 @@
   --sidebar-border: var(--neutral-150);
   --sidebar-ring: var(--brand-400);
   --shadow-card: 0 1px 0 rgb(15 20 32 / 4%), 0 1px 2px rgb(15 20 32 / 4%);
-  --shadow-popover:
-    0 1px 2px rgb(15 20 32 / 4%), 0 4px 12px rgb(15 20 32 / 6%);
-  --shadow-modal:
-    0 2px 4px rgb(15 20 32 / 5%), 0 12px 32px rgb(15 20 32 / 8%);
+  --shadow-popover: 0 1px 2px rgb(15 20 32 / 4%), 0 4px 12px rgb(15 20 32 / 6%);
+  --shadow-modal: 0 2px 4px rgb(15 20 32 / 5%), 0 12px 32px rgb(15 20 32 / 8%);
   --focus-ring: 0 0 0 3px rgb(31 93 134 / 18%);
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 }

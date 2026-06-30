@@ -6,7 +6,11 @@ export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   const ptId = await getPwaPtId();
-  if (!ptId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!ptId)
+    return NextResponse.json(
+      { code: 'UNAUTHORIZED', error: 'Pa autorizim' },
+      { status: 401 },
+    );
   const url = new URL(request.url);
   const snapshot = await getCalendarSnapshot(ptId, {
     date: url.searchParams.get('date') ?? undefined,

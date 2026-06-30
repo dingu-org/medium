@@ -9,6 +9,8 @@ const HUMAN_PATTERNS = [
   /\breal person\b/i,
   /\b(?:speak|talk|connect)\b.{0,24}\b(?:human|person|therapist|physio|pt)\b/i,
   /\b(?:human|person)\b.{0,24}\b(?:please|now)\b/i,
+  /\b(?:person|njeri|fizioterapist|terapist)\s+(?:real|të vërtetë)\b/i,
+  /\b(?:dua|flas|lidhni|më lidhni)\b.{0,24}\b(?:dikë|person|fizioterapist|terapist)\b/i,
 ];
 
 const URGENT_PATTERNS = [
@@ -20,11 +22,14 @@ const URGENT_PATTERNS = [
   /\bsevere pain\b/i,
   /\b(?:just|recently|today|yesterday)\s+(?:fell|had a fall)\b/i,
   /\b(?:fell|had a fall)\b.{0,32}\b(?:hurt|injured|pain|bleeding|dizzy|can'?t|cannot|unable)\b/i,
+  /\b(?:urgjencë|ambulancë|dhimbje gjoksi|vështirësi në frymëmarrje|dhimbje të forta)\b/i,
+  /\b(?:nuk mund|s'mund)\b.{0,16}\b(?:të ec|të qëndroj|të marr frymë)\b/i,
 ];
 
 const LEGAL_BILLING_PATTERNS = [
   /\b(?:lawyer|legal action|lawsuit|sue|solicitor)\b/i,
   /\b(?:bill|billing|invoice|refund|charge|payment dispute)\b/i,
+  /\b(?:avokat|ligjor|faturë|rimbursim|pagesë)\b/i,
 ];
 
 const INSURANCE_PATTERNS = [
@@ -32,6 +37,7 @@ const INSURANCE_PATTERNS = [
   /\b(?:health|medical)\s+(?:plan|policy)\b/i,
   /\b(?:plan|policy)\s+coverage\b/i,
   /\bcovered by (?:my|the|an?) (?:insurance|health plan|medical plan|policy)\b/i,
+  /\b(?:sigurim|siguracion|mbulim shëndetësor)\b/i,
 ];
 
 const FRUSTRATION_PATTERNS = [
@@ -39,6 +45,7 @@ const FRUSTRATION_PATTERNS = [
   /\byou(?:'re| are) not (?:understanding|listening)\b/i,
   /\bthis is useless\b/i,
   /\b(?:very|really|extremely) frustrated\b/i,
+  /\b(?:nuk funksionon|nuk po kupton|jam shumë i frustruar|jam shumë e frustruar)\b/i,
 ];
 
 export function detectSafetyEscalation(
@@ -49,6 +56,7 @@ export function detectSafetyEscalation(
   const keyword = escalationKeyword?.trim();
   if (
     normalized.toUpperCase() === 'HELP' ||
+    normalized.toLocaleUpperCase('sq') === 'NDIHMË' ||
     (keyword &&
       normalized.localeCompare(keyword, undefined, {
         sensitivity: 'accent',
@@ -77,16 +85,16 @@ export function safetyEscalationResponse(
   practiceName: string,
 ): string {
   if (reason === 'urgent_health_concern') {
-    return `I can't assess urgent medical concerns. Please contact your local emergency services now. I've also handed this conversation to ${practiceName}.`;
+    return `Nuk mund të vlerësoj shqetësime urgjente mjekësore. Ju lutem kontaktoni menjëherë shërbimet vendore të urgjencës. Këtë bisedë ia kalova edhe ${practiceName}.`;
   }
   if (reason === 'human_requested') {
-    return `Of course. I've handed this conversation to ${practiceName}, and they'll respond when available.`;
+    return `Patjetër. Këtë bisedë ia kalova ${practiceName}; do t'ju përgjigjen sapo të jenë të lirë.`;
   }
   if (reason === 'insurance_question') {
-    return `I don't have access to insurance coverage information. I've handed this conversation to ${practiceName} so they can help.`;
+    return `Nuk kam qasje në informacionin për mbulimin e sigurimit. Këtë bisedë ia kalova ${practiceName} që t'ju ndihmojnë.`;
   }
   if (reason === 'legal_or_billing') {
-    return `I can only help with appointment scheduling. I've handed this conversation to ${practiceName} for this request.`;
+    return `Mund të ndihmoj vetëm me caktimin e takimeve. Për këtë kërkesë, bisedën ia kalova ${practiceName}.`;
   }
-  return `I want to make sure you get the right help. I've handed this conversation to ${practiceName}, and they'll respond when available.`;
+  return `Dua të sigurohem që të merrni ndihmën e duhur. Këtë bisedë ia kalova ${practiceName}; do t'ju përgjigjen sapo të jenë të lirë.`;
 }

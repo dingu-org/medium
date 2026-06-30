@@ -1,5 +1,6 @@
 import { TZDate } from '@date-fns/tz';
 import { format } from 'date-fns';
+import { sq } from 'date-fns/locale';
 
 // Event `type` values from the `events` table that are worth surfacing to the
 // PT in the notification bell. PT-initiated events (e.g. conversation.taken_over)
@@ -41,7 +42,7 @@ function formatTime(iso: string | undefined, timezone: string): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  return ` for ${format(new TZDate(date, timezone), 'EEE d MMM, HH:mm')}`;
+  return ` më ${format(new TZDate(date, timezone), 'EEE d MMM, HH:mm', { locale: sq })}`;
 }
 
 /**
@@ -53,7 +54,7 @@ export function formatNotification(
   event: { id: string; type: string; payload: Payload; occurredAt: string },
   opts: { timezone: string; patientName?: string },
 ): NotificationView {
-  const who = opts.patientName ?? 'A patient';
+  const who = opts.patientName ?? 'Një klient';
   const when = formatTime(str(event.payload, 'startsAt'), opts.timezone);
   const base = { id: event.id, type: event.type, occurredAt: event.occurredAt };
 
@@ -61,14 +62,14 @@ export function formatNotification(
     case 'appointment.booked':
       return {
         ...base,
-        title: `${who} booked an appointment${when}`,
+        title: `${who} rezervoi një takim${when}`,
         icon: 'calendar-plus',
         href: '/calendar',
       };
     case 'appointment.confirmed':
       return {
         ...base,
-        title: `${who} confirmed an appointment${when}`,
+        title: `${who} konfirmoi një takim${when}`,
         icon: 'check',
         href: '/calendar',
       };
@@ -77,8 +78,8 @@ export function formatNotification(
       return {
         ...base,
         title: byPatient
-          ? `${who} cancelled an appointment${when}`
-          : `An appointment was cancelled${when}`,
+          ? `${who} anuloi një takim${when}`
+          : `Një takim u anulua${when}`,
         icon: 'x',
         href: '/calendar',
       };
@@ -86,35 +87,35 @@ export function formatNotification(
     case 'appointment.rescheduled':
       return {
         ...base,
-        title: `${who} rescheduled an appointment`,
+        title: `${who} ricaktoi një takim`,
         icon: 'repeat',
         href: '/calendar',
       };
     case 'conversation.failed':
       return {
         ...base,
-        title: `A conversation with ${who.toLowerCase() === 'a patient' ? 'a patient' : who} needs your attention`,
+        title: `Biseda me ${who} kërkon vëmendjen tënde`,
         icon: 'alert',
         href: '/chat',
       };
     case 'reminder.failed':
       return {
         ...base,
-        title: 'A reminder failed to send',
+        title: 'Një kujtesë nuk u dërgua',
         icon: 'alert',
         href: '/calendar',
       };
     case 'wa.connection.revoked':
       return {
         ...base,
-        title: 'WhatsApp disconnected — reconnect needed',
+        title: 'WhatsApp u shkëput. Duhet rilidhur.',
         icon: 'unplug',
         href: '/settings',
       };
     default:
       return {
         ...base,
-        title: 'Update',
+        title: 'Përditësim',
         icon: 'alert',
         href: '/calendar',
       };

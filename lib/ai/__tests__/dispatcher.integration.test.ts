@@ -141,7 +141,7 @@ describe('dispatchTool', () => {
       'book_appointment',
       {
         starts_at: '2026-07-06T09:00:00+02:00',
-        service_type: 'Initial consultation',
+        service_type: 'Vlerësim i parë',
       },
       ctx(),
     );
@@ -158,7 +158,22 @@ describe('dispatchTool', () => {
       .from(appointments)
       .where(eq(appointments.ptId, ptId));
     expect(stored.patientId).toBe(patientId);
-    expect(stored.serviceType).toBe('Initial consultation');
+    expect(stored.serviceType).toBe('Vlerësim i parë');
+  });
+
+  it('rejects service names that are not active for the practice', async () => {
+    const result = await dispatchTool(
+      'book_appointment',
+      {
+        starts_at: '2026-07-06T09:00:00+02:00',
+        service_type: 'Shërbim i shpikur',
+      },
+      ctx(),
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_input', retryable: true },
+    });
   });
 
   it("does not expose or cancel another patient's appointment", async () => {

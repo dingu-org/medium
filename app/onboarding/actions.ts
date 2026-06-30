@@ -22,3 +22,18 @@ export async function dismissAndGo(formData: FormData): Promise<void> {
 
   redirect(href);
 }
+
+export async function continueSetup(formData: FormData): Promise<void> {
+  const raw = formData.get('href');
+  const path = typeof raw === 'string' && raw.startsWith('/') ? raw : '/today';
+  const separator = path.includes('?') ? '&' : '?';
+
+  const store = await cookies();
+  store.set(ONBOARDING_SKIP_COOKIE, 'setup', {
+    path: '/',
+    maxAge: 60 * 60,
+    sameSite: 'lax',
+  });
+
+  redirect(`${path}${separator}from=onboarding`);
+}

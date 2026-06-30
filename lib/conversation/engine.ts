@@ -29,6 +29,7 @@ import type {
   OutboundMessage,
   ReminderTurnContext,
 } from './types';
+import { getServices } from '@/lib/services/queries';
 
 const HISTORY_LIMIT = 20;
 const STEP_LIMIT = 5;
@@ -347,7 +348,7 @@ async function runDeterministicEscalation(
 }
 
 function failedTurnHandoffResponse(practiceName: string): string {
-  return `I couldn't safely confirm the latest scheduling result. I've handed this conversation to ${practiceName} so they can verify it and follow up.`;
+  return `Nuk munda ta konfirmoj me siguri rezultatin e fundit të rezervimit. Këtë bisedë ia kalova ${practiceName} që ta verifikojnë dhe t'ju përgjigjen.`;
 }
 
 async function runFailedTurnHandoff(
@@ -420,6 +421,9 @@ async function runTurnCoreUnlocked(args: {
   }
 
   const history = await loadHistory(context.inbound);
+  const configuredServices = await getServices(context.inbound.ptId, {
+    activeOnly: true,
+  });
   const baseSystem = buildSystemPrompt({
     practiceName: context.practiceName,
     timezone: context.timezone,
@@ -427,6 +431,7 @@ async function runTurnCoreUnlocked(args: {
     aiGreeting: context.aiGreeting,
     escalationKeyword: context.escalationKeyword,
     retentionDays: context.retentionDays,
+    configuredServices,
     now: args.now,
   });
   const system = args.systemAddendum
@@ -492,7 +497,9 @@ function reminderSystemAddendum(context: ReminderTurnContext): string {
     details.push(`- Reminder appointment ID: ${context.appointmentId}`);
   }
   if (context.appointmentStartsAt) {
-    details.push(`- Reminder appointment start: ${context.appointmentStartsAt}`);
+    details.push(
+      `- Reminder appointment start: ${context.appointmentStartsAt}`,
+    );
   }
   if (context.timezone) {
     details.push(`- Reminder appointment timezone: ${context.timezone}`);

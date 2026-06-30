@@ -25,6 +25,12 @@ export default async function ConversationPage({
       initialMessages={snapshot.initialMessages}
       aiActive={snapshot.aiActive}
       windowOpen={snapshot.windowOpen}
+      closed={snapshot.closed}
+      escalationState={snapshot.escalationState}
+      aiPausedUntil={snapshot.aiPausedUntil}
+      aiPauseReason={snapshot.aiPauseReason}
+      connectionStatus={snapshot.connectionStatus}
+      upcomingAppointment={snapshot.upcomingAppointment}
     />
   );
 }

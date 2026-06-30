@@ -8,6 +8,7 @@ import {
 } from '@/lib/appointments';
 import { escalateConversationToHuman } from '@/lib/conversation/escalation';
 import { withAuditLog } from '@/lib/tenancy';
+import { getActiveServiceByName } from '@/lib/services/queries';
 import {
   toolSchemas,
   type ToolExecutionContext,
@@ -28,12 +29,19 @@ async function executeTool(
   ctx: ToolExecutionContext,
 ): Promise<ToolResult> {
   if (toolName === 'get_availability') {
+    const requestedName = input.service_type as string | undefined;
+    const service = requestedName
+      ? await getActiveServiceByName(ctx.ptId, requestedName)
+      : null;
+    if (requestedName && !service) {
+      return invalidInput('Ky shërbim nuk është i disponueshëm.');
+    }
     const availability = await getFreeSlots({
       ptId: ctx.ptId,
       start: new Date(input.start as string),
       end: new Date(input.end as string),
-      durationMinutes: 60,
-      serviceType: input.service_type as string | undefined,
+      durationMinutes: service?.durationMinutes ?? 60,
+      serviceType: service?.name,
     });
     return {
       ok: true,
@@ -67,11 +75,19 @@ async function executeTool(
   }
 
   if (toolName === 'book_appointment') {
+    const service = await getActiveServiceByName(
+      ctx.ptId,
+      input.service_type as string,
+    );
+    if (!service) {
+      return invalidInput('Ky shërbim nuk është i disponueshëm.');
+    }
     const appointment = await bookAppointment({
       ptId: ctx.ptId,
       patientId: ctx.patientId,
       startsAt: new Date(input.starts_at as string),
-      serviceType: input.service_type as string,
+      serviceType: service.name,
+      durationMinutes: service.durationMinutes,
       notes: input.notes as string | undefined,
     });
     return {
@@ -81,7 +97,7 @@ async function executeTool(
         starts_at: appointment.startsAt.toISOString(),
         ends_at: appointment.endsAt.toISOString(),
         status: appointment.status,
-        confirmation_summary: `${appointment.serviceType ?? 'Appointment'} on ${appointment.startsAt.toISOString()}`,
+        confirmation_summary: `${appointment.serviceType ?? 'Takim'} më ${appointment.startsAt.toISOString()}`,
       },
     };
   }
@@ -128,7 +144,7 @@ async function executeTool(
       ok: false,
       error: {
         code: 'not_found',
-        message: 'The conversation could not be escalated.',
+        message: 'Biseda nuk mund të eskalohej.',
         retryable: false,
       },
     };
@@ -157,7 +173,7 @@ function appointmentErrorResult(error: AppointmentError): ToolResult {
       ok: false,
       error: {
         code: 'invalid_input',
-        message: error.message,
+        message: 'Të dhënat e takimit nuk janë të vlefshme.',
         retryable: true,
       },
     };
@@ -167,7 +183,7 @@ function appointmentErrorResult(error: AppointmentError): ToolResult {
       ok: false,
       error: {
         code: 'not_found',
-        message: error.message,
+        message: 'Takimi nuk u gjet.',
         retryable: false,
       },
     };
@@ -176,7 +192,7 @@ function appointmentErrorResult(error: AppointmentError): ToolResult {
     ok: false,
     error: {
       code: 'conflict',
-      message: error.message,
+      message: 'Ky orar nuk është më i lirë.',
       retryable: error.code === 'conflict' || error.code === 'unavailable',
     },
   };
@@ -190,7 +206,7 @@ export async function dispatchTool(
   const parsed = toolSchemas[toolName].safeParse(input);
   if (!parsed.success) {
     return invalidInput(
-      'The tool input was invalid. Correct the fields and try again.',
+      'Të dhënat e veprimit nuk janë të vlefshme. Korrigjoji dhe provo sërish.',
     );
   }
 
@@ -220,7 +236,8 @@ export async function dispatchTool(
       ok: false,
       error: {
         code: 'internal_error',
-        message: 'The scheduling action failed. Try again or offer human help.',
+        message:
+          'Veprimi i rezervimit dështoi. Provo sërish ose ofro ndihmë njerëzore.',
         retryable: true,
       },
     };

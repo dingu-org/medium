@@ -66,7 +66,7 @@ function mutationThenEmptyModel() {
           toolName: 'book_appointment',
           input: JSON.stringify({
             starts_at: '2026-06-12T10:00:00+02:00',
-            service_type: 'Initial consultation',
+            service_type: 'Vlerësim i parë',
           }),
         },
       ],
@@ -108,7 +108,7 @@ function bookingResponseModel(options?: {
           toolName: 'book_appointment',
           input: JSON.stringify({
             starts_at: '2026-06-12T10:00:00+02:00',
-            service_type: 'Initial consultation',
+            service_type: 'Vlerësim i parë',
           }),
         },
       ],
@@ -163,7 +163,7 @@ function phase4BookingModel() {
           toolName: 'book_appointment',
           input: JSON.stringify({
             starts_at: '2026-07-06T09:00:00+02:00',
-            service_type: 'Initial consultation',
+            service_type: 'Vlerësim i parë',
           }),
         },
       ],
@@ -437,10 +437,10 @@ describe('runTurnCore', () => {
     expect(appointment).toMatchObject({
       ptId,
       patientId,
-      serviceType: 'Initial consultation',
+      serviceType: 'Vlerësim i parë',
       status: 'pending',
       startsAt: new Date('2026-07-06T07:00:00.000Z'),
-      endsAt: new Date('2026-07-06T08:00:00.000Z'),
+      endsAt: new Date('2026-07-06T07:45:00.000Z'),
     });
   });
 
@@ -452,7 +452,7 @@ describe('runTurnCore', () => {
     });
 
     expect(result.content).toContain(
-      "couldn't safely confirm the latest scheduling result",
+      'Nuk munda ta konfirmoj me siguri rezultatin e fundit të rezervimit',
     );
     const [stored] = await db
       .select()
@@ -481,7 +481,7 @@ describe('runTurnCore', () => {
 
     expect(second).toEqual(first);
     expect(first.content).toContain(
-      "couldn't safely confirm the latest scheduling result",
+      'Nuk munda ta konfirmoj me siguri rezultatin e fundit të rezervimit',
     );
     const [stored] = await db
       .select()
@@ -514,7 +514,7 @@ describe('runTurnCore', () => {
       modelId: 'requested/model',
     });
     expect(result.content).toContain(
-      "I've handed this conversation to Movement Clinic",
+      'Këtë bisedë ia kalova Movement Clinic',
     );
     expect(model.doGenerateCalls).toHaveLength(0);
 

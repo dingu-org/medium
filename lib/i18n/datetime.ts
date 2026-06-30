@@ -17,9 +17,18 @@ export function formatTime(date: Date): string {
 
 /** Full Albanian weekday, sentence-cased: `E hënë`. */
 export function formatWeekday(date: Date): string {
-  const s = format(date, 'EEEE', { locale: sq });
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return FULL_WEEKDAYS[date.getDay()];
 }
+
+const FULL_WEEKDAYS = [
+  'E diel',
+  'E hënë',
+  'E martë',
+  'E mërkurë',
+  'E enjte',
+  'E premte',
+  'E shtunë',
+] as const;
 
 // date-fns' `sq` abbreviations don't match the design's `E hën.` form, so map by
 // weekday index (0 = Sunday) for the compact week strip.
@@ -40,12 +49,12 @@ export function formatWeekdayShort(date: Date): string {
 
 /** Day + full month: `6 maj`. */
 export function formatDate(date: Date): string {
-  return format(date, 'd MMMM', { locale: sq });
+  return format(date, 'd MMMM', { locale: sq }).toLocaleLowerCase('sq');
 }
 
 /** Day + full month + year: `6 maj 2026`. */
 export function formatDateLong(date: Date): string {
-  return format(date, 'd MMMM yyyy', { locale: sq });
+  return format(date, 'd MMMM yyyy', { locale: sq }).toLocaleLowerCase('sq');
 }
 
 /** Weekday + date: `E hënë, 6 maj`. */
@@ -55,6 +64,6 @@ export function formatWeekdayDate(date: Date): string {
 
 /** Month + year header, sentence-cased: `Maj 2026`. */
 export function formatMonthYear(date: Date): string {
-  const s = format(date, 'LLLL yyyy', { locale: sq });
+  const s = format(date, 'LLLL yyyy', { locale: sq }).toLocaleLowerCase('sq');
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
