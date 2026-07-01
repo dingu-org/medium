@@ -36,4 +36,9 @@ export const pwa = {
 
   // Install banner dismiss
   dismissInstall: 'Hid kërkesën e instalimit',
+
+  // Push permission onboarding banner
+  pushPrompt: 'Aktivizo njoftimet për rezervime, anulime dhe kërkesa të reja.',
+  pushEnable: 'Aktivizo',
+  dismissPush: 'Hid kërkesën e njoftimeve',
 } as const;

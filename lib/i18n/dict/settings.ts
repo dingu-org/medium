@@ -23,6 +23,22 @@ export const settings = {
   notifEscalations: 'Eskalime',
   notifReminders: 'Kujtesa ditore',
   notifReminderFailure: 'Dështime të kujtesave',
+  notifConnection: 'Shkëputje e WhatsApp',
+  notifResumeOffer: 'Rikthim i asistentit',
+
+  // Push notifications (per-browser) card
+  pushCardTitle: 'Njoftimet në këtë pajisje',
+  pushCardSub: 'Merr njoftime edhe kur aplikacioni është i mbyllur.',
+  pushEnable: 'Aktivizo njoftimet',
+  pushDisable: 'Çaktivizo njoftimet',
+  pushEnabled: 'Njoftimet janë aktive në këtë pajisje.',
+  pushBlocked:
+    'Njoftimet janë të bllokuara. Lejoji te cilësimet e shfletuesit për këtë faqe.',
+  pushUnsupported: 'Ky shfletues nuk mbështet njoftime push.',
+  pushEnabledToast: 'Njoftimet u aktivizuan.',
+  pushDisabledToast: 'Njoftimet u çaktivizuan.',
+  pushBlockedToast: 'Njoftimet janë të bllokuara në shfletues.',
+  pushErrorToast: 'Nuk u aktivizuan njoftimet. Provo sërish.',
 
   exportData: 'Eksporto të dhënat',
   exportSub: 'Takime, pacientë, biseda · JSON',

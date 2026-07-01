@@ -37,6 +37,8 @@ const PREF_LABELS: Record<keyof NotificationPrefs, string> = {
   reschedule: t.settings.notifReschedules,
   escalation: t.settings.notifEscalations,
   reminderFailure: t.settings.notifReminderFailure,
+  connection: t.settings.notifConnection,
+  resumeOffer: t.settings.notifResumeOffer,
 };
 
 const initialState: SettingsState = {

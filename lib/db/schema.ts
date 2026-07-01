@@ -372,14 +372,20 @@ export const reminderJobs = pgTable(
   ],
 );
 
-export const pushSubscriptions = pgTable('push_subscriptions', {
-  id: uuid('id').primaryKey().default(genUuid),
-  ptId: ptIdRef(),
-  endpoint: text('endpoint').notNull(),
-  keys: jsonb('keys').notNull(),
-  userAgent: text('user_agent'),
-  createdAt: tsTz('created_at').notNull().default(now),
-});
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    endpoint: text('endpoint').notNull(),
+    keys: jsonb('keys').notNull(),
+    userAgent: text('user_agent'),
+    createdAt: tsTz('created_at').notNull().default(now),
+  },
+  // One row per browser endpoint so re-subscribing upserts instead of piling up
+  // duplicate rows for the same device.
+  (t) => [uniqueIndex('push_subscriptions_endpoint_uq').on(t.endpoint)],
+);
 
 export const pwaMutations = pgTable(
   'pwa_mutations',

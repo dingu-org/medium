@@ -4,6 +4,8 @@ export const NOTIFICATION_PREF_KEYS = [
   'reschedule',
   'escalation',
   'reminderFailure',
+  'connection',
+  'resumeOffer',
 ] as const;
 
 export type NotificationPrefs = Record<

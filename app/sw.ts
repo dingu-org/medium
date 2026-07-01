@@ -147,4 +147,53 @@ function isDashboardNavigation(url: URL): boolean {
   );
 }
 
+type PushPayload = { title: string; body: string; url: string; tag: string };
+
+self.addEventListener('push', (event: PushEvent) => {
+  if (!event.data) return;
+  let payload: PushPayload;
+  try {
+    payload = event.data.json() as PushPayload;
+  } catch {
+    return;
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      tag: payload.tag,
+      data: { url: payload.url },
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+  event.notification.close();
+  const data = event.notification.data as { url?: string } | null;
+  event.waitUntil(focusOrOpenWindow(data?.url ?? '/today'));
+});
+
+// Focus an already-open tab on the target path (navigating it if the query
+// differs, e.g. a new appointmentId), otherwise open a fresh window.
+async function focusOrOpenWindow(url: string): Promise<void> {
+  const target = new URL(url, self.location.origin);
+  const windows = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+  for (const client of windows) {
+    if (!('focus' in client)) continue;
+    const windowClient = client as WindowClient;
+    if (new URL(windowClient.url).pathname === target.pathname) {
+      await windowClient.focus();
+      if (windowClient.url !== target.href) {
+        await windowClient.navigate(target.href).catch(() => undefined);
+      }
+      return;
+    }
+  }
+  await self.clients.openWindow(target.href);
+}
+
 serwist.addEventListeners();
