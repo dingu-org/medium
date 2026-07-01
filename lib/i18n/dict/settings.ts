@@ -40,6 +40,19 @@ export const settings = {
   availabilitySub: 'Orët e punës, ditët e bllokuara dhe kohëzgjatja e takimit.',
   services: 'Shërbimet',
   servicesSub: 'Shërbimet që ofron dhe kohëzgjatja e tyre.',
+  servicesTitle: 'Shërbimet',
+  servicesIntro: 'Menaxho shërbimet që mund të rezervojnë klientët.',
+  serviceName: 'Emri i shërbimit',
+  serviceDuration: 'Kohëzgjatja',
+  serviceAdd: 'Shto shërbim',
+  serviceEdit: 'Ndrysho shërbimin',
+  serviceSave: 'Ruaj',
+  serviceActive: 'Aktiv',
+  serviceInactive: 'Joaktiv',
+  serviceEmpty: 'Ende asnjë shërbim',
+  serviceEmptySub: 'Shto të paktën një shërbim për të pranuar rezervime.',
+  serviceOnlineOnly: 'Shërbimet mund të ndryshohen vetëm kur je online.',
+  serviceSaved: 'Shërbimi u ruajt.',
 
   disconnectWhatsapp: 'Shkëput WhatsApp',
   deleteAccount: 'Fshi llogarinë',
@@ -85,10 +98,13 @@ export const settings = {
   connectionBadgeNotConnected: 'Nuk është lidhur',
 
   // WhatsApp card
-  whatsappCardSub: "Lidh numrin tënd WhatsApp Business që pacientët të të shkruajnë klinikës.",
-  whatsappRevoked: 'Lidhja juaj WhatsApp u revokua. Rilidh për të rifilluar mesazhet.',
+  whatsappCardSub:
+    'Lidh numrin tënd WhatsApp Business që pacientët të të shkruajnë klinikës.',
+  whatsappRevoked:
+    'Lidhja juaj WhatsApp u revokua. Rilidh për të rifilluar mesazhet.',
   whatsappConnectedId: 'ID e numrit të lidhur:',
-  whatsappEnvNote: 'Vendos NEXT_PUBLIC_META_APP_ID dhe NEXT_PUBLIC_META_CONFIG_ID për të aktivizuar regjistrimin.',
+  whatsappEnvNote:
+    'Vendos NEXT_PUBLIC_META_APP_ID dhe NEXT_PUBLIC_META_CONFIG_ID për të aktivizuar regjistrimin.',
 
   // ConnectWhatsApp button + toasts
   whatsappConnecting: 'Po lidhet…',
@@ -96,13 +112,15 @@ export const settings = {
   whatsappReconnectBusiness: 'Rilidh WhatsApp Business',
   whatsappRequiresConnection: 'WhatsApp kërkon lidhje.',
   whatsappNotConfigured: 'WhatsApp nuk është konfiguruar.',
-  whatsappRequiresHttps: "WhatsApp kërkon HTTPS — Facebook e bllokon në http://. Hap aplikacionin nëpërmjet HTTPS.",
-  whatsappIncomplete: "Lidhja mbeti e paplotë — mund ta vazhdosh kurdo.",
+  whatsappRequiresHttps:
+    'WhatsApp kërkon HTTPS — Facebook e bllokon në http://. Hap aplikacionin nëpërmjet HTTPS.',
+  whatsappIncomplete: 'Lidhja mbeti e paplotë — mund ta vazhdosh kurdo.',
   whatsappSuccess: 'WhatsApp Business u lidh. Sinkronizimi po fillon.',
   whatsappFailed: 'Diçka shkoi keq me lidhjen e WhatsApp. Provo sërish.',
 
   // Danger zone toasts / inline
-  accountAndWhatsappRequireConnection: 'Veprimet e llogarisë dhe lidhjes WhatsApp kërkojnë lidhje.',
+  accountAndWhatsappRequireConnection:
+    'Veprimet e llogarisë dhe lidhjes WhatsApp kërkojnë lidhje.',
   disconnectRequiresConnection: 'Shkëputja e WhatsApp kërkon lidhje.',
   deleteRequiresConnection: 'Fshirja e llogarisë kërkon lidhje.',
   disconnectedToast: 'WhatsApp u shkëput.',

@@ -1,0 +1,16 @@
+/* preview/_card.css — shared frame for design-system spec cards */
+@import url("../colors_and_type.css");
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg-1); }
+body {
+  width: 700px;
+  padding: 28px;
+  color: var(--fg-1);
+}
+.card-row { display: flex; gap: 12px; align-items: stretch; }
+.card-col { display: flex; flex-direction: column; gap: 12px; }
+.muted { color: var(--fg-3); }
+.tnum { font-variant-numeric: tabular-nums; }
+.label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); font-weight: 600; }
+.hairline { height: 1px; background: var(--border-1); }

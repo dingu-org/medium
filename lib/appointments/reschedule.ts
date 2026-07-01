@@ -10,8 +10,6 @@ import { AppointmentError } from './errors';
 import { withAppointmentLock } from './lock';
 import type { AppointmentRecord } from './types';
 
-const APPOINTMENT_DURATION_MINUTES = 60;
-
 export async function rescheduleAppointment(input: {
   ptId: string;
   appointmentId: string;
@@ -50,15 +48,21 @@ export async function rescheduleAppointment(input: {
       return existing;
     }
 
-    const newEndsAt = addMinutes(
-      input.newStartsAt,
-      APPOINTMENT_DURATION_MINUTES,
+    const durationMinutes = Math.round(
+      (existing.endsAt.getTime() - existing.startsAt.getTime()) / 60_000,
     );
+    if (durationMinutes < 5 || durationMinutes > 480) {
+      throw new AppointmentError(
+        'invalid_input',
+        'The appointment duration is invalid.',
+      );
+    }
+    const newEndsAt = addMinutes(input.newStartsAt, durationMinutes);
     const availability = await getFreeSlotsInternal({
       ptId: input.ptId,
       start: input.newStartsAt,
       end: newEndsAt,
-      durationMinutes: APPOINTMENT_DURATION_MINUTES,
+      durationMinutes,
       serviceType: existing.serviceType ?? undefined,
       excludeAppointmentId: existing.id,
     });

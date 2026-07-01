@@ -6,6 +6,7 @@ describe('parseReminderResponse', () => {
     ['CONFIRM', 'confirm'],
     ['yes thanks', 'confirm'],
     ['!CONFIRM', 'confirm'],
+    ['KONFIRMO', 'confirm'],
     ['ok', 'confirm'],
     ['sure.', 'confirm'],
     ['ja', 'confirm'],
@@ -20,6 +21,7 @@ describe('parseReminderResponse', () => {
 
   it.each([
     ['CANCEL', 'cancel'],
+    ['ANULO', 'cancel'],
     ['no', 'cancel'],
     ['n', 'cancel'],
     ['annulla', 'cancel'],
@@ -31,6 +33,7 @@ describe('parseReminderResponse', () => {
 
   it.each([
     ['RESCHEDULE', 'reschedule'],
+    ['RICAKTO', 'reschedule'],
     ['change it', 'reschedule'],
     ['move please', 'reschedule'],
     ['verschieben', 'reschedule'],

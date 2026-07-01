@@ -10,8 +10,10 @@ import {
   transitionAppointment,
 } from '@/lib/appointments';
 import { db } from '@/lib/db';
-import { appointments, patients, pts } from '@/lib/db/schema';
+import { appointments, pts } from '@/lib/db/schema';
 import { getPwaPtId } from '@/lib/pwa/auth';
+import { resolveBookingService } from '@/lib/services/queries';
+import { createManualPatient } from '@/lib/clients/mutations';
 import {
   beginPwaMutation,
   completePwaMutation,
@@ -37,6 +39,7 @@ const manualBookSchema = z
       .optional(),
     date,
     time,
+    serviceId: z.uuid().optional(),
     serviceType: z.string().trim().max(80).optional(),
     notes: z.string().trim().max(500).optional(),
   })
@@ -80,11 +83,14 @@ function jsonError(error: string, status: number) {
 
 export async function POST(request: Request) {
   const ptId = await getPwaPtId();
-  if (!ptId) return jsonError('Unauthorized', 401);
+  if (!ptId) return jsonError('Pa autorizim', 401);
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return jsonError(parsed.error.issues[0]?.message ?? 'Invalid request.', 400);
+    return jsonError(
+      parsed.error.issues[0]?.message ?? 'Kërkesa nuk është e vlefshme.',
+      400,
+    );
   }
   const input = parsed.data;
 
@@ -96,7 +102,7 @@ export async function POST(request: Request) {
   if (started.kind === 'success') return NextResponse.json(started.result);
   if (started.kind === 'failed') return jsonError(started.error, 409);
   if (started.kind === 'processing') {
-    return jsonError('Mutation is still processing.', 503);
+    return jsonError('Ndryshimi është ende duke u përpunuar.', 503);
   }
 
   try {
@@ -159,7 +165,10 @@ async function runAppointmentMutation(
     .update(appointments)
     .set({ notes: input.notes.trim() || null })
     .where(
-      and(eq(appointments.id, input.appointmentId), eq(appointments.ptId, ptId)),
+      and(
+        eq(appointments.id, input.appointmentId),
+        eq(appointments.ptId, ptId),
+      ),
     );
   return { ok: true, appointmentId: input.appointmentId };
 }
@@ -182,25 +191,34 @@ async function bookManual(
 
   let patientId = input.patientId;
   if (!patientId && input.newPatient) {
-    const [created] = await db
-      .insert(patients)
-      .values({
-        ptId,
-        name: input.newPatient.name,
-        phone: input.newPatient.phone,
-      })
-      .returning({ id: patients.id });
+    const created = await createManualPatient({ ptId, ...input.newPatient });
+    if ('failure' in created) {
+      throw new AppointmentError(
+        'invalid_input',
+        created.failure === 'DUPLICATE_PHONE'
+          ? 'Një klient me këtë numër ekziston tashmë.'
+          : 'Numri i telefonit nuk është i vlefshëm.',
+      );
+    }
     patientId = created.id;
   }
   if (!patientId) {
-    throw new AppointmentError('invalid_input', 'Select or add a patient.');
+    throw new AppointmentError('invalid_input', 'Zgjidh ose shto një klient.');
+  }
+  const service = await resolveBookingService(ptId, {
+    serviceId: input.serviceId,
+    legacyServiceType: input.serviceType,
+  });
+  if (!service) {
+    throw new AppointmentError('invalid_input', 'Zgjidh një shërbim aktiv.');
   }
 
   return bookAppointment({
     ptId,
     patientId,
     startsAt,
-    serviceType: input.serviceType?.trim() || 'Appointment',
+    serviceType: service.name,
+    durationMinutes: service.durationMinutes,
     notes: input.notes,
     allowOutsideAvailability: true,
   });
@@ -211,19 +229,19 @@ function messageFor(error: unknown): { message: string; status: number } {
     switch (error.code) {
       case 'unavailable':
       case 'conflict':
-        return { message: 'That time is no longer available.', status: 409 };
+        return { message: 'Ky orar nuk është më i lirë.', status: 409 };
       case 'invalid_transition':
         return {
-          message: 'That change is not allowed for this appointment.',
+          message: 'Ky ndryshim nuk lejohet për këtë takim.',
           status: 409,
         };
       case 'not_found':
-        return { message: 'Appointment not found.', status: 404 };
+        return { message: 'Takimi nuk u gjet.', status: 404 };
       case 'invalid_input':
         return { message: error.message, status: 400 };
       default:
-        return { message: 'Could not update the appointment.', status: 400 };
+        return { message: 'Takimi nuk u përditësua.', status: 400 };
     }
   }
-  return { message: 'Something went wrong. Please try again.', status: 500 };
+  return { message: 'Diçka shkoi keq. Provo sërish.', status: 500 };
 }

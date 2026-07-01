@@ -20,12 +20,12 @@ function confirmationContent(args: {
 }): string {
   const time = formatAppointmentTime(args.startsAt, args.timezone);
   if (args.kind === 'appointment.booked') {
-    return `Your appointment is booked for ${time}.`;
+    return `Takimi juaj u rezervua për ${time}.`;
   }
   if (args.kind === 'appointment.cancelled') {
-    return `Your appointment for ${time} has been cancelled.`;
+    return `Takimi juaj për ${time} u anulua.`;
   }
-  return `Your appointment has been rescheduled to ${time}.`;
+  return `Takimi juaj u ricaktua për ${time}.`;
 }
 
 export async function prepareAppointmentConfirmation(args: {

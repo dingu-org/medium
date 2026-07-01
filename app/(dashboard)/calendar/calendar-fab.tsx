@@ -20,11 +20,18 @@ import {
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
 import { cn } from '@/lib/utils';
+import type { ServiceRecord } from '@/lib/services/queries';
 import { type PatientOption, searchPatients } from './actions';
 
 type Mode = 'menu' | 'block' | 'appointment';
 
-export function CalendarFab({ defaultDate }: { defaultDate: string }) {
+export function CalendarFab({
+  defaultDate,
+  services,
+}: {
+  defaultDate: string;
+  services: ServiceRecord[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('menu');
@@ -45,7 +52,7 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
       <SheetTrigger asChild>
         <Button
           size="icon-lg"
-          className="fixed bottom-20 right-4 z-20 h-14 w-14 rounded-full shadow-lg"
+          className="fixed right-4 bottom-20 z-20 h-14 w-14 rounded-full shadow-lg"
           aria-label={t.calendar.addLabel}
         >
           <Plus className="h-6 w-6" aria-hidden="true" />
@@ -75,8 +82,10 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
               >
                 <CalendarPlus className="h-5 w-5" aria-hidden="true" />
                 <span className="text-left">
-                  <span className="block font-medium">{t.calendar.addApptTitle}</span>
-                  <span className="block text-xs text-muted-foreground">
+                  <span className="block font-medium">
+                    {t.calendar.addApptTitle}
+                  </span>
+                  <span className="text-muted-foreground block text-xs">
                     {t.calendar.addApptDesc}
                   </span>
                 </span>
@@ -88,8 +97,10 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
               >
                 <Clock className="h-5 w-5" aria-hidden="true" />
                 <span className="text-left">
-                  <span className="block font-medium">{t.calendar.blockTime}</span>
-                  <span className="block text-xs text-muted-foreground">
+                  <span className="block font-medium">
+                    {t.calendar.blockTime}
+                  </span>
+                  <span className="text-muted-foreground block text-xs">
                     {t.calendar.blockTimeDesc}
                   </span>
                 </span>
@@ -112,6 +123,7 @@ export function CalendarFab({ defaultDate }: { defaultDate: string }) {
           {mode === 'appointment' && (
             <AppointmentForm
               defaultDate={defaultDate}
+              services={services}
               online={online}
               onDone={() => {
                 setOpen(false);
@@ -203,7 +215,7 @@ function BlockTimeForm({
         />
       </div>
       {!online && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           {t.calendar.blockOnlineRequired}
         </p>
       )}
@@ -216,10 +228,12 @@ function BlockTimeForm({
 
 function AppointmentForm({
   defaultDate,
+  services,
   online,
   onDone,
 }: {
   defaultDate: string;
+  services: ServiceRecord[];
   online: boolean;
   onDone: () => void;
 }) {
@@ -231,7 +245,7 @@ function AppointmentForm({
   const [newPhone, setNewPhone] = useState('');
   const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState('09:00');
-  const [serviceType, setServiceType] = useState('');
+  const [serviceId, setServiceId] = useState(services[0]?.id ?? '');
   const [searching, startSearch] = useTransition();
   const [pending, startTransition] = useTransition();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -257,6 +271,10 @@ function AppointmentForm({
       toast.error(t.calendar.enterPatientDetails);
       return;
     }
+    if (!serviceId) {
+      toast.error('Shto ose aktivizo një shërbim para rezervimit.');
+      return;
+    }
     startTransition(async () => {
       try {
         const res = await queueAppointmentMutation({
@@ -268,7 +286,7 @@ function AppointmentForm({
               : undefined,
           date,
           time,
-          serviceType: serviceType.trim() || undefined,
+          serviceId,
         });
         if (res.status === 'sent') {
           toast.success(t.calendar.apptBooked);
@@ -285,9 +303,7 @@ function AppointmentForm({
         }
       } catch (error) {
         toast.error(
-          error instanceof Error
-            ? error.message
-            : t.calendar.apptQueueError,
+          error instanceof Error ? error.message : t.calendar.apptQueueError,
         );
       }
     });
@@ -295,7 +311,7 @@ function AppointmentForm({
 
   return (
     <div className="space-y-3">
-      <div className="inline-flex rounded-md border border-border p-0.5">
+      <div className="border-border inline-flex rounded-md border p-0.5">
         <button
           type="button"
           onClick={() => setTab('existing')}
@@ -331,7 +347,7 @@ function AppointmentForm({
             disabled={!online}
           />
           {!online && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {t.calendar.offlineSearch}
             </p>
           )}
@@ -341,7 +357,7 @@ function AppointmentForm({
               <span className="font-medium">{selected.name}</span>{' '}
               <button
                 type="button"
-                className="text-xs text-muted-foreground underline"
+                className="text-muted-foreground text-xs underline"
                 onClick={() => setSelected(null)}
               >
                 {t.calendar.changeLink}
@@ -350,7 +366,9 @@ function AppointmentForm({
           ) : (
             <ul className="max-h-40 space-y-1 overflow-y-auto">
               {searching && (
-                <li className="text-sm text-muted-foreground">{t.calendar.searching}</li>
+                <li className="text-muted-foreground text-sm">
+                  {t.calendar.searching}
+                </li>
               )}
               {!searching &&
                 results.map((p) => (
@@ -358,7 +376,7 @@ function AppointmentForm({
                     <button
                       type="button"
                       onClick={() => setSelected(p)}
-                      className="w-full rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-muted/50"
+                      className="border-border hover:bg-muted/50 w-full rounded-md border px-3 py-2 text-left text-sm"
                     >
                       <span className="font-medium">{p.name}</span>{' '}
                       <span className="text-muted-foreground">{p.phone}</span>
@@ -366,7 +384,7 @@ function AppointmentForm({
                   </li>
                 ))}
               {!searching && query && results.length === 0 && (
-                <li className="text-sm text-muted-foreground">
+                <li className="text-muted-foreground text-sm">
                   {t.calendar.noMatches}
                 </li>
               )}
@@ -416,15 +434,29 @@ function AppointmentForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="fab-appt-service">{t.calendar.serviceOptional}</Label>
-        <Input
+        <Label htmlFor="fab-appt-service">Shërbimi</Label>
+        <select
           id="fab-appt-service"
-          value={serviceType}
-          onChange={(e) => setServiceType(e.target.value)}
-          placeholder={t.calendar.servicePlaceholder}
-        />
+          value={serviceId}
+          onChange={(e) => setServiceId(e.target.value)}
+          className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+          required
+        >
+          <option value="" disabled>
+            Zgjidh shërbimin
+          </option>
+          {services.map((service) => (
+            <option key={service.id} value={service.id}>
+              {service.name} · {service.durationMinutes} min
+            </option>
+          ))}
+        </select>
       </div>
-      <Button className="w-full" onClick={submit} disabled={pending}>
+      <Button
+        className="w-full"
+        onClick={submit}
+        disabled={pending || services.length === 0}
+      >
         {pending ? t.calendar.booking : t.calendar.bookAppt}
       </Button>
     </div>

@@ -9,7 +9,7 @@ import { inngest } from '../client';
 
 export type ReminderTemplateDefinition = {
   name: string;
-  language: 'en_US';
+  language: 'sq' | 'en_US';
   body: string;
   variableSet: 'v2' | 'legacy';
 };
@@ -17,13 +17,27 @@ export type ReminderTemplateDefinition = {
 // Shared reminder templates (Option A from the spec — consistent wording across PTs).
 // v2 {{1}} = patient first name, {{2}} = practice name, {{3}} = appointment time.
 export const REMINDER_TEMPLATE: ReminderTemplateDefinition = {
+  name: 'appointment_reminder_24h_sq_v1',
+  language: 'sq',
+  body: 'Përshëndetje {{1}}, kjo është një kujtesë për takimin tuaj me {{2}} më {{3}}. Përgjigjuni KONFIRMO për ta konfirmuar, ANULO për ta anuluar ose RICAKTO për ta ndryshuar orarin.',
+  variableSet: 'v2',
+};
+
+export const FALLBACK_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
+  name: 'appointment_reminder_24h_sq_fallback',
+  language: 'sq',
+  body: 'Përshëndetje {{1}}, kujtesë: takimi juaj me {{2}} është më {{3}}. Përgjigjuni KONFIRMO, ANULO ose RICAKTO.',
+  variableSet: 'v2',
+};
+
+export const ENGLISH_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
   name: 'appointment_reminder_24h_v2',
   language: 'en_US',
   body: 'Hi {{1}}, this is a reminder about your appointment with {{2}} on {{3}}. Reply CONFIRM to confirm, CANCEL to cancel, or RESCHEDULE to change the time.',
   variableSet: 'v2',
 };
 
-export const FALLBACK_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
+export const ENGLISH_FALLBACK_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
   name: 'appointment_reminder_24h_fallback',
   language: 'en_US',
   body: 'Hi {{1}}, reminder: your appointment with {{2}} is on {{3}}. Reply CONFIRM, CANCEL, or RESCHEDULE.',
@@ -40,6 +54,8 @@ export const LEGACY_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
 export const REMINDER_TEMPLATE_PRIORITY = [
   REMINDER_TEMPLATE,
   FALLBACK_REMINDER_TEMPLATE,
+  ENGLISH_REMINDER_TEMPLATE,
+  ENGLISH_FALLBACK_REMINDER_TEMPLATE,
   LEGACY_REMINDER_TEMPLATE,
 ] as const;
 

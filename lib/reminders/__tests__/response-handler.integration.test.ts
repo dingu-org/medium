@@ -233,7 +233,7 @@ describe('handleReminderResponse', () => {
 
     expect(result.kind).toBe('outbound');
     if (result.kind !== 'outbound') return;
-    expect(result.outbound.content).toContain('Available times:');
+    expect(result.outbound.content).toContain('Oraret e lira janë:');
     expect(result.outbound.content).toContain('1.');
 
     const [job] = await db

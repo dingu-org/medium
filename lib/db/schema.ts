@@ -87,6 +87,7 @@ export const pts = pgTable('pts', {
   aiName: text('ai_name'),
   aiGreeting: text('ai_greeting'),
   aiEscalationKeyword: text('ai_escalation_keyword'),
+  servicesConfiguredAt: tsTz('services_configured_at'),
   retentionDays: integer('retention_days').notNull().default(90),
   // Web Push notification preferences (event type → enabled). Wired in Phase 9;
   // the settings UI persists the toggles now. Null = use defaults.
@@ -111,9 +112,7 @@ export const whatsappConnections = pgTable(
     wabaId: text('waba_id').notNull(),
     accessTokenEncrypted: bytea('access_token_encrypted'),
     mode: whatsappConnectionMode('mode').notNull().default('cloud_api'),
-    coexistenceSyncStatus: coexistenceSyncStatus(
-      'coexistence_sync_status',
-    )
+    coexistenceSyncStatus: coexistenceSyncStatus('coexistence_sync_status')
       .notNull()
       .default('not_applicable'),
     coexistenceSyncDeadlineAt: tsTz('coexistence_sync_deadline_at'),
@@ -173,6 +172,24 @@ export const patients = pgTable(
   (t) => [uniqueIndex('patients_pt_wa_id_uq').on(t.ptId, t.waId)],
 );
 
+export const services = pgTable(
+  'services',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    name: text('name').notNull(),
+    durationMin: integer('duration_min').notNull(),
+    active: boolean('active').notNull().default(true),
+    createdAt: tsTz('created_at').notNull().default(now),
+  },
+  (t) => [
+    check('services_name_not_blank', sql`length(btrim(${t.name})) > 0`),
+    check('services_duration_range', sql`${t.durationMin} BETWEEN 5 AND 480`),
+    uniqueIndex('services_pt_name_uq').on(t.ptId, sql`lower(btrim(${t.name}))`),
+    index('services_pt_active_idx').on(t.ptId, t.active, t.createdAt),
+  ],
+);
+
 export const conversations = pgTable(
   'conversations',
   {
@@ -183,6 +200,8 @@ export const conversations = pgTable(
       .references(() => patients.id, { onDelete: 'cascade' }),
     channel: text('channel').notNull(),
     lastInboundAt: tsTz('last_inbound_at'),
+    lastReadAt: tsTz('last_read_at'),
+    closedAt: tsTz('closed_at'),
     aiActive: boolean('ai_active').notNull().default(true),
     aiPausedUntil: tsTz('ai_paused_until'),
     aiPauseReason: text('ai_pause_reason'),
@@ -193,6 +212,11 @@ export const conversations = pgTable(
     uniqueIndex('conversations_patient_channel_uq').on(t.patientId, t.channel),
     index('conversations_pt_last_inbound_idx').on(
       t.ptId,
+      t.lastInboundAt.desc(),
+    ),
+    index('conversations_pt_closed_last_inbound_idx').on(
+      t.ptId,
+      t.closedAt,
       t.lastInboundAt.desc(),
     ),
     index('conversations_ai_pause_idx')
@@ -371,10 +395,7 @@ export const pwaMutations = pgTable(
     updatedAt: tsTz('updated_at').notNull().default(now),
   },
   (t) => [
-    uniqueIndex('pwa_mutations_pt_client_id_uq').on(
-      t.ptId,
-      t.clientMutationId,
-    ),
+    uniqueIndex('pwa_mutations_pt_client_id_uq').on(t.ptId, t.clientMutationId),
     index('pwa_mutations_pt_status_idx').on(t.ptId, t.status, t.createdAt),
   ],
 );

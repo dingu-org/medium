@@ -239,7 +239,7 @@ describe('PWA message mutation API', () => {
     await expect(first.json()).resolves.toMatchObject({
       ok: false,
       error:
-        'WhatsApp could not send the message. Try again or reconnect WhatsApp.',
+        "WhatsApp nuk e dërgoi mesazhin. Provo sërish ose rilidhe WhatsApp-in.",
     });
     expect(second.status).toBe(409);
     expect(sendFreeFormMock).toHaveBeenCalledTimes(1);
@@ -257,7 +257,7 @@ describe('PWA message mutation API', () => {
     expect(storedMutation).toEqual({
       status: 'failed',
       error:
-        'WhatsApp could not send the message. Try again or reconnect WhatsApp.',
+        "WhatsApp nuk e dërgoi mesazhin. Provo sërish ose rilidhe WhatsApp-in.",
     });
   });
 

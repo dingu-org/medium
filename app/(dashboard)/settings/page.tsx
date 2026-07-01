@@ -1,4 +1,4 @@
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, Stethoscope } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import {
@@ -39,7 +39,11 @@ function ConnectionBadge({ status }: { status: string | null }) {
         {t.settings.connectionBadgePending}
       </StatusPill>
     );
-  return <StatusPill tone="neutral">{t.settings.connectionBadgeNotConnected}</StatusPill>;
+  return (
+    <StatusPill tone="neutral">
+      {t.settings.connectionBadgeNotConnected}
+    </StatusPill>
+  );
 }
 
 export default async function SettingsPage() {
@@ -75,6 +79,12 @@ export default async function SettingsPage() {
           title={t.settings.availability}
           description={t.settings.availabilitySub}
         />
+        <GroupedListRow
+          href="/settings/services"
+          icon={Stethoscope}
+          title={t.settings.services}
+          description={t.settings.servicesSub}
+        />
       </GroupedList>
 
       <Card>
@@ -83,9 +93,7 @@ export default async function SettingsPage() {
             WhatsApp
             <ConnectionBadge status={status} />
           </CardTitle>
-          <CardDescription>
-            {t.settings.whatsappCardSub}
-          </CardDescription>
+          <CardDescription>{t.settings.whatsappCardSub}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {status === 'revoked' && (

@@ -6,7 +6,11 @@ import { Button } from '@/components/ui/button';
 import { createBrowserClient } from '@/lib/supabase/browser';
 import { t } from '@/lib/i18n';
 
-export function GoogleSignInButton({ label = t.auth.signIn.google }: { label?: string }) {
+export function GoogleSignInButton({
+  label = t.auth.signIn.google,
+}: {
+  label?: string;
+}) {
   const [pending, setPending] = useState(false);
 
   const handleClick = async () => {
@@ -24,8 +28,14 @@ export function GoogleSignInButton({ label = t.auth.signIn.google }: { label?: s
   };
 
   return (
-    <Button type="button" variant="outline" className="w-full" onClick={handleClick} disabled={pending}>
-      {pending ? 'Redirecting…' : label}
+    <Button
+      type="button"
+      variant="outline"
+      className="w-full"
+      onClick={handleClick}
+      disabled={pending}
+    >
+      {pending ? t.auth.signIn.redirecting : label}
     </Button>
   );
 }

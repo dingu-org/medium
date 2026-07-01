@@ -12,6 +12,9 @@ describe('deterministic conversation safety', () => {
     ['Does my insurance cover this?', 'insurance_question'],
     ['Is this covered by my health plan?', 'insurance_question'],
     ["This isn't working", 'high_frustration'],
+    ['NDIHMË', 'human_requested'],
+    ['Dua të flas me një person të vërtetë', 'human_requested'],
+    ['Kam vështirësi në frymëmarrje', 'urgent_health_concern'],
   ] as const)('classifies %s', (content, reason) => {
     expect(detectSafetyEscalation(content, 'HUMAN')).toBe(reason);
   });
@@ -31,7 +34,7 @@ describe('deterministic conversation safety', () => {
       'urgent_health_concern',
       'Movement Clinic',
     );
-    expect(response).toContain('local emergency services');
+    expect(response).toContain('shërbimet vendore të urgjencës');
     expect(response).toContain('Movement Clinic');
     expect(response).not.toMatch(/\+\d/);
   });

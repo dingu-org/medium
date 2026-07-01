@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="bg-background text-foreground min-h-screen">
+    <div lang="en" className="bg-background text-foreground min-h-screen">
       <header className="bg-background border-b">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
           <Link href="/" className="font-heading text-base font-medium">

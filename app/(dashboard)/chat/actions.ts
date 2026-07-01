@@ -1,6 +1,6 @@
 'use server';
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -9,11 +9,22 @@ import {
   OutsideWindowError,
 } from '@/lib/channels/whatsapp/errors';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
+import { sendTemplate } from '@/lib/channels/whatsapp/client';
 import { db } from '@/lib/db';
-import { conversations, messages, patients, whatsappConnections } from '@/lib/db/schema';
+import { withAdvisoryLock } from '@/lib/db/advisory-lock';
+import {
+  appointments,
+  conversations,
+  messageTemplates,
+  messages,
+  patients,
+  pts,
+  whatsappConnections,
+} from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { createServerClient } from '@/lib/supabase/server';
+import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
 
 async function requirePtId(): Promise<string> {
   const supabase = await createServerClient();
@@ -26,7 +37,10 @@ async function requirePtId(): Promise<string> {
 
 export type SendResult =
   | { ok: true }
-  | { ok: false; reason: 'outside_window' | 'revoked' | 'no_connection' | 'error' };
+  | {
+      ok: false;
+      reason: 'outside_window' | 'revoked' | 'no_connection' | 'error';
+    };
 
 const bodySchema = z.string().trim().min(1).max(4096);
 
@@ -159,4 +173,227 @@ export async function setTakeover(
 
   revalidatePath(`/chat/${conversationId}`);
   return { ok: true };
+}
+
+export async function markConversationRead(
+  conversationId: string,
+  throughMessageId: string,
+): Promise<{ ok: boolean }> {
+  const ptId = await requirePtId();
+  const [throughMessage] = await db
+    .select({ createdAt: messages.createdAt })
+    .from(messages)
+    .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+    .where(
+      and(
+        eq(messages.id, throughMessageId),
+        eq(conversations.id, conversationId),
+        eq(conversations.ptId, ptId),
+      ),
+    )
+    .limit(1);
+  if (!throughMessage) return { ok: false };
+
+  await db
+    .update(conversations)
+    .set({
+      lastReadAt: sql`GREATEST(
+        COALESCE(${conversations.lastReadAt}, '-infinity'::timestamptz),
+        ${throughMessage.createdAt}
+      )`,
+    })
+    .where(
+      and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
+    );
+  revalidatePath('/chat');
+  return { ok: true };
+}
+
+export async function setConversationClosed(
+  conversationId: string,
+  closed: boolean,
+): Promise<{ ok: boolean }> {
+  const ptId = await requirePtId();
+  await db
+    .update(conversations)
+    .set(
+      closed
+        ? {
+            closedAt: new Date(),
+            aiActive: false,
+            aiPausedUntil: null,
+            aiPauseReason: null,
+            escalationState: 'idle',
+          }
+        : { closedAt: null, aiActive: true, escalationState: 'idle' },
+    )
+    .where(
+      and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
+    );
+  revalidatePath('/chat');
+  revalidatePath(`/chat/${conversationId}`);
+  return { ok: true };
+}
+
+export async function sendUpcomingReminderTemplate(
+  conversationId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const ptId = await requirePtId();
+  const [context] = await db
+    .select({
+      patientId: conversations.patientId,
+      patientName: patients.name,
+      waId: patients.waId,
+      practiceName: pts.practiceName,
+      timezone: pts.timezone,
+    })
+    .from(conversations)
+    .innerJoin(patients, eq(conversations.patientId, patients.id))
+    .innerJoin(pts, eq(conversations.ptId, pts.id))
+    .where(
+      and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
+    )
+    .limit(1);
+  if (!context?.waId) return { ok: false, error: 'Biseda nuk u gjet.' };
+  // Hoist out of `context` so the narrowing survives into the closure below.
+  const waId = context.waId;
+
+  const [[connection], [appointment], templateRows] = await Promise.all([
+    db
+      .select({ id: whatsappConnections.id })
+      .from(whatsappConnections)
+      .where(
+        and(
+          eq(whatsappConnections.ptId, ptId),
+          eq(whatsappConnections.status, 'active'),
+        ),
+      )
+      .orderBy(desc(whatsappConnections.createdAt))
+      .limit(1),
+    db
+      .select({ startsAt: appointments.startsAt })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.ptId, ptId),
+          eq(appointments.patientId, context.patientId),
+          inArray(appointments.status, ['pending', 'confirmed']),
+          gt(appointments.startsAt, new Date()),
+        ),
+      )
+      .orderBy(asc(appointments.startsAt))
+      .limit(1),
+    db
+      .select({
+        id: messageTemplates.id,
+        name: messageTemplates.name,
+        language: messageTemplates.language,
+      })
+      .from(messageTemplates)
+      .where(
+        and(
+          eq(messageTemplates.ptId, ptId),
+          eq(messageTemplates.status, 'approved'),
+          inArray(
+            messageTemplates.name,
+            REMINDER_TEMPLATE_PRIORITY.map((template) => template.name),
+          ),
+        ),
+      ),
+  ]);
+  if (!connection) return { ok: false, error: 'WhatsApp nuk është i lidhur.' };
+  if (!appointment) return { ok: false, error: 'Nuk ka takim të ardhshëm.' };
+
+  const definition = REMINDER_TEMPLATE_PRIORITY.find((candidate) =>
+    templateRows.some(
+      (row) =>
+        row.name === candidate.name && row.language === candidate.language,
+    ),
+  );
+  const template = definition
+    ? templateRows.find(
+        (row) =>
+          row.name === definition.name && row.language === definition.language,
+      )
+    : null;
+  if (!definition || !template) {
+    return {
+      ok: false,
+      error: 'Shablloni i kujtesës nuk është miratuar ende.',
+    };
+  }
+
+  const localTime = new Intl.DateTimeFormat('sq-AL', {
+    timeZone: context.timezone,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(appointment.startsAt);
+  const firstName = context.patientName.trim().split(/\s+/)[0] || 'Ju';
+  const practiceName = context.practiceName?.trim() || 'praktika';
+  const variables =
+    definition.variableSet === 'legacy'
+      ? [firstName, localTime]
+      : [firstName, practiceName, localTime];
+
+  // Serialize per conversation and skip if this same reminder template was just
+  // sent — otherwise a double-tap (before the button's pending state commits)
+  // sends, and pays for, two identical WhatsApp templates.
+  return withAdvisoryLock(`reminder:${conversationId}`, async () => {
+    const [recent] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.templateId, template.id),
+          gt(messages.createdAt, new Date(Date.now() - 60_000)),
+        ),
+      )
+      .limit(1);
+    if (recent) {
+      revalidatePath(`/chat/${conversationId}`);
+      return { ok: true };
+    }
+
+    try {
+      const result = await sendTemplate(
+        connection.id,
+        waId,
+        definition.name,
+        definition.language,
+        variables,
+      );
+      await db.transaction(async (tx) => {
+        await tx.insert(messages).values({
+          ptId,
+          conversationId,
+          role: 'pt',
+          channel: 'whatsapp',
+          content: `Kujtesë për takimin më ${localTime}.`,
+          templateId: template.id,
+          externalId: result.messageId,
+        });
+        await tx
+          .update(conversations)
+          // Match every other pause path: clear aiPausedUntil/aiPauseReason too,
+          // or a conversation paused for the WhatsApp-echo reason keeps showing a
+          // stale "paused" badge after the PT sends a reminder.
+          .set({ aiActive: false, aiPausedUntil: null, aiPauseReason: null })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.ptId, ptId),
+            ),
+          );
+      });
+      revalidatePath(`/chat/${conversationId}`);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Kujtesa nuk u dërgua. Provo sërish.' };
+    }
+  });
 }

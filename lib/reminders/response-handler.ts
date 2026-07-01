@@ -30,7 +30,12 @@ type ReminderCandidate = {
   startsAt: Date;
   endsAt: Date;
   serviceType: string | null;
-  responseType: 'confirm' | 'cancel' | 'reschedule_requested' | 'opt_out' | null;
+  responseType:
+    | 'confirm'
+    | 'cancel'
+    | 'reschedule_requested'
+    | 'opt_out'
+    | null;
   responseMessageId: string | null;
   timezone: string;
   practiceName: string | null;
@@ -42,14 +47,14 @@ export type ReminderHandlingResult =
   | { kind: 'fallback'; reminder: ReminderTurnContext };
 
 function formatAppointmentTime(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('en', {
+  return new Intl.DateTimeFormat('sq-AL', {
     timeZone: timezone,
     weekday: 'long',
     month: 'long',
     day: 'numeric',
-    hour: 'numeric',
+    hour: '2-digit',
     minute: '2-digit',
-    hour12: true,
+    hour12: false,
   }).format(date);
 }
 
@@ -187,8 +192,12 @@ function reminderTurnContext(
 async function setReminderOptOut(inbound: InboundMessage): Promise<void> {
   await db
     .update(patients)
-    .set({ reminderOptedOutAt: sql`COALESCE(${patients.reminderOptedOutAt}, now())` })
-    .where(and(eq(patients.id, inbound.patientId), eq(patients.ptId, inbound.ptId)));
+    .set({
+      reminderOptedOutAt: sql`COALESCE(${patients.reminderOptedOutAt}, now())`,
+    })
+    .where(
+      and(eq(patients.id, inbound.patientId), eq(patients.ptId, inbound.ptId)),
+    );
 }
 
 async function handleConfirm(args: {
@@ -206,10 +215,13 @@ async function handleConfirm(args: {
     inbound: args.inbound,
     responseType: 'confirm',
   });
-  const time = formatAppointmentTime(args.candidate.startsAt, args.candidate.timezone);
+  const time = formatAppointmentTime(
+    args.candidate.startsAt,
+    args.candidate.timezone,
+  );
   return persistReminderReply({
     inbound: args.inbound,
-    content: `Thanks, your appointment for ${time} is confirmed. See you then.`,
+    content: `Faleminderit. Takimi juaj për ${time} u konfirmua. Mirupafshim atëherë.`,
   });
 }
 
@@ -229,10 +241,13 @@ async function handleCancel(args: {
     inbound: args.inbound,
     responseType: 'cancel',
   });
-  const time = formatAppointmentTime(args.candidate.startsAt, args.candidate.timezone);
+  const time = formatAppointmentTime(
+    args.candidate.startsAt,
+    args.candidate.timezone,
+  );
   return persistReminderReply({
     inbound: args.inbound,
-    content: `Your appointment for ${time} has been cancelled. If you would like to book a different time, send me the day or time that works for you.`,
+    content: `Takimi juaj për ${time} u anulua. Nëse dëshironi një orar tjetër, më dërgoni ditën ose orën që ju përshtatet.`,
   });
 }
 
@@ -251,7 +266,7 @@ async function handleOptOut(args: {
   return persistReminderReply({
     inbound: args.inbound,
     content:
-      'You have been opted out of automated appointment reminders. You can still message here to book or manage appointments.',
+      'U çregjistruat nga kujtesat automatike të takimeve. Mund të shkruani ende këtu për të rezervuar ose menaxhuar takimet.',
   });
 }
 
@@ -269,7 +284,10 @@ async function handleReschedule(args: {
     ptId: args.inbound.ptId,
     start: args.now,
     end: addDays(args.now, 7),
-    durationMinutes: 60,
+    durationMinutes: Math.round(
+      (args.candidate.endsAt.getTime() - args.candidate.startsAt.getTime()) /
+        60_000,
+    ),
     serviceType: args.candidate.serviceType ?? undefined,
     excludeAppointmentId: args.candidate.appointmentId,
   });
@@ -284,13 +302,13 @@ async function handleReschedule(args: {
   );
   const content =
     slots.length > 0
-      ? `No problem. I can help reschedule your appointment for ${currentTime}. Available times:\n${slots
+      ? `Pa problem. Mund t'ju ndihmoj ta ricaktoni takimin për ${currentTime}. Oraret e lira janë:\n${slots
           .map(
             (slot, index) =>
               `${index + 1}. ${formatAppointmentTime(new Date(slot.startsAt), args.candidate.timezone)}`,
           )
-          .join('\n')}\nReply with the option that works for you.`
-      : `No problem. I can help reschedule your appointment for ${currentTime}, but I do not see any available times in the next week. Send me a day or time that works for you, and I will keep looking.`;
+          .join('\n')}\nPërgjigjuni me alternativën që ju përshtatet.`
+      : `Pa problem. Mund t'ju ndihmoj ta ricaktoni takimin për ${currentTime}, por nuk shoh orare të lira javën e ardhshme. Më dërgoni një ditë ose orë që ju përshtatet dhe do të kërkoj sërish.`;
 
   return persistReminderReply({ inbound: args.inbound, content });
 }

@@ -25,6 +25,7 @@ import {
 import { encryptToken } from '@/lib/db/crypto';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
+  ENGLISH_REMINDER_TEMPLATE,
   FALLBACK_REMINDER_TEMPLATE,
   LEGACY_REMINDER_TEMPLATE,
   REMINDER_TEMPLATE,
@@ -147,7 +148,7 @@ describe('appointment event confirmation', () => {
     expect(second.kind).toBe('ready');
     if (first.kind !== 'ready' || second.kind !== 'ready') return;
     expect(second.messageId).toBe(first.messageId);
-    expect(first.content).toContain('Your appointment is booked');
+    expect(first.content).toContain('Takimi juaj u rezervua');
 
     const sendFn = vi.fn(async () => ({ messageId: 'wamid.EVENT' }));
     const delivery = await sendAppointmentConfirmation({
@@ -233,7 +234,7 @@ describe('reminder scheduling and guards', () => {
       .values({
         ptId,
         name: REMINDER_TEMPLATE.name,
-        language: 'en_US',
+        language: REMINDER_TEMPLATE.language,
         status: 'pending',
         body: REMINDER_TEMPLATE.body,
       })
@@ -250,6 +251,26 @@ describe('reminder scheduling and guards', () => {
       kind: 'retry',
       reason: 'template_not_approved',
     });
+
+    await db.insert(messageTemplates).values({
+      ptId,
+      name: ENGLISH_REMINDER_TEMPLATE.name,
+      language: ENGLISH_REMINDER_TEMPLATE.language,
+      status: 'approved',
+      body: ENGLISH_REMINDER_TEMPLATE.body,
+    });
+    const englishFallback = await loadReminderAttempt({
+      ptId,
+      appointmentId,
+      runId: 'run-current',
+      scheduledFor,
+    });
+    expect(englishFallback.kind).toBe('ready');
+    if (englishFallback.kind === 'ready') {
+      expect(englishFallback.template.name).toBe(
+        ENGLISH_REMINDER_TEMPLATE.name,
+      );
+    }
 
     await db
       .update(messageTemplates)

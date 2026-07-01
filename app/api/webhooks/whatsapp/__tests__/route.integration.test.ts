@@ -79,10 +79,12 @@ function buildPayload(opts: PayloadOpts = {}) {
   };
 }
 
-function buildHistoryPayload(opts: {
-  progress?: number;
-  errors?: { code: number; message: string }[];
-} = {}) {
+function buildHistoryPayload(
+  opts: {
+    progress?: number;
+    errors?: { code: number; message: string }[];
+  } = {},
+) {
   return {
     object: 'whatsapp_business_account',
     entry: [
@@ -395,6 +397,61 @@ describe('POST /api/webhooks/whatsapp — happy path', () => {
       }),
     );
   });
+
+  it('links an existing manual patient by normalized phone instead of duplicating it', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const [manual] = await db
+      .insert(patients)
+      .values({
+        ptId,
+        name: 'Manual Jane',
+        phone: '+44 7700 900000',
+      })
+      .returning({ id: patients.id });
+
+    const res = await POST(
+      makePost(
+        buildPayload({ messageId: nextExternalId(), text: 'linked ping' }),
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    const rows = await db
+      .select()
+      .from(patients)
+      .where(eq(patients.ptId, ptId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: manual.id, waId: WA_ID });
+  });
+
+  it('reopens a manually closed conversation on the next inbound message', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    await POST(makePost(buildPayload({ messageId: nextExternalId() })));
+    const [conversation] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    await db
+      .update(conversations)
+      .set({
+        closedAt: new Date(),
+        aiActive: false,
+        escalationState: 'idle',
+      })
+      .where(eq(conversations.id, conversation.id));
+
+    await POST(
+      makePost(
+        buildPayload({ messageId: nextExternalId(), text: 'new inbound' }),
+      ),
+    );
+    const [reopened] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversation.id));
+    expect(reopened.closedAt).toBeNull();
+    expect(reopened.aiActive).toBe(true);
+  });
 });
 
 describe('POST /api/webhooks/whatsapp — idempotency', () => {
@@ -412,6 +469,32 @@ describe('POST /api/webhooks/whatsapp — idempotency', () => {
     const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
     expect(ms).toHaveLength(1);
     expect(sendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reopen a closed conversation for a duplicate delivery', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const payload = buildPayload({ messageId: nextExternalId() });
+    await POST(makePost(payload));
+    const [conversation] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    await db
+      .update(conversations)
+      .set({ closedAt: new Date(), aiActive: false })
+      .where(eq(conversations.id, conversation.id));
+
+    await POST(makePost(payload));
+
+    const [afterRetry] = await db
+      .select({
+        closedAt: conversations.closedAt,
+        aiActive: conversations.aiActive,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, conversation.id));
+    expect(afterRetry.closedAt).not.toBeNull();
+    expect(afterRetry.aiActive).toBe(false);
   });
 });
 
@@ -512,7 +595,9 @@ describe('POST /api/webhooks/whatsapp — coexistence history', () => {
       .from(whatsappConnections)
       .where(eq(whatsappConnections.ptId, ptId));
     expect(connection.coexistenceSyncStatus).toBe('history_declined');
-    expect(connection.coexistenceLastError).toContain('History sync is turned off');
+    expect(connection.coexistenceLastError).toContain(
+      'History sync is turned off',
+    );
   });
 });
 

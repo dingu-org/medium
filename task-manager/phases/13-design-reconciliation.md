@@ -10,14 +10,33 @@ Albanian as the canonical UI language, the designed 5-tab IA, the exception-firs
 copy. The handoff now locks the full IA + Albanian, which is scope beyond the Phase 7
 checklist. Phase 7 stays complete; this phase tracks the reconciliation.
 
-**Source of truth.** Design project `019dfd60-5ce2-7ab6-b849-1f619e69849d` (canvases
-`Medium - *.html` + JSX sources), read on-demand via the design MCP (not committed).
+**Source of truth.** `docs/design/Medium - Handoff to Claude Code.md` plus the
+read-only, untracked `docs/design/Medium 3/` HTML/JSX canvases. The package covers
+auth, onboarding, Today/calendar, appointments, chat, clients, and current system
+states. Net-new Phase 9-12 capabilities shown there remain deferred to those phases.
 
 **Decisions (2026-06-22).**
-- Albanian: full-app now via `lib/i18n/sq.ts` (practitioner UI informal *ti*; AI→patient
-  copy stays formal *Ju*, already correct in prompts).
+
+- Albanian: full-app now via `lib/i18n/sq.ts` (practitioner UI informal _ti_; AI→patient
+  copy stays formal _Ju_, already correct in prompts).
 - Execution: staged with checkpoints — Foundation → Today → Services → Clients.
 - Design files: referenced via the design MCP, not copied into the repo.
+
+**Expanded reconciliation decisions (2026-06-30).**
+
+- Reconcile the full applicable `Medium 3` package, not only the three placeholder
+  destinations. Fix the existing baseline before building Today, Services, and Clients.
+- Keep Web Push delivery, GDPR export, operational quota monitoring, legal review,
+  observability, and launch work in Phases 9-12.
+- Conversations close/reopen manually; a new inbound patient message reopens them.
+- Existing practices get Services backfilled from appointment history, with the three
+  design presets used when no history exists.
+- Manual client phones use an application-level normalized duplicate check; historical
+  phone storage is not rewritten and no new DB uniqueness constraint is added.
+- Albanian reminder templates are preferred after approval; approved English templates
+  remain a temporary fallback during Meta review.
+- The matching Next 15.5.16 docs were restored under `node_modules/next/dist/docs/`
+  from the official tag because the published package did not contain them.
 
 ---
 
@@ -43,37 +62,90 @@ long-tail strings (a few `availability-editor` toasts/descriptions + 2 aria-labe
 migrate into `lib/i18n/dict` later. Legal pages (`/privacy`, `/terms`) intentionally left
 English pending legal review.
 
+## Stage 1B — Full-package baseline reconciliation
+
+- [x] Restore and read the matching Next 15.5.16 App Router documentation.
+- [x] Correct Albanian language gaps (`lang`, metadata, notifications/PWA/API errors,
+      AI/safety/appointment/reminder patient copy); keep legal pages marked English.
+- [x] Prefer new Albanian (`sq`) reminder templates with approved English fallback.
+- [x] Implement designed top-level/pushed chrome; tabs only on the five root destinations;
+      wire the real unread-chat indicator.
+- [x] Reconcile auth visuals and complete reset/confirmation/OAuth states.
+- [x] Add calendar day view, Albanian labels, all statuses, and designed loading/empty states.
+- [x] Reconcile appointment sheets and chat list/thread state coverage, including search,
+      active/closed, unread, escalation/takeover/pause/revoked, retry, and 24h-template UX.
+- [x] Align currently implemented PWA/notification/settings/account states to the canvases.
+
 ## Stage 2 — Today (`/today`)
 
-- [ ] Exception-first home: "Kërkon vëmendjen tënde" (reminder no-replies + escalations),
+- [x] Exception-first home: "Kërkon vëmendjen tënde" (reminder no-replies + escalations),
       "Më pas" (next appt), "Më vonë sot", "Medium po menaxhon N biseda" strip.
-- [ ] `lib/today/queries.ts → getTodaySnapshot(ptId)`; realtime; reuse appointment sheet/badges.
+- [x] `lib/today/queries.ts → getTodaySnapshot(ptId)`; realtime; reuse appointment sheet/badges.
+- [x] Loading + quiet-day states; offline snapshot API/cache; attention actions.
 
 ## Stage 3 — Configurable Services
 
-- [ ] `services` table (`id, pt_id, name, duration_min, active, created_at`) + RLS + migration
+- [x] `services` table (`id, pt_id, name, duration_min, active, created_at`) + RLS + migration
       (next number) ; add to the RLS isolation test seed registry.
-- [ ] Settings CRUD (`/settings/services`) + onboarding step (4→5 steps; done when ≥1 active).
-- [ ] Manual-book service picker (writes `appointments.service_type` from the managed list;
+- [x] Settings CRUD (`/settings/services`) + onboarding step (4→5 steps; done when ≥1 active).
+- [x] Manual-book service picker (writes `appointments.service_type` from the managed list;
       text column kept for legacy/AI rows).
-- [ ] AI booking tool offers configured services.
+- [x] AI booking tool offers configured services.
+- [x] Service durations drive availability/booking; reschedules preserve existing duration;
+      old queued `serviceType` mutations remain replay-compatible.
+- [x] Replace the onboarding checklist with the data-derived five-step wizard
+      (Profile → WhatsApp → Availability → Services → Test message → Done).
 
 ## Stage 4 — Clients
 
-- [ ] `/clients` directory (search, count, next/last-appt meta, default/loading/empty/search
+- [x] `/clients` directory (search, count, next/last-appt meta, default/loading/empty/search
       states), `/clients/[id]` detail (quick actions, private note, upcoming + history →
       appointment sheet, reminder opt-out banner), `/clients/new` manual add (`wa_id` NULL;
       online-only).
-- [ ] `lib/clients/queries.ts` (directory + detail); hide bottom nav on detail/new.
-- [ ] Manual patients: no WhatsApp/Biseda action until they message first.
+- [x] `lib/clients/queries.ts` (directory + detail); hide bottom nav on detail/new.
+- [x] Manual patients: no WhatsApp/Biseda action until they message first.
+- [x] Application-level phone normalization/duplicate check; notes editing; realtime and
+      directory snapshot caching.
+
+---
+
+## Canvas acceptance matrix
+
+| Surface               | Implementation gate                                                                        | Status   |
+| --------------------- | ------------------------------------------------------------------------------------------ | -------- |
+| Component system      | Existing tokens/primitives retained; missing states added without copying canvas code.     | Complete |
+| Auth                  | Sign in/up/recovery/reset/confirmation/OAuth default, validation, error, pending states.   | Complete |
+| Onboarding            | Five data-derived steps plus Meta connection states and completion.                        | Complete |
+| Today & Calendar      | Today default/loading/quiet; calendar day/week/month/loading/empty/lifecycle.              | Complete |
+| Appointment lifecycle | Detail/reschedule/cancel/create/success/offline/failed states.                             | Complete |
+| Chats & takeover      | Needs-you-first active list, closed/search/loading/empty, handling/send states.            | Complete |
+| Clients               | Directory/search/loading/empty, WhatsApp/manual detail, opt-out, add-new.                  | Complete |
+| System states         | Existing offline/sync/update/install/feed/account states only; Phase 9-12 states deferred. | Complete |
 
 ---
 
 ## Acceptance
 
-- [ ] App reads Albanian end-to-end; new IA matches the canvases.
-- [ ] Sign-in / onboarding land on Today; 5 tabs navigate with no 404s.
-- [ ] Services configurable and drive onboarding, manual booking, and AI booking.
-- [ ] Clients directory / detail / new work; manual patients gated correctly.
-- [ ] `pnpm typecheck/lint/build/test:all` green; signed-in Lighthouse mobile on `/today`
-      Performance ≥ 90, Accessibility ≥ 95.
+- [x] App reads Albanian end-to-end; new IA matches the applicable canvases.
+- [x] Sign-in / onboarding land on Today; 5 tabs navigate with no 404s.
+- [x] Services configurable and drive onboarding, manual booking, and AI booking.
+- [x] Clients directory / detail / new work; manual patients gated correctly.
+- [x] Local migration reset, RLS/Realtime/backfill coverage, `pnpm typecheck`, `pnpm lint`,
+      `pnpm build`, and `pnpm test:all` (45 files, 317 tests) pass.
+- [x] Signed-in browser canvas checks pass at 390×844 and 1280×900, including pushed-view
+      tab hiding, mobile overflow checks, service/client gating, and current PWA states.
+- [x] Offline snapshots and queued mutation replay are covered by automated tests and the
+      existing production-mode Phase 8 replay smoke.
+- [x] Signed-in Lighthouse mobile on `/today`: Performance 100, Accessibility 100.
+
+**Phase complete (2026-06-30).** The design package remains read-only and untracked. Web
+Push, GDPR export, operational quotas, legal translation/review, observability, and launch
+work remain in Phases 9-12.
+
+**PR review hardening (2026-06-30).** Migration `0014_phase13_review_hardening` adds an
+explicit service-confirmation timestamp while preserving seeded defaults for existing
+practices. Onboarding setup/dismissal is account-scoped; duplicate inbound deliveries are
+side-effect free; read watermarks stop at the latest rendered message; arbitrary service
+durations remain editable; and a daily idempotent job submits/polls Albanian reminder
+templates for existing active WhatsApp connections. Mobile browser verification covered
+setup navigation, the Services confirmation step, and a 50-minute service edit.

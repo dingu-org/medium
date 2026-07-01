@@ -15,10 +15,12 @@ import { encryptToken } from '@/lib/db/crypto';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
   FALLBACK_REMINDER_TEMPLATE,
+  ENGLISH_REMINDER_TEMPLATE,
   REMINDER_TEMPLATE,
   applyTemplateStatus,
   bootstrapWaConnectionCore,
 } from '../bootstrap-wa-connection';
+import { reconcileAlbanianReminderTemplatesCore } from '../reconcile-reminder-templates';
 
 const META_TEMPLATE_ID = 'TEMPLATE_META_ID_123';
 
@@ -161,5 +163,53 @@ describe('bootstrapWaConnectionCore', () => {
       .where(eq(messageTemplates.id, created.templateId));
     expect(row.status).toBe('rejected');
     expect(row.lastStatusAt).not.toBeNull();
+  });
+
+  it('submits Albanian templates for an existing English-only connection', async () => {
+    await db.insert(messageTemplates).values({
+      ptId,
+      name: ENGLISH_REMINDER_TEMPLATE.name,
+      language: ENGLISH_REMINDER_TEMPLATE.language,
+      status: 'approved',
+      metaId: 'ENGLISH_META_ID',
+      body: ENGLISH_REMINDER_TEMPLATE.body,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.includes('/message_templates')) {
+          return new Response(
+            JSON.stringify({ id: META_TEMPLATE_ID, status: 'PENDING' }),
+            { status: 200 },
+          );
+        }
+        if (url.includes(META_TEMPLATE_ID)) {
+          return new Response(
+            JSON.stringify({
+              status: 'APPROVED',
+              name: REMINDER_TEMPLATE.name,
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ success: true }), { status: 200 });
+      }) as unknown as typeof fetch,
+    );
+
+    await expect(
+      reconcileAlbanianReminderTemplatesCore({ ptId, connectionId }),
+    ).resolves.toEqual({ name: REMINDER_TEMPLATE.name, status: 'approved' });
+
+    const rows = await db
+      .select({ name: messageTemplates.name, status: messageTemplates.status })
+      .from(messageTemplates)
+      .where(eq(messageTemplates.ptId, ptId));
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { name: ENGLISH_REMINDER_TEMPLATE.name, status: 'approved' },
+        { name: REMINDER_TEMPLATE.name, status: 'approved' },
+      ]),
+    );
   });
 });

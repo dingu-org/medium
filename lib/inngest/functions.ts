@@ -9,6 +9,7 @@ import {
 } from './functions/poll-whatsapp-health';
 import { publishEventOutbox } from './functions/publish-event-outbox';
 import { purgeExpiredMessages } from './functions/purge-expired-messages';
+import { reconcileAlbanianReminderTemplates } from './functions/reconcile-reminder-templates';
 import { resumeBusinessAppAi } from './functions/resume-business-app-ai';
 import { sendReminder } from './functions/send-reminder';
 import { syncWhatsappCoexistence } from './functions/sync-whatsapp-coexistence';
@@ -24,5 +25,6 @@ export const functions: InngestFunction.Like[] = [
   syncWhatsappCoexistence,
   pollQualityRating,
   monitorWaTokenExpiry,
+  reconcileAlbanianReminderTemplates,
   publishEventOutbox,
 ];

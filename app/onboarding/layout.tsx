@@ -14,7 +14,7 @@ export default async function OnboardingLayout({
   if (!user) redirect('/sign-in');
 
   return (
-    <div className="min-h-screen bg-muted/20">
+    <div className="bg-background min-h-screen">
       <main className="mx-auto max-w-md px-4 py-8">{children}</main>
     </div>
   );

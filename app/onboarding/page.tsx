@@ -1,19 +1,13 @@
-import { Check, PartyPopper } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { t } from '@/lib/i18n';
 import { getOnboardingState } from '@/lib/onboarding/state';
+import { getServices } from '@/lib/services/queries';
 import { createServerClient } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils';
-import { dismissAndGo } from './actions';
+import { confirmServices, continueSetup, dismissAndGo } from './actions';
 
 export const metadata = { title: t.onboarding.metaTitle };
 
@@ -33,8 +27,10 @@ export default async function OnboardingPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
 
-  const state = await getOnboardingState(user.id);
-
+  const [state, configuredServices] = await Promise.all([
+    getOnboardingState(user.id),
+    getServices(user.id),
+  ]);
   const steps: Step[] = [
     {
       key: 'profile',
@@ -61,103 +57,173 @@ export default async function OnboardingPage() {
       cta: t.onboarding.steps.availabilityCta,
     },
     {
+      key: 'services',
+      title: t.onboarding.steps.servicesTitle,
+      description: t.onboarding.steps.servicesSub,
+      done: state.services,
+      href: '/settings/services',
+      cta: t.onboarding.steps.servicesCta,
+    },
+    {
       key: 'testMessage',
       title: t.onboarding.steps.testMessageTitle,
       description: t.onboarding.steps.testMessageSub,
       done: state.testMessage,
     },
   ];
-
-  const progress = Math.round((state.completedCount / state.total) * 100);
+  const currentIndex = Math.max(
+    0,
+    steps.findIndex((step) => !step.done),
+  );
+  const current = steps[currentIndex];
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">{t.onboarding.welcomeTitle}</h1>
-        <p className="text-muted-foreground">
-          {t.onboarding.welcomeSub}
-        </p>
-        <div className="h-2 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${progress}%` }}
-            role="progressbar"
-            aria-valuenow={state.completedCount}
-            aria-valuemin={0}
-            aria-valuemax={state.total}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {t.onboarding.progress(state.completedCount, state.total)}
-        </p>
-      </div>
+    <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-sm flex-col">
+      <header className="pb-8 text-center">
+        <Link
+          href="/"
+          className="font-heading text-primary text-xl font-semibold"
+        >
+          Medium
+        </Link>
+      </header>
 
       {state.complete ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PartyPopper className="h-5 w-5" aria-hidden="true" />
-              {t.onboarding.allSetTitle}
-            </CardTitle>
-            <CardDescription>
-              {t.onboarding.allSetSub}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild className="w-full">
-              <Link href="/today">{t.onboarding.goToApp}</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="flex flex-1 flex-col justify-center text-center">
+          <span className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--success-100)] text-[var(--success-700)]">
+            <Check className="h-7 w-7" aria-hidden />
+          </span>
+          <h1 className="text-2xl font-semibold">{t.onboarding.allSetTitle}</h1>
+          <p className="text-muted-foreground mt-2 text-sm leading-6">
+            {t.onboarding.allSetSub}
+          </p>
+          <Button asChild className="mt-8 w-full">
+            <Link href="/today">{t.onboarding.goToApp}</Link>
+          </Button>
+        </div>
       ) : (
-        <ul className="space-y-3">
-          {steps.map((step, i) => (
-            <li
-              key={step.key}
-              className="flex items-start gap-3 rounded-lg border border-border bg-card p-4"
-            >
-              <span
-                className={cn(
-                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-medium',
-                  step.done
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-muted text-muted-foreground',
-                )}
-                aria-hidden="true"
-              >
-                {step.done ? <Check className="h-4 w-4" /> : i + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">{step.title}</p>
-                <p className="text-sm text-muted-foreground">
-                  {step.description}
-                </p>
-                {!step.done && step.href && step.cta && (
-                  <form action={dismissAndGo} className="mt-2">
-                    <input type="hidden" name="href" value={step.href} />
-                    <Button type="submit" size="sm" variant="outline">
-                      {step.cta}
-                    </Button>
-                  </form>
+        <>
+          <div
+            className="mb-10 flex items-center justify-center"
+            aria-label={t.onboarding.progress(
+              state.completedCount,
+              state.total,
+            )}
+          >
+            {steps.map((step, index) => (
+              <div key={step.key} className="flex items-center">
+                <span
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-full border text-xs font-semibold tabular-nums',
+                    step.done &&
+                      'border-primary bg-primary text-primary-foreground',
+                    !step.done &&
+                      index === currentIndex &&
+                      'border-primary text-primary',
+                    !step.done &&
+                      index !== currentIndex &&
+                      'border-border text-muted-foreground',
+                  )}
+                >
+                  {step.done ? (
+                    <Check className="h-3.5 w-3.5" aria-hidden />
+                  ) : (
+                    index + 1
+                  )}
+                </span>
+                {index < steps.length - 1 && (
+                  <span
+                    className={cn(
+                      'h-px w-7',
+                      step.done ? 'bg-primary' : 'bg-border',
+                    )}
+                  />
                 )}
               </div>
-            </li>
-          ))}
-        </ul>
-      )}
+            ))}
+          </div>
 
-      {!state.complete && (
-        <form action={dismissAndGo} className="text-center">
-          <input type="hidden" name="href" value="/today" />
-          <Button
-            type="submit"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-          >
-            {t.onboarding.skip}
-          </Button>
-        </form>
+          <main className="flex flex-1 flex-col">
+            <p className="text-primary text-xs font-medium uppercase">
+              {t.onboarding.stepOf(currentIndex + 1, steps.length)}
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold">{current.title}</h1>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              {current.description}
+            </p>
+
+            {current.key === 'services' && (
+              <div className="border-border bg-card mt-6 overflow-hidden rounded-md border text-sm">
+                {configuredServices.map((service) => (
+                  <div
+                    key={service.id}
+                    className="border-border flex items-center gap-3 border-b px-4 py-3 last:border-b-0"
+                  >
+                    <span
+                      className={cn(
+                        'flex h-5 w-5 items-center justify-center rounded border',
+                        service.active
+                          ? 'border-primary bg-primary text-white'
+                          : 'border-border',
+                      )}
+                    >
+                      {service.active && (
+                        <Check className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                    </span>
+                    {service.name} · {service.durationMinutes} min
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-auto space-y-3 pt-10">
+              {current.key === 'services' ? (
+                <>
+                  <form action={confirmServices}>
+                    <Button type="submit" className="w-full">
+                      Vazhdo me këto shërbime
+                      <ChevronRight className="h-4 w-4" aria-hidden />
+                    </Button>
+                  </form>
+                  <form action={continueSetup}>
+                    <input
+                      type="hidden"
+                      name="href"
+                      value="/settings/services"
+                    />
+                    <Button type="submit" variant="outline" className="w-full">
+                      {current.cta}
+                    </Button>
+                  </form>
+                </>
+              ) : current.href && current.cta ? (
+                <form action={continueSetup}>
+                  <input type="hidden" name="href" value={current.href} />
+                  <Button type="submit" className="w-full">
+                    {current.cta}
+                    <ChevronRight className="h-4 w-4" aria-hidden />
+                  </Button>
+                </form>
+              ) : (
+                <Button asChild className="w-full">
+                  <Link href="/onboarding">Kontrollo përsëri</Link>
+                </Button>
+              )}
+              <form action={dismissAndGo} className="text-center">
+                <input type="hidden" name="href" value="/today" />
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                >
+                  {t.onboarding.skip}
+                </Button>
+              </form>
+            </div>
+          </main>
+        </>
       )}
     </div>
   );

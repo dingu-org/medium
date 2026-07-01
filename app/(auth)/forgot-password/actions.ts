@@ -20,12 +20,16 @@ export async function requestPasswordReset(
 ): Promise<ForgotPasswordState> {
   const parsed = schema.safeParse({ email: formData.get('email') });
   if (!parsed.success) {
-    return { error: null, fieldErrors: parsed.error.flatten().fieldErrors, success: false };
+    return {
+      error: null,
+      fieldErrors: parsed.error.flatten().fieldErrors,
+      success: false,
+    };
   }
 
   const supabase = await createServerClient();
   await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/sign-in`,
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/reset-password`,
   });
 
   // Always render success — don't leak whether the email exists.

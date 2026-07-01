@@ -142,7 +142,6 @@ async function selectApprovedReminderTemplate(
     .where(
       and(
         eq(messageTemplates.ptId, ptId),
-        eq(messageTemplates.language, 'en_US'),
         eq(messageTemplates.status, 'approved'),
         inArray(
           messageTemplates.name,
@@ -152,7 +151,11 @@ async function selectApprovedReminderTemplate(
     );
 
   for (const template of REMINDER_TEMPLATE_PRIORITY) {
-    const row = rows.find((candidate) => candidate.name === template.name);
+    const row = rows.find(
+      (candidate) =>
+        candidate.name === template.name &&
+        candidate.language === template.language,
+    );
     if (row) return { ...template, id: row.id };
   }
   return null;
@@ -228,7 +231,7 @@ export async function loadReminderAttempt(args: {
 }
 
 function patientFirstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || 'there';
+  return name.trim().split(/\s+/)[0] || 'Ju';
 }
 
 function templateVariables(args: {
@@ -241,11 +244,7 @@ function templateVariables(args: {
   if (args.template.variableSet === 'legacy') {
     return [firstName, args.localTime];
   }
-  return [
-    firstName,
-    args.practiceName?.trim() || 'the practice',
-    args.localTime,
-  ];
+  return [firstName, args.practiceName?.trim() || 'praktika', args.localTime];
 }
 
 async function prepareReminderMessage(args: {
@@ -527,8 +526,8 @@ export const sendReminder = inngest.createFunction(
         new Date(state.context.startsAt),
         state.context.timezone,
       );
-      const practiceName = state.context.practiceName?.trim() || 'the practice';
-      const content = `Reminder: ${patientFirstName(state.context.patientName)}, your appointment with ${practiceName} is ${localTime}.`;
+      const practiceName = state.context.practiceName?.trim() || 'praktika';
+      const content = `Kujtesë: ${patientFirstName(state.context.patientName)}, takimi juaj me ${practiceName} është më ${localTime}.`;
       const message = await step.run('prepare-reminder-message', () =>
         prepareReminderMessage({
           ptId,

@@ -28,6 +28,8 @@ const KEYWORDS: Record<ReminderResponseIntent, Set<string>> = {
     'sí',
     'confirmo',
     'confirmar',
+    'konfirmo',
+    'konfirmoj',
   ]),
   cancel: new Set([
     'cancel',
@@ -46,6 +48,8 @@ const KEYWORDS: Record<ReminderResponseIntent, Set<string>> = {
     'annule',
     'cancelar',
     'cancelo',
+    'anulo',
+    'anuloj',
   ]),
   reschedule: new Set([
     'reschedule',
@@ -63,14 +67,14 @@ const KEYWORDS: Record<ReminderResponseIntent, Set<string>> = {
     'cambiar',
     'mover',
     'reprogramar',
+    'ricakto',
+    'ricaktoj',
   ]),
-  opt_out: new Set(['stop']),
+  opt_out: new Set(['stop', 'ndal']),
 };
 
 function firstWord(input: string): string | null {
-  const match = input
-    .trim()
-    .match(/^[^\p{L}\p{N}]*([\p{L}\p{N}]+)/u);
+  const match = input.trim().match(/^[^\p{L}\p{N}]*([\p{L}\p{N}]+)/u);
   return match?.[1]?.normalize('NFC').toLocaleLowerCase('en-US') ?? null;
 }
 

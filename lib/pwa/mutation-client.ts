@@ -35,6 +35,7 @@ export type AppointmentMutationInput =
       newPatient?: { name: string; phone: string };
       date: string;
       time: string;
+      serviceId?: string;
       serviceType?: string;
       notes?: string;
     }

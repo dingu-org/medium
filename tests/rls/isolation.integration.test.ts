@@ -16,6 +16,7 @@ import {
   pushSubscriptions,
   pwaMutations,
   reminderJobs,
+  services,
   whatsappConnections,
   whatsappContacts,
 } from '@/lib/db/schema';
@@ -47,6 +48,11 @@ const seedFactories: Record<
     pt_id: ptId,
     name: 'P',
     phone: `+49${Date.now()}`,
+  }),
+  services: ({ ptId }) => ({
+    pt_id: ptId,
+    name: `service-${Date.now()}-${Math.random()}`,
+    duration_min: 30,
   }),
   conversations: ({ ptId, patientId }) => ({
     pt_id: ptId,
@@ -185,6 +191,11 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     ptId,
     appointmentId: appt.id,
     scheduledFor: new Date(),
+  });
+  await db.insert(services).values({
+    ptId,
+    name: `service-${Date.now()}-${Math.random()}`,
+    durationMin: 30,
   });
   await db.insert(messages).values({
     ptId,

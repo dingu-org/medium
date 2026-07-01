@@ -1,6 +1,7 @@
 'use client';
 
 import { addDays, format } from 'date-fns';
+import { sq } from 'date-fns/locale';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { t, formatWeekdayDate } from '@/lib/i18n';
@@ -21,6 +22,7 @@ import {
   subscribeToQueueChanges,
 } from '@/lib/pwa/client-store';
 import { cn } from '@/lib/utils';
+import type { ServiceRecord } from '@/lib/services/queries';
 import { CalendarFab } from './calendar-fab';
 
 export type WeekDay = { key: string; label: string; isToday: boolean };
@@ -36,10 +38,15 @@ function dateFromKey(key: string): Date {
 
 /** Status dot colour, per the product spec. */
 function statusDot(appt: CalendarAppointment): string {
+  if (appt.status === 'cancelled') return 'bg-destructive';
+  if (appt.status === 'rescheduled') return 'bg-primary';
   if (appt.status === 'completed') return 'bg-muted-foreground';
   if (appt.status === 'no_show') return 'bg-destructive';
   const r = appt.reminder;
-  if (r?.responseType === 'cancel' || r?.responseType === 'reschedule_requested')
+  if (
+    r?.responseType === 'cancel' ||
+    r?.responseType === 'reschedule_requested'
+  )
     return 'bg-destructive';
   if (appt.status === 'confirmed') return 'bg-[var(--success-500)]';
   // Reminder sent, patient hasn't replied → needs your attention (orange).
@@ -57,15 +64,17 @@ export function CalendarClient({
   monthLabel,
   weekDays,
   appointments,
+  activeServices,
 }: {
   ptId: string;
   timezone: string;
-  view: 'week' | 'month';
+  view: 'day' | 'week' | 'month';
   anchorKey: string;
   todayKey: string;
   monthLabel: string;
   weekDays: WeekDay[];
   appointments: CalendarAppointment[];
+  activeServices: ServiceRecord[];
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<CalendarAppointment | null>(null);
@@ -120,7 +129,7 @@ export function CalendarClient({
     return map;
   }, [pendingMutations]);
 
-  function navigate(dateKey: string, nextView: 'week' | 'month') {
+  function navigate(dateKey: string, nextView: 'day' | 'week' | 'month') {
     router.push(`/calendar?date=${dateKey}&view=${nextView}`, {
       scroll: false,
     });
@@ -132,7 +141,10 @@ export function CalendarClient({
   }
 
   function shiftWeek(deltaDays: number) {
-    navigate(format(addDays(dateFromKey(anchorKey), deltaDays), 'yyyy-MM-dd'), 'week');
+    navigate(
+      format(addDays(dateFromKey(anchorKey), deltaDays), 'yyyy-MM-dd'),
+      view,
+    );
   }
 
   return (
@@ -149,6 +161,7 @@ export function CalendarClient({
           monthLabel,
           weekDays,
           appointments,
+          activeServices,
         }}
       />
       <RealtimeRefresher table="appointments" filter={`pt_id=eq.${ptId}`} />
@@ -160,6 +173,7 @@ export function CalendarClient({
           value={view}
           onValueChange={(nextView) => navigate(anchorKey, nextView)}
           options={[
+            { value: 'day', label: t.calendar.views.day },
             { value: 'week', label: t.calendar.views.week },
             { value: 'month', label: t.calendar.views.month },
           ]}
@@ -173,7 +187,49 @@ export function CalendarClient({
         </Button>
       </div>
 
-      {view === 'week' ? (
+      {view === 'day' ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Dita e kaluar"
+              onClick={() => shiftWeek(-1)}
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+            </Button>
+            <p className="text-sm font-medium">
+              {formatWeekdayDate(dateFromKey(anchorKey))}
+            </p>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Dita tjetër"
+              onClick={() => shiftWeek(1)}
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden />
+            </Button>
+          </div>
+          {appointments.length === 0 ? (
+            <EmptyState
+              icon={CalendarDays}
+              title={t.calendar.emptyDayTitle}
+              description={t.calendar.emptyDayText}
+            />
+          ) : (
+            <ul className="space-y-1.5">
+              {appointments.map((appt) => (
+                <AppointmentRow
+                  key={appt.id}
+                  appt={appt}
+                  pendingMutations={pendingByAppointmentId.get(appt.id) ?? []}
+                  onOpen={openAppt}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : view === 'week' ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Button
@@ -209,7 +265,7 @@ export function CalendarClient({
               <div key={day.key} className="space-y-1">
                 <p
                   className={cn(
-                    'text-xs font-medium uppercase tracking-wide',
+                    'text-xs font-medium tracking-wide uppercase',
                     day.isToday ? 'text-foreground' : 'text-muted-foreground',
                   )}
                 >
@@ -217,7 +273,7 @@ export function CalendarClient({
                   {day.isToday && ` ${t.calendar.todayLabel}`}
                 </p>
                 {list.length === 0 ? (
-                  <p className="text-sm text-muted-foreground/60">—</p>
+                  <p className="text-muted-foreground/60 text-sm">—</p>
                 ) : (
                   <ul className="space-y-1.5">
                     {list.map((appt) => (
@@ -245,19 +301,20 @@ export function CalendarClient({
             onSelect={(d) => d && setSelectedDay(format(d, 'yyyy-MM-dd'))}
             onMonthChange={(m) => navigate(format(m, 'yyyy-MM-01'), 'month')}
             weekStartsOn={1}
+            locale={sq}
             modifiers={{ hasAppt: apptDays }}
             modifiersClassNames={{
               hasAppt:
                 'relative after:absolute after:bottom-1 after:left-1/2 after:h-1 after:w-1 after:-translate-x-1/2 after:rounded-full after:bg-primary',
             }}
-            className="rounded-md border border-border"
+            className="border-border rounded-md border"
           />
           <div className="space-y-2">
             <p className="text-sm font-medium">
               {formatWeekdayDate(dateFromKey(selectedDay))}
             </p>
             {(byDay.get(selectedDay) ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 {t.calendar.monthDayEmpty}
               </p>
             ) : (
@@ -282,7 +339,7 @@ export function CalendarClient({
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
-      <CalendarFab defaultDate={anchorKey} />
+      <CalendarFab defaultDate={anchorKey} services={activeServices} />
     </div>
   );
 }
@@ -302,7 +359,7 @@ function AppointmentRow({
       <button
         type="button"
         onClick={() => onOpen(appt)}
-        className="flex w-full items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-muted/50"
+        className="border-border bg-card hover:bg-muted/50 flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors"
       >
         <span
           className={cn('h-2.5 w-2.5 shrink-0 rounded-full', statusDot(appt))}
@@ -314,7 +371,7 @@ function AppointmentRow({
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{appt.patientName}</span>
           {appt.serviceType && (
-            <span className="block truncate text-xs text-muted-foreground">
+            <span className="text-muted-foreground block truncate text-xs">
               {appt.serviceType}
             </span>
           )}
@@ -343,9 +400,12 @@ function appointmentIdFromMutation(mutation: PendingMutation): string | null {
   return typeof body?.appointmentId === 'string' ? body.appointmentId : null;
 }
 
-function getPendingAppointmentLabel(mutations: PendingMutation[]): string | null {
+function getPendingAppointmentLabel(
+  mutations: PendingMutation[],
+): string | null {
   if (mutations.length === 0) return null;
-  if (mutations.some((m) => m.status === 'failed')) return t.calendar.syncFailed;
+  if (mutations.some((m) => m.status === 'failed'))
+    return t.calendar.syncFailed;
   const actions = new Set(
     mutations.map((m) => (m.body as { action?: unknown } | null)?.action),
   );

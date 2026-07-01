@@ -11,23 +11,49 @@ import { GoogleSignInButton } from './oauth-buttons';
 
 const initialState: SignInState = { error: null, fieldErrors: null };
 
-export function SignInForm({ confirmHint }: { confirmHint?: boolean }) {
+export function SignInForm({
+  confirmHint,
+  resetHint,
+  callbackError,
+}: {
+  confirmHint?: boolean;
+  resetHint?: boolean;
+  callbackError?: string | null;
+}) {
   const [state, action, pending] = useActionState(signIn, initialState);
 
   return (
     <div className="space-y-6">
       {confirmHint && (
-        <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+        <div className="border-border bg-muted/40 text-muted-foreground rounded-md border p-3 text-sm">
           {t.auth.signIn.confirmHint}
         </div>
+      )}
+      {resetHint && (
+        <div className="rounded-md border border-[var(--success-200)] bg-[var(--success-50)] p-3 text-sm text-[var(--success-700)]">
+          {t.auth.reset.complete}
+        </div>
+      )}
+      {callbackError && (
+        <p className="border-destructive/30 text-destructive rounded-md border bg-[var(--danger-50)] p-3 text-sm">
+          {callbackError}
+        </p>
       )}
 
       <form action={action} className="space-y-4" noValidate>
         <div className="space-y-2">
           <Label htmlFor="email">{t.auth.signIn.email}</Label>
-          <Input id="email" name="email" type="email" autoComplete="email" required />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+          />
           {state.fieldErrors?.email && (
-            <p className="text-sm text-destructive">{state.fieldErrors.email[0]}</p>
+            <p className="text-destructive text-sm">
+              {state.fieldErrors.email[0]}
+            </p>
           )}
         </div>
         <div className="space-y-2">
@@ -35,17 +61,27 @@ export function SignInForm({ confirmHint }: { confirmHint?: boolean }) {
             <Label htmlFor="password">{t.auth.signIn.password}</Label>
             <Link
               href="/forgot-password"
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground text-xs"
             >
               {t.auth.signIn.forgot}
             </Link>
           </div>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required />
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+          />
           {state.fieldErrors?.password && (
-            <p className="text-sm text-destructive">{state.fieldErrors.password[0]}</p>
+            <p className="text-destructive text-sm">
+              {state.fieldErrors.password[0]}
+            </p>
           )}
         </div>
-        {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+        {state.error && (
+          <p className="text-destructive text-sm">{state.error}</p>
+        )}
         <Button type="submit" className="w-full" disabled={pending}>
           {pending ? t.auth.signIn.submitting : t.auth.signIn.submit}
         </Button>
@@ -55,9 +91,12 @@ export function SignInForm({ confirmHint }: { confirmHint?: boolean }) {
 
       <GoogleSignInButton label={t.auth.signIn.google} />
 
-      <p className="text-center text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-center text-sm">
         {t.auth.signIn.footerQuestion}{' '}
-        <Link href="/sign-up" className="font-medium text-foreground hover:underline">
+        <Link
+          href="/sign-up"
+          className="text-foreground font-medium hover:underline"
+        >
           {t.auth.signIn.footerAction}
         </Link>
       </p>
@@ -68,9 +107,11 @@ export function SignInForm({ confirmHint }: { confirmHint?: boolean }) {
 function Separator({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="h-px flex-1 bg-border" />
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
-      <div className="h-px flex-1 bg-border" />
+      <div className="bg-border h-px flex-1" />
+      <span className="text-muted-foreground text-xs tracking-wider uppercase">
+        {label}
+      </span>
+      <div className="bg-border h-px flex-1" />
     </div>
   );
 }

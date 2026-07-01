@@ -17,6 +17,7 @@ import {
   retryMutation,
   subscribeToQueueChanges,
 } from '@/lib/pwa/client-store';
+import { t } from '@/lib/i18n';
 
 const INSTALL_DISMISSED_KEY = 'medium:pwa-install-dismissed-at';
 const DASHBOARD_VISITS_KEY = 'medium:pwa-dashboard-visits';
@@ -37,7 +38,9 @@ export function PwaProvider() {
   const [showInstall, setShowInstall] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [standalone, setStandalone] = useState(false);
-  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(
+    null,
+  );
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -72,11 +75,11 @@ export function PwaProvider() {
 
   useEffect(() => {
     const onSynced = () => {
-      toast.success('Pending change synced.');
+      toast.success(t.pwa.pendingChangeSynced);
       router.refresh();
     };
     const onFailed = () => {
-      toast.error('A pending change needs attention.');
+      toast.error(t.pwa.pendingChangeFailed);
       router.refresh();
     };
     window.addEventListener(PWA_MUTATION_SYNCED_EVENT, onSynced);
@@ -97,7 +100,8 @@ export function PwaProvider() {
     setIsIos(ios);
     setStandalone(standaloneMode);
 
-    const visits = Number(localStorage.getItem(DASHBOARD_VISITS_KEY) ?? '0') + 1;
+    const visits =
+      Number(localStorage.getItem(DASHBOARD_VISITS_KEY) ?? '0') + 1;
     localStorage.setItem(DASHBOARD_VISITS_KEY, String(visits));
     if (visits >= 2 && !isInstallDismissed()) setShowInstall(true);
 
@@ -165,15 +169,13 @@ export function PwaProvider() {
 
   const statusText = useMemo(() => {
     if (!online) {
-      const queueText =
-        counts.pending > 0
-          ? ` ${counts.pending} changes will sync when online.`
-          : '';
-      return `You're offline. Showing last loaded data.${queueText}`;
+      return counts.pending > 0
+        ? t.pwa.offline(counts.pending)
+        : t.pwa.offlineNoChanges;
     }
-    if (counts.failed > 0) return `${counts.failed} changes need attention.`;
+    if (counts.failed > 0) return t.pwa.failedTitle(counts.failed);
     if (counts.pending > 0) {
-      return `${counts.pending} changes are waiting to sync.`;
+      return t.pwa.pendingSync(counts.pending);
     }
     return null;
   }, [counts.failed, counts.pending, online]);
@@ -181,7 +183,10 @@ export function PwaProvider() {
   if (standalone) {
     return (
       <>
-        <StatusBanner text={statusText} tone={counts.failed > 0 ? 'error' : 'default'} />
+        <StatusBanner
+          text={statusText}
+          tone={counts.failed > 0 ? 'error' : 'default'}
+        />
         <FailedMutationsBanner items={failedMutations} />
         <UpdateBanner worker={waitingWorker} />
       </>
@@ -213,15 +218,15 @@ export function PwaProvider() {
 function FailedMutationsBanner({ items }: { items: PendingMutation[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="space-y-2 border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-xs">
+    <div className="border-destructive/20 bg-destructive/5 space-y-2 border-b px-4 py-2 text-xs">
       {items.slice(0, 3).map((item) => (
         <div key={item.id} className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <p className="font-medium text-destructive">
+            <p className="text-destructive font-medium">
               {formatMutationType(item.type)}
             </p>
             {item.lastError && (
-              <p className="truncate text-muted-foreground">{item.lastError}</p>
+              <p className="text-muted-foreground truncate">{item.lastError}</p>
             )}
           </div>
           <Button
@@ -230,7 +235,7 @@ function FailedMutationsBanner({ items }: { items: PendingMutation[] }) {
             size="sm"
             onClick={() => retryMutation(item.id).catch(() => undefined)}
           >
-            Retry
+            {t.pwa.retry}
           </Button>
           <Button
             type="button"
@@ -238,13 +243,13 @@ function FailedMutationsBanner({ items }: { items: PendingMutation[] }) {
             size="sm"
             onClick={() => removeMutation(item.id).catch(() => undefined)}
           >
-            Remove
+            {t.pwa.remove}
           </Button>
         </div>
       ))}
       {items.length > 3 && (
         <p className="text-muted-foreground">
-          {items.length - 3} more failed changes are still queued.
+          {t.pwa.moreFailedChanges(items.length - 3)}
         </p>
       )}
     </div>
@@ -252,9 +257,9 @@ function FailedMutationsBanner({ items }: { items: PendingMutation[] }) {
 }
 
 function formatMutationType(type: string): string {
-  if (type === 'message.send') return 'Message failed to sync';
-  if (type.startsWith('appointment.')) return 'Appointment change failed';
-  return 'Change failed to sync';
+  if (type === 'message.send') return t.pwa.mutationMessageFailed;
+  if (type.startsWith('appointment.')) return t.pwa.mutationAppointmentFailed;
+  return t.pwa.mutationChangeFailed;
 }
 
 function StatusBanner({
@@ -289,11 +294,11 @@ function UpdateBanner({ worker }: { worker: ServiceWorker | null }) {
           size="sm"
           onClick={() => worker.postMessage({ type: 'SKIP_WAITING' })}
         >
-          Refresh
+          {t.pwa.refresh}
         </Button>
       }
     >
-      New version available.
+      {t.pwa.updateAvailable}
     </AppBanner>
   );
 }
@@ -325,13 +330,13 @@ function InstallBanner({
                 onDismiss();
               }}
             >
-              Instalo
+              {t.pwa.install}
             </Button>
           )}
           <button
             type="button"
             className="text-muted-foreground hover:text-foreground"
-            aria-label="Mbyll ftesën për instalim"
+            aria-label={t.pwa.dismissInstall}
             onClick={onDismiss}
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -339,14 +344,14 @@ function InstallBanner({
         </div>
       }
     >
-      {isIos
-        ? 'Install from Safari: Share, then Add to Home Screen.'
-        : 'Install Medium for faster access.'}
+      {isIos ? t.pwa.installIos : t.pwa.installAndroid}
     </AppBanner>
   );
 }
 
 function isInstallDismissed() {
-  const dismissedAt = Number(localStorage.getItem(INSTALL_DISMISSED_KEY) ?? '0');
+  const dismissedAt = Number(
+    localStorage.getItem(INSTALL_DISMISSED_KEY) ?? '0',
+  );
   return dismissedAt > 0 && Date.now() - dismissedAt < DISMISS_MS;
 }

@@ -15,7 +15,10 @@ export type SignUpState = {
   fieldErrors: { email?: string[]; password?: string[] } | null;
 };
 
-export async function signUp(_prev: SignUpState, formData: FormData): Promise<SignUpState> {
+export async function signUp(
+  _prev: SignUpState,
+  formData: FormData,
+): Promise<SignUpState> {
   const parsed = schema.safeParse({
     email: formData.get('email'),
     password: formData.get('password'),
@@ -34,7 +37,12 @@ export async function signUp(_prev: SignUpState, formData: FormData): Promise<Si
   });
 
   if (error) {
-    return { error: error.message, fieldErrors: null };
+    return {
+      error: error.message.toLowerCase().includes('already')
+        ? t.auth.signUp.emailTaken
+        : t.auth.errors.signUpFailed,
+      fieldErrors: null,
+    };
   }
 
   redirect('/sign-in?confirm=1');

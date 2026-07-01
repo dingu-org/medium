@@ -35,10 +35,10 @@ function jsonError(error: string, status: number) {
 
 export async function POST(request: Request) {
   const ptId = await getPwaPtId();
-  if (!ptId) return jsonError('Unauthorized', 401);
+  if (!ptId) return jsonError('Pa autorizim', 401);
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return jsonError('Invalid message.', 400);
+  if (!parsed.success) return jsonError('Mesazhi nuk është i vlefshëm.', 400);
   const input = parsed.data;
 
   const started = await beginPwaMutation({
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   if (started.kind === 'success') return NextResponse.json(started.result);
   if (started.kind === 'failed') return jsonError(started.error, 409);
   if (started.kind === 'processing') {
-    return jsonError('Mutation is still processing.', 503);
+    return jsonError('Ndryshimi është ende duke u përpunuar.', 503);
   }
 
   let result: Awaited<ReturnType<typeof sendMessage>>;
@@ -113,7 +113,7 @@ async function sendMessage(input: {
     .limit(1);
 
   if (!conversation?.waId) {
-    return { ok: false, error: 'Conversation not found.', status: 404 };
+    return { ok: false, error: 'Biseda nuk u gjet.', status: 404 };
   }
 
   const [connection] = await db
@@ -129,23 +129,27 @@ async function sendMessage(input: {
     .limit(1);
 
   if (!connection) {
-    return { ok: false, error: 'WhatsApp is not connected.', status: 409 };
+    return { ok: false, error: 'WhatsApp nuk është i lidhur.', status: 409 };
   }
 
   let externalMessageId: string | null;
   try {
-    const res = await sendFreeForm(connection.id, conversation.waId, input.body);
+    const res = await sendFreeForm(
+      connection.id,
+      conversation.waId,
+      input.body,
+    );
     externalMessageId = res.messageId;
   } catch (error) {
     if (error instanceof OutsideWindowError) {
       return {
         ok: false,
-        error: 'The 24-hour reply window is closed.',
+        error: 'Dritarja 24-orëshe e përgjigjes është mbyllur.',
         status: 409,
       };
     }
     if (error instanceof ConnectionRevokedError) {
-      return { ok: false, error: 'WhatsApp is not connected.', status: 409 };
+      return { ok: false, error: 'WhatsApp nuk është i lidhur.', status: 409 };
     }
     throw error;
   }
@@ -195,17 +199,18 @@ function messageFor(error: unknown): { error: string; status: number } {
   if (error instanceof GraphApiError) {
     if (error.status === 429) {
       return {
-        error: 'WhatsApp is rate limiting messages. Try again in a moment.',
+        error: 'WhatsApp po kufizon mesazhet. Provo pas pak.',
         status: 429,
       };
     }
     return {
-      error: 'WhatsApp could not send the message. Try again or reconnect WhatsApp.',
+      error:
+        'WhatsApp nuk e dërgoi mesazhin. Provo sërish ose rilidhe WhatsApp-in.',
       status: error.status >= 500 ? 502 : 409,
     };
   }
   return {
-    error: 'Could not send the WhatsApp message. Please try again.',
+    error: 'Mesazhi WhatsApp nuk u dërgua. Provo sërish.',
     status: 500,
   };
 }

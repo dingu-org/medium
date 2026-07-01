@@ -35,6 +35,7 @@ export default async function CalendarPage({
       monthLabel={snapshot.monthLabel}
       weekDays={snapshot.weekDays}
       appointments={snapshot.appointments}
+      activeServices={snapshot.activeServices}
     />
   );
 }

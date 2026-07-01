@@ -2,8 +2,10 @@ import { TZDate } from '@date-fns/tz';
 import {
   addDays,
   endOfMonth,
+  endOfDay,
   endOfWeek,
   format,
+  startOfDay,
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
@@ -20,6 +22,8 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { privacyName } from '@/lib/format/name';
+import { formatMonthYear, formatWeekdayShort } from '@/lib/i18n';
+import { getServices, type ServiceRecord } from '@/lib/services/queries';
 import {
   NOTIFICATION_PREF_KEYS,
   type NotificationPrefs,
@@ -39,7 +43,13 @@ export type CalendarAppointmentSnapshot = {
   startsAt: string;
   endsAt: string;
   serviceType: string | null;
-  status: 'pending' | 'confirmed' | 'completed' | 'no_show';
+  status:
+    | 'pending'
+    | 'confirmed'
+    | 'cancelled'
+    | 'completed'
+    | 'no_show'
+    | 'rescheduled';
   notes: string | null;
   reminder: {
     status: string;
@@ -52,12 +62,13 @@ export type CalendarAppointmentSnapshot = {
 export type CalendarSnapshot = {
   ptId: string;
   timezone: string;
-  view: 'week' | 'month';
+  view: 'day' | 'week' | 'month';
   anchorKey: string;
   todayKey: string;
   monthLabel: string;
   weekDays: WeekDaySnapshot[];
   appointments: CalendarAppointmentSnapshot[];
+  activeServices: ServiceRecord[];
 };
 
 export type ChatMessageSnapshot = {
@@ -73,6 +84,12 @@ export type ChatThreadSnapshot = {
   initialMessages: ChatMessageSnapshot[];
   aiActive: boolean;
   windowOpen: boolean;
+  closed: boolean;
+  escalationState: string;
+  aiPausedUntil: string | null;
+  aiPauseReason: string | null;
+  connectionStatus: string | null;
+  upcomingAppointment: { startsAt: string; serviceType: string | null } | null;
 };
 
 export type SettingsSnapshot = {
@@ -98,6 +115,10 @@ export type ChatListRowSnapshot = {
   last_content: string | null;
   last_role: 'patient' | 'ai' | 'pt' | null;
   last_at: string | null;
+  closed_at: string | null;
+  unread_count: number;
+  ai_paused_until: string | null;
+  ai_pause_reason: string | null;
 };
 
 export async function getCalendarSnapshot(
@@ -111,58 +132,63 @@ export async function getCalendarSnapshot(
     .limit(1);
   const timezone = pt?.timezone ?? 'Europe/Berlin';
 
-  const view: 'week' | 'month' = input.view === 'month' ? 'month' : 'week';
+  const view: 'day' | 'week' | 'month' =
+    input.view === 'month' || input.view === 'day' ? input.view : 'week';
   const todayKey = format(new TZDate(new Date(), timezone), 'yyyy-MM-dd');
   const anchorKey =
     input.date && DATE_RE.test(input.date) ? input.date : todayKey;
   const [ay, am, ad] = anchorKey.split('-').map(Number);
   const anchor = new TZDate(ay, am - 1, ad, timezone);
 
-  const gridStart = startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 });
-  const gridEnd = endOfWeek(
-    endOfMonth(addDays(anchor, 30)),
-    { weekStartsOn: 1 },
-  );
+  const gridStart =
+    view === 'day'
+      ? startOfDay(anchor)
+      : view === 'week'
+        ? startOfWeek(anchor, { weekStartsOn: 1 })
+        : startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 });
+  const gridEnd =
+    view === 'day'
+      ? endOfDay(anchor)
+      : view === 'week'
+        ? endOfWeek(anchor, { weekStartsOn: 1 })
+        : endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 });
 
-  const rows = await db
-    .select({
-      id: appointments.id,
-      startsAt: appointments.startsAt,
-      endsAt: appointments.endsAt,
-      serviceType: appointments.serviceType,
-      status: appointments.status,
-      notes: appointments.notes,
-      patientName: patients.name,
-      patientPhone: patients.phone,
-      patientWaId: patients.waId,
-      conversationId: conversations.id,
-      reminderStatus: reminderJobs.status,
-      reminderResponse: reminderJobs.responseType,
-    })
-    .from(appointments)
-    .innerJoin(patients, eq(appointments.patientId, patients.id))
-    .leftJoin(
-      conversations,
-      and(
-        eq(conversations.patientId, appointments.patientId),
-        eq(conversations.channel, 'whatsapp'),
-      ),
-    )
-    .leftJoin(reminderJobs, eq(reminderJobs.appointmentId, appointments.id))
-    .where(
-      and(
-        eq(appointments.ptId, ptId),
-        gte(appointments.startsAt, new Date(gridStart.getTime())),
-        lte(appointments.startsAt, new Date(gridEnd.getTime())),
-        inArray(appointments.status, [
-          'pending',
-          'confirmed',
-          'completed',
-          'no_show',
-        ]),
-      ),
-    )
-    .orderBy(asc(appointments.startsAt));
+  const [rows, activeServices] = await Promise.all([
+    db
+      .select({
+        id: appointments.id,
+        startsAt: appointments.startsAt,
+        endsAt: appointments.endsAt,
+        serviceType: appointments.serviceType,
+        status: appointments.status,
+        notes: appointments.notes,
+        patientName: patients.name,
+        patientPhone: patients.phone,
+        patientWaId: patients.waId,
+        conversationId: conversations.id,
+        reminderStatus: reminderJobs.status,
+        reminderResponse: reminderJobs.responseType,
+      })
+      .from(appointments)
+      .innerJoin(patients, eq(appointments.patientId, patients.id))
+      .leftJoin(
+        conversations,
+        and(
+          eq(conversations.patientId, appointments.patientId),
+          eq(conversations.channel, 'whatsapp'),
+        ),
+      )
+      .leftJoin(reminderJobs, eq(reminderJobs.appointmentId, appointments.id))
+      .where(
+        and(
+          eq(appointments.ptId, ptId),
+          gte(appointments.startsAt, new Date(gridStart.getTime())),
+          lte(appointments.startsAt, new Date(gridEnd.getTime())),
+        ),
+      )
+      .orderBy(asc(appointments.startsAt)),
+    getServices(ptId, { activeOnly: true }),
+  ]);
 
   const items: CalendarAppointmentSnapshot[] = rows.map((r) => {
     const tzStart = new TZDate(r.startsAt, timezone);
@@ -189,7 +215,11 @@ export async function getCalendarSnapshot(
   const weekDays: WeekDaySnapshot[] = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(weekStart, i);
     const key = format(d, 'yyyy-MM-dd');
-    return { key, label: format(d, 'EEE d'), isToday: key === todayKey };
+    return {
+      key,
+      label: `${formatWeekdayShort(d)} ${format(d, 'd')}`,
+      isToday: key === todayKey,
+    };
   });
 
   return {
@@ -198,9 +228,10 @@ export async function getCalendarSnapshot(
     view,
     anchorKey,
     todayKey,
-    monthLabel: format(anchor, 'MMMM yyyy'),
+    monthLabel: formatMonthYear(anchor),
     weekDays,
     appointments: items,
+    activeServices,
   };
 }
 
@@ -213,6 +244,11 @@ export async function getChatThreadSnapshot(
       id: conversations.id,
       aiActive: conversations.aiActive,
       lastInboundAt: conversations.lastInboundAt,
+      closedAt: conversations.closedAt,
+      escalationState: conversations.escalationState,
+      aiPausedUntil: conversations.aiPausedUntil,
+      aiPauseReason: conversations.aiPauseReason,
+      patientId: conversations.patientId,
       patientName: patients.name,
     })
     .from(conversations)
@@ -224,22 +260,46 @@ export async function getChatThreadSnapshot(
 
   if (!conversation) return null;
 
-  const rows = await db
-    .select({
-      id: messages.id,
-      role: messages.role,
-      content: messages.content,
-      createdAt: messages.createdAt,
-    })
-    .from(messages)
-    .where(eq(messages.conversationId, conversationId))
-    .orderBy(asc(messages.createdAt), asc(messages.id))
-    .limit(50);
+  const [rows, connectionRows, upcomingRows] = await Promise.all([
+    db
+      .select({
+        id: messages.id,
+        role: messages.role,
+        content: messages.content,
+        createdAt: messages.createdAt,
+      })
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
+      .limit(50),
+    db
+      .select({ status: whatsappConnections.status })
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId))
+      .orderBy(desc(whatsappConnections.createdAt))
+      .limit(1),
+    db
+      .select({
+        startsAt: appointments.startsAt,
+        serviceType: appointments.serviceType,
+      })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.ptId, ptId),
+          eq(appointments.patientId, conversation.patientId),
+          inArray(appointments.status, ['pending', 'confirmed']),
+          gte(appointments.startsAt, new Date()),
+        ),
+      )
+      .orderBy(asc(appointments.startsAt))
+      .limit(1),
+  ]);
 
   return {
     conversationId: conversation.id,
     patientName: privacyName(conversation.patientName),
-    initialMessages: rows.map((r) => ({
+    initialMessages: [...rows].reverse().map((r) => ({
       id: r.id,
       role: r.role,
       content: r.content,
@@ -249,12 +309,26 @@ export async function getChatThreadSnapshot(
     windowOpen: conversation.lastInboundAt
       ? Date.now() - conversation.lastInboundAt.getTime() <= WINDOW_MS
       : false,
+    closed: Boolean(conversation.closedAt),
+    escalationState: conversation.escalationState,
+    aiPausedUntil: conversation.aiPausedUntil?.toISOString() ?? null,
+    aiPauseReason: conversation.aiPauseReason,
+    connectionStatus: connectionRows[0]?.status ?? null,
+    upcomingAppointment: upcomingRows[0]
+      ? {
+          startsAt: upcomingRows[0].startsAt.toISOString(),
+          serviceType: upcomingRows[0].serviceType,
+        }
+      : null,
   };
 }
 
 export async function getChatListSnapshot(
   ptId: string,
+  input: { status?: 'active' | 'closed'; query?: string } = {},
 ): Promise<ChatListRowSnapshot[]> {
+  const closed = input.status === 'closed';
+  const query = input.query?.trim();
   return db.execute<ChatListRowSnapshot>(sql`
     SELECT
       c.id,
@@ -263,7 +337,17 @@ export async function getChatListSnapshot(
       p.name AS patient_name,
       m.content AS last_content,
       m.role AS last_role,
-      m.created_at AS last_at
+      m.created_at AS last_at,
+      c.closed_at,
+      c.ai_paused_until,
+      c.ai_pause_reason,
+      (
+        SELECT count(*)::integer
+        FROM messages unread
+        WHERE unread.conversation_id = c.id
+          AND unread.role = 'patient'
+          AND unread.created_at > COALESCE(c.last_read_at, '-infinity'::timestamptz)
+      ) AS unread_count
     FROM conversations c
     JOIN patients p ON p.id = c.patient_id
     LEFT JOIN LATERAL (
@@ -274,7 +358,23 @@ export async function getChatListSnapshot(
       LIMIT 1
     ) m ON true
     WHERE c.pt_id = ${ptId}
-    ORDER BY COALESCE(c.last_inbound_at, c.created_at) DESC
+      AND ${closed ? sql`c.closed_at IS NOT NULL` : sql`c.closed_at IS NULL`}
+      ${
+        query
+          ? sql`AND (
+              p.name ILIKE ${`%${query}%`}
+              OR p.phone ILIKE ${`%${query}%`}
+              OR EXISTS (
+                SELECT 1 FROM messages searched
+                WHERE searched.conversation_id = c.id
+                  AND searched.content ILIKE ${`%${query}%`}
+              )
+            )`
+          : sql``
+      }
+    ORDER BY
+      CASE WHEN c.escalation_state <> 'idle' OR c.ai_active = false THEN 0 ELSE 1 END,
+      COALESCE(c.last_inbound_at, c.created_at) DESC
     LIMIT 50
   `);
 }

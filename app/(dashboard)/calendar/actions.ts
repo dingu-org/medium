@@ -16,6 +16,8 @@ import {
 import { db } from '@/lib/db';
 import { appointments, patients, pts } from '@/lib/db/schema';
 import { createServerClient } from '@/lib/supabase/server';
+import { resolveBookingService } from '@/lib/services/queries';
+import { createManualPatient } from '@/lib/clients/mutations';
 
 async function requirePtId(): Promise<string> {
   const supabase = await createServerClient();
@@ -26,23 +28,23 @@ async function requirePtId(): Promise<string> {
   return user.id;
 }
 
-export type ActionResult = { ok: boolean; error?: string };
+export type ActionResult = { ok: boolean; error?: string; code?: string };
 
 function messageFor(error: unknown): string {
   if (error instanceof AppointmentError) {
     switch (error.code) {
       case 'unavailable':
       case 'conflict':
-        return 'That time is no longer available.';
+        return 'Ky orar nuk është më i lirë.';
       case 'invalid_transition':
-        return 'That change is not allowed for this appointment.';
+        return 'Ky ndryshim nuk lejohet për këtë takim.';
       case 'not_found':
-        return 'Appointment not found.';
+        return 'Takimi nuk u gjet.';
       default:
-        return 'Could not update the appointment.';
+        return 'Takimi nuk u përditësua.';
     }
   }
-  return 'Something went wrong. Please try again.';
+  return 'Diçka shkoi keq. Provo sërish.';
 }
 
 export async function cancelAppointmentAction(
@@ -72,7 +74,12 @@ export async function transitionAppointmentAction(
 ): Promise<ActionResult> {
   const ptId = await requirePtId();
   const parsed = transitionSchema.safeParse(nextStatus);
-  if (!parsed.success) return { ok: false, error: 'Invalid status.' };
+  if (!parsed.success)
+    return {
+      ok: false,
+      code: 'INVALID_STATUS',
+      error: 'Statusi nuk është i vlefshëm.',
+    };
   try {
     await transitionAppointment({
       ptId,
@@ -93,7 +100,11 @@ export async function rescheduleAppointmentAction(
   const ptId = await requirePtId();
   const date = new Date(newStartsAt);
   if (Number.isNaN(date.getTime())) {
-    return { ok: false, error: 'Invalid time.' };
+    return {
+      ok: false,
+      code: 'INVALID_TIME',
+      error: 'Orari nuk është i vlefshëm.',
+    };
   }
   try {
     await rescheduleAppointment({ ptId, appointmentId, newStartsAt: date });
@@ -166,9 +177,7 @@ export async function getUpcomingSlots(): Promise<{
 export type PatientOption = { id: string; name: string; phone: string };
 
 /** Patient picker search for manual booking (by name or phone). */
-export async function searchPatients(
-  query: string,
-): Promise<PatientOption[]> {
+export async function searchPatients(query: string): Promise<PatientOption[]> {
   const ptId = await requirePtId();
   const q = query.trim();
   const where = q
@@ -195,13 +204,16 @@ const manualBookingSchema = z
         phone: z.string().trim().min(3).max(40),
       })
       .optional(),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date'),
-    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Invalid time'),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data nuk është e vlefshme'),
+    time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Ora nuk është e vlefshme'),
+    serviceId: z.uuid().optional(),
     serviceType: z.string().trim().max(80).optional(),
     notes: z.string().trim().max(500).optional(),
   })
   .refine((v) => v.patientId || v.newPatient, {
-    message: 'Select or add a patient.',
+    message: 'Zgjidh ose shto një klient.',
   });
 
 /**
@@ -213,13 +225,19 @@ export async function bookManualAppointment(input: {
   newPatient?: { name: string; phone: string };
   date: string;
   time: string;
+  serviceId?: string;
   serviceType?: string;
   notes?: string;
 }): Promise<ActionResult> {
   const ptId = await requirePtId();
   const parsed = manualBookingSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid' };
+    return {
+      ok: false,
+      code: 'INVALID_INPUT',
+      error:
+        parsed.error.issues[0]?.message ?? 'Të dhënat nuk janë të vlefshme.',
+    };
   }
 
   const [pt] = await db
@@ -237,24 +255,44 @@ export async function bookManualAppointment(input: {
 
   let patientId = parsed.data.patientId;
   if (!patientId && parsed.data.newPatient) {
-    const [created] = await db
-      .insert(patients)
-      .values({
-        ptId,
-        name: parsed.data.newPatient.name,
-        phone: parsed.data.newPatient.phone,
-      })
-      .returning({ id: patients.id });
+    const created = await createManualPatient({
+      ptId,
+      ...parsed.data.newPatient,
+    });
+    if ('failure' in created) {
+      return {
+        ok: false,
+        code: created.failure,
+        error:
+          created.failure === 'DUPLICATE_PHONE'
+            ? 'Një klient me këtë numër ekziston tashmë.'
+            : 'Numri i telefonit nuk është i vlefshëm.',
+      };
+    }
     patientId = created.id;
   }
-  if (!patientId) return { ok: false, error: 'Select or add a patient.' };
+  if (!patientId)
+    return {
+      ok: false,
+      code: 'PATIENT_REQUIRED',
+      error: 'Zgjidh ose shto një klient.',
+    };
+
+  const service = await resolveBookingService(ptId, {
+    serviceId: parsed.data.serviceId,
+    legacyServiceType: parsed.data.serviceType,
+  });
+  if (!service) {
+    return { ok: false, error: 'Zgjidh një shërbim aktiv.' };
+  }
 
   try {
     await bookAppointment({
       ptId,
       patientId,
       startsAt,
-      serviceType: parsed.data.serviceType?.trim() || 'Appointment',
+      serviceType: service.name,
+      durationMinutes: service.durationMinutes,
       notes: parsed.data.notes,
       allowOutsideAvailability: true,
     });

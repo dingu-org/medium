@@ -12,25 +12,25 @@ import { SyncIndicator } from './sync-indicator';
 import { SignOutMenuItem } from './sign-out-button';
 
 export function TopHeader({
+  title,
   ptId,
   practiceName,
   email,
   unreadCount,
   notifications,
 }: {
+  title: string;
   ptId: string;
   practiceName: string | null;
   email: string;
   unreadCount: number;
   notifications: NotificationView[];
 }) {
-  const display = practiceName || email;
-
   return (
-    <header className="sticky top-0 z-10 border-b border-border bg-card">
+    <header className="border-border bg-card sticky top-0 z-10 border-b">
       <div className="mx-auto flex max-w-md items-center justify-between gap-2 px-4 py-3">
-        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">
-          {display}
+        <h1 className="min-w-0 flex-1 truncate text-xl font-semibold">
+          {title}
         </h1>
         <SyncIndicator />
         <NotificationBell
@@ -39,11 +39,14 @@ export function TopHeader({
           items={notifications}
         />
         <DropdownMenu>
-          <DropdownMenuTrigger className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <DropdownMenuTrigger
+            aria-label="Hap menunë e llogarisë"
+            className="focus-visible:ring-ring rounded-full outline-none focus-visible:ring-2"
+          >
             <InitialsAvatar name={practiceName} fallback={email} size={36} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
+            <DropdownMenuLabel className="text-muted-foreground truncate text-xs font-normal">
               {email}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
