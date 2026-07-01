@@ -17,6 +17,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { ConnectWhatsApp } from './connect-whatsapp';
 import { DangerZone } from './danger-zone';
 import { PracticeSettingsForm } from './practice-settings-form';
+import { PushNotifications } from './push-notifications';
 
 export const metadata = { title: `${t.settings.title} · Medium` };
 
@@ -71,6 +72,8 @@ export default async function SettingsPage() {
         retentionDays={snapshot.retentionDays}
         notificationPrefs={snapshot.notificationPrefs}
       />
+
+      <PushNotifications />
 
       <GroupedList>
         <GroupedListRow

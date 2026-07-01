@@ -10,6 +10,7 @@ export const NOTIFICATION_TYPES = [
   'appointment.confirmed',
   'appointment.cancelled',
   'appointment.rescheduled',
+  'conversation.escalated',
   'conversation.failed',
   'reminder.failed',
   'wa.connection.revoked',
@@ -38,7 +39,7 @@ function str(payload: Payload, key: string): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function formatTime(iso: string | undefined, timezone: string): string {
+export function formatTime(iso: string | undefined, timezone: string): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
@@ -91,6 +92,15 @@ export function formatNotification(
         icon: 'repeat',
         href: '/calendar',
       };
+    case 'conversation.escalated': {
+      const conversationId = str(event.payload, 'conversationId');
+      return {
+        ...base,
+        title: `${who} kërkoi të flasë me ty`,
+        icon: 'alert',
+        href: conversationId ? `/chat/${conversationId}` : '/chat',
+      };
+    }
     case 'conversation.failed':
       return {
         ...base,

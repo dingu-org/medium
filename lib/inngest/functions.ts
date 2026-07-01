@@ -1,6 +1,7 @@
 import type { InngestFunction } from 'inngest';
 import { handleAppointmentEvent } from './functions/appointment-events';
 import { bootstrapWaConnection } from './functions/bootstrap-wa-connection';
+import { dispatchPushNotification } from './functions/dispatch-push';
 import { handleInboundMessage } from './functions/handle-inbound-message';
 import { offerResumeAfterPtInactivity } from './functions/offer-resume';
 import {
@@ -27,4 +28,5 @@ export const functions: InngestFunction.Like[] = [
   monitorWaTokenExpiry,
   reconcileAlbanianReminderTemplates,
   publishEventOutbox,
+  dispatchPushNotification,
 ];

@@ -83,6 +83,11 @@ export const backgroundEventSchemas = {
     pausedUntil: isoDateTime,
     reason: z.literal('whatsapp_business_app_echo'),
   }),
+  'conversation.escalated': z.object({
+    ptId: z.uuid(),
+    conversationId: z.uuid(),
+    patientId: z.uuid(),
+  }),
   'notification.requested': z.object({
     ptId: z.uuid(),
     kind: z.enum([

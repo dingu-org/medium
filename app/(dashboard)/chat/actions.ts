@@ -197,9 +197,12 @@ export async function markConversationRead(
   await db
     .update(conversations)
     .set({
+      // Pass an ISO string (not the raw Date): a JS Date interpolated into a
+      // sql`` template has no column-type context, so postgres-js can't
+      // serialize it and throws before the query runs.
       lastReadAt: sql`GREATEST(
         COALESCE(${conversations.lastReadAt}, '-infinity'::timestamptz),
-        ${throughMessage.createdAt}
+        ${throughMessage.createdAt.toISOString()}::timestamptz
       )`,
     })
     .where(
