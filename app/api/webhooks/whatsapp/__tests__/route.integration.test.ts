@@ -470,6 +470,32 @@ describe('POST /api/webhooks/whatsapp — idempotency', () => {
     expect(ms).toHaveLength(1);
     expect(sendSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('does not reopen a closed conversation for a duplicate delivery', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const payload = buildPayload({ messageId: nextExternalId() });
+    await POST(makePost(payload));
+    const [conversation] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    await db
+      .update(conversations)
+      .set({ closedAt: new Date(), aiActive: false })
+      .where(eq(conversations.id, conversation.id));
+
+    await POST(makePost(payload));
+
+    const [afterRetry] = await db
+      .select({
+        closedAt: conversations.closedAt,
+        aiActive: conversations.aiActive,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, conversation.id));
+    expect(afterRetry.closedAt).not.toBeNull();
+    expect(afterRetry.aiActive).toBe(false);
+  });
 });
 
 describe('POST /api/webhooks/whatsapp — unknown phone_number_id', () => {

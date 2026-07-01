@@ -4,7 +4,10 @@ import { normalizeManualPhone } from '../phone';
 describe('normalizeManualPhone', () => {
   it.each([
     ['+355 69 123 4567', '+355691234567'],
-    ['(0049) 151-23456789', '+004915123456789'],
+    // '00' international prefix is normalized away so the stored number matches
+    // the digits-only WhatsApp wa_id ('4915123456789').
+    ['(0049) 151-23456789', '+4915123456789'],
+    ['00355691234567', '+355691234567'],
     ['355691234567', '+355691234567'],
   ])('normalizes %s', (input, expected) => {
     expect(normalizeManualPhone(input)).toBe(expected);

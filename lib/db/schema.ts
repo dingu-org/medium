@@ -87,6 +87,7 @@ export const pts = pgTable('pts', {
   aiName: text('ai_name'),
   aiGreeting: text('ai_greeting'),
   aiEscalationKeyword: text('ai_escalation_keyword'),
+  servicesConfiguredAt: tsTz('services_configured_at'),
   retentionDays: integer('retention_days').notNull().default(90),
   // Web Push notification preferences (event type → enabled). Wired in Phase 9;
   // the settings UI persists the toggles now. Null = use defaults.

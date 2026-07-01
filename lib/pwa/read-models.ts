@@ -270,7 +270,7 @@ export async function getChatThreadSnapshot(
       })
       .from(messages)
       .where(eq(messages.conversationId, conversationId))
-      .orderBy(asc(messages.createdAt), asc(messages.id))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
       .limit(50),
     db
       .select({ status: whatsappConnections.status })
@@ -299,7 +299,7 @@ export async function getChatThreadSnapshot(
   return {
     conversationId: conversation.id,
     patientName: privacyName(conversation.patientName),
-    initialMessages: rows.map((r) => ({
+    initialMessages: [...rows].reverse().map((r) => ({
       id: r.id,
       role: r.role,
       content: r.content,

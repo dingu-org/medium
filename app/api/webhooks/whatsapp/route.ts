@@ -177,30 +177,40 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
         );
       }
 
-      const [conversation] = await tx
+      const insertedConversation = await tx
         .insert(conversations)
         .values({
           ptId,
           patientId: patient.id,
           channel: 'whatsapp',
-          lastInboundAt: sql`now()`,
         })
-        .onConflictDoUpdate({
+        .onConflictDoNothing({
           target: [conversations.patientId, conversations.channel],
-          set: {
-            lastInboundAt: sql`now()`,
-            closedAt: null,
-            aiActive: sql`CASE WHEN ${conversations.closedAt} IS NOT NULL THEN true ELSE ${conversations.aiActive} END`,
-            escalationState: sql`CASE WHEN ${conversations.closedAt} IS NOT NULL THEN 'idle' ELSE ${conversations.escalationState} END`,
-          },
         })
         .returning({ id: conversations.id });
+      const [existingConversation] = insertedConversation.length
+        ? insertedConversation
+        : await tx
+            .select({ id: conversations.id })
+            .from(conversations)
+            .where(
+              and(
+                eq(conversations.patientId, patient.id),
+                eq(conversations.channel, 'whatsapp'),
+              ),
+            )
+            .limit(1);
+      if (!existingConversation) {
+        throw new Error(
+          `[whatsapp-webhook] conversation row missing after upsert (patient_id=${patient.id})`,
+        );
+      }
 
       const inserted = await tx
         .insert(messages)
         .values({
           ptId,
-          conversationId: conversation.id,
+          conversationId: existingConversation.id,
           externalId: msg.id,
           role: 'patient',
           channel: 'whatsapp',
@@ -211,15 +221,25 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
 
       if (inserted.length !== 1) return { fresh: false as const };
 
+      await tx
+        .update(conversations)
+        .set({
+          lastInboundAt: sql`now()`,
+          closedAt: null,
+          aiActive: sql`CASE WHEN ${conversations.closedAt} IS NOT NULL THEN true ELSE ${conversations.aiActive} END`,
+          escalationState: sql`CASE WHEN ${conversations.closedAt} IS NOT NULL THEN 'idle' ELSE ${conversations.escalationState} END`,
+        })
+        .where(eq(conversations.id, existingConversation.id));
+
       const messageId = inserted[0].id;
       const eventId = await appendBackgroundEvent(tx, {
         type: 'message.received',
-        data: { messageId, ptId, conversationId: conversation.id },
+        data: { messageId, ptId, conversationId: existingConversation.id },
       });
       return {
         fresh: true as const,
         messageId,
-        conversationId: conversation.id,
+        conversationId: existingConversation.id,
         eventId,
       };
     });

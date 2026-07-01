@@ -4,9 +4,10 @@ import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { t } from '@/lib/i18n';
 import { getOnboardingState } from '@/lib/onboarding/state';
+import { getServices } from '@/lib/services/queries';
 import { createServerClient } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils';
-import { continueSetup, dismissAndGo } from './actions';
+import { confirmServices, continueSetup, dismissAndGo } from './actions';
 
 export const metadata = { title: t.onboarding.metaTitle };
 
@@ -26,7 +27,10 @@ export default async function OnboardingPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
 
-  const state = await getOnboardingState(user.id);
+  const [state, configuredServices] = await Promise.all([
+    getOnboardingState(user.id),
+    getServices(user.id),
+  ]);
   const steps: Step[] = [
     {
       key: 'profile',
@@ -150,35 +154,50 @@ export default async function OnboardingPage() {
 
             {current.key === 'services' && (
               <div className="border-border bg-card mt-6 overflow-hidden rounded-md border text-sm">
-                {[
-                  'Vlerësim i parë · 45 min',
-                  'Seancë vijuese · 30 min',
-                  'Terapi manuale · 60 min',
-                ].map((preset, index) => (
+                {configuredServices.map((service) => (
                   <div
-                    key={preset}
+                    key={service.id}
                     className="border-border flex items-center gap-3 border-b px-4 py-3 last:border-b-0"
                   >
                     <span
                       className={cn(
                         'flex h-5 w-5 items-center justify-center rounded border',
-                        index < 2
+                        service.active
                           ? 'border-primary bg-primary text-white'
                           : 'border-border',
                       )}
                     >
-                      {index < 2 && (
+                      {service.active && (
                         <Check className="h-3.5 w-3.5" aria-hidden />
                       )}
                     </span>
-                    {preset}
+                    {service.name} · {service.durationMinutes} min
                   </div>
                 ))}
               </div>
             )}
 
             <div className="mt-auto space-y-3 pt-10">
-              {current.href && current.cta ? (
+              {current.key === 'services' ? (
+                <>
+                  <form action={confirmServices}>
+                    <Button type="submit" className="w-full">
+                      Vazhdo me këto shërbime
+                      <ChevronRight className="h-4 w-4" aria-hidden />
+                    </Button>
+                  </form>
+                  <form action={continueSetup}>
+                    <input
+                      type="hidden"
+                      name="href"
+                      value="/settings/services"
+                    />
+                    <Button type="submit" variant="outline" className="w-full">
+                      {current.cta}
+                    </Button>
+                  </form>
+                </>
+              ) : current.href && current.cta ? (
                 <form action={continueSetup}>
                   <input type="hidden" name="href" value={current.href} />
                   <Button type="submit" className="w-full">

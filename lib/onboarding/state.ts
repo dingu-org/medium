@@ -34,7 +34,10 @@ export async function getOnboardingState(
     messageRows,
   ] = await Promise.all([
     db
-      .select({ practiceName: pts.practiceName })
+      .select({
+        practiceName: pts.practiceName,
+        servicesConfiguredAt: pts.servicesConfiguredAt,
+      })
       .from(pts)
       .where(eq(pts.id, ptId))
       .limit(1),
@@ -68,7 +71,8 @@ export async function getOnboardingState(
   const profile = Boolean(profileRows[0]?.practiceName?.trim());
   const whatsapp = whatsappRows.length > 0;
   const availability = availabilityRows.length > 0;
-  const hasServices = serviceRows.length > 0;
+  const hasServices =
+    serviceRows.length > 0 && Boolean(profileRows[0]?.servicesConfiguredAt);
   const testMessage = messageRows.length > 0;
 
   const steps = [profile, whatsapp, availability, hasServices, testMessage];

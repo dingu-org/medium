@@ -93,6 +93,13 @@ export function ChatThread({
       ),
     [messages, optimisticMessages],
   );
+  const latestPersistedMessageId = useMemo(
+    () =>
+      [...messages]
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .at(-1)?.id ?? null,
+    [messages],
+  );
 
   // Auto-scroll to the newest message.
   useEffect(() => {
@@ -100,8 +107,11 @@ export function ChatThread({
   }, [visibleMessages.length]);
 
   useEffect(() => {
-    void markConversationRead(conversationId).then(() => router.refresh());
-  }, [conversationId, router]);
+    if (!latestPersistedMessageId) return;
+    void markConversationRead(conversationId, latestPersistedMessageId).then(
+      () => router.refresh(),
+    );
+  }, [conversationId, latestPersistedMessageId, router]);
 
   useEffect(() => {
     function onSynced(event: Event) {

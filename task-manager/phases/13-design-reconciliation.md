@@ -131,7 +131,7 @@ English pending legal review.
 - [x] Services configurable and drive onboarding, manual booking, and AI booking.
 - [x] Clients directory / detail / new work; manual patients gated correctly.
 - [x] Local migration reset, RLS/Realtime/backfill coverage, `pnpm typecheck`, `pnpm lint`,
-      `pnpm build`, and `pnpm test:all` (43 files, 312 tests) pass.
+      `pnpm build`, and `pnpm test:all` (45 files, 317 tests) pass.
 - [x] Signed-in browser canvas checks pass at 390×844 and 1280×900, including pushed-view
       tab hiding, mobile overflow checks, service/client gating, and current PWA states.
 - [x] Offline snapshots and queued mutation replay are covered by automated tests and the
@@ -141,3 +141,11 @@ English pending legal review.
 **Phase complete (2026-06-30).** The design package remains read-only and untracked. Web
 Push, GDPR export, operational quotas, legal translation/review, observability, and launch
 work remain in Phases 9-12.
+
+**PR review hardening (2026-06-30).** Migration `0014_phase13_review_hardening` adds an
+explicit service-confirmation timestamp while preserving seeded defaults for existing
+practices. Onboarding setup/dismissal is account-scoped; duplicate inbound deliveries are
+side-effect free; read watermarks stop at the latest rendered message; arbitrary service
+durations remain editable; and a daily idempotent job submits/polls Albanian reminder
+templates for existing active WhatsApp connections. Mobile browser verification covered
+setup navigation, the Services confirmation step, and a 50-minute service edit.

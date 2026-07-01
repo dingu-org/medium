@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -11,6 +11,7 @@ import {
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
 import { sendTemplate } from '@/lib/channels/whatsapp/client';
 import { db } from '@/lib/db';
+import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 import {
   appointments,
   conversations,
@@ -176,11 +177,31 @@ export async function setTakeover(
 
 export async function markConversationRead(
   conversationId: string,
+  throughMessageId: string,
 ): Promise<{ ok: boolean }> {
   const ptId = await requirePtId();
+  const [throughMessage] = await db
+    .select({ createdAt: messages.createdAt })
+    .from(messages)
+    .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+    .where(
+      and(
+        eq(messages.id, throughMessageId),
+        eq(conversations.id, conversationId),
+        eq(conversations.ptId, ptId),
+      ),
+    )
+    .limit(1);
+  if (!throughMessage) return { ok: false };
+
   await db
     .update(conversations)
-    .set({ lastReadAt: new Date() })
+    .set({
+      lastReadAt: sql`GREATEST(
+        COALESCE(${conversations.lastReadAt}, '-infinity'::timestamptz),
+        ${throughMessage.createdAt}
+      )`,
+    })
     .where(
       and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
     );
@@ -234,6 +255,8 @@ export async function sendUpcomingReminderTemplate(
     )
     .limit(1);
   if (!context?.waId) return { ok: false, error: 'Biseda nuk u gjet.' };
+  // Hoist out of `context` so the narrowing survives into the closure below.
+  const waId = context.waId;
 
   const [[connection], [appointment], templateRows] = await Promise.all([
     db
@@ -316,37 +339,61 @@ export async function sendUpcomingReminderTemplate(
       ? [firstName, localTime]
       : [firstName, practiceName, localTime];
 
-  try {
-    const result = await sendTemplate(
-      connection.id,
-      context.waId,
-      definition.name,
-      definition.language,
-      variables,
-    );
-    await db.transaction(async (tx) => {
-      await tx.insert(messages).values({
-        ptId,
-        conversationId,
-        role: 'pt',
-        channel: 'whatsapp',
-        content: `Kujtesë për takimin më ${localTime}.`,
-        templateId: template.id,
-        externalId: result.messageId,
+  // Serialize per conversation and skip if this same reminder template was just
+  // sent — otherwise a double-tap (before the button's pending state commits)
+  // sends, and pays for, two identical WhatsApp templates.
+  return withAdvisoryLock(`reminder:${conversationId}`, async () => {
+    const [recent] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.templateId, template.id),
+          gt(messages.createdAt, new Date(Date.now() - 60_000)),
+        ),
+      )
+      .limit(1);
+    if (recent) {
+      revalidatePath(`/chat/${conversationId}`);
+      return { ok: true };
+    }
+
+    try {
+      const result = await sendTemplate(
+        connection.id,
+        waId,
+        definition.name,
+        definition.language,
+        variables,
+      );
+      await db.transaction(async (tx) => {
+        await tx.insert(messages).values({
+          ptId,
+          conversationId,
+          role: 'pt',
+          channel: 'whatsapp',
+          content: `Kujtesë për takimin më ${localTime}.`,
+          templateId: template.id,
+          externalId: result.messageId,
+        });
+        await tx
+          .update(conversations)
+          // Match every other pause path: clear aiPausedUntil/aiPauseReason too,
+          // or a conversation paused for the WhatsApp-echo reason keeps showing a
+          // stale "paused" badge after the PT sends a reminder.
+          .set({ aiActive: false, aiPausedUntil: null, aiPauseReason: null })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.ptId, ptId),
+            ),
+          );
       });
-      await tx
-        .update(conversations)
-        .set({ aiActive: false })
-        .where(
-          and(
-            eq(conversations.id, conversationId),
-            eq(conversations.ptId, ptId),
-          ),
-        );
-    });
-    revalidatePath(`/chat/${conversationId}`);
-    return { ok: true };
-  } catch {
-    return { ok: false, error: 'Kujtesa nuk u dërgua. Provo sërish.' };
-  }
+      revalidatePath(`/chat/${conversationId}`);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Kujtesa nuk u dërgua. Provo sërish.' };
+    }
+  });
 }

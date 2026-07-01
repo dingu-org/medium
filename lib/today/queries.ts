@@ -203,7 +203,10 @@ export async function getTodaySnapshot(
             eq(reminderJobs.status, 'sent'),
             isNull(reminderJobs.responseType),
             inArray(appointments.status, ['pending', 'confirmed']),
-            gt(appointments.startsAt, now),
+            // Keep unanswered reminders in "attention" through the appointment
+            // itself (a live no-reply is a possible no-show), not just until it
+            // starts — dropping them at startsAt hid the no-reply signal.
+            gt(appointments.endsAt, now),
           ),
         )
         .orderBy(asc(appointments.startsAt)),

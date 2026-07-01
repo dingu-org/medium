@@ -188,6 +188,18 @@ function appointmentErrorResult(error: AppointmentError): ToolResult {
       },
     };
   }
+  if (error.code === 'invalid_transition') {
+    return {
+      ok: false,
+      error: {
+        code: 'conflict',
+        // The appointment is in a terminal state (cancelled/completed/no_show),
+        // not a booking conflict — don't tell the patient the slot is taken.
+        message: 'Ky takim nuk mund të ndryshohet më.',
+        retryable: false,
+      },
+    };
+  }
   return {
     ok: false,
     error: {

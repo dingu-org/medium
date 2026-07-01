@@ -2,7 +2,10 @@ import { eq } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { ONBOARDING_SKIP_COOKIE } from '@/app/onboarding/constants';
+import {
+  allowsOnboardingBypass,
+  ONBOARDING_SKIP_COOKIE,
+} from '@/app/onboarding/constants';
 import { DashboardChrome } from '@/components/dashboard/dashboard-chrome';
 import { PwaProvider } from '@/components/pwa/pwa-provider';
 import { Toaster } from '@/components/ui/sonner';
@@ -29,7 +32,8 @@ export default async function DashboardLayout({
 
   // Push fresh PTs through onboarding unless they've dismissed it. Onboarding
   // lives outside this layout, so redirecting here can't loop.
-  const skipped = (await cookies()).get(ONBOARDING_SKIP_COOKIE)?.value === '1';
+  const onboardingCookie = (await cookies()).get(ONBOARDING_SKIP_COOKIE)?.value;
+  const skipped = allowsOnboardingBypass(onboardingCookie, user.id);
   if (!skipped) {
     const onboarding = await getOnboardingState(user.id);
     if (!onboarding.complete) redirect('/onboarding');

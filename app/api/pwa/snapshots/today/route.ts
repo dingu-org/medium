@@ -7,6 +7,9 @@ export const runtime = 'nodejs';
 export async function GET() {
   const ptId = await getPwaPtId();
   if (!ptId)
-    return NextResponse.json({ error: 'Pa autorizim' }, { status: 401 });
+    return NextResponse.json(
+      { code: 'UNAUTHORIZED', error: 'Pa autorizim' },
+      { status: 401 },
+    );
   return NextResponse.json(await getTodaySnapshot(ptId));
 }

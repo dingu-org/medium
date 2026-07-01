@@ -20,8 +20,6 @@ import { t } from '@/lib/i18n';
 import type { ServiceRecord } from '@/lib/services/queries';
 import { createService, setServiceActive, updateService } from './actions';
 
-const DURATIONS = [15, 30, 45, 60, 75, 90, 120];
-
 export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
   const online = useOnlineStatus();
   const [editing, setEditing] = useState<ServiceRecord | 'new' | null>(null);
@@ -179,22 +177,20 @@ function ServiceSheet({
             <Label htmlFor="service-duration">
               {t.settings.serviceDuration}
             </Label>
-            <select
+            <Input
               id="service-duration"
               name="duration"
+              type="number"
+              min={5}
+              max={480}
+              step={1}
               defaultValue={
                 service === 'new' || service === null
                   ? 30
                   : service.durationMinutes
               }
-              className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
-            >
-              {DURATIONS.map((minutes) => (
-                <option key={minutes} value={minutes}>
-                  {minutes} min
-                </option>
-              ))}
-            </select>
+              required
+            />
           </div>
           <Button type="submit" className="w-full" disabled={pending}>
             {pending ? t.calendar.saving : t.settings.serviceSave}
