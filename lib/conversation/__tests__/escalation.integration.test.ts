@@ -97,6 +97,27 @@ describe('escalateConversationToHuman', () => {
     );
   });
 
+  it('is a no-op when the conversation is already escalated (no duplicate event/push)', async () => {
+    const send = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
+
+    expect(
+      await escalateConversationToHuman({ ptId, patientId, conversationId }),
+    ).toBe(true);
+    // Second call on the now-escalated conversation must not re-emit.
+    expect(
+      await escalateConversationToHuman({ ptId, patientId, conversationId }),
+    ).toBe(false);
+
+    const rows = await db
+      .select({ type: events.type })
+      .from(events)
+      .where(eq(events.ptId, ptId));
+    expect(rows).toEqual([{ type: 'conversation.escalated' }]);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it('does nothing when no conversation matches', async () => {
     const send = vi
       .spyOn(inngest, 'send')

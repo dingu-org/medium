@@ -27,6 +27,10 @@ export async function escalateConversationToHuman(
           eq(conversations.id, context.conversationId),
           eq(conversations.ptId, context.ptId),
           eq(conversations.patientId, context.patientId),
+          // Guard on the source state (AI still handling) so a repeat
+          // escalate_to_human call can't re-emit the event/push. Mirrors
+          // markRevoked's `status = 'active'` transition guard.
+          eq(conversations.aiActive, true),
         ),
       )
       .returning({ id: conversations.id });
