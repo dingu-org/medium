@@ -49,6 +49,7 @@
   - `push_subscribed`
 - [ ] Funnel dashboard: signed_up → connected → first_message → first_booking.
 - [ ] Cohort view: PTs who completed onboarding within 24 h.
+- [ ] **Web Push delivery rate** (deferred here from Phase 9). The Phase 9 dispatcher already returns per-event `{ sent, removed }` counts as the Inngest step output (`lib/notifications/push-dispatch.ts`) and warns when a PT's subscriptions were all stale, but nothing persists them. Aggregate delivered-vs-attempted per PT (and stale-subscription churn) so silent Web Push failures are visible — Web Push drops silently and there's otherwise no signal.
 
 ### Cost dashboards
 

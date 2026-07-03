@@ -16,6 +16,10 @@ import { createServiceClient } from '@/lib/supabase/service';
 const sendPush = vi.hoisted(() => vi.fn());
 vi.mock('../push', () => ({ sendPush, vapidPublicKey: 'test-key' }));
 
+import {
+  NOTIFICATION_PREF_KEYS,
+  type NotificationPrefs,
+} from '@/app/(dashboard)/settings/constants';
 import { dispatchPushForEvent } from '../push-dispatch';
 import type { PushEvent } from '../push-payload';
 
@@ -77,10 +81,63 @@ function revokedEvent(): PushEvent {
   };
 }
 
+/**
+ * One representative event per settings toggle, so we can exhaustively verify
+ * that every pref gates its own event through the full DB-backed dispatch path
+ * (not just the pure `pushPrefKey` mapping).
+ */
+function eventForPref(key: keyof NotificationPrefs): PushEvent {
+  switch (key) {
+    case 'booking':
+      return bookedEvent();
+    case 'cancellation':
+      return {
+        name: 'notification.requested',
+        data: {
+          ptId,
+          kind: 'appointment.cancelled',
+          appointmentId: randomUUID(),
+          patientId,
+          startsAt: new Date().toISOString(),
+          previousStartsAt: null,
+        },
+      };
+    case 'reschedule':
+      return {
+        name: 'notification.requested',
+        data: {
+          ptId,
+          kind: 'appointment.rescheduled',
+          appointmentId: randomUUID(),
+          patientId,
+          startsAt: new Date().toISOString(),
+          previousStartsAt: new Date().toISOString(),
+        },
+      };
+    case 'escalation':
+      return {
+        name: 'conversation.escalated',
+        data: { ptId, conversationId: randomUUID(), patientId },
+      };
+    case 'resumeOffer':
+      return {
+        name: 'conversation.resume_offered',
+        data: { ptId, conversationId: randomUUID(), patientId },
+      };
+    case 'connection':
+      return revokedEvent();
+    case 'reminderFailure':
+      return {
+        name: 'reminder.failed',
+        data: { ptId, appointmentId: randomUUID(), reason: 'send_failed' },
+      };
+  }
+}
+
 describe('dispatchPushForEvent', () => {
   it('sends when the category is enabled (defaults on)', async () => {
     const result = await dispatchPushForEvent(bookedEvent());
-    expect(result).toEqual({ status: 'sent' });
+    expect(result).toEqual({ status: 'sent', sent: 1, removed: 0 });
     expect(sendPush).toHaveBeenCalledTimes(1);
     const [calledPtId, payload] = sendPush.mock.calls[0];
     expect(calledPtId).toBe(ptId);
@@ -112,6 +169,8 @@ describe('dispatchPushForEvent', () => {
   it('sends a revoked event to settings when enabled', async () => {
     expect(await dispatchPushForEvent(revokedEvent())).toEqual({
       status: 'sent',
+      sent: 1,
+      removed: 0,
     });
     expect(sendPush.mock.calls[0][1].url).toBe('/settings');
   });
@@ -130,5 +189,53 @@ describe('dispatchPushForEvent', () => {
     });
     expect(result).toEqual({ status: 'skipped', reason: 'pt_not_found' });
     expect(sendPush).not.toHaveBeenCalled();
+  });
+
+  // Every settings toggle must gate its own event end-to-end (DB-backed), not
+  // just at the pure `pushPrefKey` level. Loops over all seven keys so a new
+  // event/toggle can't silently ship ungated.
+  describe.each(NOTIFICATION_PREF_KEYS)('pref "%s"', (key) => {
+    it('sends when enabled by default', async () => {
+      const result = await dispatchPushForEvent(eventForPref(key));
+      expect(result).toEqual({ status: 'sent', sent: 1, removed: 0 });
+      expect(sendPush).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips when that toggle is off', async () => {
+      await db
+        .update(pts)
+        .set({ notificationPrefs: { [key]: false } as NotificationPrefs })
+        .where(eq(pts.id, ptId));
+      const result = await dispatchPushForEvent(eventForPref(key));
+      expect(result).toEqual({ status: 'skipped', reason: 'pref_disabled' });
+      expect(sendPush).not.toHaveBeenCalled();
+    });
+  });
+
+  it('propagates the fan-out counts and warns when every subscription is stale', async () => {
+    sendPush.mockResolvedValue({ sent: 0, removed: 2 });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await dispatchPushForEvent(bookedEvent());
+      expect(result).toEqual({ status: 'sent', sent: 0, removed: 2 });
+      expect(warn).toHaveBeenCalledWith(
+        '[push] dispatch reached no live subscriptions',
+        expect.objectContaining({ ptId, removed: 2 }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('does not warn when the PT simply has no subscriptions', async () => {
+    sendPush.mockResolvedValue({ sent: 0, removed: 0 });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await dispatchPushForEvent(bookedEvent());
+      expect(result).toEqual({ status: 'sent', sent: 0, removed: 0 });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

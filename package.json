@@ -18,6 +18,7 @@
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
     "ai:smoke": "tsx --env-file=.env.local scripts/smoke-ai.ts",
+    "push:smoke": "tsx --env-file=.env.local scripts/smoke-push.ts",
     "prepare": "husky"
   },
   "lint-staged": {

@@ -55,9 +55,13 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await db.delete(pushSubscriptions).where(eq(pushSubscriptions.ptId, ptId));
+  // Sentinels must be distinctive: the log legitimately includes the
+  // subscription's UUID, so a short marker like 'a1' collides with any random
+  // UUID containing those hex chars (a ~11%-flaky false positive). 'AUTHMARK'
+  // uses non-hex letters, so it can never appear in a UUID.
   await db.insert(pushSubscriptions).values([
-    { ptId, endpoint: LIVE, keys: { p256dh: 'p1', auth: 'a1' } },
-    { ptId, endpoint: DEAD, keys: { p256dh: 'p2', auth: 'a2' } },
+    { ptId, endpoint: LIVE, keys: { p256dh: 'p1', auth: 'AUTHMARK1' } },
+    { ptId, endpoint: DEAD, keys: { p256dh: 'p2', auth: 'AUTHMARK2' } },
   ]);
   sendNotification.mockReset();
 });
@@ -129,7 +133,7 @@ describe('sendPush', () => {
       .map((args) => JSON.stringify(args))
       .join(' ');
     expect(logged).not.toContain('SECRET');
-    expect(logged).not.toContain('a1');
+    expect(logged).not.toContain('AUTHMARK');
     expect(logged).not.toContain('p256dh');
   });
 });

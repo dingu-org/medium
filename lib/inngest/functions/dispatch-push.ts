@@ -20,6 +20,9 @@ export const dispatchPushNotification = inngest.createFunction(
   ],
   async ({ event, step }) => {
     if (!event.id) throw new Error('Push event ID is required');
+    // The dispatch result ({status, sent, removed} | {status:'skipped', reason})
+    // is returned as the step output, so Inngest's run history records exactly
+    // how many browsers each event reached — the delivery signal Phase 11 reads.
     return step.run('dispatch-push', () =>
       dispatchPushForEvent({
         name: event.name,

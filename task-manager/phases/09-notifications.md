@@ -34,6 +34,7 @@
 - [x] Payload shape: `{ title, body, url, tag }`.
   - `tag` deduplicates ("appointment-12345-booked" prevents duplicate booking pushes).
 - [x] Title + body templates per event type. (`push-payload.ts`, Albanian; patient names kept out of titles.)
+- [x] Surface the fan-out result. `sendPush` returns `{ sent, removed }`; `dispatchPushForEvent` now returns those counts (previously discarded, so it always reported `sent` even when it reached zero browsers) and structured-warns when a PT _had_ subscriptions but every one was stale (`sent===0 && removed>0`). The counts are the Inngest step output, so each dispatch's real reach is recorded in run history — the delivery signal Phase 11's dashboard reads. (Persistent delivery-rate metrics remain Phase 11.)
 
 ### Event subscribers (extends Phase 5 stubs)
 
@@ -61,16 +62,30 @@ Wired as a single multi-trigger Inngest function (`lib/inngest/functions/dispatc
 
 ## Acceptance criteria
 
-Automated coverage in place (typecheck, lint, build, `pnpm test:all` = 49 files / 335 tests): `push-payload.test.ts` (event→payload mapping, deep links, tags, name-out-of-title), `push.integration.test.ts` (fan-out, 410 → row delete, transient → row kept + warn, secret-safety), `push-dispatch.integration.test.ts` (pref gating + send), `escalation.integration.test.ts` (event appended + published). The generated `public/sw.js` contains the `push`/`notificationclick` handlers.
+Automated coverage in place and executed green this session (`pnpm test:all` = 50 files / 355 tests, plus typecheck/lint/build): `push-payload.test.ts` (event→payload mapping, deep links, tags, name-out-of-title), `push.integration.test.ts` (fan-out, 410 → row delete, transient → row kept + warn, secret-safety — the "never logs endpoint/keys" sentinel was hardened from a 2-char `'a1'` that flaked ~11% against random subscription UUIDs to a non-hex `'AUTHMARK'`), `push-dispatch.integration.test.ts` (now exhaustive: all seven event→pref gates through the DB-backed path via `describe.each(NOTIFICATION_PREF_KEYS)`, plus fan-out-count propagation and the all-stale warn), `escalation.integration.test.ts` (event appended + published). The generated `public/sw.js` contains the `push`/`notificationclick` handlers.
 
-- [ ] After signup + permission grant, a `push_subscriptions` row exists. _(Code complete; live browser grant pending.)_
-- [ ] A test booking fires a Web Push that appears on the registered browser. _(Live device delivery pending — needs a real push service, ideally the deployed app.)_
-- [ ] Tapping the notification opens the relevant screen. _(Handler implemented; live tap pending.)_
+**Device-free transport smoke — `pnpm push:smoke` (`scripts/smoke-push.ts`).** Uses the app's real VAPID keys and the same `web-push` library the dispatcher uses to build an actual push request via `generateRequestDetails` (genuine VAPID JWT signing + aes128gcm encryption), then asserts it is exactly what a push service validates before accepting: POST, `Content-Encoding: aes128gcm`, TTL, non-empty encrypted body, and a VAPID `Authorization` header whose JWT verifies (ES256) against our public key with the right audience/subject/expiry. Passes (12/12). This closes the "does our push produce a valid, correctly-signed request" slice of the live acceptance items without a browser, device, or database. The only remaining unverified hop is the real push service → browser render.
+
+- [ ] After signup + permission grant, a `push_subscriptions` row exists. _(Code complete; needs a real browser permission grant.)_
+- [ ] A test booking fires a Web Push that appears on the registered browser. _(Request validity now proven device-free by `pnpm push:smoke`; the real push-service → browser render hop still needs a device.)_
+- [ ] Tapping the notification opens the relevant screen. _(Handler implemented + unit-covered; live tap pending.)_
 - [x] Two rapid bookings for the same appointment (rare race) deduplicate via `tag`. _(Deterministic `tag` per subject; verified in `push-payload.test.ts`.)_
-- [x] An expired subscription returns 410 on next push and the dispatcher removes the DB row. _(Verified in `push.integration.test.ts`; live hand-delete simulation still worth a spot-check.)_
-- [x] PT can disable a category and it stops arriving. _(Verified in `push-dispatch.integration.test.ts`; live UI spot-check pending.)_
+- [x] An expired subscription returns 410 on next push and the dispatcher removes the DB row. _(Verified in `push.integration.test.ts`.)_
+- [x] PT can disable a category and it stops arriving. _(Now verified for all seven categories through the DB-backed dispatch path in `push-dispatch.integration.test.ts`.)_
 
-**Remaining (live/device):** grant permission in a real browser and confirm the row + a delivered, deep-linking push; iOS delivery on an **installed** PWA (not simulator); confirm `VAPID_*` are set in Vercel Preview + Production before any deployed test.
+**Remaining — genuinely needs a device / external account (cannot be closed from a headless box):**
+
+Desktop Chrome (fastest end-to-end confirmation), with Docker + `supabase start` up and a signed-in PT:
+
+1. Run `pnpm dev`, sign in, and accept the push permission banner (or Settings toggle). Confirm a `push_subscriptions` row appears for the PT.
+2. Trigger a booking (or fire a `notification.requested` event through the Inngest dev server). Confirm the OS notification appears with the right title/body.
+3. Click it — confirm it deep-links to `/calendar?appointmentId=…` and focuses an existing tab if one is open.
+4. Hand-delete the subscription in DevTools (Application → Service Workers → Push) or let it expire, push again, and confirm the row is removed on the 410.
+
+Then:
+
+- [ ] iOS delivery on an **installed** PWA (Add to Home Screen), on a real device — not the simulator.
+- [ ] Confirm `VAPID_*` (public/private/subject) are set in Vercel **Preview + Production** before any deployed push test. `NEXT_PUBLIC`-free, so runtime-read — but a missing key throws at module load (`lib/notifications/push.ts`).
 
 ---
 

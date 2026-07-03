@@ -7,7 +7,7 @@ import { buildPushPayload, pushPrefKey, type PushEvent } from './push-payload';
 import { sendPush } from './push';
 
 export type DispatchResult =
-  | { status: 'sent' }
+  | { status: 'sent'; sent: number; removed: number }
   | {
       status: 'skipped';
       reason: 'pt_not_found' | 'pref_disabled' | 'no_payload';
@@ -37,7 +37,8 @@ export async function dispatchPushForEvent(
     return { status: 'skipped', reason: 'pref_disabled' };
   }
 
-  const patientId = 'patientId' in event.data ? event.data.patientId : undefined;
+  const patientId =
+    'patientId' in event.data ? event.data.patientId : undefined;
   let patientName: string | undefined;
   if (patientId) {
     const [patient] = await db
@@ -54,6 +55,18 @@ export async function dispatchPushForEvent(
   });
   if (!payload) return { status: 'skipped', reason: 'no_payload' };
 
-  await sendPush(ptId, payload);
-  return { status: 'sent' };
+  const { sent, removed } = await sendPush(ptId, payload);
+  // Surfacing the fan-out counts up to the Inngest step return gives Phase 11 a
+  // free per-dispatch delivery signal in the run history. A dispatch where every
+  // subscription turned out stale (removed>0, sent===0) means we believed we
+  // could reach this PT but couldn't — worth a structured warn. sent===0 with
+  // no removals is just a PT who hasn't enabled push yet, so we stay quiet.
+  if (sent === 0 && removed > 0) {
+    console.warn('[push] dispatch reached no live subscriptions', {
+      ptId,
+      event: event.name,
+      removed,
+    });
+  }
+  return { status: 'sent', sent, removed };
 }
