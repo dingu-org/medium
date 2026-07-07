@@ -18,6 +18,7 @@ const eslintConfig = defineConfig([
     'build/**',
     'next-env.d.ts',
     'public/sw.js',
+    'docs/design/**',
   ]),
 ]);
 
