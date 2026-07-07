@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Medium — Flow map</title>
+<link rel="stylesheet" href="_ds/medium-design-system-019dfd61-84e7-79df-9aa0-63cab1646fdf/colors_and_type.css" />
+<style>
+  :root {
+    --ink: #0F1420; --ink2: #5b6472; --ink3: #9aa1ad;
+    --brand: #3B5BFE; --brand-ink: #2A41C9; --brand-tint: #EAEEFF; --sage: #7CC4A8;
+    --line: #e3e7ed; --rail: #d3dae3; --sep: #eef0f4; --bg: #eef1f5; --card: #fff;
+    --green: #17A45D; --green-tint: #E6F5EC; --amber-ink:#8a5a08; --amber-tint:#fbf1dc;
+    --red: #D5453C; --red-tint: #fbeceb;
+    --display: "Manrope", sans-serif; --sans: "Manrope", sans-serif; --mono: "JetBrains Mono", monospace;
+    /* canvas wayfinding hues — muted, cool */
+    --c-auth:#3B5BFE; --c-onb:#2C7A7B; --c-cal:#3E6CA8; --c-chat:#5A5DA8; --c-cli:#4f8a6b; --c-appt:#7A5C9E; --c-sys:#5B6472; --c-comp:#8a93a0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    background-image: radial-gradient(120% 60% at 50% -8%, #e4edf6, rgba(238,241,245,0) 55%);
+    color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased;
+    line-height: 1.5; padding: 56px 24px 96px;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+
+  /* ── masthead ── */
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-name { font-family: var(--display); font-weight: 600; font-size: 18px; letter-spacing: -0.02em; }
+  .eyebrow { font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand); margin: 30px 0 12px; }
+  h1 { font-family: var(--display); font-weight: 600; font-size: 40px; letter-spacing: -0.035em; margin: 0; line-height: 1.08; }
+  .lede { font-size: 16px; color: var(--ink2); line-height: 1.55; max-width: 640px; margin: 14px 0 0; }
+  .backlink { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--brand); text-decoration:none; margin-bottom: 8px; }
+  .backlink:hover { text-decoration: underline; }
+
+  /* ── legend ── */
+  .legend { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top: 26px; padding: 16px 18px; background: var(--card); border:1px solid var(--line); border-radius: 12px; }
+  .legend .li { display:inline-flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink2); font-weight:500; }
+  .legend .sw { width:11px; height:11px; border-radius:3px; }
+  .legend .hint { flex-basis:100%; font-size:12.5px; color:var(--ink3); padding-top:4px; border-top:1px solid var(--sep); margin-top:4px; display:flex; align-items:center; gap:7px; }
+
+  /* ── flow section ── */
+  .flow { margin-top: 56px; }
+  .flow-num { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink3); letter-spacing: 0.06em; }
+  .flow h2 { font-family: var(--display); font-weight: 600; font-size: 26px; letter-spacing: -0.025em; margin: 6px 0 0; }
+  .flow .desc { font-size: 14.5px; color: var(--ink2); margin: 8px 0 0; max-width: 620px; }
+  .sub { font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin: 34px 0 4px; }
+
+  /* ── diagram primitives ── */
+  .diagram { margin-top: 26px; display: flex; flex-direction: column; align-items: center; }
+  .row { display:flex; align-items:center; gap:10px; }
+
+  .node {
+    display: flex; align-items: center; gap: 11px; width: 300px; max-width: 100%;
+    padding: 12px 13px 12px 14px; background: var(--card); border: 1px solid var(--line);
+    border-left: 3px solid var(--c, #c3cad4); border-radius: 10px; text-decoration: none; color: inherit;
+    box-shadow: 0 1px 2px rgba(15,20,32,.05); transition: transform .12s cubic-bezier(.2,.7,.2,1), box-shadow .12s, border-color .12s;
+  }
+  a.node:hover { transform: translateY(-1px); box-shadow: 0 8px 22px -10px rgba(15,30,45,.4); border-color: #cdd6e2; }
+  .node[data-c="auth"]{--c:var(--c-auth)} .node[data-c="onb"]{--c:var(--c-onb)} .node[data-c="cal"]{--c:var(--c-cal)}
+  .node[data-c="chat"]{--c:var(--c-chat)} .node[data-c="cli"]{--c:var(--c-cli)} .node[data-c="appt"]{--c:var(--c-appt)} .node[data-c="sys"]{--c:var(--c-sys)} .node[data-c="comp"]{--c:var(--c-comp)}
+  .nbody { flex: 1; min-width: 0; }
+  .nlabel { font-size: 14px; font-weight: 600; color: var(--ink); letter-spacing: -0.005em; display:block; }
+  .nsub { font-size: 11.5px; color: var(--ink3); font-family: var(--mono); margin-top: 2px; display:block; }
+  .open { flex-shrink:0; color: var(--c, #b0b8c2); opacity:.0; transition: opacity .12s, transform .12s; }
+  a.node:hover .open { opacity: 1; transform: translate(1px,-1px); }
+
+  /* autonomous / system (no screen) */
+  .node.auto { border: 1px dashed #c3cdd8; border-left: 1px dashed #c3cdd8; background: #fbfcfd; box-shadow:none; cursor: default; }
+  .node.auto .nlabel { color: var(--ink2); }
+  .sage { width: 9px; height: 9px; border-radius: 999px; background: var(--sage); flex-shrink:0; }
+
+  /* terminals */
+  .term { font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 7px 16px; border-radius: 999px; background: var(--brand); color:#fff; box-shadow: 0 1px 2px rgba(15,20,32,.12); }
+  .term.end { background: #2a3340; }
+  .term.ghost { background: var(--card); color: var(--ink2); border: 1px solid var(--line); }
+
+  /* connectors */
+  .conn { display:flex; flex-direction:column; align-items:center; }
+  .conn .seg { width:2px; background: var(--rail); }
+  .conn.sm .seg { height: 12px; } .conn .seg { height: 15px; }
+  .conn .trig { font-family: var(--mono); font-size: 10.5px; font-weight: 500; color: var(--ink2);
+    background: var(--card); border:1px solid var(--line); border-radius: 999px; padding: 3px 10px; max-width: 280px; text-align:center; }
+  .conn .trig.kw { color: var(--brand-ink); background: var(--brand-tint); border-color:#cfe0ee; font-weight:600; letter-spacing:.04em; }
+  .conn .arr { width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid var(--rail); }
+
+  /* decision */
+  .decide { display:inline-flex; align-items:center; gap:8px; font-size: 13px; font-weight: 600; color: var(--brand-ink);
+    background: var(--brand-tint); border: 1px solid #cfe0ee; border-radius: 999px; padding: 9px 16px; }
+  .decide::before { content:''; width:7px; height:7px; background: var(--brand); transform: rotate(45deg); border-radius:1px; }
+
+  /* branches */
+  .branches { display:flex; gap: 18px; align-items:flex-start; justify-content:center; flex-wrap:wrap; max-width:100%; }
+  .branch { display:flex; flex-direction:column; align-items:center; }
+  .cond { font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing:.04em; padding: 4px 11px; border-radius: 999px; margin-bottom: 2px; }
+  .cond.ok { color: var(--green); background: var(--green-tint); }
+  .cond.bad { color: var(--red); background: var(--red-tint); }
+  .cond.warn { color: var(--amber-ink); background: var(--amber-tint); }
+  .cond.neu { color: var(--ink2); background: var(--sep); }
+
+  /* loops / cross-references */
+  .note { display:flex; align-items:center; gap:8px; font-size:12px; color: var(--ink3); font-style: italic; margin-top: 4px; }
+  .xref { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; color: var(--ink2);
+    background:var(--card); border:1px dashed #cdd6e2; border-radius:10px; padding:9px 13px; text-decoration:none; }
+  .xref:hover { border-color: var(--brand); color: var(--brand); }
+  .xref .sw { width:9px; height:9px; border-radius:3px; flex-shrink:0; }
+
+  footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink3); line-height: 1.6; }
+  footer b { color: var(--ink2); font-weight: 600; }
+
+  @media (max-width: 560px) { h1{font-size:30px} body{padding:36px 16px 64px} .node{width:100%} }
+  @media print { body{background:#fff} a.node:hover{transform:none} }
+</style>
+</head>
+<body>
+
+<template id="__bundler_thumbnail">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+    <rect width="40" height="40" rx="9" fill="#3B5BFE" />
+    <path d="M8 28l6-7 5 4 7-9 6 5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+    <circle cx="8" cy="28" r="2.4" fill="#7CC4A8" />
+  </svg>
+</template>
+
+<div class="wrap">
+  <a class="backlink" href="Medium%20-%20Handover%20index.html">← Handover index</a>
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#3B5BFE" /><path d="M11 27V13h2.4l4.1 7.6 4.1-7.6h2.4v14h-2.2v-9.5l-3.6 6.6h-1.4l-3.6-6.6V27H11Z" fill="#fff" /><circle cx="29.5" cy="13.5" r="1.6" fill="#7CC4A8" /></svg>
+    <span class="brand-name">Medium</span>
+  </div>
+
+  <div class="eyebrow">Flow map</div>
+  <h1>How the screens connect</h1>
+  <p class="lede">Eight end-to-end flows across the manager-facing PWA — each screen a node, each arrow a transition labelled with its trigger, with decision points and the autonomous paths where Medium acts on its own. Click any screen to open it focused in its canvas.</p>
+
+  <div class="legend">
+    <span class="li"><span class="sw" style="background:var(--c-auth)"></span>Auth</span>
+    <span class="li"><span class="sw" style="background:var(--c-onb)"></span>Onboarding</span>
+    <span class="li"><span class="sw" style="background:var(--c-cal)"></span>Today &amp; Calendar</span>
+    <span class="li"><span class="sw" style="background:var(--c-chat)"></span>Chats &amp; takeover</span>
+    <span class="li"><span class="sw" style="background:var(--c-cli)"></span>Klientët</span>
+    <span class="li"><span class="sw" style="background:var(--c-appt)"></span>Appointment lifecycle</span>
+    <span class="li"><span class="sw" style="background:var(--c-sys)"></span>System states</span>
+    <span class="li"><span class="sage" style="width:11px;height:11px"></span>Medium acts autonomously (no screen)</span>
+    <span class="hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9aa1ad" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg> Solid nodes are real screens — click to open them in their canvas. Dashed nodes are off-screen AI/system steps.</span>
+  </div>
+
+  <!-- ════════════════ FLOW 1 ════════════════ -->
+  <section class="flow">
+    <div class="flow-num">FLOW 01</div>
+    <h2>Onboard &amp; connect</h2>
+    <p class="desc">From sign-up to a live WhatsApp number — the first run a practitioner does once. The WhatsApp step is Meta's Embedded Signup, with a branch for every way it can fail.</p>
+    <div class="diagram">
+      <div class="term">Hyrje</div>
+      <div class="conn"><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#signin/signup"><span class="nbody"><span class="nlabel">Krijo llogarinë</span><span class="nsub">auth · sign up</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">krijo llogarinë</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#recovery/verify"><span class="nbody"><span class="nlabel">Konfirmo email-in</span><span class="nsub">auth · verify</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">email i konfirmuar</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#wizard/welcome"><span class="nbody"><span class="nlabel">Mirë se erdhe</span><span class="nsub">onboarding · welcome</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">fillo</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#wizard/profile"><span class="nbody"><span class="nlabel">1 · Profili</span><span class="nsub">onboarding · profile</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond bad">fusha bosh</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#edge/profile-error"><span class="nbody"><span class="nlabel">Profili · gabim</span><span class="nsub">onboarding · validation</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="note">↩ korrigjo &amp; vazhdo</div>
+        </div>
+        <div class="branch">
+          <span class="cond ok">vlefshëm</span>
+          <div class="conn sm"><i class="seg"></i><span class="trig">ruaj</span><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#whatsapp/launch"><span class="nbody"><span class="nlabel">2 · Lidh WhatsApp</span><span class="nsub">onboarding · launchpad</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+      <div class="conn"><i class="seg"></i><span class="trig kw">lidh me Meta</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#whatsapp/connecting"><span class="nbody"><span class="nlabel">Po lidhet</span><span class="nsub">onboarding · embedded signup</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="decide">Rezultati i Embedded Signup?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond ok">u lidh</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#whatsapp/connected"><span class="nbody"><span class="nlabel">U lidh</span><span class="nsub">success</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">refuzuar</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#whatsapp/rejected"><span class="nbody"><span class="nlabel">Verifikimi u refuzua</span><span class="nsub">Meta rejected</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="note">↩ provo sërish</div>
+        </div>
+        <div class="branch">
+          <span class="cond warn">numri zënë</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#whatsapp/duplicate"><span class="nbody"><span class="nlabel">Numri në përdorim</span><span class="nsub">duplicate</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond warn">përgjysmë</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#whatsapp/incomplete"><span class="nbody"><span class="nlabel">Lidhja përgjysmë</span><span class="nsub">incomplete</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="note">↩ rifillo</div>
+        </div>
+        <div class="branch">
+          <span class="cond bad">pa internet</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#whatsapp/offline"><span class="nbody"><span class="nlabel">Pa internet</span><span class="nsub">offline</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="note">↩ rilidhu</div>
+        </div>
+      </div>
+      <div class="conn"><i class="seg"></i><span class="trig">vazhdo</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#wizard/hours"><span class="nbody"><span class="nlabel">3 · Disponueshmëria</span><span class="nsub">onboarding · hours</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">ruaj</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#wizard/services"><span class="nbody"><span class="nlabel">4 · Shërbimet</span><span class="nsub">onboarding · services</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond neu">asnjë shërbim</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#edge/services-empty"><span class="nbody"><span class="nlabel">Shërbimet · bosh</span><span class="nsub">empty state</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond ok">të paktën një</span>
+          <div class="conn sm"><i class="seg"></i><span class="trig">përfundo</span><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#edge/finalizing"><span class="nbody"><span class="nlabel">Po përfundon</span><span class="nsub">finalizing</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+      <div class="conn"><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#wizard/done"><span class="nbody"><span class="nlabel">U regjistrove</span><span class="nsub">onboarding · done</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">hyr në app</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="cal" target="_blank" href="Medium%20-%20Today%20%26%20Calendar.html#today/today-default"><span class="nbody"><span class="nlabel">Sot</span><span class="nsub">today · home</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+    </div>
+  </section>
+
+  <!-- ════════════════ FLOW 2 ════════════════ -->
+  <section class="flow">
+    <div class="flow-num">FLOW 02</div>
+    <h2>Auth &amp; recovery</h2>
+    <p class="desc">Returning sign-in, with the wrong-credentials and unconfirmed-email branches, the forgot → reset side-path, and Google OAuth.</p>
+    <div class="diagram">
+      <div class="term">Hyrje</div>
+      <div class="conn"><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#signin/signin"><span class="nbody"><span class="nlabel">Hyr</span><span class="nsub">auth · sign in</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="decide">Kredencialet?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond ok">vlefshme</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="cal" target="_blank" href="Medium%20-%20Today%20%26%20Calendar.html#today/today-default"><span class="nbody"><span class="nlabel">Sot</span><span class="nsub">today · home</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">të pasakta</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#signin/signin-wrong"><span class="nbody"><span class="nlabel">Kredenciale të pasakta</span><span class="nsub">wrong creds</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="note">↩ provo sërish</div>
+        </div>
+        <div class="branch">
+          <span class="cond warn">email pakonfirmuar</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#signin/signin-confirm"><span class="nbody"><span class="nlabel">Konfirmo email-in</span><span class="nsub">confirm hint</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+
+      <div class="sub">Side-path · harrova fjalëkalimin</div>
+      <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#recovery/forgot"><span class="nbody"><span class="nlabel">Rikupero fjalëkalimin</span><span class="nsub">auth · forgot</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">dërgo lidhjen</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#recovery/forgot-sent"><span class="nbody"><span class="nlabel">Kontrollo email-in</span><span class="nsub">link sent</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">hap lidhjen nga email</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#recovery/reset"><span class="nbody"><span class="nlabel">Vendos fjalëkalim të ri</span><span class="nsub">reset password</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">ruaj → hyr</span><i class="seg"></i><i class="arr"></i></div>
+      <div class="term ghost">↩ kthehu te hyrja</div>
+
+      <div class="sub">Side-path · Google</div>
+      <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#recovery/oauth-redirect"><span class="nbody"><span class="nlabel">Po të ridrejtojmë</span><span class="nsub">OAuth redirect</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="decide">OAuth?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond ok">sukses</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="cal" target="_blank" href="Medium%20-%20Today%20%26%20Calendar.html#today/today-default"><span class="nbody"><span class="nlabel">Sot</span><span class="nsub">today · home</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">gabim</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="auth" target="_blank" href="Medium%20-%20Auth.html#recovery/oauth-error"><span class="nbody"><span class="nlabel">Gabim me Google</span><span class="nsub">OAuth error</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="note">↩ provo sërish</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════ FLOW 3 ════════════════ -->
+  <section class="flow">
+    <div class="flow-num">FLOW 03</div>
+    <h2>Inbound booking · autonomous</h2>
+    <p class="desc">A patient messages on WhatsApp and Medium books the appointment on its own. Most of this happens off-screen (dashed); the practitioner only sees the result land in the app.</p>
+    <div class="diagram">
+      <div class="term">Pacienti shkruan · WhatsApp</div>
+      <div class="conn"><i class="seg"></i><i class="arr"></i></div>
+      <div class="node auto"><span class="sage"></span><span class="nbody"><span class="nlabel">Medium lexon &amp; përgjigjet</span><span class="nsub">AI · pyet shërbimin</span></span></div>
+      <div class="conn"><i class="seg"></i><span class="trig">propozon orare</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#threads/t-ai"><span class="nbody"><span class="nlabel">Medium po përgjigjet</span><span class="nsub">chats · AI handling (live view)</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="decide">Përgjigja e pacientit?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond ok">KONFIRMO</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <div class="node auto"><span class="sage"></span><span class="nbody"><span class="nlabel">Medium rezervon</span><span class="nsub">shkruan në kalendar</span></span></div>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#detail/d-confirmed"><span class="nbody"><span class="nlabel">Takim i konfirmuar</span><span class="nsub">appt · detail</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="conn sm"><i class="seg"></i><span class="trig">push</span><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#install/lock-screen"><span class="nbody"><span class="nlabel">Njoftim · rezervim i ri</span><span class="nsub">system · lock-screen</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">RICAKTO</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <div class="node auto"><span class="sage"></span><span class="nbody"><span class="nlabel">Medium propozon orare të reja</span><span class="nsub">AI · loop</span></span></div>
+          <div class="note">↩ kthehet te propozimi</div>
+        </div>
+        <div class="branch">
+          <span class="cond neu">ANULO</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <div class="node auto"><span class="sage"></span><span class="nbody"><span class="nlabel">Medium mbyll me mirësjellje</span><span class="nsub">AI · fund</span></span></div>
+        </div>
+        <div class="branch">
+          <span class="cond warn">NDIHMË / e ndërlikuar</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="xref" href="#flow4"><span class="sw" style="background:var(--c-chat)"></span>→ Flow 04 · Triazh &amp; marrje në dorë</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════ FLOW 4 ════════════════ -->
+  <section class="flow" id="flow4">
+    <div class="flow-num">FLOW 04</div>
+    <h2>Triage &amp; takeover</h2>
+    <p class="desc">When Medium escalates, the practitioner steps in. From the alert to taking over the thread, replying, and handing back — including the message send-state branches.</p>
+    <div class="diagram">
+      <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#install/lock-screen"><span class="nbody"><span class="nlabel">Push · pacienti të kërkon ty</span><span class="nsub">system · lock-screen</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">hap</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="cal" target="_blank" href="Medium%20-%20Today%20%26%20Calendar.html#today/today-default"><span class="nbody"><span class="nlabel">Sot · kërkon vëmendjen</span><span class="nsub">today · exception</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">hap bisedën</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#threads/t-escalated"><span class="nbody"><span class="nlabel">Eskaluar · të duhet ty</span><span class="nsub">chats · escalated</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">merr në dorë</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#threads/t-takeover"><span class="nbody"><span class="nlabel">Marrja në dorë</span><span class="nsub">chats · takeover</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">shkruaj</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#send/s-typed"><span class="nbody"><span class="nlabel">Tekst · gati</span><span class="nsub">composer typed</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">dërgo</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#send/s-pending"><span class="nbody"><span class="nlabel">Po dërgohet</span><span class="nsub">pending sync</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="decide">Dërgimi?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond ok">u dërgua</span>
+          <div class="conn sm"><i class="seg"></i><span class="trig">kthe te Medium</span><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#threads/t-ai"><span class="nbody"><span class="nlabel">Medium vazhdon</span><span class="nsub">hand back to AI</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond warn">offline</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#send/s-offline"><span class="nbody"><span class="nlabel">Pa internet · radhë</span><span class="nsub">queued</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">dështoi</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#send/s-failed"><span class="nbody"><span class="nlabel">Dështoi · provo sërish</span><span class="nsub">failed</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">dritarja 24h</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#send/s-window"><span class="nbody"><span class="nlabel">Dritarja u mbyll</span><span class="nsub">24h window</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">u shkëput</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#send/s-revoked"><span class="nbody"><span class="nlabel">U shkëput · rilidh</span><span class="nsub">revoked</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+      <div class="sub">Variante paralele gjatë triazhit</div>
+      <div class="branches">
+        <div class="branch">
+          <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#threads/t-paused"><span class="nbody"><span class="nlabel">Pauzë · nga WhatsApp-i yt</span><span class="nsub">auto-pause</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="note">përgjigjesh vetë nga telefoni → Medium ndalon</div>
+        </div>
+        <div class="branch">
+          <a class="node" data-c="chat" target="_blank" href="Medium%20-%20Chats%20%26%20takeover.html#threads/t-debounce"><span class="nbody"><span class="nlabel">Mesazhe të shpejta</span><span class="nsub">debounced</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="note">pacienti dërgon disa rresht → Medium pret</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════ FLOW 5 ════════════════ -->
+  <section class="flow">
+    <div class="flow-num">FLOW 05</div>
+    <h2>Appointment lifecycle</h2>
+    <p class="desc">Everything the practitioner does to an appointment by hand — open it, reschedule, cancel, or book a new one — with offline-first sync results on every write.</p>
+    <div class="diagram">
+      <a class="node" data-c="cal" target="_blank" href="Medium%20-%20Today%20%26%20Calendar.html#calendar/cal-day"><span class="nbody"><span class="nlabel">Kalendari · dita</span><span class="nsub">calendar · day view</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">prek takimin</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#detail/d-confirmed"><span class="nbody"><span class="nlabel">Detajet e takimit</span><span class="nsub">appt · detail (konfirmuar / në pritje / mbaruar / shënim)</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="decide">Veprimi?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond neu">ricakto</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#actions/a-reschedule"><span class="nbody"><span class="nlabel">Ricakto · zgjidh orarin</span><span class="nsub">picker (+ loading / empty)</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">anulo</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#actions/a-cancel"><span class="nbody"><span class="nlabel">Anulo · arsyeja</span><span class="nsub">cancel reason</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">kryer / nuk erdhi</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#detail/d-ended"><span class="nbody"><span class="nlabel">Ka mbaruar</span><span class="nsub">complete / no-show</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+      <div class="conn"><i class="seg"></i><span class="trig">ruaj ndryshimin</span><i class="seg"></i><i class="arr"></i></div>
+      <div class="decide">Sinkronizimi?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond ok">online</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#actions/a-resched-ok"><span class="nbody"><span class="nlabel">U ricaktua · sukses</span><span class="nsub">result</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond warn">offline</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#sync/s-queued"><span class="nbody"><span class="nlabel">Në radhë · offline</span><span class="nsub">queued</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">dështoi</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#sync/s-failed"><span class="nbody"><span class="nlabel">Dështoi</span><span class="nsub">sync failed</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+
+      <div class="sub">Side-path · takim i ri me dorë</div>
+      <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#create/c-menu"><span class="nbody"><span class="nlabel">Shto · menu</span><span class="nsub">add menu</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond neu">pacient ekzistues</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#create/c-existing"><span class="nbody"><span class="nlabel">Pacient ekzistues</span><span class="nsub">existing</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">pacient i ri</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#create/c-new"><span class="nbody"><span class="nlabel">Pacient i ri</span><span class="nsub">new patient</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">blloko kohë</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#create/c-block"><span class="nbody"><span class="nlabel">Blloko kohë</span><span class="nsub">block time</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+      <div class="conn"><i class="seg"></i><span class="trig">rezervo</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="appt" target="_blank" href="Medium%20-%20Appointment%20lifecycle.html#create/c-booked"><span class="nbody"><span class="nlabel">U rezervua · sukses</span><span class="nsub">booked</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+    </div>
+  </section>
+
+  <!-- ════════════════ FLOW 6 ════════════════ -->
+  <section class="flow">
+    <div class="flow-num">FLOW 06</div>
+    <h2>Calendar navigation</h2>
+    <p class="desc">The wayfinding hub. Today is home; the calendar toggles between day, week and month, and any appointment opens its detail. Empty and loading states sit behind each view.</p>
+    <div class="diagram">
+      <a class="node" data-c="cal" target="_blank" href="Medium%20-%20Today%20%26%20Calendar.html#today/today-default"><span class="nbody"><span class="nlabel">Sot</span><span class="nsub">today · home (+ loading / quiet-day)</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">hap kalendarin</span><i class="seg"></i><i class="arr"></i></div>
+      <div class="decide">Pamja?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond neu">ditë</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="cal" target="_blank" href="Medium%20-%20Today%20%26%20Calendar.html#calendar/cal-day"><span class="nbody"><span class="nlabel">Pamja ditore</span><span class="nsub">day (+ empty / loading)</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">javë</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="cal" target="_blank" href="Medium%20-%20Today%20%26%20Calendar.html#calendar/cal-week"><span class="nbody"><span class="nlabel">Pamja javore</span><span class="nsub">week</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">muaj</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="cal" target="_blank" href="Medium%20-%20Today%20%26%20Calendar.html#calendar/cal-month"><span class="nbody"><span class="nlabel">Pamja mujore</span><span class="nsub">month</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+      <div class="conn"><i class="seg"></i><span class="trig">prek takimin</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="xref" href="#flow5"><span class="sw" style="background:var(--c-appt)"></span>→ Flow 05 · Appointment lifecycle</a>
+    </div>
+  </section>
+
+  <!-- ════════════════ FLOW 7 — Klientët ════════════════ -->
+  <section class="flow">
+    <div class="flow-num">FLOW 07</div>
+    <h2>Clients directory</h2>
+    <p class="desc">The Klientët tab — every patient in one searchable place. Patients appear on their own the moment they message on WhatsApp; the practitioner can also add one by hand. Each client opens to its history, notes and contact actions.</p>
+    <div class="diagram">
+      <div class="node auto"><span class="sage"></span><span class="nbody"><span class="nlabel">Pacienti shkruan · WhatsApp</span><span class="nsub">klienti shtohet vetë</span></span></div>
+      <div class="conn"><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="cli" target="_blank" href="Medium%20-%20Clients.html#list/list-default"><span class="nbody"><span class="nlabel">Klientët</span><span class="nsub">clients · directory (+ loading / empty)</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="decide">Çfarë?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond neu">kërko</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="cli" target="_blank" href="Medium%20-%20Clients.html#list/list-search"><span class="nbody"><span class="nlabel">Kërkim</span><span class="nsub">filtered results</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">hap klientin</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="cli" target="_blank" href="Medium%20-%20Clients.html#detail/client-detail"><span class="nbody"><span class="nlabel">Detajet e klientit</span><span class="nsub">history · note · contact (+ me dorë / opt-out)</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="conn sm"><i class="seg"></i><span class="trig">prek takimin</span><i class="seg"></i><i class="arr"></i></div>
+          <a class="xref" href="#flow5"><span class="sw" style="background:var(--c-appt)"></span>→ Flow 05 · Appointment lifecycle</a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">shto me dorë</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="cli" target="_blank" href="Medium%20-%20Clients.html#detail/client-new"><span class="nbody"><span class="nlabel">Klient i ri</span><span class="nsub">manual · wa_id null</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+          <div class="conn sm"><i class="seg"></i><span class="trig">ruaj</span><i class="seg"></i><i class="arr"></i></div>
+          <div class="term ghost">↩ te lista</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════ FLOW 8 ════════════════ -->
+  <section class="flow">
+    <div class="flow-num">FLOW 08</div>
+    <h2>System &amp; account</h2>
+    <p class="desc">The connective tissue that runs underneath every flow — connectivity recovery, installing the app, push, operational alerts, and the GDPR account paths.</p>
+
+    <div class="sub">A · Connectivity &amp; sync</div>
+    <div class="diagram">
+      <div class="term ghost">Online</div>
+      <div class="conn"><i class="seg"></i><span class="trig">humb lidhjen</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#conn/offline"><span class="nbody"><span class="nlabel">Jashtë linje</span><span class="nsub">system · offline banner</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">rilidhesh · ndryshime në radhë</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#conn/pending"><span class="nbody"><span class="nlabel">Po sinkronizohet</span><span class="nsub">pending</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="decide">Sinkronizimi?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond ok">ok</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <div class="term ghost">Online</div>
+        </div>
+        <div class="branch">
+          <span class="cond bad">dështoi</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#conn/failed"><span class="nbody"><span class="nlabel">Ndryshime të dështuara</span><span class="nsub">failed · retry/remove</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">serveri</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#conn/error"><span class="nbody"><span class="nlabel">S'lidhet me serverin</span><span class="nsub">error</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">version i ri</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#conn/update"><span class="nbody"><span class="nlabel">Version i ri</span><span class="nsub">update · rifresko</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">B · Install &amp; push</div>
+    <div class="diagram">
+      <div class="branches">
+        <div class="branch">
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#install/install-android"><span class="nbody"><span class="nlabel">Instalo · Android</span><span class="nsub">install prompt</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#install/install-ios"><span class="nbody"><span class="nlabel">Instalo · iOS</span><span class="nsub">share-sheet</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+      <div class="conn"><i class="seg"></i><span class="trig">instalo &amp; hap</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#install/push-permission"><span class="nbody"><span class="nlabel">Leje për njoftimet</span><span class="nsub">push permission</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="decide">Lejon?</div>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond ok">lejo</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#install/lock-screen"><span class="nbody"><span class="nlabel">Njoftime në ekran të kyçur</span><span class="nsub">lock-screen push</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond neu">jo tani</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#feed/feed"><span class="nbody"><span class="nlabel">Vetëm njoftimet në app</span><span class="nsub">in-app feed (+ empty)</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">C · Operational alerts &amp; GDPR</div>
+    <div class="diagram">
+      <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#feed/ops"><span class="nbody"><span class="nlabel">Banderola operacionale</span><span class="nsub">reconnect WhatsApp · template rejected · quota</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn"><i class="seg"></i><span class="trig">rilidh WhatsApp</span><i class="seg"></i><i class="arr"></i></div>
+      <a class="node" data-c="onb" target="_blank" href="Medium%20-%20Onboarding.html#whatsapp/reconnect"><span class="nbody"><span class="nlabel">U shkëput · rilidh</span><span class="nsub">onboarding · reconnect</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+
+      <div class="sub">Llogaria</div>
+      <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#account/account"><span class="nbody"><span class="nlabel">Llogaria &amp; të dhënat</span><span class="nsub">settings · export · retention</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+      <div class="conn sm"><i class="seg"></i></div>
+      <div class="branches">
+        <div class="branch">
+          <span class="cond warn">shkëput</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#account/disconnect"><span class="nbody"><span class="nlabel">Shkëput WhatsApp</span><span class="nsub">confirm</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="branch">
+          <span class="cond bad">fshi</span>
+          <div class="conn sm"><i class="seg"></i><i class="arr"></i></div>
+          <a class="node" data-c="sys" target="_blank" href="Medium%20-%20System%20states.html#account/delete"><span class="nbody"><span class="nlabel">Fshi llogarinë</span><span class="nsub">GDPR · type DELETE</span></span><svg class="open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <b>Reading the map.</b> Each solid node is a real screen — clicking it opens that canvas with the screen focused. Dashed nodes are steps where Medium acts on its own, off-screen. Arrow labels are the trigger for the transition; <span style="font-family:var(--mono)">MONO CAPS</span> labels are WhatsApp protocol keywords.<br>
+    Eight flows over the Medium component kit · grounded in the product codebase · Albanian throughout.
+  </footer>
+</div>
+
+</body>
+</html>

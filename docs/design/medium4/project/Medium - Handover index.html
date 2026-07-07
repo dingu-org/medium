@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Medium — Design handover</title>
+<link rel="stylesheet" href="_ds/medium-design-system-019dfd61-84e7-79df-9aa0-63cab1646fdf/colors_and_type.css" />
+<style>
+  :root {
+    --ink: #0F1420; --ink2: #6b7280; --ink3: #9aa1ad;
+    --brand: #3B5BFE; --brand-ink: #2A41C9; --brand-tint: #EAEEFF; --sage: #7CC4A8;
+    --line: #e6e9ee; --sep: #eef0f4; --bg: #eef1f5; --card: #ffffff;
+    --green: #17A45D; --green-tint: #E6F5EC; --amber: #DE930B; --red: #D5453C;
+    --display: "Manrope", sans-serif; --sans: "Manrope", sans-serif; --mono: "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    background-image: radial-gradient(120% 80% at 50% -10%, #e4edf6, rgba(238,241,245,0) 60%);
+    color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased;
+    min-height: 100vh; padding: 56px 28px 80px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  /* header */
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-name { font-family: var(--display); font-weight: 600; font-size: 18px; letter-spacing: -0.02em; }
+  .eyebrow { font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand); margin: 30px 0 12px; }
+  h1 { font-family: var(--display); font-weight: 600; font-size: 40px; letter-spacing: -0.035em; margin: 0; line-height: 1.08; }
+  .lede { font-size: 16px; color: var(--ink2); line-height: 1.55; max-width: 600px; margin: 14px 0 0; }
+
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; font-weight: 500; color: var(--ink2); }
+  .chip .dot { width: 8px; height: 8px; border-radius: 999px; }
+
+  /* featured flow-map card */
+  .feature { display:flex; align-items:center; gap:20px; text-decoration:none; color:inherit; margin-top:40px;
+    background:linear-gradient(120deg,#3B5BFE,#2434A8); border-radius:16px; padding:24px 26px;
+    box-shadow:0 12px 30px -16px rgba(15,40,60,.6); position:relative; overflow:hidden; transition:transform .16s cubic-bezier(.2,.7,.2,1), box-shadow .16s; }
+  .feature:hover { transform:translateY(-3px); box-shadow:0 20px 44px -18px rgba(15,40,60,.7); }
+  .feature .fglyph { width:54px; height:54px; border-radius:13px; background:rgba(255,255,255,.12); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .feature .fbody { flex:1; min-width:0; }
+  .feature .feyebrow { font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:#9ec7e3; }
+  .feature h2 { font-family:var(--display); font-weight:600; font-size:23px; letter-spacing:-0.025em; margin:5px 0 0; color:#fff; }
+  .feature p { font-size:13.5px; color:#cfe0ee; line-height:1.5; margin:7px 0 0; max-width:560px; }
+  .feature .fgo { display:inline-flex; align-items:center; gap:7px; font-size:13.5px; font-weight:600; color:#fff; flex-shrink:0; }
+  .feature:hover .fgo .arr { transform:translateX(3px); }
+
+  /* grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; margin-top: 40px; }
+  .card {
+    display: flex; flex-direction: column; gap: 0; text-decoration: none; color: inherit;
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px;
+    box-shadow: 0 1px 2px rgba(15,20,32,0.04);
+    transition: transform .16s cubic-bezier(.2,.7,.2,1), box-shadow .16s, border-color .16s;
+    position: relative; overflow: hidden;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 16px 36px -18px rgba(15,30,45,0.4); border-color: #d4ddea; }
+  .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .glyph { width: 46px; height: 46px; border-radius: 12px; background: var(--brand-tint); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .num { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink3); letter-spacing: 0.04em; }
+  .card h2 { font-family: var(--display); font-weight: 600; font-size: 20px; letter-spacing: -0.02em; margin: 18px 0 0; }
+  .card p { font-size: 13.5px; color: var(--ink2); line-height: 1.5; margin: 8px 0 0; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .tag { font-size: 11px; font-weight: 500; color: var(--ink2); background: #f3f5f8; border-radius: 6px; padding: 3px 8px; letter-spacing: -0.005em; }
+  .card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--sep); }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink3); font-variant-numeric: tabular-nums; }
+  .go { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--brand); }
+  .card:hover .go .arr { transform: translateX(3px); }
+  .arr { transition: transform .16s cubic-bezier(.2,.7,.2,1); }
+
+  footer { margin-top: 44px; font-size: 12.5px; color: var(--ink3); line-height: 1.6; }
+  footer b { color: var(--ink2); font-weight: 600; }
+
+  @media (max-width: 560px) { h1 { font-size: 32px; } body { padding: 40px 18px 60px; } }
+</style>
+</head>
+<body>
+
+<template id="__bundler_thumbnail">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+    <rect width="40" height="40" rx="9" fill="#3B5BFE" />
+    <path d="M11 27V13h2.4l4.1 7.6 4.1-7.6h2.4v14h-2.2v-9.5l-3.6 6.6h-1.4l-3.6-6.6V27H11Z" fill="#fff" />
+    <circle cx="29.5" cy="13.5" r="1.6" fill="#7CC4A8" />
+  </svg>
+</template>
+
+<div class="wrap">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#3B5BFE" /><path d="M11 27V13h2.4l4.1 7.6 4.1-7.6h2.4v14h-2.2v-9.5l-3.6 6.6h-1.4l-3.6-6.6V27H11Z" fill="#fff" /><circle cx="29.5" cy="13.5" r="1.6" fill="#7CC4A8" /></svg>
+    <span class="brand-name">Medium</span>
+  </div>
+
+  <div class="eyebrow">Design handover</div>
+  <h1>Every screen, flow & state</h1>
+  <p class="lede">Eight design canvases covering the manager-facing PWA end to end — from the front door to every edge state — grounded in the codebase, drawn from one shared kit, locked to a single look. Open any canvas to pan, zoom, focus a screen, or export it.</p>
+
+  <div class="meta">
+    <span class="chip"><span class="dot" style="background:#3B5BFE"></span>Calm · blue · soft</span>
+    <span class="chip"><span class="dot" style="background:var(--sage)"></span>Albanian copy</span>
+    <span class="chip">8 canvases</span>
+    <span class="chip">110+ screens &amp; states</span>
+  </div>
+
+  <a class="feature" href="Medium%20-%20Flow%20map.html">
+    <span class="fglyph"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><path d="M9 6h6M6 9v6a2 2 0 0 0 2 2h7M18 9v3"/></svg></span>
+    <div class="fbody">
+      <div class="feyebrow">Start here · Flow map</div>
+      <h2>How the screens connect</h2>
+      <p>Seven end-to-end flows — every transition, decision and autonomous path — with each node linking straight through to its screen in the canvases below.</p>
+    </div>
+    <span class="fgo">Open the map<svg class="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span>
+  </a>
+
+  <div class="grid">
+
+    <a class="card" href="Medium%20-%20Auth.html">
+      <div class="card-top">
+        <span class="glyph"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1"/></svg></span>
+        <span class="num">00</span>
+      </div>
+      <h2>Auth</h2>
+      <p>The front door — sign in, sign up, password recovery, email verification and Google OAuth, with every validation, error and submitting state.</p>
+      <div class="tags"><span class="tag">Sign in / up</span><span class="tag">Validation</span><span class="tag">Recovery</span><span class="tag">OAuth</span></div>
+      <div class="card-foot"><span class="count">15 screens</span><span class="go">Open<svg class="arr" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+    <a class="card" href="Medium%20-%20Component%20sheet.html">
+      <div class="card-top">
+        <span class="glyph"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+        <span class="num">01</span>
+      </div>
+      <h2>Component sheet</h2>
+      <p>The reference kit — every component in all variants and states. Foundations, controls and feedback patterns the other canvases draw from.</p>
+      <div class="tags"><span class="tag">Type &amp; color</span><span class="tag">Buttons</span><span class="tag">Forms</span><span class="tag">Badges</span><span class="tag">Chat</span><span class="tag">Feedback</span></div>
+      <div class="card-foot"><span class="count">20 component specs</span><span class="go">Open<svg class="arr" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+    <a class="card" href="Medium%20-%20Onboarding.html">
+      <div class="card-top">
+        <span class="glyph"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></span>
+        <span class="num">02</span>
+      </div>
+      <h2>Onboarding</h2>
+      <p>First-run wizard plus the full WhatsApp Embedded Signup state matrix — launchpad, connecting, success and every Meta failure mode.</p>
+      <div class="tags"><span class="tag">Wizard</span><span class="tag">Embedded Signup</span><span class="tag">Failure modes</span><span class="tag">Validation</span></div>
+      <div class="card-foot"><span class="count">16 screens</span><span class="go">Open<svg class="arr" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+    <a class="card" href="Medium%20-%20Chats%20%26%20takeover.html">
+      <div class="card-top">
+        <span class="glyph"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+        <span class="num">03</span>
+      </div>
+      <h2>Chats &amp; takeover</h2>
+      <p>Needs-you-first list and the full handling matrix — AI, escalation, manual takeover, auto-pause and debounced messages — plus composer send states.</p>
+      <div class="tags"><span class="tag">Chat list</span><span class="tag">Escalation</span><span class="tag">Takeover</span><span class="tag">Edge cases</span><span class="tag">Send states</span></div>
+      <div class="card-foot"><span class="count">15 screens</span><span class="go">Open<svg class="arr" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+    <a class="card" href="Medium%20-%20Clients.html">
+      <div class="card-top">
+        <span class="glyph"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span class="num">04</span>
+      </div>
+      <h2>Klientët</h2>
+      <p>The patients directory — searchable list, and each client's detail with appointment history, private notes, contact actions, manual entry and reminder opt-out.</p>
+      <div class="tags"><span class="tag">Directory</span><span class="tag">Search</span><span class="tag">Client detail</span><span class="tag">History</span><span class="tag">Manual / opt-out</span></div>
+      <div class="card-foot"><span class="count">7 screens</span><span class="go">Open<svg class="arr" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+    <a class="card" href="Medium%20-%20Today%20%26%20Calendar.html">
+      <div class="card-top">
+        <span class="glyph"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+        <span class="num">05</span>
+      </div>
+      <h2>Today &amp; Calendar</h2>
+      <p>Exception-first home and the calendar — day, week and month views, empty and loading states, and the full appointment status lifecycle.</p>
+      <div class="tags"><span class="tag">Today</span><span class="tag">Day / week / month</span><span class="tag">Status dots</span><span class="tag">Empty / loading</span></div>
+      <div class="card-foot"><span class="count">9 screens</span><span class="go">Open<svg class="arr" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+    <a class="card" href="Medium%20-%20Appointment%20lifecycle.html">
+      <div class="card-top">
+        <span class="glyph"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9-5 9 5"/><path d="M9 13l2 2 4-4"/></svg></span>
+        <span class="num">06</span>
+      </div>
+      <h2>Appointment lifecycle</h2>
+      <p>The detail sheet over the calendar — reschedule, cancel, complete and no-show, new-appointment booking, and offline-first sync results.</p>
+      <div class="tags"><span class="tag">Detail sheet</span><span class="tag">Reschedule</span><span class="tag">Cancel</span><span class="tag">New booking</span><span class="tag">Sync</span></div>
+      <div class="card-foot"><span class="count">16 sheets</span><span class="go">Open<svg class="arr" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+    <a class="card" href="Medium%20-%20System%20states.html">
+      <div class="card-top">
+        <span class="glyph"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg></span>
+        <span class="num">07</span>
+      </div>
+      <h2>System states</h2>
+      <p>The connective tissue — offline &amp; sync banners, PWA install, push permission and notifications, operational alerts, and GDPR account flows.</p>
+      <div class="tags"><span class="tag">Offline / sync</span><span class="tag">Install &amp; push</span><span class="tag">Notifications</span><span class="tag">GDPR</span></div>
+      <div class="card-foot"><span class="count">16 screens</span><span class="go">Open<svg class="arr" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5BFE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+  </div>
+
+  <footer>
+    <b>Each canvas</b> supports pan / zoom, drag-reorder, inline rename, fullscreen focus (←/→/Esc), and per-artboard PNG / HTML export.<br>
+    Built on the Medium Design System · grounded in the product codebase · one shared component kit across all six.
+  </footer>
+</div>
+
+</body>
+</html>
