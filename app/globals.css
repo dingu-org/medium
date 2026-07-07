@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-manrope);
   --font-mono: var(--font-jetbrains-mono);
-  --font-heading: var(--font-inter-tight);
+  --font-heading: var(--font-manrope);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,60 +39,97 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* v2 "New direction": generous concentric radii — md for fields/controls,
+     lg for cards (MT.radius 26). Buttons/pills use rounded-full. */
+  --radius-sm: 10px;
+  --radius-md: 18px;
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: 28px;
+  --radius-2xl: 32px;
+  --radius-3xl: 36px;
+  --radius-4xl: 40px;
+  --color-line: var(--line);
+  --color-sep: var(--sep);
+  --color-sunken: var(--sunken);
+  --color-dock: var(--dock);
+  --color-sage: var(--sage);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -180px 0;
+  }
+  100% {
+    background-position: 180px 0;
+  }
 }
 
 :root {
+  /* v2 "New direction" (medium4): warm-gray neutrals, near-black ink. */
   --neutral-0: #ffffff;
-  --neutral-50: #f7f8fa;
-  --neutral-100: #eef0f4;
-  --neutral-150: #e3e7ed;
-  --neutral-200: #d4dae3;
-  --neutral-300: #b6bdc9;
-  --neutral-400: #8d95a3;
-  --neutral-500: #6b7280;
-  --neutral-600: #4b5563;
-  --neutral-700: #303744;
-  --neutral-800: #1d2330;
-  --neutral-900: #0f1420;
-  --brand-50: #ecf3f9;
-  --brand-100: #d4e3f0;
-  --brand-200: #a6c5dc;
-  --brand-300: #6ea1c2;
-  --brand-400: #3d7da4;
-  --brand-500: #1f5d86;
-  --brand-600: #174a6c;
-  --brand-700: #113a55;
-  --brand-800: #0c2a3e;
-  --success-50: #ecf6f0;
-  --success-100: #d8eee1;
-  --success-200: #b6ddc7;
-  --success-500: #2f8b5a;
-  --success-600: #246e47;
-  --success-700: #1d583a;
-  --warning-50: #fcf4e6;
-  --warning-200: #efd39e;
-  --warning-500: #b97a08;
-  --warning-600: #8c5c06;
-  --warning-700: #684405;
-  --danger-50: #fbecec;
-  --danger-500: #b3322b;
-  --danger-600: #8a2622;
-  --info-50: #eaf1f8;
-  --info-500: #2a6fa1;
-  /* "Needs your attention" — distinct from --warning (pending). Handoff §5. */
-  --attention-50: #fef6ec;
+  --neutral-50: #f6f6f3;
+  --neutral-100: #efefec;
+  --neutral-150: #e5e5e1;
+  --neutral-200: #d6d6d1;
+  --neutral-300: #b8b8b3;
+  --neutral-400: #91949b;
+  --neutral-500: #6a6f78;
+  --neutral-600: #4c515b;
+  --neutral-700: #30343d;
+  --neutral-800: #1c1f26;
+  --neutral-900: #0c0d12;
+  /* Brand: vivid royal blue. */
+  --brand-50: #eaeeff;
+  --brand-100: #d6deff;
+  --brand-200: #adbbff;
+  --brand-300: #8497ff;
+  --brand-400: #5b78ff;
+  --brand-500: #3b5bfe;
+  --brand-600: #2a41c9;
+  --brand-700: #1e2f9a;
+  --brand-800: #16226e;
+  --success-50: #e6f5ec;
+  --success-100: #d1ecdd;
+  --success-200: #a8dcc0;
+  --success-500: #17a45d;
+  --success-600: #0f7a43;
+  --success-700: #0b5c33;
+  --warning-50: #fbf1dc;
+  --warning-200: #f2d9a0;
+  --warning-500: #de930b;
+  --warning-600: #9c6707;
+  --warning-700: #7a5106;
+  --danger-50: #fbeae9;
+  --danger-500: #d5453c;
+  --danger-600: #a93129;
+  --info-50: var(--brand-50);
+  --info-500: var(--brand-500);
+  /* "Needs your attention" — distinct from --warning (pending). Handoff §5;
+     tint/ink per medium4 cal-kit ORANGE_TINT/ORANGE_INK. */
+  --attention-50: #fdf1e3;
   --attention-100: #fce7c8;
   --attention-500: #d97706;
-  --attention-600: #b45309;
+  --attention-600: #a85a08;
   --attention-700: #92400e;
-  --background: var(--neutral-50);
+  /* MT surface language (medium4 v2/ui.jsx). */
+  --line: #e7e7e2;
+  --sep: #f0f0ec;
+  --sunken: #f6f6f3;
+  --dock: #0c0d12;
+  --sage: #7cc4a8;
+  --ink-2: #5e6572;
+  --ink-3: #9ca2ae;
+  --hatch: repeating-linear-gradient(
+    135deg,
+    rgb(12 13 18 / 13%) 0,
+    rgb(12 13 18 / 13%) 1.5px,
+    transparent 1.5px,
+    transparent 6.5px
+  );
+  --background: #f3f3f0;
   --foreground: var(--neutral-900);
   --card: var(--neutral-0);
   --card-foreground: var(--neutral-900);
@@ -103,11 +140,11 @@
   --secondary: var(--neutral-100);
   --secondary-foreground: var(--neutral-900);
   --muted: var(--neutral-100);
-  --muted-foreground: var(--neutral-500);
+  --muted-foreground: var(--ink-2);
   --accent: var(--brand-50);
-  --accent-foreground: var(--brand-700);
+  --accent-foreground: var(--brand-600);
   --destructive: var(--danger-500);
-  --border: var(--neutral-150);
+  --border: var(--line);
   --input: var(--neutral-200);
   --ring: var(--brand-400);
   --chart-1: var(--brand-500);
@@ -115,19 +152,23 @@
   --chart-3: var(--warning-500);
   --chart-4: var(--danger-500);
   --chart-5: var(--neutral-500);
-  --radius: 0.625rem;
+  --radius: 1.625rem; /* 26px — borderless card radius (MT.radius) */
   --sidebar: var(--neutral-0);
   --sidebar-foreground: var(--neutral-900);
   --sidebar-primary: var(--brand-500);
   --sidebar-primary-foreground: var(--neutral-0);
   --sidebar-accent: var(--brand-50);
-  --sidebar-accent-foreground: var(--brand-700);
-  --sidebar-border: var(--neutral-150);
+  --sidebar-accent-foreground: var(--brand-600);
+  --sidebar-border: var(--line);
   --sidebar-ring: var(--brand-400);
-  --shadow-card: 0 1px 0 rgb(15 20 32 / 4%), 0 1px 2px rgb(15 20 32 / 4%);
-  --shadow-popover: 0 1px 2px rgb(15 20 32 / 4%), 0 4px 12px rgb(15 20 32 / 6%);
-  --shadow-modal: 0 2px 4px rgb(15 20 32 / 5%), 0 12px 32px rgb(15 20 32 / 8%);
-  --focus-ring: 0 0 0 3px rgb(31 93 134 / 18%);
+  /* Borderless cards live on soft ambient elevation, not hairlines. */
+  --shadow-card: 0 1px 2px rgb(12 13 18 / 3%), 0 10px 30px -18px rgb(12 13 18 / 14%);
+  --shadow-popover: 0 1px 3px rgb(12 13 18 / 4%), 0 16px 40px -20px rgb(12 13 18 / 18%);
+  --shadow-modal: 0 2px 4px rgb(12 13 18 / 4%), 0 24px 48px -20px rgb(12 13 18 / 22%);
+  --shadow-glow: 0 10px 24px -12px rgb(59 91 254 / 50%);
+  --shadow-dock: 0 18px 40px -18px rgb(12 13 18 / 55%);
+  --focus-ring: 0 0 0 3px rgb(59 91 254 / 18%);
+  --focus-ring-field: 0 0 0 3px rgb(59 91 254 / 16%);
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
@@ -172,7 +213,7 @@
   body {
     @apply bg-background text-foreground;
     font-size: 15px;
-    letter-spacing: 0;
+    letter-spacing: -0.005em;
   }
   html {
     @apply font-sans;

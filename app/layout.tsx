@@ -1,15 +1,10 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Inter_Tight, JetBrains_Mono } from 'next/font/google';
+import { JetBrains_Mono, Manrope } from 'next/font/google';
 
 import './globals.css';
 
-const inter = Inter({
-  variable: '--font-inter',
-  subsets: ['latin'],
-});
-
-const interTight = Inter_Tight({
-  variable: '--font-inter-tight',
+const manrope = Manrope({
+  variable: '--font-manrope',
   subsets: ['latin'],
 });
 
@@ -43,7 +38,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#1f5d86',
+  themeColor: '#f3f3f0',
 };
 
 export default function RootLayout({
@@ -54,7 +49,7 @@ export default function RootLayout({
   return (
     <html
       lang="sq"
-      className={`${inter.variable} ${interTight.variable} ${jetBrainsMono.variable} h-full antialiased`}
+      className={`${manrope.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
       <body
         className={`bg-background text-foreground flex min-h-full flex-col`}
