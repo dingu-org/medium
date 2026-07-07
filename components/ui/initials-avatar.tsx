@@ -39,7 +39,7 @@ export function InitialsAvatar({
   return (
     <span className={cn('relative inline-flex shrink-0', className)}>
       <span
-        className="inline-flex items-center justify-center rounded-full bg-[var(--brand-50)] font-heading font-semibold text-[var(--brand-700)]"
+        className="inline-flex items-center justify-center rounded-full bg-[var(--brand-50)] font-heading font-bold tracking-[-0.01em] text-[var(--brand-600)]"
         style={{ width: size, height: size, fontSize: Math.max(12, size * 0.34) }}
         aria-hidden="true"
       >

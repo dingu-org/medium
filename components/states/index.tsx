@@ -20,18 +20,18 @@ export function LoadingState({
       aria-live="polite"
     >
       <span className="sr-only">{t.states.loading}</span>
-      {Array.from({ length: rows }, (_, i) => `skeleton-${i}`).map((key) => (
-        <div
-          key={key}
-          className="flex items-center gap-3 rounded-[10px] border border-border bg-card p-3 shadow-[var(--shadow-card)]"
-        >
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-3 w-3/4" />
+      <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+        {Array.from({ length: rows }, (_, i) => `skeleton-${i}`).map((key) => (
+          <div key={key} className="flex items-center gap-3 px-4 py-[13px]">
+            <Skeleton className="h-11 w-11 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-3 w-1/2" />
+              <Skeleton className="h-2.5 w-3/4" />
+            </div>
+            <Skeleton className="h-[18px] w-10 rounded-full" />
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -53,22 +53,24 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-[10px] border border-dashed border-border bg-card px-6 py-12 text-center shadow-[var(--shadow-card)]',
+        'flex flex-col items-center justify-center px-6 py-10 text-center',
         className,
       )}
     >
       {Icon && (
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-          <Icon className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
+        <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#ecece7]">
+          <Icon className="h-[26px] w-[26px] text-ink-3" aria-hidden="true" />
         </span>
       )}
-      <div className="space-y-1">
-        <p className="font-medium">{title}</p>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
-      </div>
-      {action}
+      <p className="font-heading text-lg font-bold tracking-[-0.02em] text-foreground">
+        {title}
+      </p>
+      {description && (
+        <p className="mt-1.5 max-w-[260px] text-[13.5px] leading-relaxed text-ink-2">
+          {description}
+        </p>
+      )}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
@@ -89,7 +91,7 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-[10px] border border-destructive/30 bg-[var(--danger-50)] px-6 py-12 text-center',
+        'flex flex-col items-center justify-center gap-3 rounded-lg bg-[var(--danger-50)] px-6 py-12 text-center',
         className,
       )}
     >

@@ -5,14 +5,11 @@ import { cn } from '@/lib/utils';
 type Tone = 'info' | 'success' | 'warning' | 'danger' | 'neutral';
 
 const toneClasses: Record<Tone, string> = {
-  info: 'border-[var(--brand-100)] bg-[var(--brand-50)] text-[var(--brand-700)]',
-  success:
-    'border-[#cfe7d9] bg-[var(--success-50)] text-[var(--success-600)]',
-  warning:
-    'border-[#f0e0bd] bg-[var(--warning-50)] text-[var(--warning-600)]',
-  danger:
-    'border-[#f0d0cf] bg-[var(--danger-50)] text-[var(--danger-600)]',
-  neutral: 'border-border bg-muted text-muted-foreground',
+  info: 'bg-[var(--brand-50)] text-[var(--brand-600)]',
+  success: 'bg-[var(--success-50)] text-[var(--success-600)]',
+  warning: 'bg-[var(--warning-50)] text-[var(--warning-600)]',
+  danger: 'bg-[var(--danger-50)] text-[var(--danger-600)]',
+  neutral: 'bg-muted text-muted-foreground',
 };
 
 export function AppBanner({
@@ -35,7 +32,7 @@ export function AppBanner({
       role={tone === 'danger' ? 'alert' : 'status'}
       aria-live="polite"
       className={cn(
-        'flex items-start gap-2.5 border px-3 py-2 text-sm leading-snug',
+        'flex items-start gap-2.5 rounded-[18px] px-[15px] py-[13px] text-sm leading-snug',
         toneClasses[tone],
         className,
       )}

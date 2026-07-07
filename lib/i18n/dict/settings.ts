@@ -14,6 +14,7 @@ export const settings = {
   connected: 'I lidhur',
   disconnected: 'I shkëputur',
   reconnect: 'Rilidh',
+  comingSoon: 'Së shpejti',
   reminderTemplate: 'Shablloni i kujtesave',
   approved: 'Miratuar',
 

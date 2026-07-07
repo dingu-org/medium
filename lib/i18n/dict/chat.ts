@@ -46,4 +46,5 @@ export const chat = {
 
   aiBadge: 'Medium',
   youBadge: 'Ti',
+  closedBadge: 'Mbyllur',
 } as const;

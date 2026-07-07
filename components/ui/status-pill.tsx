@@ -11,8 +11,8 @@ export type StatusPillTone =
   | 'attention';
 
 const toneClasses: Record<StatusPillTone, string> = {
-  brand: 'bg-[var(--brand-50)] text-[var(--brand-700)]',
-  neutral: 'bg-muted text-muted-foreground',
+  brand: 'bg-[var(--brand-50)] text-[var(--brand-600)]',
+  neutral: 'bg-[var(--neutral-100)] text-[var(--neutral-600)]',
   success: 'bg-[var(--success-50)] text-[var(--success-600)]',
   warning: 'bg-[var(--warning-50)] text-[var(--warning-600)]',
   danger: 'bg-[var(--danger-50)] text-[var(--danger-600)]',
@@ -22,7 +22,7 @@ const toneClasses: Record<StatusPillTone, string> = {
 
 const dotClasses: Record<StatusPillTone, string> = {
   brand: 'bg-primary',
-  neutral: 'bg-muted-foreground',
+  neutral: 'bg-[var(--neutral-400)]',
   success: 'bg-[var(--success-500)]',
   warning: 'bg-[var(--warning-500)]',
   danger: 'bg-destructive',
