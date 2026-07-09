@@ -12,9 +12,9 @@ export default async function ResetPasswordPage() {
   if (!store.get(RECOVERY_COOKIE)) redirect('/sign-in');
   return (
     <section>
-      <header className="mb-7 text-center">
-        <h1 className="text-2xl font-semibold">{t.auth.reset.title}</h1>
-        <p className="text-muted-foreground mt-2 text-sm">
+      <header className="mt-6 mb-7">
+        <h1 className="font-heading text-[29px] leading-tight font-semibold tracking-[-0.03em]">{t.auth.reset.title}</h1>
+        <p className="text-ink-2 mt-2 text-[14.5px] leading-normal">
           {t.auth.reset.subtitle}
         </p>
       </header>
