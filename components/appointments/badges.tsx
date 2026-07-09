@@ -55,5 +55,9 @@ export function reminderBadge(
 export function ReminderBadge({ reminder }: { reminder: ReminderInfo }) {
   const badge = reminderBadge(reminder);
   if (!badge) return null;
-  return <StatusPill tone={badge.tone}>{badge.label}</StatusPill>;
+  return (
+    <StatusPill tone={badge.tone} mono>
+      {badge.label}
+    </StatusPill>
+  );
 }

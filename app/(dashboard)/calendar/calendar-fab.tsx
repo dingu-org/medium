@@ -1,6 +1,7 @@
 'use client';
 
-import { CalendarPlus, Plus, Clock } from 'lucide-react';
+import { CalendarPlus, ChevronRight, Plus, Clock } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { t } from '@/lib/i18n';
 import { useRef, useState, useTransition } from 'react';
@@ -74,37 +75,19 @@ export function CalendarFab({
 
         <div className="px-4 pb-6">
           {mode === 'menu' && (
-            <div className="space-y-2">
-              <Button
-                variant="outline"
-                className="h-auto w-full justify-start gap-3 py-3"
+            <div className="space-y-2.5">
+              <MenuItem
+                icon={CalendarPlus}
+                title={t.calendar.addApptTitle}
+                sub={t.calendar.addApptDesc}
                 onClick={() => setMode('appointment')}
-              >
-                <CalendarPlus className="h-5 w-5" aria-hidden="true" />
-                <span className="text-left">
-                  <span className="block font-medium">
-                    {t.calendar.addApptTitle}
-                  </span>
-                  <span className="text-muted-foreground block text-xs">
-                    {t.calendar.addApptDesc}
-                  </span>
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto w-full justify-start gap-3 py-3"
+              />
+              <MenuItem
+                icon={Clock}
+                title={t.calendar.blockTime}
+                sub={t.calendar.blockTimeDesc}
                 onClick={() => setMode('block')}
-              >
-                <Clock className="h-5 w-5" aria-hidden="true" />
-                <span className="text-left">
-                  <span className="block font-medium">
-                    {t.calendar.blockTime}
-                  </span>
-                  <span className="text-muted-foreground block text-xs">
-                    {t.calendar.blockTimeDesc}
-                  </span>
-                </span>
-              </Button>
+              />
             </div>
           )}
 
@@ -460,5 +443,35 @@ function AppointmentForm({
         {pending ? t.calendar.booking : t.calendar.bookAppt}
       </Button>
     </div>
+  );
+}
+
+/** FAB menu row (canvas MenuItem): brandTint icon tile + title/sub + chevron. */
+function MenuItem({
+  icon: Icon,
+  title,
+  sub,
+  onClick,
+}: {
+  icon: LucideIcon;
+  title: string;
+  sub: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="border-line hover:bg-muted/50 flex w-full items-center gap-[13px] rounded-[12px] border bg-card px-4 py-3.5 text-left transition-colors"
+    >
+      <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[10px] bg-[var(--brand-50)]">
+        <Icon className="text-primary h-[19px] w-[19px]" aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-semibold">{title}</span>
+        <span className="text-ink-3 mt-0.5 block text-[12.5px]">{sub}</span>
+      </span>
+      <ChevronRight className="text-ink-3/70 h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+    </button>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { TZDate } from '@date-fns/tz';
-import { MessageSquare, Phone } from 'lucide-react';
+import { CalendarDays, Check, MessageSquare, Phone, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/sheet';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Textarea } from '@/components/ui/textarea';
+import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { formatTime, formatWeekdayDate, t } from '@/lib/i18n';
 import {
@@ -183,7 +184,7 @@ export function AppointmentSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto">
         <SheetHeader>
-          <SheetTitle className="flex items-center justify-between gap-2">
+          <SheetTitle className="font-heading flex items-center justify-between gap-2.5 pr-9 text-[19px] font-semibold tracking-[-0.02em]">
             {appointment.patientName}
             <StatusBadge status={appointment.status} />
           </SheetTitle>
@@ -192,17 +193,20 @@ export function AppointmentSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-4 px-4 pb-6">
+        <div className="space-y-3.5 px-5 pb-6">
           {mode === 'detail' && (
             <>
-              <div className="rounded-lg border border-border p-3">
-                <p className="text-lg font-semibold">{formatWeekdayDate(start)}</p>
-                <p className="text-muted-foreground">
+              {/* Canvas InfoCard: Manrope date, tabular time, chips row. */}
+              <div className="border-line rounded-[12px] border bg-card p-3.5">
+                <p className="font-heading text-[17px] font-semibold tracking-[-0.015em]">
+                  {formatWeekdayDate(start)}
+                </p>
+                <p className="text-ink-2 mt-0.5 text-sm tabular-nums">
                   {formatTime(start)}–{formatTime(end)}
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="mt-[11px] flex flex-wrap items-center gap-2">
                   {appointment.serviceType && (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-ink-2 text-[13px]">
                       {appointment.serviceType}
                     </span>
                   )}
@@ -222,36 +226,42 @@ export function AppointmentSheet({
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button asChild variant="outline" size="sm">
-                  <a href={`tel:${appointment.patientPhone}`}>
-                    <Phone className="h-4 w-4" aria-hidden="true" />
-                    {t.appointment.call}
-                  </a>
-                </Button>
+              {/* Canvas QuickActs: equal-width bordered tiles. */}
+              <div className="flex gap-2">
+                <a
+                  href={`tel:${appointment.patientPhone}`}
+                  className="border-line hover:bg-muted/50 flex h-[42px] flex-1 items-center justify-center gap-[7px] rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
+                >
+                  <Phone className="text-primary h-4 w-4" aria-hidden="true" />
+                  {t.appointment.call}
+                </a>
                 {appointment.patientWaId && (
-                  <Button asChild variant="outline" size="sm">
-                    <a
-                      href={`https://wa.me/${appointment.patientWaId.replace(/\D/g, '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                      {t.appointment.whatsapp}
-                    </a>
-                  </Button>
+                  <a
+                    href={`https://wa.me/${appointment.patientWaId.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="border-line hover:bg-muted/50 flex h-[42px] flex-1 items-center justify-center gap-[7px] rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
+                  >
+                    <WhatsAppMark size={16} />
+                    {t.appointment.whatsapp}
+                  </a>
                 )}
                 {appointment.conversationId && (
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={`/chat/${appointment.conversationId}`}>
-                      {t.appointment.openChat}
-                    </Link>
-                  </Button>
+                  <Link
+                    href={`/chat/${appointment.conversationId}`}
+                    className="border-line hover:bg-muted/50 flex h-[42px] flex-1 items-center justify-center gap-[7px] rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
+                  >
+                    <MessageSquare className="text-primary h-4 w-4" aria-hidden="true" />
+                    {t.appointment.openChat}
+                  </Link>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <label htmlFor="appt-notes" className="text-sm font-medium">
+              <div className="pt-1">
+                <label
+                  htmlFor="appt-notes"
+                  className="mb-[7px] block text-[13px] font-semibold text-[var(--neutral-700)]"
+                >
                   {t.appointment.privateNote}
                 </label>
                 <Textarea
@@ -259,15 +269,16 @@ export function AppointmentSheet({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
-                  className="resize-none"
+                  className="min-h-[64px] resize-none rounded-[10px] text-sm"
                   placeholder={t.appointment.notePlaceholder}
                 />
                 {notes !== (appointment.notes ?? '') && (
                   <Button
-                    variant="secondary"
+                    variant="outline"
                     size="sm"
                     onClick={saveNotes}
                     disabled={pending}
+                    className="mt-2.5 rounded-[10px]"
                   >
                     {t.appointment.saveNote}
                   </Button>
@@ -275,19 +286,9 @@ export function AppointmentSheet({
               </div>
 
               {isActive && (
-                <div className="flex flex-col gap-2 border-t border-border pt-4">
-                  {!started && (
-                    <Button
-                      variant="outline"
-                      onClick={openReschedule}
-                      disabled={pending}
-                    >
-                      {t.appointment.reschedule}
-                    </Button>
-                  )}
+                <div className="border-sep flex flex-col gap-2.5 border-t pt-[18px]">
                   {ended && (
                     <Button
-                      variant="outline"
                       onClick={() =>
                         run(
                           {
@@ -299,8 +300,24 @@ export function AppointmentSheet({
                         )
                       }
                       disabled={pending}
+                      className="h-12 rounded-[12px]"
                     >
+                      <Check className="h-[17px] w-[17px]" aria-hidden />
                       {t.appointment.markComplete}
+                    </Button>
+                  )}
+                  {!started && (
+                    <Button
+                      variant="outline"
+                      onClick={openReschedule}
+                      disabled={pending}
+                      className="h-12 rounded-[12px]"
+                    >
+                      <CalendarDays
+                        className="text-primary h-[17px] w-[17px]"
+                        aria-hidden
+                      />
+                      {t.appointment.reschedule}
                     </Button>
                   )}
                   {started && (
@@ -317,15 +334,18 @@ export function AppointmentSheet({
                         )
                       }
                       disabled={pending}
+                      className="h-12 rounded-[12px]"
                     >
                       {t.appointment.markNoShow}
                     </Button>
                   )}
                   <Button
-                    variant="destructive"
+                    variant="ghost-danger"
                     onClick={() => setMode('cancel')}
                     disabled={pending}
+                    className="h-12 rounded-[12px] bg-[var(--danger-50)]"
                   >
+                    <X className="h-[17px] w-[17px]" aria-hidden />
                     {t.appointment.cancel}
                   </Button>
                 </div>
@@ -417,6 +437,7 @@ export function AppointmentSheet({
                                 t.appointment.rescheduled,
                               )
                             }
+                            className="rounded-[10px] font-mono text-[13.5px]"
                           >
                             {formatTime(new TZDate(new Date(iso), timezone))}
                           </Button>
