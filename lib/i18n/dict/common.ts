@@ -62,6 +62,8 @@ export const common = {
     emptyDescription: 'Rezervimet, anulimet dhe njoftimet do të shfaqen këtu.',
     unread: (n: number) => `Njoftimet, ${n} të palexuara`,
     recentActivity: 'Aktiviteti i fundit në praktikën tënde',
+    groupNew: 'E re',
+    groupEarlier: 'Më herët',
   },
 
   account: {

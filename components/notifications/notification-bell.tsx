@@ -12,8 +12,8 @@ import {
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { EmptyState } from '@/components/states';
-import { Button } from '@/components/ui/button';
 import { RoundButton } from '@/components/ui/round-button';
+import { SectionLabel } from '@/components/ui/section-label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Sheet,
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/sheet';
 import { t } from '@/lib/i18n';
 import { useRealtimeRefresh } from '@/lib/hooks/realtime';
+import { formatRelativeShort } from '@/lib/i18n/datetime';
 import type { NotificationView } from '@/lib/notifications/format';
 import { cn } from '@/lib/utils';
 import { markAllNotificationsRead } from './actions';
@@ -38,16 +39,15 @@ const ICONS = {
   unplug: Unplug,
 } as const;
 
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diffSec = Math.round((then - Date.now()) / 1000);
-  const abs = Math.abs(diffSec);
-  const fmt = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-  if (abs < 60) return fmt.format(Math.round(diffSec), 'second');
-  if (abs < 3600) return fmt.format(Math.round(diffSec / 60), 'minute');
-  if (abs < 86_400) return fmt.format(Math.round(diffSec / 3600), 'hour');
-  return fmt.format(Math.round(diffSec / 86_400), 'day');
-}
+// Canvas FEED_ICON: tinted 34px circles per notification kind.
+const ICON_TINTS: Record<NotificationView['icon'], string> = {
+  'calendar-plus': 'bg-[var(--brand-50)] text-primary',
+  check: 'bg-[var(--success-50)] text-[var(--success-500)]',
+  x: 'bg-[var(--danger-50)] text-destructive',
+  repeat: 'bg-[var(--warning-50)] text-[var(--warning-500)]',
+  alert: 'bg-[var(--danger-50)] text-destructive',
+  unplug: 'bg-[var(--danger-50)] text-destructive',
+};
 
 export function NotificationBell({
   ptId,
@@ -101,14 +101,14 @@ export function NotificationBell({
 
         {items.length > 0 && (
           <div className="flex justify-end px-4 pb-2">
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              type="button"
               onClick={markRead}
               disabled={pending || unreadCount === 0}
+              className="text-primary text-[13px] font-semibold disabled:opacity-40"
             >
               {t.notifications.markAllRead}
-            </Button>
+            </button>
           </div>
         )}
 
@@ -121,38 +121,87 @@ export function NotificationBell({
               className="mt-6"
             />
           ) : (
-            <ul className="space-y-1">
-              {items.map((item) => {
-                const Icon = ICONS[item.icon];
-                return (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => go(item.href)}
-                      className={cn(
-                        'flex w-full items-start gap-3 rounded-lg p-3 text-left transition-colors hover:bg-muted',
-                      )}
-                    >
-                      <span className="mt-0.5 rounded-full bg-muted p-1.5">
-                        <Icon
-                          className="h-4 w-4 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                      </span>
-                      <span className="flex-1 space-y-0.5">
-                        <span className="block text-sm">{item.title}</span>
-                        <span className="block text-xs text-muted-foreground">
-                          {relativeTime(item.occurredAt)}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="space-y-5">
+              {/* The first `unreadCount` items are past the read watermark. */}
+              <FeedGroup
+                title={t.notifications.groupNew}
+                items={items.slice(0, unreadCount)}
+                unread
+                onOpen={go}
+              />
+              <FeedGroup
+                title={t.notifications.groupEarlier}
+                items={items.slice(unreadCount)}
+                onOpen={go}
+              />
+            </div>
           )}
         </ScrollArea>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** Grouped feed section (canvas FeedScreen Group + FeedRow). */
+function FeedGroup({
+  title,
+  items,
+  unread = false,
+  onOpen,
+}: {
+  title: string;
+  items: NotificationView[];
+  unread?: boolean;
+  onOpen: (href: string) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section>
+      <SectionLabel>{title}</SectionLabel>
+      <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+        {items.map((item) => {
+          const Icon = ICONS[item.icon];
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onOpen(item.href)}
+              className={cn(
+                'hover:bg-muted/50 flex w-full items-center gap-3 px-4 py-[13px] text-left transition-colors',
+                unread && 'bg-[#fbfcfe]',
+              )}
+            >
+              <span
+                className={cn(
+                  'flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full',
+                  ICON_TINTS[item.icon],
+                )}
+              >
+                <Icon className="h-[17px] w-[17px]" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span
+                  className={cn(
+                    'block text-sm leading-snug',
+                    unread ? 'font-semibold' : 'font-medium',
+                  )}
+                >
+                  {item.title}
+                </span>
+                <span className="text-ink-3 mt-0.5 block font-mono text-xs">
+                  {formatRelativeShort(new Date(item.occurredAt))}
+                </span>
+              </span>
+              {unread && (
+                <span
+                  className="bg-primary h-2 w-2 shrink-0 rounded-full"
+                  aria-hidden="true"
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }

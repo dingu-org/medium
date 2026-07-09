@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { GroupedList, GroupedListRow } from '@/components/ui/grouped-list';
+import { ChannelChip } from '@/components/ui/channel-chip';
 import { StatusPill } from '@/components/ui/status-pill';
 import { GRAPH_VERSION } from '@/lib/channels/whatsapp/constants';
 import { t } from '@/lib/i18n';
@@ -22,24 +23,9 @@ import { PushNotifications } from './push-notifications';
 export const metadata = { title: `${t.settings.title} · Medium` };
 
 function ConnectionBadge({ status }: { status: string | null }) {
-  if (status === 'active')
-    return (
-      <StatusPill tone="success" dot>
-        {t.settings.connected}
-      </StatusPill>
-    );
-  if (status === 'revoked')
-    return (
-      <StatusPill tone="danger" dot>
-        {t.settings.connectionBadgeActionNeeded}
-      </StatusPill>
-    );
-  if (status === 'pending')
-    return (
-      <StatusPill tone="warning" dot>
-        {t.settings.connectionBadgePending}
-      </StatusPill>
-    );
+  if (status === 'active') return <ChannelChip state="connected" />;
+  if (status === 'revoked') return <ChannelChip state="reconnect" />;
+  if (status === 'pending') return <ChannelChip state="pending" />;
   return (
     <StatusPill tone="neutral">
       {t.settings.connectionBadgeNotConnected}
