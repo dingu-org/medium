@@ -67,3 +67,31 @@ export function formatMonthYear(date: Date): string {
   const s = format(date, 'LLLL yyyy', { locale: sq }).toLocaleLowerCase('sq');
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+/**
+ * Compact relative timestamp for list rows, per the design's chat list:
+ * `tani`, `8 min`, `3 orë`, `dje`, `4 ditë`, then a `6 maj` date.
+ */
+export function formatRelativeShort(date: Date, now = new Date()): string {
+  const mins = Math.floor((now.getTime() - date.getTime()) / 60_000);
+  if (mins < 1) return 'tani';
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24 && date.getDate() === now.getDate())
+    return hours === 1 ? '1 orë' : `${hours} orë`;
+  const days = Math.floor(hours / 24);
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return 'dje';
+  if (days < 7) return `${Math.max(days, 1)} ditë`;
+  return formatDate(date);
+}
+
+/** Day-separator label for chat threads: `sot`, `dje`, else `6 maj`. */
+export function formatDayLabel(date: Date, now = new Date()): string {
+  if (date.toDateString() === now.toDateString()) return 'sot';
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return 'dje';
+  return formatDate(date);
+}

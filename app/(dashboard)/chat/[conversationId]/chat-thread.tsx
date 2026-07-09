@@ -2,23 +2,29 @@
 
 import {
   Archive,
-  ChevronLeft,
-  Clock,
+  Bell,
+  HandHeart,
+  Link2Off,
+  Pause,
+  Phone,
   RefreshCw,
-  Send,
   WifiOff,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { t } from '@/lib/i18n';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { ChatComposer } from '@/components/chat/composer';
+import { ChatNotice } from '@/components/chat/notice';
+import { ChatStatusRow, type ChatHandlingMode } from '@/components/chat/status-row';
+import { ChatSysLine } from '@/components/chat/sys-line';
+import { NavBar } from '@/components/dashboard/nav-bar';
 import { SnapshotCache } from '@/components/pwa/snapshot-cache';
-import { AppBanner } from '@/components/ui/app-banner';
-import { Button } from '@/components/ui/button';
 import { ChatBubble } from '@/components/ui/chat-bubble';
-import { StatusPill } from '@/components/ui/status-pill';
-import { Switch } from '@/components/ui/switch';
+import { RoundButton } from '@/components/ui/round-button';
+import { formatDayLabel, formatTime } from '@/lib/i18n/datetime';
 import { type LiveMessage, useMessages } from '@/lib/hooks/realtime';
 import {
   PWA_MUTATION_FAILED_EVENT,
@@ -36,6 +42,7 @@ import { useOnlineStatus } from '@/lib/hooks/realtime';
 type Props = {
   conversationId: string;
   patientName: string;
+  patientPhone: string;
   initialMessages: LiveMessage[];
   aiActive: boolean;
   windowOpen: boolean;
@@ -62,6 +69,7 @@ function isOptimisticMessage(
 export function ChatThread({
   conversationId,
   patientName,
+  patientPhone,
   initialMessages,
   aiActive: initialAiActive,
   windowOpen: initialWindowOpen,
@@ -100,6 +108,19 @@ export function ChatThread({
         .at(-1)?.id ?? null,
     [messages],
   );
+  const hasFailed = optimisticMessages.some((m) => m.failed === true);
+
+  const paused = Boolean(
+    aiPauseReason && aiPausedUntil && new Date(aiPausedUntil) > new Date(),
+  );
+  const escalated = escalationState !== 'idle' && !closed;
+  const mode: ChatHandlingMode = escalated
+    ? 'escalated'
+    : !aiActive
+      ? 'you'
+      : paused
+        ? 'paused'
+        : 'ai';
 
   // Auto-scroll to the newest message.
   useEffect(() => {
@@ -226,11 +247,11 @@ export function ChatThread({
     startStateTransition(async () => {
       const result = await sendUpcomingReminderTemplate(conversationId);
       if (result.ok) {
-        toast.success('Kujtesa u dërgua.');
+        toast.success(t.chat.reminderSent);
         setAiActive(false);
         router.refresh();
       } else {
-        toast.error(result.error ?? 'Kujtesa nuk u dërgua.');
+        toast.error(result.error ?? t.chat.reminderFailed);
       }
     });
   }
@@ -244,154 +265,153 @@ export function ChatThread({
     setDraft(message.content);
   }
 
+  const composerVisible = !closed && connectionStatus !== null;
+  const composerState =
+    connectionStatus === 'revoked'
+      ? ('revoked' as const)
+      : windowClosed
+        ? ('windowClosed' as const)
+        : ('default' as const);
+
   return (
-    <div className="flex flex-col">
+    <div className="-mx-4 -mt-4 flex flex-col">
       <SnapshotCache
         cacheKey={`chat:${conversationId}`}
         kind="chat"
         payload={{
           conversationId,
           patientName,
+          patientPhone,
           initialMessages: messages,
           aiActive,
           windowOpen: !windowClosed,
         }}
       />
-      {/* Sub-header */}
-      <div className="border-border bg-background/95 sticky top-0 z-10 -mx-4 flex items-center gap-3 border-b px-4 py-2 backdrop-blur">
-        <Link
-          href="/chat"
-          aria-label={t.chat.backToChats}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-        </Link>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate font-medium">{patientName}</p>
-            <StatusPill tone={aiActive ? 'brand' : 'success'} dot>
-              {aiActive ? t.chat.aiBadge : t.chat.youBadge}
-            </StatusPill>
-          </div>
-          <p className="text-muted-foreground text-xs">
-            {aiActive ? t.chat.aiHandlingDesc : t.chat.youHandlingDesc}
-          </p>
-        </div>
-        <label className="text-muted-foreground flex items-center gap-2 text-xs">
-          <span className="hidden sm:inline">{t.chat.letAiRespond}</span>
-          <Switch
-            checked={aiActive}
-            onCheckedChange={onToggle}
-            disabled={closed || statePending}
-            aria-label={t.chat.letAiRespond}
-          />
-        </label>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          onClick={toggleClosed}
-          disabled={statePending}
-          aria-label={closed ? 'Rihap bisedën' : 'Mbyll bisedën'}
-        >
-          {closed ? (
-            <RefreshCw className="h-4 w-4" aria-hidden />
-          ) : (
-            <Archive className="h-4 w-4" aria-hidden />
-          )}
-        </Button>
+      <div className="bg-background sticky top-0 z-10">
+        <NavBar
+          backHref="/chat"
+          title={patientName}
+          right={
+            <>
+              <RoundButton asChild aria-label={t.chat.callPatient}>
+                <a href={`tel:${patientPhone}`}>
+                  <Phone className="h-[18px] w-[18px]" aria-hidden />
+                </a>
+              </RoundButton>
+              <RoundButton
+                onClick={toggleClosed}
+                disabled={statePending}
+                aria-label={
+                  closed ? t.chat.reopenConversation : t.chat.closeConversation
+                }
+              >
+                {closed ? (
+                  <RefreshCw className="h-[18px] w-[18px]" aria-hidden />
+                ) : (
+                  <Archive className="h-[18px] w-[18px]" aria-hidden />
+                )}
+              </RoundButton>
+            </>
+          }
+        />
+        <ChatStatusRow
+          mode={mode}
+          aiActive={aiActive}
+          onToggle={onToggle}
+          disabled={closed || statePending}
+        />
+        {escalated && (
+          <ChatNotice tone="danger" icon={Bell}>
+            {t.chat.noticeEscalated}
+          </ChatNotice>
+        )}
+        {mode === 'you' && !escalated && (
+          <ChatNotice
+            tone="success"
+            icon={HandHeart}
+            action={
+              <button
+                type="button"
+                onClick={() => onToggle(true)}
+                disabled={statePending}
+              >
+                {t.chat.handBack}
+              </button>
+            }
+          >
+            {t.chat.noticeTakeover}
+          </ChatNotice>
+        )}
+        {mode === 'paused' && aiPausedUntil && (
+          <ChatNotice
+            tone="warning"
+            icon={Pause}
+            action={
+              <button
+                type="button"
+                onClick={() => onToggle(true)}
+                disabled={statePending}
+              >
+                {t.chat.resume}
+              </button>
+            }
+          >
+            {t.chat.noticePaused(formatTime(new Date(aiPausedUntil)))}
+          </ChatNotice>
+        )}
+        {!online && (
+          <ChatNotice tone="info" icon={WifiOff}>
+            {t.chat.noticeOffline}
+          </ChatNotice>
+        )}
+        {closed && (
+          <ChatNotice tone="info" icon={Archive}>
+            {t.chat.noticeClosed}
+          </ChatNotice>
+        )}
+        {connectionStatus === null && (
+          <ChatNotice
+            tone="warning"
+            icon={Link2Off}
+            action={
+              <Link href="/settings" className="underline-offset-2">
+                {t.chat.connectNow}
+              </Link>
+            }
+          >
+            {t.chat.noticeNotConnected}
+          </ChatNotice>
+        )}
+        {hasFailed && (
+          <ChatNotice tone="danger" icon={X}>
+            {t.chat.noticeFailed}
+          </ChatNotice>
+        )}
       </div>
 
-      {!online && (
-        <AppBanner
-          tone="warning"
-          icon={WifiOff}
-          className="-mx-4 border-x-0 border-t-0 text-xs"
-        >
-          Je jashtë linje. Mesazhet e reja do të radhiten.
-        </AppBanner>
-      )}
-      {closed && (
-        <AppBanner tone="info" className="-mx-4 border-x-0 border-t-0 text-xs">
-          Kjo bisedë është mbyllur. Mesazhi i ardhshëm i klientit do ta rihapë.
-        </AppBanner>
-      )}
-      {connectionStatus === 'revoked' && (
-        <AppBanner
-          tone="danger"
-          className="-mx-4 border-x-0 border-t-0 text-xs"
-        >
-          Lidhja WhatsApp është revokuar.{' '}
-          <Link href="/settings" className="font-semibold underline">
-            Rilidhe
-          </Link>
-        </AppBanner>
-      )}
-      {connectionStatus === null && (
-        <AppBanner
-          tone="warning"
-          className="-mx-4 border-x-0 border-t-0 text-xs"
-        >
-          WhatsApp nuk është i lidhur.{' '}
-          <Link href="/settings" className="font-semibold underline">
-            Lidhe tani
-          </Link>
-        </AppBanner>
-      )}
-      {escalationState !== 'idle' && !closed && (
-        <AppBanner
-          tone="warning"
-          className="-mx-4 border-x-0 border-t-0 text-xs"
-        >
-          Medium ta ka kaluar këtë bisedë. Merr përsipër përgjigjen.
-        </AppBanner>
-      )}
-      {aiPauseReason === 'whatsapp_business_app_echo' &&
-        aiPausedUntil &&
-        !closed && (
-          <AppBanner
-            tone="warning"
-            className="-mx-4 border-x-0 border-t-0 text-xs"
-          >
-            AI është në pauzë sepse u dërgua një mesazh nga WhatsApp Business.
-          </AppBanner>
-        )}
-
-      {windowClosed && (
-        <AppBanner
-          tone="danger"
-          icon={Clock}
-          className="-mx-4 border-x-0 border-t-0 text-xs"
-        >
-          <span>{t.chat.windowClosedText}</span>
-          {upcomingAppointment && connectionStatus === 'active' && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-2 w-full"
-              onClick={sendReminder}
-              disabled={statePending}
-            >
-              Dërgo kujtesën e miratuar
-            </Button>
-          )}
-        </AppBanner>
-      )}
-
       {/* Messages */}
-      <div className="flex-1 space-y-2 py-4">
+      <div className="flex-1 space-y-[11px] px-4 py-4">
         {visibleMessages.map((m, index) => {
           const previous = visibleMessages[index - 1];
+          const newDay =
+            !previous ||
+            new Date(previous.createdAt).toDateString() !==
+              new Date(m.createdAt).toDateString();
           const grouped = Boolean(
-            previous &&
-            previous.role === m.role &&
-            new Date(m.createdAt).getTime() -
-              new Date(previous.createdAt).getTime() <
-              3 * 60_000,
+            !newDay &&
+              previous &&
+              previous.role === m.role &&
+              new Date(m.createdAt).getTime() -
+                new Date(previous.createdAt).getTime() <
+                3 * 60_000,
           );
           return (
-            <div key={m.id} className={grouped ? '-mt-1' : undefined}>
+            <div key={m.id} className={grouped ? '-mt-2' : undefined}>
+              {newDay && (
+                <ChatSysLine>
+                  {formatDayLabel(new Date(m.createdAt))}
+                </ChatSysLine>
+              )}
               <ChatBubble
                 role={m.role}
                 content={m.content}
@@ -403,47 +423,36 @@ export function ChatThread({
               {isOptimisticMessage(m) && m.failed === true && (
                 <button
                   type="button"
-                  className="text-destructive mt-1 ml-auto block text-xs font-medium underline"
+                  className="text-primary mt-1 ml-auto block font-mono text-[11px] font-semibold"
                   onClick={() => retryFailed(m)}
                 >
-                  Provo sërish
+                  · {t.chat.retry}
                 </button>
               )}
             </div>
           );
         })}
-        <div ref={bottomRef} className="h-20" />
+        {escalated && <ChatSysLine>{t.chat.sysStopped}</ChatSysLine>}
+        {windowClosed && !closed && connectionStatus === 'active' && (
+          <ChatSysLine>{t.chat.sysWindowClosed}</ChatSysLine>
+        )}
+        <div ref={bottomRef} className="h-24" />
       </div>
 
-      {/* Input — pinned above the bottom nav */}
-      {!closed && connectionStatus === 'active' && (
-        <div className="border-border bg-background fixed inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)]">
-          <div className="mx-auto flex max-w-md items-end gap-2 px-4 py-2">
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  onSend();
-                }
-              }}
-              rows={1}
-              placeholder={t.chat.messagePlaceholder}
-              className="border-input bg-card focus-visible:border-ring focus-visible:ring-ring/20 max-h-32 min-h-10 flex-1 resize-none rounded-full border px-4 py-2 text-sm outline-none focus-visible:ring-3"
-              disabled={windowClosed}
-            />
-            <Button
-              type="button"
-              size="icon"
-              onClick={onSend}
-              disabled={sending || windowClosed || draft.trim().length === 0}
-              aria-label={t.chat.sendMessage}
-            >
-              <Send className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
-        </div>
+      {/* Composer — pinned above the bottom safe area */}
+      {composerVisible && (
+        <ChatComposer
+          state={composerState}
+          draft={draft}
+          onDraftChange={setDraft}
+          onSend={onSend}
+          onSendTemplate={sendReminder}
+          sending={sending}
+          templateAvailable={Boolean(
+            upcomingAppointment && connectionStatus === 'active',
+          )}
+          templatePending={statePending}
+        />
       )}
     </div>
   );

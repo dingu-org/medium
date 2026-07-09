@@ -64,6 +64,7 @@ async function main() {
       practiceName: 'Fizio Tirana',
       timezone: 'Europe/Tirane',
       aiName: 'Medium',
+      servicesConfiguredAt: new Date(),
     })
     .where(eq(pts.id, ptId));
 
@@ -122,7 +123,10 @@ async function main() {
     const lastInbound = opts.msgs
       .filter((m) => m.role === 'patient')
       .reduce((min, m) => Math.min(min, m.minsAgo), Infinity);
-    const newest = opts.msgs.reduce((min, m) => Math.min(min, m.minsAgo), 60);
+    const newest = opts.msgs.reduce(
+      (min, m) => Math.min(min, m.minsAgo),
+      Infinity,
+    );
     const [c] = await db
       .insert(conversations)
       .values({
@@ -243,7 +247,8 @@ async function main() {
   await db.insert(appointments).values([
     { ptId, patientId: anila, startsAt: at(0, 10), endsAt: at(0, 11), serviceType: 'Vlerësim i parë', status: 'confirmed' },
     { ptId, patientId: endi, startsAt: at(0, 14, 30), endsAt: at(0, 15, 15), serviceType: 'Seancë vijuese', status: 'pending' },
-    { ptId, patientId: vera, startsAt: at(0, 17), endsAt: at(0, 18), serviceType: 'Seancë vijuese', status: 'confirmed' },
+    // Tomorrow, so the window-closed composer shows the template CTA.
+    { ptId, patientId: vera, startsAt: at(1, 17), endsAt: at(1, 18), serviceType: 'Seancë vijuese', status: 'confirmed' },
     { ptId, patientId: genti, startsAt: at(2, 11), endsAt: at(2, 12), serviceType: 'Vlerësim i parë', status: 'confirmed' },
     { ptId, patientId: mira, startsAt: at(3, 16), endsAt: at(3, 17), serviceType: 'Seancë vijuese', status: 'pending' },
     { ptId, patientId: liridon, startsAt: at(-2, 10), endsAt: at(-2, 11), serviceType: 'Seancë vijuese', status: 'completed' },

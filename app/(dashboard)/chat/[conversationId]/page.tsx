@@ -22,6 +22,7 @@ export default async function ConversationPage({
     <ChatThread
       conversationId={snapshot.conversationId}
       patientName={snapshot.patientName}
+      patientPhone={snapshot.patientPhone}
       initialMessages={snapshot.initialMessages}
       aiActive={snapshot.aiActive}
       windowOpen={snapshot.windowOpen}

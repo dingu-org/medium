@@ -18,6 +18,7 @@ export function TopHeader({
   email,
   unreadCount,
   notifications,
+  action,
 }: {
   title: string;
   ptId: string;
@@ -25,6 +26,7 @@ export function TopHeader({
   email: string;
   unreadCount: number;
   notifications: NotificationView[];
+  action?: React.ReactNode;
 }) {
   return (
     <header className="bg-background sticky top-0 z-10">
@@ -33,6 +35,7 @@ export function TopHeader({
           {title}
         </h1>
         <SyncIndicator />
+        {action}
         <NotificationBell
           ptId={ptId}
           unreadCount={unreadCount}

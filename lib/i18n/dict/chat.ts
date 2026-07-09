@@ -2,18 +2,45 @@
 export const chat = {
   title: 'Bisedat',
   emptyTitle: 'Asnjë bisedë aktive',
-  emptyText: 'Kur një pacient shkruan, do ta shohësh këtu.',
+  emptyText:
+    'Kur një pacient shkruan në WhatsApp, biseda shfaqet këtu — Medium përgjigjet vetë.',
+  emptyClosedTitle: 'Asnjë bisedë e mbyllur',
+  searchPlaceholder: 'Kërko bisedat…',
+  searchLabel: 'Kërko bisedat',
+  searchClear: 'Pastro kërkimin',
+  searchEmptyTitle: 'Asnjë rezultat',
+  searchEmptyText: 'Provo një emër, numër ose mesazh tjetër.',
+  listNeedsYou: 'Të duhet ty',
+  listManaged: 'Medium po menaxhon',
+  listClosed: 'Të mbyllura',
+  tabActive: 'Aktive',
+  tabClosed: 'Të mbyllura',
+  noMessages: 'Ende pa mesazhe',
 
   aiHandling: 'Medium po përgjigjet',
   aiHandlingDesc: 'IA po menaxhon këtë',
   youHandling: 'Ti po bisedon',
   youHandlingDesc: 'Ti po bisedon',
   escalated: 'Të duhet ty',
-  paused: 'Në pauzë',
+  paused: 'Medium në pauzë',
 
   takeOver: 'Merre në dorë',
   handBack: 'Ktheja Medium-it',
   resume: 'Aktivizo tani',
+  letMedium: 'Lër Medium-in',
+  callPatient: 'Telefono pacientin',
+  closeConversation: 'Mbyll bisedën',
+  reopenConversation: 'Rihap bisedën',
+
+  sysStopped: '— Medium ndaloi · pret ty —',
+  sysWindowClosed: '— kanë kaluar mbi 24 orë —',
+  noticeOffline:
+    'Pa internet. Mesazhi u vendos në radhë dhe do të dërgohet kur të lidhesh.',
+  noticeClosed:
+    'Kjo bisedë është mbyllur. Mesazhi i ardhshëm i klientit do ta rihapë.',
+  noticeFailed: 'Një mesazh nuk u dërgua. Provo sërish më poshtë.',
+  noticeNotConnected: 'WhatsApp nuk është i lidhur.',
+  connectNow: 'Lidhe tani',
 
   noticeEscalated:
     'Pacienti kërkoi të flasë me një person. Medium ndaloi përgjigjet.',
@@ -29,11 +56,16 @@ export const chat = {
 
   windowClosedTitle: 'Dritarja 24-orëshe u mbyll',
   windowClosedText:
-    "Nuk mund t'i shkruash jashtë 24 orëve pa një shabllon të miratuar.",
+    'Dritarja 24-orëshe u mbyll. Pacienti duhet të shkruajë sërish para një përgjigjeje të lirë.',
+  sendTemplateReminder: 'Dërgo kujtesë me shabllon',
   revokedTitle: 'WhatsApp u shkëput',
-  revokedText: 'Rilidh për të dërguar mesazhe.',
+  revokedText: 'WhatsApp u shkëput. Rilidh për të dërguar mesazhe.',
+  reconnectWhatsApp: 'Rilidh WhatsApp',
   sendFailed: 'Dërgimi dështoi. Provo sërish.',
   sendMessage: 'Dërgo mesazhin',
+  retry: 'Provo sërish',
+  reminderSent: 'Kujtesa u dërgua.',
+  reminderFailed: 'Kujtesa nuk u dërgua.',
 
   letAiRespond: 'Lëre IA të përgjigjet',
   backToChats: 'Kthehu te bisedat',

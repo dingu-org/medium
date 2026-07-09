@@ -81,6 +81,7 @@ export type ChatMessageSnapshot = {
 export type ChatThreadSnapshot = {
   conversationId: string;
   patientName: string;
+  patientPhone: string;
   initialMessages: ChatMessageSnapshot[];
   aiActive: boolean;
   windowOpen: boolean;
@@ -250,6 +251,7 @@ export async function getChatThreadSnapshot(
       aiPauseReason: conversations.aiPauseReason,
       patientId: conversations.patientId,
       patientName: patients.name,
+      patientPhone: patients.phone,
     })
     .from(conversations)
     .innerJoin(patients, eq(conversations.patientId, patients.id))
@@ -299,6 +301,7 @@ export async function getChatThreadSnapshot(
   return {
     conversationId: conversation.id,
     patientName: privacyName(conversation.patientName),
+    patientPhone: conversation.patientPhone,
     initialMessages: [...rows].reverse().map((r) => ({
       id: r.id,
       role: r.role,

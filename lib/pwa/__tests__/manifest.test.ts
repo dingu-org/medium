@@ -28,8 +28,9 @@ describe('PWA manifest', () => {
       start_url: '/today',
       scope: '/',
       display: 'standalone',
-      background_color: '#ffffff',
-      theme_color: '#242424',
+      // v2 "New direction" warm canvas (Phase 14).
+      background_color: '#f3f3f0',
+      theme_color: '#f3f3f0',
       orientation: 'portrait',
       lang: 'sq',
       dir: 'ltr',

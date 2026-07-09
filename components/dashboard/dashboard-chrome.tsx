@@ -1,8 +1,11 @@
 'use client';
 
+import { Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { RoundButton } from '@/components/ui/round-button';
+import { t } from '@/lib/i18n';
 import type { NotificationView } from '@/lib/notifications/format';
 import { cn } from '@/lib/utils';
 import { BottomNav } from './bottom-nav';
@@ -38,6 +41,31 @@ export function DashboardChrome({
   const title = TITLES[pathname];
   const topLevel = Boolean(title);
 
+  // The chat list keeps its ?q= search but hides the field behind the
+  // canvas TopBar search button (medium4 chat/chat-list.jsx).
+  let action: ReactNode = null;
+  if (pathname === '/chat') {
+    const params = new URLSearchParams(searchParams);
+    const open = params.get('search') === '1';
+    if (open) {
+      params.delete('search');
+      params.delete('q');
+    } else {
+      params.set('search', '1');
+    }
+    action = (
+      <RoundButton
+        asChild
+        aria-label={t.chat.searchLabel}
+        aria-expanded={open}
+      >
+        <Link href={`/chat${params.size ? `?${params}` : ''}`} replace>
+          <Search className="h-5 w-5" strokeWidth={1.7} aria-hidden />
+        </Link>
+      </RoundButton>
+    );
+  }
+
   return (
     <div className="bg-background min-h-screen">
       {topLevel && (
@@ -48,6 +76,7 @@ export function DashboardChrome({
           email={email}
           unreadCount={notificationCount}
           notifications={notifications}
+          action={action}
         />
       )}
       {searchParams.get('from') === 'onboarding' && (
