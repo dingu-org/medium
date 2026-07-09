@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { EmptyState } from '@/components/states';
 import { Button } from '@/components/ui/button';
+import { RoundButton } from '@/components/ui/round-button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Sheet,
@@ -79,23 +80,16 @@ export function NotificationBell({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative"
+        <RoundButton
+          dot={unreadCount > 0}
           aria-label={
             unreadCount > 0
               ? t.notifications.unread(unreadCount)
               : t.notifications.title
           }
         >
-          <Bell className="h-5 w-5" aria-hidden="true" />
-          {unreadCount > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-white">
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </span>
-          )}
-        </Button>
+          <Bell className="h-5 w-5" strokeWidth={1.7} aria-hidden="true" />
+        </RoundButton>
       </SheetTrigger>
       <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-sm">
         <SheetHeader>

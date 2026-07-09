@@ -51,7 +51,7 @@ export function DashboardChrome({
         />
       )}
       {searchParams.get('from') === 'onboarding' && (
-        <div className="border-b border-[var(--brand-100)] bg-[var(--brand-50)] px-4 py-2 text-center text-sm text-[var(--brand-700)]">
+        <div className="bg-[var(--brand-50)] px-4 py-2 text-center text-sm text-[var(--brand-600)]">
           Ruaj ndryshimet, pastaj{' '}
           <Link href="/onboarding" className="font-semibold underline">
             kthehu te konfigurimi
@@ -61,15 +61,13 @@ export function DashboardChrome({
       )}
       <main
         className={cn(
-          'mx-auto max-w-md px-4 pt-4',
-          topLevel ? 'pb-24' : 'pb-6',
+          'mx-auto max-w-md px-4',
+          topLevel ? 'pt-2 pb-28' : 'pt-4 pb-6',
         )}
       >
         {children}
       </main>
-      {topLevel && (
-        <BottomNav unreadChats={unreadChats > 0} unreadCount={unreadChats} />
-      )}
+      {topLevel && <BottomNav unreadChats={unreadChats > 0} />}
     </div>
   );
 }

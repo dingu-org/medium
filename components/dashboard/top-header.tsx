@@ -27,9 +27,9 @@ export function TopHeader({
   notifications: NotificationView[];
 }) {
   return (
-    <header className="border-border bg-card sticky top-0 z-10 border-b">
-      <div className="mx-auto flex max-w-md items-center justify-between gap-2 px-4 py-3">
-        <h1 className="min-w-0 flex-1 truncate text-xl font-semibold">
+    <header className="bg-background sticky top-0 z-10">
+      <div className="mx-auto flex min-h-[44px] max-w-md items-center justify-between gap-2 px-4 pt-3.5 pb-3">
+        <h1 className="font-heading min-w-0 flex-1 truncate text-[27px] leading-tight font-bold tracking-[-0.025em]">
           {title}
         </h1>
         <SyncIndicator />
@@ -41,9 +41,9 @@ export function TopHeader({
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="Hap menunë e llogarisë"
-            className="focus-visible:ring-ring rounded-full outline-none focus-visible:ring-2"
+            className="focus-visible:ring-ring rounded-full shadow-[var(--shadow-card)] outline-none focus-visible:ring-2"
           >
-            <InitialsAvatar name={practiceName} fallback={email} size={36} />
+            <InitialsAvatar name={practiceName} fallback={email} size={44} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="text-muted-foreground truncate text-xs font-normal">

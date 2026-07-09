@@ -15,12 +15,11 @@ const items = [
   { href: '/settings', label: t.nav.you, icon: Settings },
 ];
 
+/** Floating black pill dock (MT Tabs): icon-only circular targets. */
 export function BottomNav({
   unreadChats = false,
-  unreadCount = 0,
 }: {
   unreadChats?: boolean;
-  unreadCount?: number;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -38,19 +37,20 @@ export function BottomNav({
   }
 
   return (
-    <nav className="border-border bg-card fixed right-0 bottom-0 left-0 z-10 border-t pb-[env(safe-area-inset-bottom)]">
-      <ul className="mx-auto flex max-w-md items-stretch justify-around">
+    <nav className="fixed right-0 bottom-0 left-0 z-10 px-3.5 pt-2 pb-[max(16px,env(safe-area-inset-bottom))]">
+      <ul className="mx-auto flex max-w-md items-center justify-between rounded-full bg-dock p-1.5 shadow-[var(--shadow-dock)]">
         {items.map(({ href, label, icon: Icon, badge }) => {
           const displayPathname = pendingHref ?? pathname;
           const current = pathname === href || pathname.startsWith(`${href}/`);
           const active =
             displayPathname === href || displayPathname.startsWith(`${href}/`);
-          const showDot = Boolean(badge) && unreadChats;
+          const showDot = Boolean(badge) && unreadChats && !active;
           return (
-            <li key={href} className="flex-1">
+            <li key={href}>
               <Link
                 href={href}
                 prefetch={true}
+                aria-label={label}
                 onFocus={() => prefetch(href)}
                 onMouseEnter={() => prefetch(href)}
                 onTouchStart={() => prefetch(href)}
@@ -58,22 +58,24 @@ export function BottomNav({
                   if (!active) setPendingHref(href);
                 }}
                 className={cn(
-                  'flex min-h-14 flex-col items-center justify-center gap-1 px-2 py-2 text-xs font-medium transition-colors',
+                  'relative flex h-[52px] w-[52px] items-center justify-center rounded-full transition-colors',
                   active
-                    ? 'text-primary'
-                    : 'text-muted-foreground hover:text-foreground',
+                    ? 'bg-primary text-white'
+                    : 'text-white/[0.66] hover:text-white',
                 )}
                 aria-current={current ? 'page' : undefined}
               >
-                <span className="relative">
-                  <Icon className="h-5 w-5" aria-hidden />
-                  {showDot && (
-                    <span className="border-card bg-destructive absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full border px-1 text-[9px] leading-none font-semibold text-white">
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
-                  )}
-                </span>
-                <span>{label}</span>
+                <Icon
+                  className="h-[22px] w-[22px]"
+                  strokeWidth={active ? 1.9 : 1.6}
+                  aria-hidden
+                />
+                {showDot && (
+                  <span
+                    className="absolute top-[11px] right-[11px] h-[7px] w-[7px] rounded-full border-2 border-dock bg-primary"
+                    aria-hidden="true"
+                  />
+                )}
               </Link>
             </li>
           );
