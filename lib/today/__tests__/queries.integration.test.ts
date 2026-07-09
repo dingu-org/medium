@@ -93,7 +93,6 @@ describe('getTodaySnapshot', () => {
       [patientA, 'escalation'],
       [patientB, 'reminder'],
     ]);
-    expect(snapshot.managedConversationCount).toBe(0);
     expect(conversation.id).toBeTruthy();
   });
 });

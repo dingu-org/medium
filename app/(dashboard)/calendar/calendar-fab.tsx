@@ -52,7 +52,7 @@ export function CalendarFab({
       <SheetTrigger asChild>
         <Button
           size="icon-lg"
-          className="fixed right-4 bottom-20 z-20 h-14 w-14 rounded-full shadow-lg"
+          className="fixed right-[18px] bottom-28 z-20 h-[58px] w-[58px] rounded-full shadow-[0_14px_30px_-10px_rgb(59_91_254_/_55%)]"
           aria-label={t.calendar.addLabel}
         >
           <Plus className="h-6 w-6" aria-hidden="true" />

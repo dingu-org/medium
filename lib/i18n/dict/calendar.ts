@@ -20,6 +20,7 @@ export const calendar = {
   monthDayEmpty: 'Asnjë takim këtë ditë.',
   prevWeek: 'Java e kaluar',
   nextWeek: 'Java tjetër',
+  currentWeek: 'java aktuale',
   todayLabel: '· Sot',
   newAppointment: 'Takim i ri',
   blockTime: 'Blloko kohë',
