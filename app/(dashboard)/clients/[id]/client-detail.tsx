@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, MessageSquare, Phone, Save } from 'lucide-react';
+import { Bell, MessageSquare, Phone, Save, User } from 'lucide-react';
 import { TZDate } from '@date-fns/tz';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
@@ -8,14 +8,19 @@ import { toast } from 'sonner';
 import { AppointmentSheet } from '@/components/appointments/appointment-sheet';
 import { StatusBadge } from '@/components/appointments/badges';
 import type { AppointmentView } from '@/components/appointments/types';
+import { NavBar } from '@/components/dashboard/nav-bar';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { AppBanner } from '@/components/ui/app-banner';
 import { Button } from '@/components/ui/button';
+import { ChannelChip } from '@/components/ui/channel-chip';
 import { InitialsAvatar } from '@/components/ui/initials-avatar';
+import { SectionLabel } from '@/components/ui/section-label';
 import { Textarea } from '@/components/ui/textarea';
+import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
 import type { ClientDetailSnapshot } from '@/lib/clients/queries';
 import { updateClientNotes } from '../actions';
 import { formatDateLong, formatMonthYear, formatTime } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 
 export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
   const [notes, setNotes] = useState(client.notes ?? '');
@@ -34,7 +39,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="-mx-4 -mt-4">
       <RealtimeRefresher table="patients" filter={`pt_id=eq.${client.ptId}`} />
       <RealtimeRefresher
         table="appointments"
@@ -44,123 +49,113 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
         table="conversations"
         filter={`pt_id=eq.${client.ptId}`}
       />
-      <header className="flex items-center gap-3">
-        <Button asChild size="icon-sm" variant="ghost">
-          <Link href="/clients" aria-label="Kthehu te klientët">
-            <ArrowLeft className="h-5 w-5" aria-hidden />
-          </Link>
-        </Button>
-        <h1 className="text-lg font-semibold">Detajet e klientit</h1>
-      </header>
+      <NavBar backHref="/clients" title={client.name} />
 
-      <section className="text-center">
-        <InitialsAvatar name={client.name} size={64} className="mx-auto" />
-        <h2 className="mt-3 text-xl font-semibold">{client.name}</h2>
-        <p className="text-muted-foreground mt-1 font-mono text-sm">
-          {client.phone}
-        </p>
-        <p className="text-muted-foreground mt-1 text-xs">
-          Klient që nga {memberSince} ·{' '}
-          {client.manual ? 'Shtuar me dorë' : 'WhatsApp'}
-        </p>
-      </section>
+      <div className="px-5 pt-4 pb-7">
+        {/* Canvas ClientHeader: big avatar, Manrope name, mono phone. */}
+        <section className="flex flex-col items-center pb-1 text-center">
+          <InitialsAvatar name={client.name} size={72} />
+          <h2 className="font-heading mt-3 text-[22px] font-semibold tracking-[-0.02em]">
+            {client.name}
+          </h2>
+          <p className="text-ink-2 mt-1 font-mono text-sm tabular-nums">
+            {client.phone}
+          </p>
+          <div className="mt-[11px]">
+            {client.manual ? <ManualBadge /> : <ChannelChip state="connected" />}
+          </div>
+          <p className="text-ink-3 mt-2.5 text-[12.5px]">
+            {client.manual
+              ? `Shtuar me dorë · ${memberSince}`
+              : `Klient që nga ${memberSince}`}
+          </p>
+        </section>
 
-      {client.reminderOptedOutAt && (
-        <AppBanner tone="warning">
-          Ç&apos;regjistruar nga kujtesat. Ky klient nuk merr mesazhe kujtese.
-        </AppBanner>
-      )}
-
-      <div className="grid grid-cols-3 gap-2">
-        <Button asChild variant="outline" className="h-14 flex-col gap-1">
-          <a href={`tel:${client.phone}`}>
-            <Phone className="h-4 w-4" aria-hidden />
-            <span className="text-xs">Telefono</span>
-          </a>
-        </Button>
-        <Button
-          asChild={!client.manual}
-          variant="outline"
-          className="h-14 flex-col gap-1"
-          disabled={client.manual}
-        >
-          {client.manual ? (
-            <span>
-              <MessageSquare className="mx-auto h-4 w-4" aria-hidden />
-              <span className="mt-1 block text-xs">WhatsApp</span>
-            </span>
-          ) : (
-            <a
-              href={`https://wa.me/${client.waId}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <MessageSquare className="h-4 w-4" aria-hidden />
-              <span className="text-xs">WhatsApp</span>
-            </a>
-          )}
-        </Button>
-        <Button
-          asChild={Boolean(client.conversationId && client.waId)}
-          variant="outline"
-          className="h-14 flex-col gap-1"
-          disabled={!client.conversationId || !client.waId}
-        >
-          {client.conversationId && client.waId ? (
-            <Link href={`/chat/${client.conversationId}`}>
-              <MessageSquare className="h-4 w-4" aria-hidden />
-              <span className="text-xs">Biseda</span>
-            </Link>
-          ) : (
-            <span>
-              <MessageSquare className="mx-auto h-4 w-4" aria-hidden />
-              <span className="mt-1 block text-xs">Biseda</span>
-            </span>
-          )}
-        </Button>
-      </div>
-      {client.manual && (
-        <p className="text-muted-foreground text-center text-xs">
-          WhatsApp dhe biseda aktivizohen pasi klienti të të shkruajë.
-        </p>
-      )}
-
-      <section className="space-y-2">
-        <label
-          htmlFor="client-notes"
-          className="text-muted-foreground text-xs font-semibold uppercase"
-        >
-          Shënim privat
-        </label>
-        <Textarea
-          id="client-notes"
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          maxLength={1000}
-          placeholder="Vetëm ti mund ta shohësh këtë shënim."
-        />
-        {notes !== (client.notes ?? '') && (
-          <Button size="sm" onClick={saveNotes} disabled={pending}>
-            <Save className="h-4 w-4" aria-hidden />
-            Ruaj
-          </Button>
+        {/* Quick actions (canvas QuickActs). */}
+        <div className="mt-[18px] flex gap-2">
+          <QuickAct href={`tel:${client.phone}`} label="Telefono">
+            <Phone className="h-5 w-5" aria-hidden />
+          </QuickAct>
+          <QuickAct
+            href={
+              client.manual || !client.waId
+                ? undefined
+                : `https://wa.me/${client.waId}`
+            }
+            external
+            label="WhatsApp"
+          >
+            <WhatsAppMark size={20} />
+          </QuickAct>
+          <QuickAct
+            href={
+              client.conversationId && client.waId
+                ? `/chat/${client.conversationId}`
+                : undefined
+            }
+            label="Biseda"
+          >
+            <MessageSquare className="h-5 w-5" aria-hidden />
+          </QuickAct>
+        </div>
+        {client.manual && (
+          <p className="text-ink-3 mt-2 text-center text-xs">
+            WhatsApp dhe biseda aktivizohen pasi klienti të të shkruajë.
+          </p>
         )}
-      </section>
 
-      <AppointmentList
-        title="Takimet e ardhshme"
-        appointments={client.upcoming}
-        empty="Asnjë takim i ardhshëm."
-        timezone={client.timezone}
-        onOpen={setSelected}
-      />
-      <AppointmentList
-        title="Historiku"
-        appointments={client.history}
-        empty="Ende pa histori takimesh."
-        timezone={client.timezone}
-        onOpen={setSelected}
-      />
+        {client.reminderOptedOutAt && (
+          <AppBanner
+            tone="warning"
+            icon={Bell}
+            title="Ç'regjistruar nga kujtesat"
+            className="mt-4"
+          >
+            Ky klient nuk merr kujtesa automatike në WhatsApp.
+          </AppBanner>
+        )}
+
+        {/* Private note (canvas NoteBlock). */}
+        <section className="mt-5">
+          <label
+            htmlFor="client-notes"
+            className="mb-2 block text-[13px] font-semibold text-[var(--neutral-700)]"
+          >
+            Shënim privat
+          </label>
+          <Textarea
+            id="client-notes"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            maxLength={1000}
+            placeholder="Shto një shënim privat…"
+            className="min-h-[60px] text-sm"
+          />
+          {notes !== (client.notes ?? '') && (
+            <Button size="sm" onClick={saveNotes} disabled={pending} className="mt-2">
+              <Save className="h-4 w-4" aria-hidden />
+              Ruaj
+            </Button>
+          )}
+        </section>
+
+        <AppointmentList
+          title="Takimet e ardhshme"
+          appointments={client.upcoming}
+          empty="Asnjë takim i ardhshëm."
+          timezone={client.timezone}
+          onOpen={setSelected}
+          className="mt-6"
+        />
+        <AppointmentList
+          title={`Historiku${client.history.length ? ` · ${client.history.length} ${client.history.length === 1 ? 'takim' : 'takime'}` : ''}`}
+          appointments={client.history}
+          empty="Ende pa histori takimesh."
+          timezone={client.timezone}
+          onOpen={setSelected}
+          className="mt-5"
+        />
+      </div>
 
       <AppointmentSheet
         appointment={selected}
@@ -172,52 +167,126 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
   );
 }
 
+/** Manually-added patient badge (canvas ManualBadge). */
+function ManualBadge() {
+  return (
+    <span className="text-ink-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--neutral-100)] py-[5px] pr-[11px] pl-[9px] text-xs font-medium">
+      <User className="h-3.5 w-3.5" aria-hidden />
+      Shtuar me dorë
+    </span>
+  );
+}
+
+/** Quick-action tile (canvas CAct) — disabled when no href. */
+function QuickAct({
+  href,
+  external = false,
+  label,
+  children,
+}: {
+  href?: string;
+  external?: boolean;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const inner = (
+    <>
+      <span
+        className={cn(!href && 'opacity-60 grayscale', href && 'text-primary')}
+      >
+        {children}
+      </span>
+      <span
+        className={cn(
+          'text-[12.5px] font-semibold',
+          href ? 'text-foreground' : 'text-ink-3',
+        )}
+      >
+        {label}
+      </span>
+    </>
+  );
+  const classes = cn(
+    'border-line flex flex-1 flex-col items-center gap-1.5 rounded-[12px] border bg-card px-1.5 py-3',
+    !href && 'opacity-60',
+  );
+  if (!href) {
+    return (
+      <span aria-disabled="true" className={classes}>
+        {inner}
+      </span>
+    );
+  }
+  if (external || href.startsWith('tel:')) {
+    return (
+      <a
+        href={href}
+        target={external && !href.startsWith('tel:') ? '_blank' : undefined}
+        rel={external ? 'noreferrer' : undefined}
+        className={cn(classes, 'hover:bg-muted/50 transition-colors')}
+      >
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={cn(classes, 'hover:bg-muted/50 transition-colors')}>
+      {inner}
+    </Link>
+  );
+}
+
 function AppointmentList({
   title,
   appointments,
   empty,
   timezone,
   onOpen,
+  className,
 }: {
   title: string;
   appointments: AppointmentView[];
   empty: string;
   timezone: string;
   onOpen: (appointment: AppointmentView) => void;
+  className?: string;
 }) {
   return (
-    <section className="space-y-2">
-      <h3 className="text-muted-foreground text-xs font-semibold uppercase">
-        {title}
-      </h3>
+    <section className={className}>
+      <SectionLabel>{title}</SectionLabel>
       {appointments.length === 0 ? (
-        <p className="text-muted-foreground text-sm">{empty}</p>
+        <p className="text-ink-3 px-1 text-sm">{empty}</p>
       ) : (
-        <div className="border-border bg-card overflow-hidden rounded-md border">
-          {appointments.map((appointment) => (
-            <button
-              key={appointment.id}
-              type="button"
-              onClick={() => onOpen(appointment)}
-              className="border-border hover:bg-muted/50 flex min-h-14 w-full items-center gap-3 border-b px-4 py-3 text-left last:border-b-0"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block font-medium">
-                  {(() => {
-                    const zoned = new TZDate(
-                      new Date(appointment.startsAt),
-                      timezone,
-                    );
-                    return `${formatDateLong(zoned)}, ${formatTime(zoned)}`;
-                  })()}
+        <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+          {appointments.map((appointment) => {
+            const zoned = new TZDate(
+              new Date(appointment.startsAt),
+              timezone,
+            );
+            return (
+              <button
+                key={appointment.id}
+                type="button"
+                onClick={() => onOpen(appointment)}
+                className="hover:bg-muted/50 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
+              >
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={cn(
+                      'block truncate text-[14.5px] font-semibold tracking-[-0.005em]',
+                      appointment.status === 'cancelled' && 'line-through',
+                    )}
+                  >
+                    {formatDateLong(zoned)} · {formatTime(zoned)}
+                  </span>
+                  <span className="text-ink-3 mt-px block truncate text-[12.5px]">
+                    {appointment.serviceType ?? 'Takim'}
+                  </span>
                 </span>
-                <span className="text-muted-foreground block truncate text-xs">
-                  {appointment.serviceType ?? 'Takim'}
-                </span>
-              </span>
-              <StatusBadge status={appointment.status} />
-            </button>
-          ))}
+                <StatusBadge status={appointment.status} />
+              </button>
+            );
+          })}
         </div>
       )}
     </section>

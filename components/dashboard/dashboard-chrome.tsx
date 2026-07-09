@@ -1,6 +1,6 @@
 'use client';
 
-import { Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -61,6 +61,14 @@ export function DashboardChrome({
       >
         <Link href={`/chat${params.size ? `?${params}` : ''}`} replace>
           <Search className="h-5 w-5" strokeWidth={1.7} aria-hidden />
+        </Link>
+      </RoundButton>
+    );
+  } else if (pathname === '/clients') {
+    action = (
+      <RoundButton asChild aria-label="Shto klient">
+        <Link href="/clients/new">
+          <Plus className="h-5 w-5" strokeWidth={1.7} aria-hidden />
         </Link>
       </RoundButton>
     );

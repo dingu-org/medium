@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Search, Users, X } from 'lucide-react';
+import { ChevronRight, Plus, Search, Users, X } from 'lucide-react';
 import { TZDate } from '@date-fns/tz';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -10,7 +10,7 @@ import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar } from '@/components/ui/initials-avatar';
-import { Input } from '@/components/ui/input';
+import { SectionLabel } from '@/components/ui/section-label';
 import type { ClientDirectorySnapshot } from '@/lib/clients/queries';
 import { formatDate, formatTime } from '@/lib/i18n';
 
@@ -55,37 +55,28 @@ export function ClientsDirectory({
         table="conversations"
         filter={`pt_id=eq.${snapshot.ptId}`}
       />
-      <header className="flex items-center justify-between">
-        <p className="text-muted-foreground text-sm">
-          {snapshot.total} {snapshot.total === 1 ? 'klient' : 'klientë'}
-        </p>
-        <Button asChild size="icon" aria-label="Shto klient">
-          <Link href="/clients/new">
-            <Plus className="h-5 w-5" aria-hidden />
-          </Link>
-        </Button>
-      </header>
 
+      {/* Always-visible directory search (canvas SearchBar). */}
       <div className="relative">
         <Search
-          className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
+          className="text-ink-3 absolute top-1/2 left-[13px] h-[18px] w-[18px] -translate-y-1/2"
           aria-hidden
         />
-        <Input
+        <input
           value={query}
           onChange={(event) => search(event.target.value)}
-          placeholder="Kërko emër ose telefon…"
-          className="pr-9 pl-9"
+          placeholder="Kërko klient"
           aria-label="Kërko klientët"
+          className="placeholder:text-ink-3 h-[42px] w-full rounded-[14px] bg-[#ecece7] pr-10 pl-10 text-[15px] outline-none focus-visible:ring-3 focus-visible:ring-ring/20"
         />
         {query && (
           <button
             type="button"
             onClick={() => search('')}
-            className="text-muted-foreground absolute top-1/2 right-3 -translate-y-1/2"
+            className="text-ink-3 absolute top-1/2 right-[13px] -translate-y-1/2"
             aria-label="Pastro kërkimin"
           >
-            <X className="h-4 w-4" aria-hidden />
+            <X className="h-[17px] w-[17px]" aria-hidden />
           </button>
         )}
       </div>
@@ -97,11 +88,12 @@ export function ClientsDirectory({
           description={
             query
               ? 'Provo një emër ose numër tjetër.'
-              : 'Klientët shfaqen këtu kur shkruajnë ose kur i shton me dorë.'
+              : 'Sapo një pacient të shkruajë në WhatsApp, shtohet këtu vetë. Ose shto një me dorë.'
           }
+          className="pt-14"
           action={
             !query && (
-              <Button asChild>
+              <Button asChild variant="tinted" className="h-11">
                 <Link href="/clients/new">
                   <Plus className="h-4 w-4" aria-hidden />
                   Shto klient
@@ -111,25 +103,42 @@ export function ClientsDirectory({
           }
         />
       ) : (
-        <div className="border-border bg-card overflow-hidden rounded-md border shadow-[var(--shadow-card)]">
-          {snapshot.rows.map((client) => (
-            <Link
-              key={client.id}
-              href={`/clients/${client.id}`}
-              className="border-border hover:bg-muted/50 flex min-h-16 items-center gap-3 border-b px-4 py-3 last:border-b-0"
-            >
-              <InitialsAvatar name={client.name} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold">
-                  {client.name}
+        <section>
+          <SectionLabel>
+            {snapshot.query
+              ? `${snapshot.rows.length} ${snapshot.rows.length === 1 ? 'rezultat' : 'rezultate'}`
+              : `${snapshot.total} ${snapshot.total === 1 ? 'klient' : 'klientë'}`}
+          </SectionLabel>
+          <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+            {snapshot.rows.map((client) => (
+              <Link
+                key={client.id}
+                href={`/clients/${client.id}`}
+                className="hover:bg-muted/50 flex items-center gap-[13px] px-4 py-3"
+              >
+                <InitialsAvatar name={client.name} size={44} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold tracking-[-0.005em]">
+                    {client.name}
+                  </span>
+                  <span
+                    className={
+                      client.nextAppointment
+                        ? 'block truncate text-[13px] text-[var(--success-500)]'
+                        : 'text-ink-3 block truncate text-[13px]'
+                    }
+                  >
+                    {clientMeta(client, snapshot.timezone)}
+                  </span>
                 </span>
-                <span className="text-muted-foreground block truncate text-sm">
-                  {clientMeta(client, snapshot.timezone)}
-                </span>
-              </span>
-            </Link>
-          ))}
-        </div>
+                <ChevronRight
+                  className="text-ink-3/70 h-[17px] w-[17px] shrink-0"
+                  aria-hidden
+                />
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
@@ -142,8 +151,6 @@ function clientMeta(
   const appointment = client.nextAppointment ?? client.lastAppointment;
   if (!appointment) return client.manual ? 'Shtuar me dorë' : client.phone;
   const zoned = new TZDate(new Date(appointment.startsAt), timezone);
-  const date = `${formatDate(zoned)}, ${formatTime(zoned)}`;
-  return client.nextAppointment
-    ? `Takimi tjetër: ${date}`
-    : `I fundit: ${date}`;
+  const date = `${formatDate(zoned)} · ${formatTime(zoned)}`;
+  return client.nextAppointment ? `Më pas: ${date}` : `I fundit: ${date}`;
 }

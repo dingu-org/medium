@@ -36,11 +36,7 @@ export function NewClientForm() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <AppBanner tone="info" icon={Info}>
-        WhatsApp lidhet automatikisht kur klienti të të shkruajë për herë të
-        parë.
-      </AppBanner>
+    <form onSubmit={submit} className="space-y-[18px]">
       <div className="space-y-2">
         <Label htmlFor="new-client-name">Emri</Label>
         <Input
@@ -69,21 +65,36 @@ export function NewClientForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="new-client-notes">
-          Shënim privat (jo i detyrueshëm)
+          Shënim privat{' '}
+          <span className="text-ink-3 font-normal">· me dëshirë</span>
         </Label>
         <Textarea
           id="new-client-notes"
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
           maxLength={1000}
+          placeholder="Shto një shënim…"
         />
       </div>
+      <AppBanner
+        tone="info"
+        icon={Info}
+        title="WhatsApp lidhet kur të shkruajnë"
+      >
+        Klientët e shtuar me dorë s&apos;kanë WhatsApp derisa të nisin vetë një
+        bisedë në numrin tënd.
+      </AppBanner>
       {!online && (
-        <p className="text-sm text-[var(--warning-700)]">
+        <p className="text-sm text-[var(--warning-600)]">
           Je jashtë linje. Lidhe internetin për ta shtuar klientin.
         </p>
       )}
-      <Button type="submit" className="w-full" disabled={!online || pending}>
+      <Button
+        type="submit"
+        size="lg"
+        className="h-[50px] w-full"
+        disabled={!online || pending}
+      >
         {pending ? 'Po shtohet…' : 'Shto klientin'}
       </Button>
     </form>
