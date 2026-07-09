@@ -132,8 +132,22 @@ export const settings = {
   whatsappRequiresHttps:
     'WhatsApp kërkon HTTPS — Facebook e bllokon në http://. Hap aplikacionin nëpërmjet HTTPS.',
   whatsappIncomplete: 'Lidhja mbeti e paplotë — mund ta vazhdosh kurdo.',
+  whatsappIncompleteTitle: 'Lidhja mbeti përgjysmë',
   whatsappSuccess: 'WhatsApp Business u lidh. Sinkronizimi po fillon.',
   whatsappFailed: 'Diçka shkoi keq me lidhjen e WhatsApp. Provo sërish.',
+  whatsappFailedTitle: 'Lidhja nuk u përfundua',
+  whatsappErrRejectedTitle: 'Verifikimi u refuzua',
+  whatsappErrRejected:
+    'Meta nuk e verifikoi dot biznesin. Kontrollo të dhënat dhe provo sërish.',
+  whatsappErrRejectedReasons: [
+    'Dokumentet e paqarta ose të skaduara',
+    "Emri i biznesit s'përputhet me regjistrimin",
+    "Numri s'është llogari WhatsApp Business",
+  ],
+  whatsappErrDuplicateTitle: 'Numri është i zënë',
+  whatsappErrDuplicate:
+    'Ky numër është lidhur me një ofrues tjetër. Shkëpute atje dhe provo sërish.',
+  whatsappCommonReasons: 'Arsye të zakonshme',
 
   // Danger zone toasts / inline
   accountAndWhatsappRequireConnection:

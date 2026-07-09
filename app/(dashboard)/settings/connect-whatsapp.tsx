@@ -1,9 +1,11 @@
 'use client';
 
+import { AlertCircle, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { AppBanner } from '@/components/ui/app-banner';
+import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
 import { t } from '@/lib/i18n';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 
@@ -58,15 +60,37 @@ function loadFbSdk(appId: string, version: string): Promise<void> {
   return sdkPromise;
 }
 
-function errorMessage(kind: unknown): string {
+type WaStatus = {
+  tone: 'warning' | 'danger';
+  title: string;
+  body: string;
+  reasons?: readonly string[];
+};
+
+// Persistent status card per the canvas WAStatus states — an error from
+// Meta shouldn't vanish with a toast.
+function errorStatus(kind: unknown): WaStatus {
   switch (kind) {
     case 'duplicate_number':
-      return 'Ky numër është lidhur me një ofrues tjetër. Shkëpute atje dhe provo sërish.';
+      return {
+        tone: 'danger',
+        title: t.settings.whatsappErrDuplicateTitle,
+        body: t.settings.whatsappErrDuplicate,
+      };
     case 'rejected':
-      return 'Meta nuk e verifikoi biznesin. Kontrollo të dhënat dhe provo sërish.';
+      return {
+        tone: 'danger',
+        title: t.settings.whatsappErrRejectedTitle,
+        body: t.settings.whatsappErrRejected,
+        reasons: t.settings.whatsappErrRejectedReasons,
+      };
     case 'token_exchange_failed':
     default:
-      return 'Lidhja nuk u përfundua. Provo sërish.';
+      return {
+        tone: 'danger',
+        title: t.settings.whatsappFailedTitle,
+        body: t.settings.whatsappFailed,
+      };
   }
 }
 
@@ -78,6 +102,7 @@ export function ConnectWhatsApp({
 }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState<WaStatus | null>(null);
   const online = useOnlineStatus();
   // Meta delivers phone_number_id + waba_id via a postMessage during the popup,
   // separately from the FB.login auth code — capture it here.
@@ -126,6 +151,7 @@ export function ConnectWhatsApp({
       return;
     }
     setPending(true);
+    setStatus(null);
     sessionInfo.current = {};
     try {
       await loadFbSdk(appId, graphVersion);
@@ -151,7 +177,11 @@ export function ConnectWhatsApp({
       const code = loginResp.authResponse?.code;
       const { phoneNumberId, wabaId } = sessionInfo.current;
       if (!code || !wabaId) {
-        toast.info(t.settings.whatsappIncomplete);
+        setStatus({
+          tone: 'warning',
+          title: t.settings.whatsappIncompleteTitle,
+          body: t.settings.whatsappIncomplete,
+        });
         return;
       }
 
@@ -174,30 +204,58 @@ export function ConnectWhatsApp({
       }
 
       const body = (await res.json().catch(() => ({}))) as { error?: string };
-      toast.error(errorMessage(body.error));
+      setStatus(errorStatus(body.error));
     } catch {
-      toast.error(t.settings.whatsappFailed);
+      setStatus(errorStatus(undefined));
     } finally {
       setPending(false);
     }
   }, [appId, configId, graphVersion, online, router]);
 
   return (
-    <div className="space-y-2">
-      <Button
+    <div className="space-y-3">
+      {status && (
+        <AppBanner
+          tone={status.tone}
+          icon={status.tone === 'danger' ? X : AlertCircle}
+          title={status.title}
+        >
+          <p>{status.body}</p>
+          {status.reasons && (
+            <div className="mt-2.5">
+              <p className="text-ink-3 mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase">
+                {t.settings.whatsappCommonReasons}
+              </p>
+              <ul className="space-y-1.5">
+                {status.reasons.map((reason) => (
+                  <li key={reason} className="flex gap-2 text-[13px]">
+                    <span className="text-destructive" aria-hidden>
+                      •
+                    </span>
+                    {reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </AppBanner>
+      )}
+      <button
         type="button"
         onClick={handleClick}
         disabled={pending || !appId || !configId || !online}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] text-[15px] font-bold tracking-[-0.01em] text-white transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
       >
+        <WhatsAppMark size={18} fill="#ffffff" />
         {pending
-          ? 'Connecting…'
+          ? t.settings.whatsappConnecting
           : connected
-            ? 'Reconnect WhatsApp Business app'
-            : 'Connect WhatsApp Business app'}
-      </Button>
+            ? t.settings.whatsappReconnectBusiness
+            : t.settings.whatsappConnectBusiness}
+      </button>
       {!online && (
-        <p className="text-muted-foreground text-xs">
-          WhatsApp signup requires a connection.
+        <p className="text-ink-3 text-xs">
+          {t.settings.whatsappRequiresConnection}
         </p>
       )}
     </div>

@@ -72,7 +72,7 @@ export function ChatComposer({
               href="/settings"
               className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] text-sm font-semibold text-white transition-opacity hover:opacity-90"
             >
-              <WhatsAppMark size={17} />
+              <WhatsAppMark size={17} fill="#ffffff" />
               {t.chat.reconnectWhatsApp}
             </Link>
           </>
