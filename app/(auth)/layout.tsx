@@ -26,6 +26,9 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <Link href="/terms" className="hover:text-foreground">
           {t.auth.layout.termsOfService}
         </Link>
+        <Link href="/help" className="hover:text-foreground">
+          {t.auth.layout.help}
+        </Link>
       </footer>
     </div>
   );

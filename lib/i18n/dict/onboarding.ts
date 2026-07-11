@@ -7,6 +7,7 @@ export const onboarding = {
   start: 'Fillo',
   skip: 'Kalo për tani',
   goToApp: 'Shko te paneli',
+  helpLink: 'Ke nevojë për ndihmë?',
   allSetTitle: 'U regjistrove.',
   allSetSub:
     'Medium tashmë mund të pranojë rezervime në WhatsApp. Pacienti i parë që shkruan do të marrë përgjigje brenda sekondash.',

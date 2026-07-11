@@ -62,5 +62,6 @@ export const auth = {
   layout: {
     privacyPolicy: 'Politika e privatësisë',
     termsOfService: 'Kushtet e shërbimit',
+    help: 'Ndihmë',
   },
 } as const;

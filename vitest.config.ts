@@ -6,6 +6,9 @@ const env = loadDotenv({ path: '.env.test' }).parsed ?? {};
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
+  // tsconfig sets jsx: "preserve" (Next transforms it); vitest's rolldown
+  // pipeline must compile JSX itself or .tsx imports fail to parse.
+  oxc: { jsx: { runtime: 'automatic' } },
   test: {
     env,
     globalSetup: ['./tests/setup/global.ts'],
@@ -14,9 +17,10 @@ export default defineConfig({
     projects: [
       {
         plugins: [tsconfigPaths()],
+        oxc: { jsx: { runtime: 'automatic' } },
         test: {
           name: 'unit',
-          include: ['**/*.test.ts'],
+          include: ['**/*.test.{ts,tsx}'],
           exclude: ['**/node_modules/**', '**/.next/**', '**/dist/**', '**/*.integration.test.ts'],
         },
       },

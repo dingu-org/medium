@@ -38,6 +38,7 @@ yarn-error.log*
 .env*
 !.env.example
 !.env.test
+!.env.local.dev.example
 
 # supabase local stack runtime files
 supabase/.branches/

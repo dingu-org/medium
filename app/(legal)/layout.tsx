@@ -23,6 +23,12 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
               Terms
             </Link>
             <Link
+              href="/help"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Help
+            </Link>
+            <Link
               href="/sign-in"
               className="text-muted-foreground hover:text-foreground"
             >

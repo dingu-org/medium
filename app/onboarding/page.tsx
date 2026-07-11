@@ -221,6 +221,14 @@ export default async function OnboardingPage() {
                   {t.onboarding.skip}
                 </Button>
               </form>
+              <p className="text-center">
+                <Link
+                  href="/help"
+                  className="text-muted-foreground hover:text-foreground text-xs"
+                >
+                  {t.onboarding.helpLink}
+                </Link>
+              </p>
             </div>
           </main>
         </>
