@@ -53,9 +53,10 @@ export default function HelpAiBookingsPage() {
 
       <PolicySection title="Dritarja 24-orëshe dhe kujtesat">
         <p>
-          Asistenti punon brenda dritares 24-orëshe të WhatsApp-it; jashtë saj
-          përdoren modele mesazhesh të miratuara paraprakisht. Për kujtesën
-          24-orëshe, pacienti mund të përgjigjet me{' '}
+          WhatsApp-i lejon përgjigje të lira vetëm brenda 24 orëve nga mesazhi
+          i fundit i pacientit — pas kësaj, asistenti mund të dërgojë vetëm
+          mesazhe të paracaktuara, si kujtesa e takimit. Kur pacienti merr
+          kujtesën, mund të përgjigjet me{' '}
           <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]">
             KONFIRMO
           </code>{' '}

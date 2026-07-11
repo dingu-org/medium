@@ -3,7 +3,7 @@ import { PolicySection } from '../policy-section';
 export const metadata = {
   title: 'Lidh WhatsApp-in · Ndihmë · Medium',
   description:
-    'Si të lidhësh numrin tënd të WhatsApp Business me Medium përmes Embedded Signup.',
+    'Si të lidhësh numrin tënd të WhatsApp Business me Medium në pak minuta.',
 };
 
 export default function HelpWhatsAppPage() {
@@ -15,59 +15,52 @@ export default function HelpWhatsAppPage() {
         </h1>
         <p className="text-muted-foreground text-base leading-7">
           Numri yt i WhatsApp Business është mënyra si pacientët bisedojnë me
-          Medium.
+          Medium. Lidhja zgjat vetëm pak minuta.
         </p>
       </header>
 
       <PolicySection title="Si të lidhesh">
         <p>
           Nga <strong>Cilësimet</strong>, shtyp butonin e gjelbër të
-          WhatsApp-it. Hapet dritarja e{' '}
-          <strong>Embedded Signup</strong> e Facebook-ut, ku zgjedh ose lidh
-          numrin tënd të WhatsApp Business.
+          WhatsApp-it. Hapet një dritare e sigurt e Facebook-ut (Meta), ku
+          identifikohesh me llogarinë tënde të biznesit dhe zgjedh numrin që
+          do të lidhësh. Ndiq hapat në ekran deri në fund — kur dritarja
+          mbyllet, statusi te Cilësimet bëhet <strong>aktiv</strong>.
         </p>
       </PolicySection>
 
-      <PolicySection title="Kërkohet HTTPS">
+      <PolicySection title="Numri vazhdon të punojë në telefonin tënd">
         <p>
-          Lidhja funksionon vetëm mbi HTTPS — nuk hapet nga{' '}
-          <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]">
-            http://localhost
-          </code>
-          . Nëse po testosh lokalisht, përdor një adresë Vercel preview ose
-          një tunel HTTPS (
-          <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]">
-            pnpm tunnel
-          </code>
-          ).
-        </p>
-      </PolicySection>
-
-      <PolicySection title="Modaliteti coexistence">
-        <p>
-          Medium lidhet në modalitetin <strong>coexistence</strong>: numri yt
-          vazhdon të punojë njëkohësisht edhe në aplikacionin WhatsApp
-          Business që përdor tashmë.
+          Pas lidhjes, aplikacioni WhatsApp Business në telefonin tënd vazhdon
+          të punojë si më parë — asgjë nuk fshihet dhe nuk bllokohet. Nëse i
+          përgjigjesh vetë një pacienti nga telefoni, asistenti tërhiqet nga
+          ajo bisedë për rreth dy orë, që të mos flisni njëkohësisht.
         </p>
       </PolicySection>
 
       <PolicySection title="Pas lidhjes">
         <p>
-          Kur signup-i mbaron, lidhja kalon në gjendjen <strong>aktive</strong>{' '}
-          dhe pacientët mund të fillojnë të shkruajnë menjëherë. Modeli i
-          kujtesës{' '}
-          <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]">
-            appointment_reminder_24h
-          </code>{' '}
-          dërgohet për miratim te Meta — miratimi mund të zgjasë 24–48 orë.
+          Pacientët mund të të shkruajnë menjëherë dhe asistenti u përgjigjet.
+          Vetëm mesazhi i kujtesës së takimeve ka nevojë për një miratim nga
+          Meta, i cili zakonisht zgjat 24–48 orë — derisa të miratohet,
+          kujtesat automatike mund të mos dërgohen ende.
         </p>
       </PolicySection>
 
-      <PolicySection title="Gabime të mundshme">
+      <PolicySection title="Nëse lidhja nuk funksionon">
         <ul>
-          <li>Numër i dyfishtë — numri është lidhur tashmë me një llogari tjetër.</li>
-          <li>Refuzim nga Meta, me arsyet e listuara në panel.</li>
-          <li>Dështim i shkëmbimit të tokenit — provo lidhjen përsëri.</li>
+          <li>
+            Nëse numri është i lidhur tashmë me një llogari tjetër, Meta nuk e
+            lejon lidhjen e dytë — na shkruaj që ta zgjidhim bashkë.
+          </li>
+          <li>
+            Nëse dritarja mbyllet me gabim, mbylle dhe provo edhe një herë nga
+            fillimi — zakonisht hera e dytë funksionon.
+          </li>
+          <li>
+            Statusin e lidhjes e sheh gjithmonë te <strong>Cilësimet</strong>;
+            aty shfaqet edhe arsyeja nëse diçka ka shkuar keq.
+          </li>
         </ul>
       </PolicySection>
     </article>
