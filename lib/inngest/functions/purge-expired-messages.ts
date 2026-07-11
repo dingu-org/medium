@@ -9,6 +9,26 @@ export type PurgeResult = {
   deletedCount: number;
 };
 
+export const AUDIT_LOG_RETENTION_DAYS = 730; // GDPR-minimum for healthcare-adjacent context — pending legal confirmation
+
+/**
+ * Purge audit-log rows older than the retention window. Flat global window (not
+ * per-tenant), so a single delete suffices.
+ */
+export async function purgeExpiredAuditLog(
+  now = new Date(),
+): Promise<{ deletedCount: number }> {
+  const cutoff = new Date(
+    now.getTime() - AUDIT_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const deleted = await db.execute<{ id: string }>(sql`
+    DELETE FROM audit_log
+    WHERE occurred_at < ${cutoff.toISOString()}::timestamptz
+    RETURNING id
+  `);
+  return { deletedCount: deleted.length };
+}
+
 export async function purgePtExpiredMessages(args: {
   ptId: string;
   retentionDays: number;
@@ -87,6 +107,9 @@ export const purgeExpiredMessages = inngest.createFunction(
         ),
       );
     }
-    return results;
+    const auditPurge = await step.run('purge-audit-log', () =>
+      purgeExpiredAuditLog(),
+    );
+    return { tenants: results, auditPurge };
   },
 );

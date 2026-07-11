@@ -8,6 +8,9 @@ import { db } from '@/lib/db';
 import { patients } from '@/lib/db/schema';
 import { createServerClient } from '@/lib/supabase/server';
 import { createManualPatient } from '@/lib/clients/mutations';
+import { erasePatient as erasePatientData } from '@/lib/patients/erase';
+import { buildPatientExport, type PatientExport } from '@/lib/gdpr/export';
+import { withAuditLog } from '@/lib/tenancy';
 
 export type ClientActionResult =
   | { ok: true; clientId?: string }
@@ -63,6 +66,17 @@ export async function createManualClient(input: {
     };
   }
 
+  await withAuditLog(
+    {
+      ptId,
+      actor: 'pt',
+      action: 'patient.created',
+      targetTable: 'patients',
+      targetId: created.id,
+    },
+    async () => created,
+  );
+
   revalidatePath('/clients');
   return { ok: true, clientId: created.id };
 }
@@ -80,13 +94,52 @@ export async function updateClientNotes(
       error: 'Shënimi është shumë i gjatë.',
     };
   }
-  const [updated] = await db
-    .update(patients)
-    .set({ notes: value.data || null })
-    .where(and(eq(patients.id, clientId), eq(patients.ptId, ptId)))
-    .returning({ id: patients.id });
+  const updated = await withAuditLog(
+    {
+      ptId,
+      actor: 'pt',
+      action: 'patient.notes_updated',
+      targetTable: 'patients',
+      targetId: clientId,
+    },
+    async () => {
+      const [row] = await db
+        .update(patients)
+        .set({ notes: value.data || null })
+        .where(and(eq(patients.id, clientId), eq(patients.ptId, ptId)))
+        .returning({ id: patients.id });
+      return row;
+    },
+  );
   if (!updated)
     return { ok: false, code: 'NOT_FOUND', error: 'Klienti nuk u gjet.' };
   revalidatePath(`/clients/${clientId}`);
   return { ok: true };
+}
+
+/** Right-to-erasure: delegates the transactional cascade + audit write to lib/patients/erase. */
+export async function erasePatient(patientId: string): Promise<{ ok: boolean }> {
+  const ptId = await requirePtId();
+  await erasePatientData({ patientId, ptId });
+  revalidatePath('/clients');
+  return { ok: true };
+}
+
+/** Per-patient GDPR data export (DSAR shape). */
+export async function exportPatient(
+  patientId: string,
+): Promise<{ ok: true; data: PatientExport } | { ok: false }> {
+  const ptId = await requirePtId();
+  const data = await withAuditLog(
+    {
+      ptId,
+      actor: 'pt',
+      action: 'export.patient',
+      targetTable: 'patients',
+      targetId: patientId,
+    },
+    () => buildPatientExport({ ptId, patientId }),
+  );
+  if (!data) return { ok: false };
+  return { ok: true, data };
 }

@@ -3,6 +3,7 @@
 import { Bell, MessageSquare, Phone, Save, User } from 'lucide-react';
 import { TZDate } from '@date-fns/tz';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { AppointmentSheet } from '@/components/appointments/appointment-sheet';
@@ -13,19 +14,37 @@ import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { AppBanner } from '@/components/ui/app-banner';
 import { Button } from '@/components/ui/button';
 import { ChannelChip } from '@/components/ui/channel-chip';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { InitialsAvatar } from '@/components/ui/initials-avatar';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { SectionLabel } from '@/components/ui/section-label';
 import { Textarea } from '@/components/ui/textarea';
 import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
 import type { ClientDetailSnapshot } from '@/lib/clients/queries';
-import { updateClientNotes } from '../actions';
-import { formatDateLong, formatMonthYear, formatTime } from '@/lib/i18n';
+import { erasePatient, exportPatient, updateClientNotes } from '../actions';
+import { formatDateLong, formatMonthYear, formatTime, t } from '@/lib/i18n';
+import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { cn } from '@/lib/utils';
 
 export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
+  const router = useRouter();
   const [notes, setNotes] = useState(client.notes ?? '');
   const [selected, setSelected] = useState<AppointmentView | null>(null);
   const [pending, startTransition] = useTransition();
+  const [exporting, startExport] = useTransition();
+  const [erasing, startErase] = useTransition();
+  const [confirmText, setConfirmText] = useState('');
+  const online = useOnlineStatus();
   const memberSince = formatMonthYear(
     new TZDate(new Date(client.createdAt), client.timezone),
   ).toLocaleLowerCase('sq');
@@ -35,6 +54,41 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
       const result = await updateClientNotes(client.id, notes);
       if (!result.ok) toast.error(result.error);
       else toast.success('Shënimi u ruajt.');
+    });
+  }
+
+  function onExport() {
+    startExport(async () => {
+      try {
+        const result = await exportPatient(client.id);
+        if (!result.ok) {
+          toast.error(t.clients.exportFailed);
+          return;
+        }
+        const blob = new Blob([JSON.stringify(result.data, null, 2)], {
+          type: 'application/json',
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `patient-${client.id}.json`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      } catch {
+        toast.error(t.clients.exportFailed);
+      }
+    });
+  }
+
+  function onErase() {
+    startErase(async () => {
+      try {
+        await erasePatient(client.id);
+        toast.success(t.clients.erasedToast);
+        router.push('/clients');
+      } catch {
+        toast.error(t.clients.eraseFailed);
+      }
     });
   }
 
@@ -155,6 +209,62 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
           onOpen={setSelected}
           className="mt-5"
         />
+
+        {/* Danger zone (canvas parity with settings/danger-zone.tsx): export + erase. */}
+        <section className="mt-6">
+          <SectionLabel>{t.clients.dangerZone}</SectionLabel>
+          <div className="border-line space-y-2 rounded-[12px] border bg-card p-3 shadow-[var(--shadow-card)]">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={onExport}
+              disabled={exporting || !online}
+            >
+              {exporting ? t.clients.exporting : t.clients.exportClient}
+            </Button>
+
+            <Dialog onOpenChange={(open) => !open && setConfirmText('')}>
+              <DialogTrigger asChild>
+                <Button variant="destructive" className="w-full" disabled={!online}>
+                  {t.clients.erase}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t.clients.eraseTitle}</DialogTitle>
+                  <DialogDescription>{t.clients.eraseBody}</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-erase">
+                    {t.clients.eraseTypePrompt(client.name)}
+                  </Label>
+                  <Input
+                    id="confirm-erase"
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="ghost">{t.actions.cancel}</Button>
+                  </DialogClose>
+                  <Button
+                    variant="destructive"
+                    onClick={onErase}
+                    disabled={
+                      erasing ||
+                      !online ||
+                      confirmText.trim() !== client.name.trim()
+                    }
+                  >
+                    {erasing ? t.clients.erasing : t.clients.eraseConfirm}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </section>
       </div>
 
       <AppointmentSheet

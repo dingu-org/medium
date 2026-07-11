@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import {
   conversations,
@@ -90,12 +90,50 @@ export async function markConnectionRevoked(args: {
   await markRevoked(args.connectionId, args.ptId, args.reason);
 }
 
+/**
+ * Best-effort detach of Medium's app from the PT's WABA at Meta, used by
+ * account erasure. Decryption stays inside this module (the only sanctioned
+ * home for the token). Never throws — a failed detach must not block deletion.
+ */
+export async function detachWabaSubscription(args: {
+  ptId: string;
+}): Promise<{ detached: boolean }> {
+  const [row] = await db
+    .select()
+    .from(whatsappConnections)
+    .where(
+      and(
+        eq(whatsappConnections.ptId, args.ptId),
+        eq(whatsappConnections.status, 'active'),
+      ),
+    )
+    .orderBy(desc(whatsappConnections.createdAt))
+    .limit(1);
+
+  if (!row || !row.accessTokenEncrypted) return { detached: false };
+
+  try {
+    const token = await decryptToken(row.accessTokenEncrypted);
+    await graphFetch(`${row.wabaId}/subscribed_apps`, {
+      method: 'DELETE',
+      token,
+    });
+    return { detached: true };
+  } catch (err) {
+    console.warn('[gdpr] waba detach failed', {
+      ptId: args.ptId,
+      errorName: err instanceof Error ? err.name : typeof err,
+    });
+    return { detached: false };
+  }
+}
+
 /** Graph call that turns an auth failure into a revoked connection. Token never logged. */
 async function authedGraph<T>(
   conn: ActiveConnection,
   path: string,
   opts: {
-    method?: 'GET' | 'POST';
+    method?: 'GET' | 'POST' | 'DELETE';
     searchParams?: Record<string, string>;
     body?: unknown;
   } = {},

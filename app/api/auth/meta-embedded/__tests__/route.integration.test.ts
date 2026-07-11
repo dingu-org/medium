@@ -8,10 +8,10 @@ import {
   it,
   vi,
 } from 'vitest';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { whatsappConnections } from '@/lib/db/schema';
+import { auditLog, whatsappConnections } from '@/lib/db/schema';
 import { decryptToken } from '@/lib/db/crypto';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -116,6 +116,9 @@ beforeEach(async () => {
   await db
     .delete(whatsappConnections)
     .where(inArray(whatsappConnections.ptId, [ptId, otherPtId]));
+  await db
+    .delete(auditLog)
+    .where(inArray(auditLog.ptId, [ptId, otherPtId]));
   getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
   vi.stubGlobal('fetch', okFetch());
 });
@@ -192,6 +195,20 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
       }),
     );
     expect(row.tokenExpiresAt).not.toBeNull();
+
+    const [audit] = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(eq(auditLog.ptId, ptId), eq(auditLog.action, 'wa.token.issued')),
+      );
+    expect(audit).toBeTruthy();
+    expect(audit.targetTable).toBe('whatsapp_connections');
+    expect(audit.metadata).toEqual({
+      phone_number_id: phoneNumberId,
+      waba_id: 'WABA_123',
+    });
+    expect(JSON.stringify(audit).includes(BIZ_TOKEN)).toBe(false);
   });
 
   it('resolves the phone number from the WABA when coexistence only returns waba_id', async () => {

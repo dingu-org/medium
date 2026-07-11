@@ -14,6 +14,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:reset:test": "tsx --env-file=.env.test scripts/db-reset.ts",
+    "rotate:token-key": "tsx --env-file=.env.local scripts/rotate-token-key.ts",
     "seed:qa": "tsx --env-file=.env.test scripts/seed-qa.ts",
     "dev:test": "sh scripts/dev-test.sh",
     "test": "vitest run --project unit",

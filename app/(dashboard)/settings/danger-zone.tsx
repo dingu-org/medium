@@ -27,7 +27,13 @@ import { t } from '@/lib/i18n';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { deleteAccount, disconnectWhatsApp } from './actions';
 
-export function DangerZone({ connected }: { connected: boolean }) {
+export function DangerZone({
+  connected,
+  practiceName,
+}: {
+  connected: boolean;
+  practiceName: string;
+}) {
   const router = useRouter();
   const [disconnecting, startDisconnect] = useTransition();
   const [deleting, startDelete] = useTransition();
@@ -121,7 +127,7 @@ export function DangerZone({ connected }: { connected: boolean }) {
             </DialogHeader>
             <div className="space-y-2">
               <Label htmlFor="confirm-delete">
-                {t.settings.deleteTypePrompt}
+                {t.settings.deleteTypePrompt(practiceName)}
               </Label>
               <Input
                 id="confirm-delete"
@@ -137,7 +143,11 @@ export function DangerZone({ connected }: { connected: boolean }) {
               <Button
                 variant="destructive"
                 onClick={onDelete}
-                disabled={deleting || !online || confirmText !== 'DELETE'}
+                disabled={
+                  deleting ||
+                  !online ||
+                  confirmText.trim() !== practiceName.trim()
+                }
               >
                 {deleting ? t.settings.deleting : t.settings.deleteConfirm}
               </Button>

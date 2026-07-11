@@ -10,7 +10,7 @@ export function graphUrl(path: string): string {
 type GraphFetchOptions = {
   /** Bearer token. Set on the Authorization header — never logged. */
   token?: string;
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'DELETE';
   searchParams?: Record<string, string>;
   body?: unknown;
 };

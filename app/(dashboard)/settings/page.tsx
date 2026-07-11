@@ -17,6 +17,7 @@ import { getSettingsSnapshot } from '@/lib/pwa/read-models';
 import { createServerClient } from '@/lib/supabase/server';
 import { ConnectWhatsApp } from './connect-whatsapp';
 import { DangerZone } from './danger-zone';
+import { ExportData } from './export-data';
 import { PracticeSettingsForm } from './practice-settings-form';
 import { PushNotifications } from './push-notifications';
 
@@ -112,7 +113,17 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      <DangerZone connected={connected} />
+      <Card>
+        <CardHeader>
+          <CardTitle>{t.settings.exportData}</CardTitle>
+          <CardDescription>{t.settings.exportSub}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ExportData />
+        </CardContent>
+      </Card>
+
+      <DangerZone connected={connected} practiceName={snapshot.practiceName} />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   availabilityRules,
   blockedPeriods,
   conversations,
+  erasureArchive,
   eventOutbox,
   events,
   messageTemplates,
@@ -118,6 +119,7 @@ const seedFactories: Record<
     action: 'a',
     target_table: 'patients',
   }),
+  erasure_archive: ({ ptId }) => ({ pt_id: ptId, scope: 'account' }),
 };
 
 const TENANT_ID_COL: Record<string, 'pt_id' | 'id'> = { pts: 'id' };
@@ -231,6 +233,7 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     action: 'seed',
     targetTable: 'patients',
   });
+  await db.insert(erasureArchive).values({ ptId, scope: 'account' });
 
   return {
     ptId,

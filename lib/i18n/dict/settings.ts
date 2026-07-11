@@ -80,9 +80,14 @@ export const settings = {
   deleteTitle: 'Fshi llogarinë?',
   deleteBody:
     "Kjo fshin përgjithmonë praktikën, pacientët, takimet, bisedat dhe lidhjen me WhatsApp. S'kthehet.",
-  deleteTypePrompt: 'Shkruaj DELETE për të konfirmuar',
+  deleteTypePrompt: (name: string) =>
+    `Shkruaj "${name}" për të konfirmuar`,
   deleteConfirm: 'Fshi llogarinë',
   savedToast: 'Ndryshimet u ruajtën.',
+
+  exportRun: 'Shkarko JSON',
+  exporting: 'Po eksportohet…',
+  exportFailed: 'Eksporti dështoi. Provo sërish.',
 
   // Practice card
   practiceCard: 'Klinika',

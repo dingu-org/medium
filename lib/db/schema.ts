@@ -453,3 +453,25 @@ export const auditLog = pgTable('audit_log', {
   metadata: jsonb('metadata'),
   occurredAt: tsTz('occurred_at').notNull().default(now),
 });
+
+// Long-term compliance record of an erasure event itself — survives the PT
+// deletion it describes, so pt_id is a bare uuid with no FK cascade. Written
+// only by the service role (RLS is deny-all for authenticated).
+export const erasureArchive = pgTable(
+  'erasure_archive',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: uuid('pt_id').notNull(),
+    scope: text('scope').notNull(),
+    targetId: uuid('target_id'),
+    beforeStateHash: text('before_state_hash'),
+    metadata: jsonb('metadata'),
+    occurredAt: tsTz('occurred_at').notNull().default(now),
+  },
+  (t) => [
+    check(
+      'erasure_archive_scope_check',
+      sql`${t.scope} in ('patient','account')`,
+    ),
+  ],
+);

@@ -23,6 +23,7 @@ import {
 } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
+import { withAuditLog } from '@/lib/tenancy';
 import { createServerClient } from '@/lib/supabase/server';
 import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
 
@@ -134,42 +135,57 @@ export async function setTakeover(
 ): Promise<{ ok: boolean }> {
   const ptId = await requirePtId();
 
-  const eventId = await db.transaction(async (tx) => {
-    const [updated] = await tx
-      .update(conversations)
-      .set(
-        takeover
-          ? {
-              aiActive: false,
-              aiPausedUntil: null,
-              aiPauseReason: null,
-            }
-          : {
-              aiActive: true,
-              aiPausedUntil: null,
-              aiPauseReason: null,
-              escalationState: 'idle',
-            },
-      )
-      .where(
-        and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
-      )
-      .returning({ patientId: conversations.patientId });
+  await withAuditLog(
+    {
+      ptId,
+      actor: 'pt',
+      action: 'conversation.takeover',
+      targetTable: 'conversations',
+      targetId: conversationId,
+      metadata: { takeover },
+    },
+    async () => {
+      const eventId = await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(conversations)
+          .set(
+            takeover
+              ? {
+                  aiActive: false,
+                  aiPausedUntil: null,
+                  aiPauseReason: null,
+                }
+              : {
+                  aiActive: true,
+                  aiPausedUntil: null,
+                  aiPauseReason: null,
+                  escalationState: 'idle',
+                },
+          )
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.ptId, ptId),
+            ),
+          )
+          .returning({ patientId: conversations.patientId });
 
-    if (!updated || !takeover) return null;
+        if (!updated || !takeover) return null;
 
-    return appendBackgroundEvent(tx, {
-      type: 'conversation.taken_over',
-      data: {
-        ptId,
-        conversationId,
-        patientId: updated.patientId,
-        takenOverAt: new Date().toISOString(),
-      },
-    });
-  });
+        return appendBackgroundEvent(tx, {
+          type: 'conversation.taken_over',
+          data: {
+            ptId,
+            conversationId,
+            patientId: updated.patientId,
+            takenOverAt: new Date().toISOString(),
+          },
+        });
+      });
 
-  if (eventId) await tryPublishOutboxEvent(eventId);
+      if (eventId) await tryPublishOutboxEvent(eventId);
+    },
+  );
 
   revalidatePath(`/chat/${conversationId}`);
   return { ok: true };

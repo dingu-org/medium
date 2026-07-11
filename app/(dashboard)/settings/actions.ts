@@ -6,6 +6,10 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { pts, whatsappConnections } from '@/lib/db/schema';
+import { detachWabaSubscription } from '@/lib/channels/whatsapp/client';
+import { recordErasureArchive } from '@/lib/gdpr/archive';
+import { buildPtExport, type PtExport } from '@/lib/gdpr/export';
+import { withAuditLog } from '@/lib/tenancy';
 import { createServerClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
@@ -132,13 +136,34 @@ export async function disconnectWhatsApp(): Promise<void> {
   revalidatePath('/settings');
 }
 
-/** Permanently delete the PT's auth user; the FK cascade purges all their data. */
+/**
+ * Permanently delete the PT's auth user; the FK cascade purges all their data.
+ * Order matters: the compliance archive is written before anything is deleted
+ * (it must survive the cascade), WhatsApp is best-effort detached from Meta's
+ * side, and only then is the auth user removed.
+ */
 export async function deleteAccount(): Promise<void> {
   const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
+
+  try {
+    await recordErasureArchive({
+      ptId: user.id,
+      scope: 'account',
+      metadata: { deletedAt: new Date().toISOString() },
+    });
+  } catch {
+    throw new Error('Could not delete account. Please try again.');
+  }
+
+  try {
+    await detachWabaSubscription({ ptId: user.id });
+  } catch {
+    // Best-effort: a Meta-side detach failure must never block account deletion.
+  }
 
   const admin = createServiceClient();
   const { error } = await admin.auth.admin.deleteUser(user.id);
@@ -148,4 +173,22 @@ export async function deleteAccount(): Promise<void> {
 
   await supabase.auth.signOut();
   redirect('/sign-in');
+}
+
+/** Full-account GDPR export: settings, patients, conversations, everything scoped to this PT. */
+export async function exportPt(): Promise<
+  { ok: true; data: PtExport } | { ok: false }
+> {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/sign-in');
+  const ptId = user.id;
+
+  const data = await withAuditLog(
+    { ptId, actor: 'pt', action: 'export.pt', targetTable: 'pts', targetId: ptId },
+    () => buildPtExport(ptId),
+  );
+  return { ok: true, data };
 }

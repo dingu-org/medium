@@ -6,7 +6,7 @@ import { whatsappConnections } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
-import { getServiceClient } from '@/lib/tenancy';
+import { getServiceClient, withAuditLog } from '@/lib/tenancy';
 import { createServerClient } from '@/lib/supabase/server';
 import { graphFetch } from '@/lib/channels/whatsapp/graph';
 import {
@@ -91,14 +91,24 @@ export async function POST(req: NextRequest) {
     const tokenExpiresAt = new Date(
       Date.now() + (token.expiresInSeconds ?? 60 * 24 * 60 * 60) * 1000,
     );
-    const { eventId } = await persistConnection({
-      ptId,
-      phoneNumberId,
-      wabaId,
-      mode,
-      encrypted,
-      tokenExpiresAt,
-    });
+    const { eventId } = await withAuditLog(
+      {
+        ptId,
+        actor: 'pt',
+        action: 'wa.token.issued',
+        targetTable: 'whatsapp_connections',
+        metadata: { phone_number_id: phoneNumberId, waba_id: wabaId },
+      },
+      () =>
+        persistConnection({
+          ptId,
+          phoneNumberId,
+          wabaId,
+          mode,
+          encrypted,
+          tokenExpiresAt,
+        }),
+    );
     await tryPublishOutboxEvent(eventId);
 
     return Response.json({ ok: true, status: 'active' }, { status: 200 });

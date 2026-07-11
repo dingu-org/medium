@@ -10,6 +10,7 @@ import { appointment } from './dict/appointment';
 import { auth } from './dict/auth';
 import { calendar, reminder, status } from './dict/calendar';
 import { chat } from './dict/chat';
+import { clients } from './dict/clients';
 import { common } from './dict/common';
 import { onboarding } from './dict/onboarding';
 import { availability, settings } from './dict/settings';
@@ -27,6 +28,7 @@ export const sq = {
   settings,
   availability,
   pwa,
+  clients,
 } as const;
 
 export type Dictionary = typeof sq;

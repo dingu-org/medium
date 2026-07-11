@@ -113,6 +113,13 @@
       "when": 1782909024351,
       "tag": "0015_phase9_push_subscription_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783803068032,
+      "tag": "0016_phase10_gdpr",
+      "breakpoints": true
     }
   ]
 }
