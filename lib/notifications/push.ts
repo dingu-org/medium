@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import * as webpush from 'web-push';
 import { db } from '@/lib/db';
 import { pushSubscriptions } from '@/lib/db/schema';
+import { logger, serializeError } from '@/lib/log';
 
 // Throw at construction (repo convention). The VAPID keypair is generated once
 // in Phase 0 and must never be regenerated — doing so invalidates every
@@ -68,11 +69,11 @@ export async function sendPush(
             .where(eq(pushSubscriptions.id, row.id));
           return 'removed' as const;
         }
-        console.warn('[push] send failed', {
-          ptId,
-          subscriptionId: row.id,
-          statusCode,
-          errorName: error instanceof Error ? error.name : typeof error,
+        logger.warn('push.send_failed', 'Web push send failed', {
+          pt_id: ptId,
+          subscription_id: row.id,
+          status_code: statusCode,
+          ...serializeError(error),
         });
         return 'failed' as const;
       }

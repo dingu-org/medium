@@ -10,6 +10,7 @@ import { detachWabaSubscription } from '@/lib/channels/whatsapp/client';
 import { recordErasureArchive } from '@/lib/gdpr/archive';
 import { buildPtExport, type PtExport } from '@/lib/gdpr/export';
 import { withAuditLog } from '@/lib/tenancy';
+import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
@@ -56,7 +57,7 @@ const schema = z.object({
     ),
 });
 
-export async function updateSettings(
+async function updateSettingsImpl(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
@@ -106,8 +107,13 @@ export async function updateSettings(
   return { error: null, success: true, fieldErrors: null };
 }
 
+export const updateSettings = instrumentedAction(
+  'settings.updateSettings',
+  updateSettingsImpl,
+);
+
 /** Mark the active WhatsApp connection revoked so the PT can reconnect later. */
-export async function disconnectWhatsApp(): Promise<void> {
+async function disconnectWhatsAppImpl(): Promise<void> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -136,13 +142,18 @@ export async function disconnectWhatsApp(): Promise<void> {
   revalidatePath('/settings');
 }
 
+export const disconnectWhatsApp = instrumentedAction(
+  'settings.disconnectWhatsApp',
+  disconnectWhatsAppImpl,
+);
+
 /**
  * Permanently delete the PT's auth user; the FK cascade purges all their data.
  * Order matters: the compliance archive is written before anything is deleted
  * (it must survive the cascade), WhatsApp is best-effort detached from Meta's
  * side, and only then is the auth user removed.
  */
-export async function deleteAccount(): Promise<void> {
+async function deleteAccountImpl(): Promise<void> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -175,8 +186,13 @@ export async function deleteAccount(): Promise<void> {
   redirect('/sign-in');
 }
 
+export const deleteAccount = instrumentedAction(
+  'settings.deleteAccount',
+  deleteAccountImpl,
+);
+
 /** Full-account GDPR export: settings, patients, conversations, everything scoped to this PT. */
-export async function exportPt(): Promise<
+async function exportPtImpl(): Promise<
   { ok: true; data: PtExport } | { ok: false }
 > {
   const supabase = await createServerClient();
@@ -192,3 +208,5 @@ export async function exportPt(): Promise<
   );
   return { ok: true, data };
 }
+
+export const exportPt = instrumentedAction('settings.exportPt', exportPtImpl);

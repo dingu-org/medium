@@ -11,6 +11,7 @@ import { createManualPatient } from '@/lib/clients/mutations';
 import { erasePatient as erasePatientData } from '@/lib/patients/erase';
 import { buildPatientExport, type PatientExport } from '@/lib/gdpr/export';
 import { withAuditLog } from '@/lib/tenancy';
+import { instrumentedAction } from '@/lib/actions/instrument';
 
 export type ClientActionResult =
   | { ok: true; clientId?: string }
@@ -35,7 +36,7 @@ const createSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 });
 
-export async function createManualClient(input: {
+async function createManualClientImpl(input: {
   name: string;
   phone: string;
   notes?: string;
@@ -81,7 +82,12 @@ export async function createManualClient(input: {
   return { ok: true, clientId: created.id };
 }
 
-export async function updateClientNotes(
+export const createManualClient = instrumentedAction(
+  'clients.createManualClient',
+  createManualClientImpl,
+);
+
+async function updateClientNotesImpl(
   clientId: string,
   notes: string,
 ): Promise<ClientActionResult> {
@@ -117,16 +123,26 @@ export async function updateClientNotes(
   return { ok: true };
 }
 
+export const updateClientNotes = instrumentedAction(
+  'clients.updateClientNotes',
+  updateClientNotesImpl,
+);
+
 /** Right-to-erasure: delegates the transactional cascade + audit write to lib/patients/erase. */
-export async function erasePatient(patientId: string): Promise<{ ok: boolean }> {
+async function erasePatientImpl(patientId: string): Promise<{ ok: boolean }> {
   const ptId = await requirePtId();
   await erasePatientData({ patientId, ptId });
   revalidatePath('/clients');
   return { ok: true };
 }
 
+export const erasePatient = instrumentedAction(
+  'clients.erasePatient',
+  erasePatientImpl,
+);
+
 /** Per-patient GDPR data export (DSAR shape). */
-export async function exportPatient(
+async function exportPatientImpl(
   patientId: string,
 ): Promise<{ ok: true; data: PatientExport } | { ok: false }> {
   const ptId = await requirePtId();
@@ -143,3 +159,8 @@ export async function exportPatient(
   if (!data) return { ok: false };
   return { ok: true, data };
 }
+
+export const exportPatient = instrumentedAction(
+  'clients.exportPatient',
+  exportPatientImpl,
+);

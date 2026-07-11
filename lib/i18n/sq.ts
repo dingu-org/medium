@@ -15,6 +15,7 @@ import { common } from './dict/common';
 import { onboarding } from './dict/onboarding';
 import { availability, settings } from './dict/settings';
 import { pwa } from './dict/pwa';
+import { today } from './dict/today';
 
 export const sq = {
   ...common,
@@ -29,6 +30,7 @@ export const sq = {
   availability,
   pwa,
   clients,
+  today,
 } as const;
 
 export type Dictionary = typeof sq;

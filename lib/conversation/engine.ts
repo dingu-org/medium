@@ -17,6 +17,7 @@ import {
 import { selectModel } from '@/lib/ai/models';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 import { conversations, messages, patients, pts } from '@/lib/db/schema';
+import { createLogger, logger, serializeError } from '@/lib/log';
 import { getServiceClient, withAuditLog } from '@/lib/tenancy';
 import { ConversationEngineError } from './errors';
 import {
@@ -100,11 +101,13 @@ export async function runModelTurn(args: {
   messages: ModelMessage[];
   toolContext: ToolExecutionContext;
   dispatch?: Dispatch;
+  modelId?: string;
 }): Promise<ModelTurnResult> {
   const tools = createConversationTools(
     args.toolContext,
     args.dispatch ?? dispatchTool,
   );
+  const startedAt = Date.now();
   const result = await generateText({
     model: args.model,
     system: args.system,
@@ -116,6 +119,7 @@ export async function runModelTurn(args: {
     maxRetries: 0,
     timeout: 30_000,
   });
+  const durationMs = Date.now() - startedAt;
 
   let provider =
     typeof args.model === 'string' ? 'unknown' : args.model.provider;
@@ -133,6 +137,22 @@ export async function runModelTurn(args: {
     provider,
     costMicrousd: Math.round(cost * 1_000_000),
   };
+
+  // Per-turn cost/usage telemetry for the cost dashboard (Phase 11). ids +
+  // counts only — no message content.
+  createLogger({
+    pt_id: args.toolContext.ptId,
+    conversation_id: args.toolContext.conversationId,
+  }).info('ai.turn_completed', 'AI model turn completed', {
+    model: args.modelId,
+    provider: metadata.provider,
+    tokensIn: metadata.tokensIn,
+    tokensOut: metadata.tokensOut,
+    cachedTokens: metadata.cachedTokens,
+    costMicrousd: metadata.costMicrousd,
+    steps: result.steps.length,
+    durationMs,
+  });
 
   const text = result.text.trim();
   if (text) {
@@ -439,6 +459,7 @@ async function runTurnCoreUnlocked(args: {
     : baseSystem;
   const result = await runModelTurn({
     model: args.model,
+    modelId: args.modelId,
     system,
     messages: history,
     toolContext: {
@@ -530,16 +551,16 @@ export async function runReminderTurn(args: {
       cancellationActor: 'patient',
     });
   } catch (error) {
-    console.error('[conversation-engine] reminder turn failed', {
-      ptId: args.inboundMessage.ptId,
-      conversationId: args.inboundMessage.conversationId,
-      messageId: args.inboundMessage.id,
+    logger.error('conversation.turn_failed', 'Conversation turn failed', {
+      pt_id: args.inboundMessage.ptId,
+      conversation_id: args.inboundMessage.conversationId,
+      message_id: args.inboundMessage.id,
       model: modelId,
-      errorCode:
+      error_code:
         error instanceof ConversationEngineError
           ? error.code
           : 'unhandled_error',
-      errorName: error instanceof Error ? error.name : typeof error,
+      ...serializeError(error),
     });
     throw error;
   }
@@ -584,16 +605,16 @@ export async function runTurn(args: {
       model: getOpenRouterModel(modelId),
     });
   } catch (error) {
-    console.error('[conversation-engine] turn failed', {
-      ptId: args.inboundMessage.ptId,
-      conversationId: args.inboundMessage.conversationId,
-      messageId: args.inboundMessage.id,
+    logger.error('conversation.turn_failed', 'Conversation turn failed', {
+      pt_id: args.inboundMessage.ptId,
+      conversation_id: args.inboundMessage.conversationId,
+      message_id: args.inboundMessage.id,
       model: modelId,
-      errorCode:
+      error_code:
         error instanceof ConversationEngineError
           ? error.code
           : 'unhandled_error',
-      errorName: error instanceof Error ? error.name : typeof error,
+      ...serializeError(error),
     });
     throw error;
   }

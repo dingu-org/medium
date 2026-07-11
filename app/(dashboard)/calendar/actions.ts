@@ -15,6 +15,7 @@ import {
 } from '@/lib/appointments';
 import { db } from '@/lib/db';
 import { appointments, patients, pts } from '@/lib/db/schema';
+import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 import { resolveBookingService } from '@/lib/services/queries';
 import { createManualPatient } from '@/lib/clients/mutations';
@@ -47,7 +48,7 @@ function messageFor(error: unknown): string {
   return 'Diçka shkoi keq. Provo sërish.';
 }
 
-export async function cancelAppointmentAction(
+async function cancelAppointmentActionImpl(
   appointmentId: string,
   reason?: string,
 ): Promise<ActionResult> {
@@ -66,9 +67,14 @@ export async function cancelAppointmentAction(
   }
 }
 
+export const cancelAppointmentAction = instrumentedAction(
+  'calendar.cancelAppointmentAction',
+  cancelAppointmentActionImpl,
+);
+
 const transitionSchema = z.enum(['confirmed', 'completed', 'no_show']);
 
-export async function transitionAppointmentAction(
+async function transitionAppointmentActionImpl(
   appointmentId: string,
   nextStatus: 'confirmed' | 'completed' | 'no_show',
 ): Promise<ActionResult> {
@@ -93,7 +99,12 @@ export async function transitionAppointmentAction(
   }
 }
 
-export async function rescheduleAppointmentAction(
+export const transitionAppointmentAction = instrumentedAction(
+  'calendar.transitionAppointmentAction',
+  transitionAppointmentActionImpl,
+);
+
+async function rescheduleAppointmentActionImpl(
   appointmentId: string,
   newStartsAt: string,
 ): Promise<ActionResult> {
@@ -115,7 +126,12 @@ export async function rescheduleAppointmentAction(
   }
 }
 
-export async function updateAppointmentNotes(
+export const rescheduleAppointmentAction = instrumentedAction(
+  'calendar.rescheduleAppointmentAction',
+  rescheduleAppointmentActionImpl,
+);
+
+async function updateAppointmentNotesImpl(
   appointmentId: string,
   notes: string,
 ): Promise<ActionResult> {
@@ -130,10 +146,15 @@ export async function updateAppointmentNotes(
   return { ok: true };
 }
 
+export const updateAppointmentNotes = instrumentedAction(
+  'calendar.updateAppointmentNotes',
+  updateAppointmentNotesImpl,
+);
+
 export type SlotsByDay = { date: string; label: string; slots: string[] };
 
 /** Free slots over the next 14 days for the reschedule / booking picker. */
-export async function getUpcomingSlots(): Promise<{
+async function getUpcomingSlotsImpl(): Promise<{
   days: SlotsByDay[];
   timezone: string;
 }> {
@@ -174,10 +195,15 @@ export async function getUpcomingSlots(): Promise<{
   return { days, timezone };
 }
 
+export const getUpcomingSlots = instrumentedAction(
+  'calendar.getUpcomingSlots',
+  getUpcomingSlotsImpl,
+);
+
 export type PatientOption = { id: string; name: string; phone: string };
 
 /** Patient picker search for manual booking (by name or phone). */
-export async function searchPatients(query: string): Promise<PatientOption[]> {
+async function searchPatientsImpl(query: string): Promise<PatientOption[]> {
   const ptId = await requirePtId();
   const q = query.trim();
   const where = q
@@ -194,6 +220,11 @@ export async function searchPatients(query: string): Promise<PatientOption[]> {
     .orderBy(desc(patients.createdAt))
     .limit(20);
 }
+
+export const searchPatients = instrumentedAction(
+  'calendar.searchPatients',
+  searchPatientsImpl,
+);
 
 const manualBookingSchema = z
   .object({
@@ -220,7 +251,7 @@ const manualBookingSchema = z
  * Create an appointment manually. The PT can book any free time (working hours
  * are bypassed); double-booking is still blocked by the overlap constraint.
  */
-export async function bookManualAppointment(input: {
+async function bookManualAppointmentImpl(input: {
   patientId?: string;
   newPatient?: { name: string; phone: string };
   date: string;
@@ -302,3 +333,8 @@ export async function bookManualAppointment(input: {
     return { ok: false, error: messageFor(error) };
   }
 }
+
+export const bookManualAppointment = instrumentedAction(
+  'calendar.bookManualAppointment',
+  bookManualAppointmentImpl,
+);

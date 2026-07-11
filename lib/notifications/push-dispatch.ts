@@ -1,7 +1,9 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { patients, pts } from '@/lib/db/schema';
+import { appendBackgroundEvent } from '@/lib/events/background';
 import { privacyName } from '@/lib/format/name';
+import { logger, serializeError } from '@/lib/log';
 import { resolveNotificationPrefs } from '@/lib/pwa/read-models';
 import { buildPushPayload, pushPrefKey, type PushEvent } from './push-payload';
 import { sendPush } from './push';
@@ -56,17 +58,34 @@ export async function dispatchPushForEvent(
   if (!payload) return { status: 'skipped', reason: 'no_payload' };
 
   const { sent, removed } = await sendPush(ptId, payload);
-  // Surfacing the fan-out counts up to the Inngest step return gives Phase 11 a
-  // free per-dispatch delivery signal in the run history. A dispatch where every
-  // subscription turned out stale (removed>0, sent===0) means we believed we
-  // could reach this PT but couldn't — worth a structured warn. sent===0 with
-  // no removals is just a PT who hasn't enabled push yet, so we stay quiet.
+
+  // Persist a counts-only `push.dispatched` event so Phase 11 delivery-rate
+  // metrics can see silent Web Push churn. No Inngest consumer — the outbox row
+  // just drains. Recording must NEVER fail a real dispatch, so swallow errors.
+  try {
+    await db.transaction((tx) =>
+      appendBackgroundEvent(tx, {
+        type: 'push.dispatched',
+        data: { ptId, sourceEvent: event.name, sent, removed },
+      }),
+    );
+  } catch (error) {
+    logger.warn(
+      'push.dispatched_record_failed',
+      'Failed to record push.dispatched metric event',
+      { pt_id: ptId, source_event: event.name, ...serializeError(error) },
+    );
+  }
+
+  // A dispatch where every subscription turned out stale (removed>0, sent===0)
+  // means we believed we could reach this PT but couldn't — worth a structured
+  // warn. sent===0 with no removals is just a PT who hasn't enabled push yet.
   if (sent === 0 && removed > 0) {
-    console.warn('[push] dispatch reached no live subscriptions', {
-      ptId,
-      event: event.name,
-      removed,
-    });
+    logger.warn(
+      'push.dispatch_no_live_subscriptions',
+      'Push dispatch reached no live subscriptions',
+      { pt_id: ptId, source_event: event.name, removed },
+    );
   }
   return { status: 'sent', sent, removed };
 }

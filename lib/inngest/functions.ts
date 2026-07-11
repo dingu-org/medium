@@ -1,6 +1,7 @@
 import type { InngestFunction } from 'inngest';
 import { handleAppointmentEvent } from './functions/appointment-events';
 import { bootstrapWaConnection } from './functions/bootstrap-wa-connection';
+import { dailyCostRollup } from './functions/daily-cost-rollup';
 import { dispatchPushNotification } from './functions/dispatch-push';
 import { handleInboundMessage } from './functions/handle-inbound-message';
 import { offerResumeAfterPtInactivity } from './functions/offer-resume';
@@ -29,4 +30,5 @@ export const functions: InngestFunction.Like[] = [
   reconcileAlbanianReminderTemplates,
   publishEventOutbox,
   dispatchPushNotification,
+  dailyCostRollup,
 ];

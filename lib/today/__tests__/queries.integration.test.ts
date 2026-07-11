@@ -1,9 +1,13 @@
+import { TZDate } from '@date-fns/tz';
+import { endOfISOWeek, startOfISOWeek } from 'date-fns';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
 import {
   appointments,
   conversations,
+  events,
+  messages,
   patients,
   pts,
   reminderJobs,
@@ -94,5 +98,108 @@ describe('getTodaySnapshot', () => {
       [patientB, 'reminder'],
     ]);
     expect(conversation.id).toBeTruthy();
+  });
+
+  it('week strip counts only rows inside the current ISO week', async () => {
+    // A fixed date far in the past so this test's data can never collide with
+    // stray `createdAt` defaults (real wall-clock time) from other inserts in
+    // this file or test run.
+    const now = new Date('2021-03-10T09:00:00.000Z');
+    const zonedNow = new TZDate(now, 'Europe/Tirane');
+    const weekStart = new Date(startOfISOWeek(zonedNow).getTime());
+    const weekEnd = new Date(endOfISOWeek(zonedNow).getTime());
+    const inWeek = new Date(weekStart.getTime() + 60_000);
+    const beforeWeek = new Date(weekStart.getTime() - 60_000);
+    const afterWeek = new Date(weekEnd.getTime() + 60_000);
+
+    const [conversation] = await db
+      .insert(conversations)
+      .values({ ptId, patientId: patientA, channel: 'whatsapp' })
+      .onConflictDoNothing({
+        target: [conversations.patientId, conversations.channel],
+      })
+      .returning({ id: conversations.id });
+    const conversationId =
+      conversation?.id ??
+      (
+        await db
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(eq(conversations.patientId, patientA))
+          .limit(1)
+      )[0].id;
+
+    await db.insert(messages).values([
+      {
+        ptId,
+        conversationId,
+        role: 'patient',
+        channel: 'whatsapp',
+        content: 'in week',
+        createdAt: inWeek,
+      },
+      {
+        ptId,
+        conversationId,
+        role: 'patient',
+        channel: 'whatsapp',
+        content: 'before week',
+        createdAt: beforeWeek,
+      },
+      {
+        ptId,
+        conversationId,
+        role: 'patient',
+        channel: 'whatsapp',
+        content: 'after week',
+        createdAt: afterWeek,
+      },
+      {
+        ptId,
+        conversationId,
+        role: 'pt',
+        channel: 'whatsapp',
+        content: 'pt reply in week (not a received message)',
+        createdAt: inWeek,
+      },
+    ]);
+
+    await db.insert(appointments).values([
+      {
+        ptId,
+        patientId: patientB,
+        startsAt: new Date(inWeek.getTime() + 60 * 60_000),
+        endsAt: new Date(inWeek.getTime() + 2 * 60 * 60_000),
+        serviceType: 'Në javë',
+        status: 'confirmed',
+        createdAt: inWeek,
+      },
+      {
+        ptId,
+        patientId: patientB,
+        startsAt: new Date(afterWeek.getTime() + 60 * 60_000),
+        endsAt: new Date(afterWeek.getTime() + 2 * 60 * 60_000),
+        serviceType: 'Jashtë javës',
+        status: 'confirmed',
+        createdAt: afterWeek,
+      },
+    ]);
+
+    await db.insert(events).values([
+      { ptId, type: 'conversation.escalated', payload: {}, occurredAt: inWeek },
+      {
+        ptId,
+        type: 'conversation.escalated',
+        payload: {},
+        occurredAt: beforeWeek,
+      },
+    ]);
+
+    const snapshot = await getTodaySnapshot(ptId, now);
+    expect(snapshot.week).toEqual({
+      messagesReceived: 1,
+      bookings: 1,
+      escalations: 1,
+    });
   });
 });

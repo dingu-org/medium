@@ -8,9 +8,9 @@ import {
   it,
   vi,
 } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { patients, pts } from '@/lib/db/schema';
+import { events, patients, pts } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 
 const sendPush = vi.hoisted(() => vi.fn());
@@ -218,10 +218,18 @@ describe('dispatchPushForEvent', () => {
     try {
       const result = await dispatchPushForEvent(bookedEvent());
       expect(result).toEqual({ status: 'sent', sent: 0, removed: 2 });
-      expect(warn).toHaveBeenCalledWith(
-        '[push] dispatch reached no live subscriptions',
-        expect.objectContaining({ ptId, removed: 2 }),
-      );
+      const line = warn.mock.calls
+        .map((c) => c[0])
+        .filter((a): a is string => typeof a === 'string')
+        .map((a) => JSON.parse(a))
+        .find((l) => l.event_name === 'push.dispatch_no_live_subscriptions');
+      expect(line).toMatchObject({
+        level: 'warn',
+        event_name: 'push.dispatch_no_live_subscriptions',
+        pt_id: ptId,
+        source_event: 'notification.requested',
+        removed: 2,
+      });
     } finally {
       warn.mockRestore();
     }
@@ -236,6 +244,49 @@ describe('dispatchPushForEvent', () => {
       expect(warn).not.toHaveBeenCalled();
     } finally {
       warn.mockRestore();
+    }
+  });
+
+  it('records a push.dispatched event with counts after a dispatch', async () => {
+    await db.delete(events).where(eq(events.ptId, ptId));
+    sendPush.mockResolvedValue({ sent: 2, removed: 1 });
+    const result = await dispatchPushForEvent(bookedEvent());
+    expect(result).toEqual({ status: 'sent', sent: 2, removed: 1 });
+
+    const rows = await db
+      .select()
+      .from(events)
+      .where(and(eq(events.ptId, ptId), eq(events.type, 'push.dispatched')));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].payload).toMatchObject({
+      ptId,
+      sourceEvent: 'notification.requested',
+      sent: 2,
+      removed: 1,
+    });
+  });
+
+  it('swallows a metric-recording failure without failing the dispatch', async () => {
+    const txSpy = vi
+      .spyOn(db, 'transaction')
+      .mockRejectedValueOnce(new Error('boom') as never);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await dispatchPushForEvent(bookedEvent());
+      expect(result).toEqual({ status: 'sent', sent: 1, removed: 0 });
+      const recordFailed = warn.mock.calls
+        .map((c) => c[0])
+        .filter((a): a is string => typeof a === 'string')
+        .map((a) => JSON.parse(a))
+        .find((l) => l.event_name === 'push.dispatched_record_failed');
+      expect(recordFailed).toMatchObject({
+        level: 'warn',
+        event_name: 'push.dispatched_record_failed',
+        pt_id: ptId,
+      });
+    } finally {
+      warn.mockRestore();
+      txSpy.mockRestore();
     }
   });
 });

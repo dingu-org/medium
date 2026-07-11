@@ -4,13 +4,20 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { pushSubscriptions } from '@/lib/db/schema';
+import { appendBackgroundEvent } from '@/lib/events/background';
 import { vapidPublicKey } from '@/lib/notifications/push';
+import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 
 /** The public VAPID key the browser needs to build `applicationServerKey`. */
-export async function getVapidPublicKey(): Promise<string> {
+async function getVapidPublicKeyImpl(): Promise<string> {
   return vapidPublicKey;
 }
+
+export const getVapidPublicKey = instrumentedAction(
+  'push.getVapidPublicKey',
+  getVapidPublicKeyImpl,
+);
 
 const subscriptionSchema = z.object({
   endpoint: z.string().url(),
@@ -25,7 +32,7 @@ const subscriptionSchema = z.object({
  * Upserts on `endpoint` so re-subscribing the same browser updates rather than
  * duplicates.
  */
-export async function savePushSubscription(
+async function savePushSubscriptionImpl(
   input: unknown,
   userAgent?: string,
 ): Promise<{ ok: boolean }> {
@@ -55,11 +62,30 @@ export async function savePushSubscription(
       },
     });
 
+  // Best-effort funnel metric: a save failure must never fail the real
+  // subscription write above. No consumer listens for this event — the
+  // outbox row it also produces just drains with no matching trigger.
+  try {
+    await db.transaction((tx) =>
+      appendBackgroundEvent(tx, {
+        type: 'push.subscribed',
+        data: { ptId: user.id },
+      }),
+    );
+  } catch {
+    // swallow
+  }
+
   return { ok: true };
 }
 
+export const savePushSubscription = instrumentedAction(
+  'push.savePushSubscription',
+  savePushSubscriptionImpl,
+);
+
 /** Remove this browser's subscription (called on disable / unsubscribe). */
-export async function removePushSubscription(endpoint: string): Promise<void> {
+async function removePushSubscriptionImpl(endpoint: string): Promise<void> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -75,3 +101,8 @@ export async function removePushSubscription(endpoint: string): Promise<void> {
       ),
     );
 }
+
+export const removePushSubscription = instrumentedAction(
+  'push.removePushSubscription',
+  removePushSubscriptionImpl,
+);

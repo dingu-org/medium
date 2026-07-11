@@ -1,11 +1,26 @@
 import { TZDate } from '@date-fns/tz';
-import { endOfDay, startOfDay } from 'date-fns';
-import { and, asc, desc, eq, gt, inArray, isNull, lte, ne } from 'drizzle-orm';
+import { endOfDay, endOfISOWeek, startOfDay, startOfISOWeek } from 'date-fns';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  ne,
+} from 'drizzle-orm';
 import type { AppointmentView } from '@/components/appointments/types';
 import { db } from '@/lib/db';
 import {
   appointments,
   conversations,
+  events,
+  messages,
   patients,
   pts,
   reminderJobs,
@@ -33,6 +48,13 @@ export type TodayAttention =
       appointment: TodayAppointment;
     };
 
+/** PT dashboard funnel widget: "This week — N messages, N bookings, N escalations". */
+export type WeekStrip = {
+  messagesReceived: number;
+  bookings: number;
+  escalations: number;
+};
+
 export type TodaySnapshot = {
   ptId: string;
   timezone: string;
@@ -40,6 +62,7 @@ export type TodaySnapshot = {
   attention: TodayAttention[];
   next: TodayAppointment | null;
   later: TodayAppointment[];
+  week: WeekStrip;
 };
 
 function appointmentView(
@@ -99,8 +122,19 @@ export async function getTodaySnapshot(
   const zonedNow = new TZDate(now, timezone);
   const dayStart = new Date(startOfDay(zonedNow).getTime());
   const dayEnd = new Date(endOfDay(zonedNow).getTime());
+  // ISO week (Mon–Sun) in the PT's timezone, converted to plain Dates for
+  // comparison against UTC-stored timestamps.
+  const weekStart = new Date(startOfISOWeek(zonedNow).getTime());
+  const weekEnd = new Date(endOfISOWeek(zonedNow).getTime());
 
-  const [appointmentRows, escalationRows, reminderRows] = await Promise.all([
+  const [
+    appointmentRows,
+    escalationRows,
+    reminderRows,
+    [messagesWeekRow],
+    [bookingsWeekRow],
+    [escalationsWeekRow],
+  ] = await Promise.all([
     db
       .select({
         id: appointments.id,
@@ -194,6 +228,38 @@ export async function getTodaySnapshot(
         ),
       )
       .orderBy(asc(appointments.startsAt)),
+    db
+      .select({ value: count() })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.ptId, ptId),
+          eq(messages.role, 'patient'),
+          gte(messages.createdAt, weekStart),
+          lt(messages.createdAt, weekEnd),
+        ),
+      ),
+    db
+      .select({ value: count() })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.ptId, ptId),
+          gte(appointments.createdAt, weekStart),
+          lt(appointments.createdAt, weekEnd),
+        ),
+      ),
+    db
+      .select({ value: count() })
+      .from(events)
+      .where(
+        and(
+          eq(events.ptId, ptId),
+          eq(events.type, 'conversation.escalated'),
+          gte(events.occurredAt, weekStart),
+          lt(events.occurredAt, weekEnd),
+        ),
+      ),
   ]);
 
   const todayAppointments = appointmentRows.map((row) =>
@@ -231,5 +297,10 @@ export async function getTodaySnapshot(
     attention,
     next: todayAppointments[0] ?? null,
     later: todayAppointments.slice(1),
+    week: {
+      messagesReceived: messagesWeekRow?.value ?? 0,
+      bookings: bookingsWeekRow?.value ?? 0,
+      escalations: escalationsWeekRow?.value ?? 0,
+    },
   };
 }

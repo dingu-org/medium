@@ -15,6 +15,7 @@ import type {
   OutboundMessage,
   ReminderTurnContext,
 } from '@/lib/conversation/types';
+import { createLogger } from '@/lib/log';
 import { handleReminderResponse } from '@/lib/reminders/response-handler';
 import { inngest } from '../client';
 
@@ -276,7 +277,20 @@ export const handleInboundMessage = inngest.createFunction(
     },
   },
   { event: 'message.received' },
-  async ({ event, step }) => {
+  async ({ event, step, runId }) => {
+    // Continue the webhook's trace through Inngest to the outbound send; fall
+    // back to the run id when the event carries no trace (criterion 6). These
+    // entry/exit lines all share trace_id.
+    const trace_id = event.data.traceId ?? runId;
+    const log = createLogger({
+      trace_id,
+      pt_id: event.data.ptId,
+      conversation_id: event.data.conversationId,
+    });
+    log.info('inbound.processing', 'Processing inbound message', {
+      message_id: event.data.messageId,
+    });
+
     const context = await step.run('load-context', () =>
       loadInboundJobContext(event.data),
     );
@@ -303,6 +317,10 @@ export const handleInboundMessage = inngest.createFunction(
         }),
       );
 
+      log.info('inbound.reply_sent', 'Outbound AI reply sent', {
+        message_id: event.data.messageId,
+        wa_message_id: delivery.messageId,
+      });
       return {
         outboundMessageId: reminder.outbound.id,
         externalId: delivery.messageId,
@@ -338,6 +356,10 @@ export const handleInboundMessage = inngest.createFunction(
       }),
     );
 
+    log.info('inbound.reply_sent', 'Outbound AI reply sent', {
+      message_id: event.data.messageId,
+      wa_message_id: delivery.messageId,
+    });
     return {
       outboundMessageId: turn.outbound.id,
       externalId: delivery.messageId,

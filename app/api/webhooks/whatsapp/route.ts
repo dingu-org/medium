@@ -12,6 +12,7 @@ import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { markConnectionRevoked } from '@/lib/channels/whatsapp/client';
 import { verifySignature } from '@/lib/channels/whatsapp/signature';
+import { createLogger, newTraceId } from '@/lib/log';
 import {
   whatsappWebhookPayload,
   type WhatsappChangeValue,
@@ -42,10 +43,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
+  const trace_id = req.headers.get('x-request-id') ?? newTraceId();
+  const log = createLogger({ trace_id });
   const header = req.headers.get('x-hub-signature-256');
 
   if (!verifySignature({ rawBody, header, secret: APP_SECRET })) {
-    console.warn('[whatsapp-webhook] rejected: bad signature', {
+    log.warn('webhook.bad_signature', 'Rejected: invalid webhook signature', {
       hasHeader: header !== null,
     });
     return new Response('Invalid signature', { status: 401 });
@@ -55,15 +58,17 @@ export async function POST(req: NextRequest) {
   try {
     json = JSON.parse(rawBody);
   } catch {
-    console.warn('[whatsapp-webhook] rejected: invalid JSON');
+    log.warn('webhook.invalid_json', 'Rejected: invalid JSON payload');
     return new Response('Bad payload', { status: 400 });
   }
 
   const parsed = whatsappWebhookPayload.safeParse(json);
   if (!parsed.success) {
-    console.warn('[whatsapp-webhook] rejected: schema mismatch', {
-      issues: parsed.error.issues,
-    });
+    log.warn(
+      'webhook.schema_mismatch',
+      'Rejected: payload failed schema validation',
+      { issue_count: parsed.error.issues.length },
+    );
     return new Response('Bad payload', { status: 400 });
   }
 
@@ -71,16 +76,16 @@ export async function POST(req: NextRequest) {
     for (const change of entry.changes) {
       switch (change.field) {
         case 'messages':
-          await handleMessagesChange(change.value);
+          await handleMessagesChange(change.value, trace_id);
           break;
         case 'history':
-          await handleHistoryChange(change.value);
+          await handleHistoryChange(change.value, trace_id);
           break;
         case 'smb_app_state_sync':
-          await handleAppStateSyncChange(change.value);
+          await handleAppStateSyncChange(change.value, trace_id);
           break;
         case 'smb_message_echoes':
-          await handleMessageEchoesChange(change.value);
+          await handleMessageEchoesChange(change.value, trace_id);
           break;
         case 'account_update':
           await handleAccountUpdate(entry.id, change.value);
@@ -99,9 +104,15 @@ type WebhookConnection = { id: string; ptId: string; wabaId: string };
 async function loadConnectionByPhoneNumberId(
   phoneNumberId: string | undefined,
   source: string,
+  trace_id: string,
 ): Promise<WebhookConnection | null> {
+  const log = createLogger({ trace_id });
   if (!phoneNumberId) {
-    console.warn('[whatsapp-webhook] missing phone_number_id', { source });
+    log.warn(
+      'webhook.missing_phone_number_id',
+      'Webhook payload is missing phone_number_id',
+      { source },
+    );
     return null;
   }
 
@@ -121,25 +132,33 @@ async function loadConnectionByPhoneNumberId(
     .limit(1);
 
   if (!connection) {
-    console.warn('[whatsapp-webhook] unknown phone_number_id', {
-      phoneNumberId,
-      source,
-    });
+    log.warn(
+      'webhook.unknown_phone_number_id',
+      'No active connection for phone_number_id',
+      { phone_number_id: phoneNumberId, source },
+    );
     return null;
   }
   return connection;
 }
 
-async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
+async function handleMessagesChange(
+  value: WhatsappChangeValue,
+  trace_id: string,
+): Promise<void> {
+  const log = createLogger({ trace_id });
   if (value.errors?.some((error) => error.code === 131060)) {
-    console.warn('[whatsapp-webhook] unsupported coexistence request', {
-      codes: value.errors.map((error) => error.code).filter(Boolean),
-    });
+    log.warn(
+      'webhook.unsupported_coexistence_request',
+      'Unsupported coexistence request',
+      { codes: value.errors.map((error) => error.code).filter(Boolean) },
+    );
     return;
   }
   const connection = await loadConnectionByPhoneNumberId(
     value.metadata?.phone_number_id,
     'messages',
+    trace_id,
   );
   if (!connection) {
     return;
@@ -148,7 +167,7 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
 
   for (const msg of value.messages ?? []) {
     if (msg.type !== 'text' || !msg.text) {
-      console.warn('[whatsapp-webhook] skipping non-text message', {
+      log.warn('webhook.skipping_non_text_message', 'Skipping non-text message', {
         type: msg.type,
         externalId: msg.id,
       });
@@ -234,7 +253,12 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
       const messageId = inserted[0].id;
       const eventId = await appendBackgroundEvent(tx, {
         type: 'message.received',
-        data: { messageId, ptId, conversationId: existingConversation.id },
+        data: {
+          messageId,
+          ptId,
+          conversationId: existingConversation.id,
+          traceId: trace_id,
+        },
       });
       return {
         fresh: true as const,
@@ -246,6 +270,11 @@ async function handleMessagesChange(value: WhatsappChangeValue): Promise<void> {
 
     if (result.fresh) {
       await tryPublishOutboxEvent(result.eventId);
+      log.info('webhook.message_accepted', 'Inbound message accepted', {
+        pt_id: ptId,
+        conversation_id: result.conversationId,
+        message_id: result.messageId,
+      });
     }
   }
 }
@@ -309,10 +338,14 @@ function errorText(
   );
 }
 
-async function handleHistoryChange(value: WhatsappChangeValue): Promise<void> {
+async function handleHistoryChange(
+  value: WhatsappChangeValue,
+  trace_id: string,
+): Promise<void> {
   const connection = await loadConnectionByPhoneNumberId(
     value.metadata?.phone_number_id,
     'history',
+    trace_id,
   );
   if (!connection) return;
 
@@ -366,10 +399,12 @@ function isDeleteAction(action: string | undefined): boolean {
 
 async function handleAppStateSyncChange(
   value: WhatsappChangeValue,
+  trace_id: string,
 ): Promise<void> {
   const connection = await loadConnectionByPhoneNumberId(
     value.metadata?.phone_number_id,
     'smb_app_state_sync',
+    trace_id,
   );
   if (!connection) return;
 
@@ -503,19 +538,23 @@ async function ensureWhatsappConversation(
 
 async function handleMessageEchoesChange(
   value: WhatsappChangeValue,
+  trace_id: string,
 ): Promise<void> {
+  const log = createLogger({ trace_id });
   const connection = await loadConnectionByPhoneNumberId(
     value.metadata?.phone_number_id,
     'smb_message_echoes',
+    trace_id,
   );
   if (!connection) return;
 
   for (const echo of value.message_echoes ?? []) {
     if (echo.type !== 'text' || !echo.text) {
-      console.warn('[whatsapp-webhook] skipping non-text message echo', {
-        type: echo.type,
-        externalId: echo.id,
-      });
+      log.warn(
+        'webhook.skipping_non_text_message_echo',
+        'Skipping non-text message echo',
+        { type: echo.type, externalId: echo.id },
+      );
       continue;
     }
 
@@ -559,11 +598,21 @@ async function handleMessageEchoesChange(
           reason: 'whatsapp_business_app_echo',
         },
       });
-      return { fresh: true as const, eventId };
+      return {
+        fresh: true as const,
+        eventId,
+        conversationId,
+        messageId: inserted[0].id,
+      };
     });
 
     if (result.fresh) {
       await tryPublishOutboxEvent(result.eventId);
+      log.info('webhook.message_accepted', 'Inbound message accepted', {
+        pt_id: connection.ptId,
+        conversation_id: result.conversationId,
+        message_id: result.messageId,
+      });
     }
   }
 }

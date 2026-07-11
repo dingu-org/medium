@@ -23,6 +23,7 @@ import {
   subscribeToPush,
 } from '@/lib/pwa/push-client';
 import { t } from '@/lib/i18n';
+import { recordPwaInstalled } from '@/app/(dashboard)/pwa-install-actions';
 
 const INSTALL_DISMISSED_KEY = 'medium:pwa-install-dismissed-at';
 const PUSH_DISMISSED_KEY = 'medium:pwa-push-dismissed-at';
@@ -349,6 +350,10 @@ function InstallBanner({
               size="sm"
               onClick={async () => {
                 await installEvent?.prompt();
+                const choice = await installEvent?.userChoice;
+                if (choice?.outcome === 'accepted') {
+                  await recordPwaInstalled().catch(() => undefined);
+                }
                 onDismiss();
               }}
             >

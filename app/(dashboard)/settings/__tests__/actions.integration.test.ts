@@ -57,7 +57,17 @@ const {
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('next/navigation', () => ({ redirect: redirectMock }));
+vi.mock('next/navigation', () => ({
+  redirect: redirectMock,
+  // instrumentedAction (lib/actions/instrument.ts) calls unstable_rethrow
+  // before logging/rethrowing; mirror its redirect-passthrough contract so
+  // the REDIRECT: sentinel from redirectMock above isn't logged as an error.
+  unstable_rethrow: (error: unknown) => {
+    if (error instanceof Error && error.message.startsWith('REDIRECT:')) {
+      throw error;
+    }
+  },
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: async () => ({
     auth: { getUser: getUserMock, signOut: signOutMock },

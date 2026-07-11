@@ -7,6 +7,7 @@ import {
   rescheduleAppointment,
 } from '@/lib/appointments';
 import { escalateConversationToHuman } from '@/lib/conversation/escalation';
+import { logger, serializeError } from '@/lib/log';
 import { withAuditLog } from '@/lib/tenancy';
 import { getActiveServiceByName } from '@/lib/services/queries';
 import {
@@ -238,11 +239,11 @@ export async function dispatchTool(
     if (error instanceof AppointmentError) {
       return appointmentErrorResult(error);
     }
-    console.error('[ai-dispatcher] tool failed', {
-      toolName,
-      ptId: ctx.ptId,
-      conversationId: ctx.conversationId,
-      errorName: error instanceof Error ? error.name : typeof error,
+    logger.error('ai.tool_failed', 'AI tool dispatch failed', {
+      pt_id: ctx.ptId,
+      conversation_id: ctx.conversationId,
+      tool_name: toolName,
+      ...serializeError(error),
     });
     return {
       ok: false,

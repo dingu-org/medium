@@ -119,6 +119,10 @@ const seedFactories: Record<
     action: 'a',
     target_table: 'patients',
   }),
+  cost_daily: ({ ptId }) => ({
+    pt_id: ptId,
+    day: new Date().toISOString().slice(0, 10),
+  }),
   erasure_archive: ({ ptId }) => ({ pt_id: ptId, scope: 'account' }),
 };
 

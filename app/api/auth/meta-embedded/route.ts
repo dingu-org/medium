@@ -7,6 +7,7 @@ import { encryptToken } from '@/lib/db/crypto';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { getServiceClient, withAuditLog } from '@/lib/tenancy';
+import { createLogger, newTraceId, serializeError } from '@/lib/log';
 import { createServerClient } from '@/lib/supabase/server';
 import { graphFetch } from '@/lib/channels/whatsapp/graph';
 import {
@@ -49,8 +50,11 @@ const STATUS_BY_KIND: Record<MetaSignupErrorKind, number> = {
  * session + an Origin check — there is no redirect round-trip to carry a state token.
  */
 export async function POST(req: NextRequest) {
+  const trace_id = newTraceId();
+  const log = createLogger({ trace_id });
+
   if (req.headers.get('origin') !== APP_URL) {
-    console.warn('[meta-embedded] rejected: bad origin', {
+    log.warn('meta_embedded.bad_origin', 'Rejected: unexpected request origin', {
       origin: req.headers.get('origin'),
     });
     return new Response('Forbidden', { status: 403 });
@@ -107,6 +111,7 @@ export async function POST(req: NextRequest) {
           mode,
           encrypted,
           tokenExpiresAt,
+          traceId: trace_id,
         }),
     );
     await tryPublishOutboxEvent(eventId);
@@ -114,15 +119,18 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: true, status: 'active' }, { status: 200 });
   } catch (err) {
     if (err instanceof MetaSignupError) {
-      console.warn('[meta-embedded] signup failed', { kind: err.kind, ptId });
+      log.warn('meta_embedded.signup_failed', 'Embedded Signup failed', {
+        kind: err.kind,
+        pt_id: ptId,
+      });
       return Response.json(
         { ok: false, error: err.kind },
         { status: STATUS_BY_KIND[err.kind] },
       );
     }
-    console.error('[meta-embedded] unexpected error', {
-      ptId,
-      err: err instanceof Error ? err.message : String(err),
+    log.error('meta_embedded.unexpected_error', 'Unexpected Embedded Signup error', {
+      pt_id: ptId,
+      ...serializeError(err),
     });
     return Response.json({ ok: false, error: 'graph_error' }, { status: 502 });
   }
@@ -222,10 +230,14 @@ async function registerPhoneNumber(
       body: { messaging_product: 'whatsapp', pin },
     });
   } catch (err) {
-    console.warn('[meta-embedded] phone register skipped/failed (continuing)', {
-      phoneNumberId,
-      status: err instanceof GraphApiError ? err.status : undefined,
-    });
+    createLogger().warn(
+      'meta_embedded.phone_register_skipped',
+      'Phone register skipped/failed (continuing)',
+      {
+        phone_number_id: phoneNumberId,
+        status: err instanceof GraphApiError ? err.status : undefined,
+      },
+    );
   }
 }
 
@@ -265,8 +277,10 @@ async function persistConnection(args: {
   mode: 'cloud_api' | 'coexistence';
   encrypted: Buffer;
   tokenExpiresAt: Date;
+  traceId: string;
 }): Promise<{ connectionId: string; eventId: string }> {
-  const { ptId, phoneNumberId, wabaId, mode, encrypted, tokenExpiresAt } = args;
+  const { ptId, phoneNumberId, wabaId, mode, encrypted, tokenExpiresAt, traceId } =
+    args;
   const svc = getServiceClient(ptId);
   const coexistence = mode === 'coexistence';
 
@@ -301,6 +315,7 @@ async function persistConnection(args: {
           phoneNumberId,
           wabaId,
           mode,
+          traceId,
         },
       });
       return { connectionId: row.id, eventId };
@@ -347,6 +362,7 @@ async function persistConnection(args: {
           phoneNumberId,
           wabaId,
           mode,
+          traceId,
         },
       });
       return { connectionId: existing.id, eventId };

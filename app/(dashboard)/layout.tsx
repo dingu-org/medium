@@ -8,6 +8,7 @@ import {
 } from '@/app/onboarding/constants';
 import { DashboardChrome } from '@/components/dashboard/dashboard-chrome';
 import { PwaProvider } from '@/components/pwa/pwa-provider';
+import { WebVitalsReporter } from '@/components/web-vitals-reporter';
 import { Toaster } from '@/components/ui/sonner';
 import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
@@ -58,6 +59,7 @@ export default async function DashboardLayout({
       unreadChats={unreadChats}
     >
       <PwaProvider />
+      <WebVitalsReporter />
       {children}
       <Toaster />
     </DashboardChrome>

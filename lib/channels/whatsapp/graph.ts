@@ -1,3 +1,4 @@
+import { logger } from '@/lib/log';
 import { GRAPH_BASE, GRAPH_VERSION } from './constants';
 import { GraphApiError } from './errors';
 
@@ -58,6 +59,14 @@ export async function graphFetch<T = unknown>(
 
   if (!res.ok) {
     const err = (json as GraphErrorBody).error;
+    // Single Graph error-boundary log for all call sites. NEVER include the url,
+    // token, searchParams, or body — the token-exchange URL carries the app
+    // secret in its query string. Status/code/subcode only.
+    logger.warn('graph.api_error', 'Graph API request failed', {
+      status: res.status,
+      code: err?.code,
+      subcode: err?.error_subcode,
+    });
     throw new GraphApiError({
       status: res.status,
       code: err?.code,

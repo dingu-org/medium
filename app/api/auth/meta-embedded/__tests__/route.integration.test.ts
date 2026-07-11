@@ -191,6 +191,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
           phoneNumberId,
           wabaId: 'WABA_123',
           mode: 'coexistence',
+          traceId: expect.any(String),
         },
       }),
     );

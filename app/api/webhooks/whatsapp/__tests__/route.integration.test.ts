@@ -393,7 +393,12 @@ describe('POST /api/webhooks/whatsapp — happy path', () => {
       expect.objectContaining({
         id: expect.any(String),
         name: 'message.received',
-        data: { messageId: ms[0].id, ptId, conversationId: cs[0].id },
+        data: {
+          messageId: ms[0].id,
+          ptId,
+          conversationId: cs[0].id,
+          traceId: expect.any(String),
+        },
       }),
     );
   });

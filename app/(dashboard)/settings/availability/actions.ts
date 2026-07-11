@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { availabilityRules, blockedPeriods, pts } from '@/lib/db/schema';
+import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -35,7 +36,7 @@ async function requirePtId(): Promise<string> {
 export type AvailabilityResult = { ok: boolean; error?: string };
 
 /** Replace the PT's weekly availability with the supplied rules (one per day). */
-export async function saveAvailability(input: {
+async function saveAvailabilityImpl(input: {
   rules: { weekday: number; start: string; end: string }[];
 }): Promise<AvailabilityResult> {
   const ptId = await requirePtId();
@@ -62,6 +63,11 @@ export async function saveAvailability(input: {
   return { ok: true };
 }
 
+export const saveAvailability = instrumentedAction(
+  'availability.saveAvailability',
+  saveAvailabilityImpl,
+);
+
 const blockSchema = z
   .object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date'),
@@ -74,7 +80,7 @@ const blockSchema = z
   });
 
 /** Add a blocked period, interpreting the entered wall-clock times in the PT tz. */
-export async function addBlockedPeriod(input: {
+async function addBlockedPeriodImpl(input: {
   date: string;
   startTime: string;
   endTime: string;
@@ -112,10 +118,20 @@ export async function addBlockedPeriod(input: {
   return { ok: true };
 }
 
-export async function deleteBlockedPeriod(id: string): Promise<void> {
+export const addBlockedPeriod = instrumentedAction(
+  'availability.addBlockedPeriod',
+  addBlockedPeriodImpl,
+);
+
+async function deleteBlockedPeriodImpl(id: string): Promise<void> {
   const ptId = await requirePtId();
   await db
     .delete(blockedPeriods)
     .where(and(eq(blockedPeriods.id, id), eq(blockedPeriods.ptId, ptId)));
   revalidatePath('/settings/availability');
 }
+
+export const deleteBlockedPeriod = instrumentedAction(
+  'availability.deleteBlockedPeriod',
+  deleteBlockedPeriodImpl,
+);

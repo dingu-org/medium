@@ -24,6 +24,7 @@ import {
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { withAuditLog } from '@/lib/tenancy';
+import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
 
@@ -50,7 +51,7 @@ const bodySchema = z.string().trim().min(1).max(4096);
  * manual mode (ai_active = false) so the AI doesn't talk over the PT, persists
  * the outbound message, and surfaces window / connection errors to the UI.
  */
-export async function sendPtMessage(
+async function sendPtMessageImpl(
   conversationId: string,
   rawBody: string,
 ): Promise<SendResult> {
@@ -125,11 +126,16 @@ export async function sendPtMessage(
   return { ok: true };
 }
 
+export const sendPtMessage = instrumentedAction(
+  'chat.sendPtMessage',
+  sendPtMessageImpl,
+);
+
 /**
  * Toggle who is handling a conversation. Taking over disables the AI and emits
  * `conversation.taken_over` (Phase 5 offers to resume after PT inactivity).
  */
-export async function setTakeover(
+async function setTakeoverImpl(
   conversationId: string,
   takeover: boolean,
 ): Promise<{ ok: boolean }> {
@@ -191,7 +197,12 @@ export async function setTakeover(
   return { ok: true };
 }
 
-export async function markConversationRead(
+export const setTakeover = instrumentedAction(
+  'chat.setTakeover',
+  setTakeoverImpl,
+);
+
+async function markConversationReadImpl(
   conversationId: string,
   throughMessageId: string,
 ): Promise<{ ok: boolean }> {
@@ -228,7 +239,12 @@ export async function markConversationRead(
   return { ok: true };
 }
 
-export async function setConversationClosed(
+export const markConversationRead = instrumentedAction(
+  'chat.markConversationRead',
+  markConversationReadImpl,
+);
+
+async function setConversationClosedImpl(
   conversationId: string,
   closed: boolean,
 ): Promise<{ ok: boolean }> {
@@ -254,7 +270,12 @@ export async function setConversationClosed(
   return { ok: true };
 }
 
-export async function sendUpcomingReminderTemplate(
+export const setConversationClosed = instrumentedAction(
+  'chat.setConversationClosed',
+  setConversationClosedImpl,
+);
+
+async function sendUpcomingReminderTemplateImpl(
   conversationId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const ptId = await requirePtId();
@@ -416,3 +437,8 @@ export async function sendUpcomingReminderTemplate(
     }
   });
 }
+
+export const sendUpcomingReminderTemplate = instrumentedAction(
+  'chat.sendUpcomingReminderTemplate',
+  sendUpcomingReminderTemplateImpl,
+);

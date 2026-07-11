@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getPostgresErrorCode } from '@/lib/db/postgres-errors';
 import { services } from '@/lib/db/schema';
+import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 
 export type ServiceMutationResult =
@@ -46,7 +47,7 @@ function failure(error: unknown): ServiceMutationResult {
   };
 }
 
-export async function createService(input: {
+async function createServiceImpl(input: {
   name: string;
   durationMinutes: number;
 }): Promise<ServiceMutationResult> {
@@ -73,7 +74,12 @@ export async function createService(input: {
   }
 }
 
-export async function updateService(
+export const createService = instrumentedAction(
+  'services.createService',
+  createServiceImpl,
+);
+
+async function updateServiceImpl(
   serviceId: string,
   input: { name: string; durationMinutes: number },
 ): Promise<ServiceMutationResult> {
@@ -101,7 +107,12 @@ export async function updateService(
   }
 }
 
-export async function setServiceActive(
+export const updateService = instrumentedAction(
+  'services.updateService',
+  updateServiceImpl,
+);
+
+async function setServiceActiveImpl(
   serviceId: string,
   active: boolean,
 ): Promise<ServiceMutationResult> {
@@ -117,3 +128,8 @@ export async function setServiceActive(
   revalidatePath('/onboarding');
   return { ok: true };
 }
+
+export const setServiceActive = instrumentedAction(
+  'services.setServiceActive',
+  setServiceActiveImpl,
+);

@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { eventOutbox } from '@/lib/db/schema';
 import { inngest } from '@/lib/inngest/client';
+import { logger, serializeError } from '@/lib/log';
 
 const LEASE_MINUTES = 5;
 const MAX_BACKOFF_MINUTES = 60;
@@ -100,11 +101,11 @@ async function publishClaimed(
       })
       .where(eq(eventOutbox.id, row.id));
 
-    console.warn('[event-outbox] publish failed', {
-      eventId: row.eventId,
-      eventType: row.eventType,
+    logger.warn('outbox.publish_failed', 'Outbox event publish failed', {
+      event_id: row.eventId,
+      outbox_event_type: row.eventType,
       attempts: row.attempts,
-      errorName: error instanceof Error ? error.name : typeof error,
+      ...serializeError(error),
     });
     return false;
   }
@@ -122,10 +123,11 @@ export async function tryPublishOutboxEvent(eventId: string): Promise<void> {
   try {
     await publishOutboxEvent(eventId);
   } catch (error) {
-    console.warn('[event-outbox] immediate publish unavailable', {
-      eventId,
-      errorName: error instanceof Error ? error.name : typeof error,
-    });
+    logger.warn(
+      'outbox.immediate_publish_unavailable',
+      'Immediate outbox publish unavailable',
+      { event_id: eventId, ...serializeError(error) },
+    );
   }
 }
 

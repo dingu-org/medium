@@ -1,9 +1,11 @@
 import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   check,
   customType,
+  date,
   index,
   integer,
   jsonb,
@@ -441,6 +443,30 @@ export const eventOutbox = pgTable(
       .on(t.availableAt)
       .where(sql`published_at IS NULL`),
   ],
+);
+
+// Per-PT per-day cost rollup (Phase 11). Populated by the `daily-cost-rollup`
+// Inngest cron from persisted `messages` cost fields + an estimated Meta
+// conversation cost. Idempotent upsert on (pt_id, day).
+export const costDaily = pgTable(
+  'cost_daily',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    day: date('day', { mode: 'string' }).notNull(),
+    aiCostMicrousd: bigint('ai_cost_microusd', { mode: 'number' })
+      .notNull()
+      .default(0),
+    aiCachedTokens: bigint('ai_cached_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    metaConversations: integer('meta_conversations').notNull().default(0),
+    metaCostMicroEur: bigint('meta_cost_micro_eur', { mode: 'number' })
+      .notNull()
+      .default(0),
+    computedAt: tsTz('computed_at').notNull().default(now),
+  },
+  (t) => [uniqueIndex('cost_daily_pt_day_uq').on(t.ptId, t.day)],
 );
 
 export const auditLog = pgTable('audit_log', {

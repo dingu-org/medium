@@ -14,13 +14,46 @@ import { conversations, messages, patients } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { markConversationRead } from '../actions';
 
-const authState = vi.hoisted(() => ({ userId: '' }));
+const authState = vi.hoisted(() => ({ userId: '' as string | null }));
+const { errorSpy, redirectMock } = vi.hoisted(() => ({
+  errorSpy: vi.fn(),
+  redirectMock: vi.fn((path: string) => {
+    const err = new Error(`REDIRECT:${path}`);
+    (err as Error & { __isRedirect?: true }).__isRedirect = true;
+    throw err;
+  }),
+}));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('next/navigation', () => ({
+  redirect: redirectMock,
+  // Mirrors the real unstable_rethrow contract: rethrow redirect/notFound
+  // control-flow errors, no-op (return) for anything else.
+  unstable_rethrow: (error: unknown) => {
+    if (error instanceof Error && (error as { __isRedirect?: true }).__isRedirect) {
+      throw error;
+    }
+  },
+}));
+vi.mock('@/lib/log', () => ({
+  logger: {
+    error: errorSpy,
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+  },
+  newTraceId: () => 'test-trace-id',
+  serializeError: (err: unknown) => ({
+    errorName: err instanceof Error ? err.name : typeof err,
+    errorMessage: err instanceof Error ? err.message : String(err),
+  }),
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: async () => ({
     auth: {
-      getUser: async () => ({ data: { user: { id: authState.userId } } }),
+      getUser: async () => ({
+        data: { user: authState.userId ? { id: authState.userId } : null },
+      }),
     },
   }),
 }));
@@ -119,5 +152,39 @@ describe('markConversationRead', () => {
   it('returns ok:false for a message outside the conversation', async () => {
     const result = await markConversationRead(conversationId, randomUUID());
     expect(result).toEqual({ ok: false });
+  });
+});
+
+describe('instrumentedAction wrapper (via markConversationRead)', () => {
+  beforeEach(() => {
+    errorSpy.mockClear();
+  });
+
+  it('logs action.error once and rethrows a genuine failure', async () => {
+    // Not a valid UUID: the underlying query throws a real Postgres error
+    // (invalid input syntax for uuid), giving instrumentedAction something
+    // real to catch, log, and rethrow.
+    await expect(
+      markConversationRead(conversationId, 'not-a-uuid'),
+    ).rejects.toThrow();
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [eventName, message, attrs] = errorSpy.mock.calls[0];
+    expect(eventName).toBe('action.error');
+    expect(message).toBe('chat.markConversationRead');
+    expect(attrs).toMatchObject({ action: 'chat.markConversationRead' });
+  });
+
+  it('passes a redirect through unchanged, without logging', async () => {
+    const previous = authState.userId;
+    authState.userId = null;
+    try {
+      await expect(
+        markConversationRead(conversationId, newerId),
+      ).rejects.toThrow('REDIRECT:/sign-in');
+    } finally {
+      authState.userId = previous;
+    }
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

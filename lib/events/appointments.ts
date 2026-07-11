@@ -5,6 +5,11 @@ import { appendStoredEvent } from './store';
 const isoDateTime = z.iso.datetime({ offset: true });
 const cancellationActor = z.enum(['patient', 'pt', 'ai']);
 
+// Optional request-edge trace id (Phase 11). Optional so old outbox rows still
+// validate; declared explicitly because z.object().parse() strips undeclared
+// keys.
+const traceId = z.uuid().optional();
+
 const appointmentSummary = z.object({
   ptId: z.uuid(),
   appointmentId: z.uuid(),
@@ -12,6 +17,7 @@ const appointmentSummary = z.object({
   startsAt: isoDateTime,
   endsAt: isoDateTime,
   serviceType: z.string().nullable(),
+  traceId,
 });
 
 export const appointmentEventSchemas = {
@@ -34,6 +40,7 @@ export const appointmentEventSchemas = {
     status: z.enum(['pending', 'confirmed']),
     from: z.object({ startsAt: isoDateTime, endsAt: isoDateTime }),
     to: z.object({ startsAt: isoDateTime, endsAt: isoDateTime }),
+    traceId,
   }),
   'appointment.completed': appointmentSummary.extend({
     status: z.literal('completed'),

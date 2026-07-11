@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { SectionLabel } from '@/components/ui/section-label';
 import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
 import type { TodayAppointment, TodaySnapshot } from '@/lib/today/queries';
-import { formatWeekdayDate } from '@/lib/i18n';
+import { formatWeekdayDate, t } from '@/lib/i18n';
 
 export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
   const [selected, setSelected] = useState<TodayAppointment | null>(null);
@@ -63,6 +63,23 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
       <p className="text-ink-3 -mt-1 mb-5 text-[13.5px] tracking-[-0.005em]">
         {dateLabel}
       </p>
+
+      <section className="mb-6">
+        <SectionLabel>{t.today.weekLabel}</SectionLabel>
+        <div className="flex items-center rounded-lg bg-card px-[18px] py-4 shadow-[var(--shadow-card)]">
+          <WeekStat
+            value={snapshot.week.messagesReceived}
+            label={t.today.messages}
+          />
+          <div className="mx-4 h-8 w-px bg-sep" aria-hidden />
+          <WeekStat value={snapshot.week.bookings} label={t.today.bookings} />
+          <div className="mx-4 h-8 w-px bg-sep" aria-hidden />
+          <WeekStat
+            value={snapshot.week.escalations}
+            label={t.today.escalations}
+          />
+        </div>
+      </section>
 
       {quiet ? (
         <>
@@ -193,6 +210,20 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
       />
+    </div>
+  );
+}
+
+/** One inline stat inside the "Kjo javë" strip (big number + small label). */
+function WeekStat({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="min-w-0 flex-1 text-center first:text-left">
+      <span className="font-heading block text-[22px] leading-none font-semibold tracking-[-0.02em] tabular-nums">
+        {value}
+      </span>
+      <span className="text-ink-3 mt-1 block truncate text-[12px]">
+        {label}
+      </span>
     </div>
   );
 }
