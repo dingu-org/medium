@@ -84,6 +84,9 @@ async function readPt() {
   const [row] = await db
     .select({
       practiceName: pts.practiceName,
+      fullName: pts.fullName,
+      title: pts.title,
+      address: pts.address,
       timezone: pts.timezone,
       retentionDays: pts.retentionDays,
       notificationPrefs: pts.notificationPrefs,
@@ -159,6 +162,45 @@ describe('updateProfile', () => {
 
     const row = await readPt();
     expect(row.practiceName).toBe('Fizioterapi Hoxha');
+  });
+
+  it('persists full name, title, and address', async () => {
+    const fd = new FormData();
+    fd.set('practiceName', 'Fizioterapi Hoxha');
+    fd.set('fullName', 'Arta Hoxha');
+    fd.set('title', 'Fizioterapiste');
+    fd.set('address', 'Rr. Sami Frashëri 4, Tiranë');
+
+    const result = await updateProfile(initialState, fd);
+    expect(result).toEqual({ error: null, success: true, fieldErrors: null });
+
+    const row = await readPt();
+    expect(row.fullName).toBe('Arta Hoxha');
+    expect(row.title).toBe('Fizioterapiste');
+    expect(row.address).toBe('Rr. Sami Frashëri 4, Tiranë');
+  });
+
+  it('clears optional profile fields to null when submitted empty', async () => {
+    const seed = new FormData();
+    seed.set('practiceName', 'Fizioterapi Hoxha');
+    seed.set('fullName', 'Arta Hoxha');
+    seed.set('title', 'Fizioterapiste');
+    seed.set('address', 'Rr. Sami Frashëri 4, Tiranë');
+    await updateProfile(initialState, seed);
+
+    const fd = new FormData();
+    fd.set('practiceName', 'Fizioterapi Hoxha');
+    fd.set('fullName', '');
+    fd.set('title', '');
+    fd.set('address', '');
+
+    const result = await updateProfile(initialState, fd);
+    expect(result.success).toBe(true);
+
+    const row = await readPt();
+    expect(row.fullName).toBeNull();
+    expect(row.title).toBeNull();
+    expect(row.address).toBeNull();
   });
 
   it('rejects an empty practice name without writing', async () => {

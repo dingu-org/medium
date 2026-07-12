@@ -2,18 +2,13 @@
 
 import { type FormEvent, useActionState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { t } from '@/lib/i18n';
+import { NavBar } from '@/components/dashboard/nav-bar';
+import { OfflineNote } from '@/components/settings/offline-note';
+import { SaveAction } from '@/components/settings/save-action';
+import { SetField } from '@/components/settings/set-field';
+import { InitialsAvatar } from '@/components/ui/initials-avatar';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
+import { t } from '@/lib/i18n';
 import type { SettingsState } from '../constants';
 import { updateProfile } from './actions';
 
@@ -22,8 +17,23 @@ const initialState: SettingsState = {
   success: false,
   fieldErrors: null,
 };
+const FORM_ID = 'profile-form';
 
-export function ProfileForm({ practiceName }: { practiceName: string }) {
+export function ProfileForm({
+  fullName,
+  title,
+  practiceName,
+  address,
+  phone,
+  email,
+}: {
+  fullName: string;
+  title: string;
+  practiceName: string;
+  address: string;
+  phone: string | null;
+  email: string;
+}) {
   const [state, action, pending] = useActionState(updateProfile, initialState);
   const online = useOnlineStatus();
 
@@ -33,44 +43,70 @@ export function ProfileForm({ practiceName }: { practiceName: string }) {
   }, [state]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
-    if (online) return;
+    if (online) return; // offline defense (SaveAction is already disabled)
     event.preventDefault();
     toast.error(t.settings.settingsRequireConnection);
   }
 
-  return (
-    <form action={action} onSubmit={onSubmit} className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t.settings.practiceCard}</CardTitle>
-          <CardDescription>{t.settings.practiceCardSub}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="practiceName">{t.settings.practiceName}</Label>
-            <Input
-              id="practiceName"
-              name="practiceName"
-              defaultValue={practiceName}
-              required
-            />
-            {state.fieldErrors?.practiceName && (
-              <p className="text-sm text-destructive">
-                {state.fieldErrors.practiceName[0]}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+  const avatarName = fullName || practiceName || email;
 
-      <Button type="submit" className="w-full" disabled={pending || !online}>
-        {pending ? t.actions.saving : t.settings.saveSettings}
-      </Button>
-      {!online && (
-        <p className="text-center text-xs text-muted-foreground">
-          {t.settings.requiresConnection}
-        </p>
-      )}
-    </form>
+  return (
+    <>
+      <NavBar
+        title={t.settings.profileBusiness}
+        backHref="/settings"
+        right={<SaveAction form={FORM_ID} disabled={pending || !online} />}
+      />
+      <div className="px-5 pt-2 pb-7">
+        <OfflineNote />
+        <div className="mb-[26px] flex justify-center pt-1">
+          <InitialsAvatar name={avatarName} fallback={email} size={76} />
+        </div>
+        <form
+          id={FORM_ID}
+          action={action}
+          onSubmit={onSubmit}
+          className="flex flex-col gap-4"
+        >
+          <SetField
+            label={t.settings.fullName}
+            name="fullName"
+            defaultValue={fullName}
+            disabled={!online}
+            error={state.fieldErrors?.fullName?.[0]}
+          />
+          <SetField
+            label={t.settings.profileTitleLabel}
+            name="title"
+            defaultValue={title}
+            help={t.settings.profileTitleHelp}
+            disabled={!online}
+            error={state.fieldErrors?.title?.[0]}
+          />
+          <SetField
+            label={t.settings.profilePracticeLabel}
+            name="practiceName"
+            defaultValue={practiceName}
+            disabled={!online}
+            error={state.fieldErrors?.practiceName?.[0]}
+          />
+          <SetField
+            label={t.settings.profileAddressLabel}
+            name="address"
+            defaultValue={address}
+            help={t.settings.profileAddressHelp}
+            disabled={!online}
+            error={state.fieldErrors?.address?.[0]}
+          />
+          <SetField
+            label={t.settings.profilePhoneLabel}
+            defaultValue={phone ?? undefined}
+            placeholder={t.settings.connectionBadgeNotConnected}
+            help={t.settings.profilePhoneHelp}
+            readOnly
+          />
+        </form>
+      </div>
+    </>
   );
 }

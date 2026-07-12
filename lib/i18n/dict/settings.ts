@@ -47,7 +47,7 @@ export const settings = {
   retentionDays: (n: number) => `${n} ditë`,
 
   practiceName: 'Klinika ose praktika',
-  fullName: 'Emri i plotë',
+  fullName: 'Emri',
   timezone: 'Zona kohore',
   aiName: 'Emri i asistentit',
   aiGreeting: 'Përshëndetja',
@@ -177,6 +177,16 @@ export const settings = {
   signOut: 'Dil nga llogaria',
   assistantActive: 'Aktiv',
   assistantPaused: 'Në pauzë',
+
+  // Profile screen (Phase 15 task 6)
+  profileTitleLabel: 'Titulli',
+  profileTitleHelp: 'Medium e përdor kur u prezantohet pacientëve.',
+  profilePracticeLabel: 'Emri i praktikës',
+  profileAddressLabel: 'Adresa',
+  profileAddressHelp: 'Medium e përdor kur pacientët pyesin ku ndodhesh.',
+  profilePhoneLabel: 'Telefoni',
+  profilePhoneHelp: 'Vjen nga lidhja me WhatsApp Business. Ndryshohet aty.',
+  profilePracticeRequired: 'Shkruaj emrin e praktikës.',
 
   // AssistantCard (hub + assistant screen)
   assistantCardActiveTitle: 'Medium po përgjigjet',

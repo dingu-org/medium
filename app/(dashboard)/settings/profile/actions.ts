@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
+import { t } from '@/lib/i18n';
 import { createServerClient } from '@/lib/supabase/server';
 import type { SettingsState } from '../constants';
 
@@ -14,7 +15,11 @@ const emptyToUndefined = (v: unknown) =>
   typeof v === 'string' && v.trim() === '' ? undefined : v;
 
 const schema = z.object({
-  practiceName: z.string().trim().min(1, 'Practice name is required').max(120),
+  practiceName: z
+    .string()
+    .trim()
+    .min(1, t.settings.profilePracticeRequired)
+    .max(120),
   fullName: z.preprocess(emptyToUndefined, z.string().trim().max(120).optional()),
   title: z.preprocess(emptyToUndefined, z.string().trim().max(120).optional()),
   address: z.preprocess(emptyToUndefined, z.string().trim().max(240).optional()),
@@ -30,8 +35,7 @@ async function updateProfileImpl(
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
 
-  // Optional fields stay untouched when the form does not submit them
-  // (the transitional form only sends practiceName).
+  // Optional fields stay untouched when the form does not submit them.
   const parsed = schema.safeParse({
     practiceName: formData.get('practiceName'),
     fullName: formData.get('fullName') ?? undefined,

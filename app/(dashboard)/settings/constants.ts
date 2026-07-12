@@ -20,6 +20,9 @@ export type SettingsState = {
   success: boolean;
   fieldErrors: {
     practiceName?: string[];
+    fullName?: string[];
+    title?: string[];
+    address?: string[];
     timezone?: string[];
     aiName?: string[];
     aiGreeting?: string[];
