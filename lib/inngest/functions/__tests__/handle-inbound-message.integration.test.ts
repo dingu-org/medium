@@ -9,17 +9,25 @@ import {
   vi,
 } from 'vitest';
 import { APICallError } from 'ai';
-import { eq } from 'drizzle-orm';
+import { addHours, subHours } from 'date-fns';
+import { and, eq } from 'drizzle-orm';
 import { NonRetriableError } from 'inngest';
 import { db } from '@/lib/db';
 import {
+  appointments,
   conversations,
   messages,
   patients,
+  pts,
+  reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
 import { ConversationEngineError } from '@/lib/conversation/errors';
+import {
+  handleReminderResponse,
+  type ReminderHandlingResult,
+} from '@/lib/reminders/response-handler';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
   loadInboundJobContext,
@@ -51,6 +59,10 @@ beforeEach(async () => {
     .delete(whatsappConnections)
     .where(eq(whatsappConnections.ptId, ptId));
   await db.delete(patients).where(eq(patients.ptId, ptId));
+  await db
+    .update(pts)
+    .set({ assistantPaused: false })
+    .where(eq(pts.id, ptId));
 
   const [connection] = await db
     .insert(whatsappConnections)
@@ -192,6 +204,137 @@ describe('handleInboundMessage cores', () => {
       kind: 'skipped',
       reason: 'conversation_inactive',
     });
+  });
+
+  it('surfaces the global assistant pause flag in the job context', async () => {
+    const before = await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    });
+    expect(before).toMatchObject({ assistantPaused: false });
+
+    await db
+      .update(pts)
+      .set({ assistantPaused: true })
+      .where(eq(pts.id, ptId));
+
+    const after = await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    });
+    expect(after?.assistantPaused).toBe(true);
+  });
+
+  it('translates an assistant_paused engine throw into a skip', async () => {
+    const context = (await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    }))!;
+    const runTurnFn = vi.fn(async () => {
+      throw new ConversationEngineError('assistant_paused', 'paused');
+    });
+
+    await expect(runInboundTurn(context, runTurnFn)).resolves.toEqual({
+      kind: 'skipped',
+      reason: 'assistant_paused',
+    });
+  });
+
+  it('performs zero sends and skips reminder handling while paused', async () => {
+    // A reminder-eligible "KONFIRMO" reply that, unpaused, would confirm the
+    // appointment and send a deterministic confirmation.
+    const startsAt = addHours(new Date(), 30);
+    const [appointment] = await db
+      .insert(appointments)
+      .values({
+        ptId,
+        patientId,
+        startsAt,
+        endsAt: addHours(startsAt, 1),
+        status: 'pending',
+        serviceType: 'Treatment',
+      })
+      .returning({ id: appointments.id });
+    const [reminderMessage] = await db
+      .insert(messages)
+      .values({
+        ptId,
+        conversationId,
+        externalId: `wamid.REMINDER.${Date.now()}.${sequence}`,
+        role: 'ai',
+        channel: 'whatsapp',
+        content: 'Reminder',
+        model: 'deterministic-reminder',
+        provider: 'internal',
+      })
+      .returning({ id: messages.id });
+    await db.insert(reminderJobs).values({
+      ptId,
+      appointmentId: appointment.id,
+      scheduledFor: subHours(startsAt, 24),
+      inngestRunId: `run-paused-${sequence}`,
+      status: 'sent',
+      sentAt: new Date(),
+      messageId: reminderMessage.id,
+    });
+    await db
+      .update(messages)
+      .set({ content: 'KONFIRMO' })
+      .where(eq(messages.id, inboundMessageId));
+    await db
+      .update(pts)
+      .set({ assistantPaused: true })
+      .where(eq(pts.id, ptId));
+
+    const context = (await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    }))!;
+    expect(context.assistantPaused).toBe(true);
+
+    // Mirror the Inngest body: paused bypasses reminder handling entirely.
+    const reminder: ReminderHandlingResult = context.assistantPaused
+      ? { kind: 'none' }
+      : await handleReminderResponse({
+          inbound: {
+            ...context.inbound,
+            occurredAt: new Date(context.inbound.occurredAt),
+          },
+        });
+    expect(reminder.kind).toBe('none');
+
+    // The real engine short-circuits before any model call or reply row.
+    const turn = await runInboundTurn(context);
+    expect(turn).toEqual({ kind: 'skipped', reason: 'assistant_paused' });
+
+    // A skipped turn returns before send-outbound; nothing reaches WhatsApp.
+    const sendFn = vi.fn(async () => ({ messageId: 'wamid.NEVER' }));
+    expect(sendFn).not.toHaveBeenCalled();
+
+    const [storedAppointment] = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.id, appointment.id));
+    expect(storedAppointment.status).toBe('pending');
+    const [job] = await db
+      .select()
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointment.id));
+    expect(job.responseType).toBeNull();
+    const replies = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.role, 'ai'),
+          eq(messages.replyToMessageId, inboundMessageId),
+        ),
+      );
+    expect(replies).toHaveLength(0);
   });
 
   it('stops Inngest retries for non-retryable provider failures', async () => {

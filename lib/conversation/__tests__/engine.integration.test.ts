@@ -224,6 +224,10 @@ beforeEach(async () => {
   await db.delete(events).where(eq(events.ptId, ptId));
   await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
   await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
+  await db
+    .update(pts)
+    .set({ assistantPaused: false })
+    .where(eq(pts.id, ptId));
   await db.insert(availabilityRules).values({
     ptId,
     weekday: 1,
@@ -542,6 +546,96 @@ describe('runTurnCore', () => {
     expect(
       audits.some((row) => row.action === 'ai.tool.escalate_to_human'),
     ).toBe(true);
+  });
+
+  it('suppresses the reply and never calls the model while the assistant is paused', async () => {
+    await db
+      .update(pts)
+      .set({ assistantPaused: true })
+      .where(eq(pts.id, ptId));
+    const model = new MockLanguageModelV3({
+      doGenerate: vi.fn(() => {
+        throw new Error('model should not run');
+      }),
+    });
+
+    await expect(
+      runTurnCore({
+        inboundMessage: inbound,
+        model,
+        modelId: 'requested/model',
+      }),
+    ).rejects.toMatchObject({
+      code: 'assistant_paused',
+    } satisfies Partial<ConversationEngineError>);
+    expect(model.doGenerateCalls).toHaveLength(0);
+
+    const replies = await db
+      .select()
+      .from(messages)
+      .where(
+        and(eq(messages.role, 'ai'), eq(messages.replyToMessageId, inbound.id)),
+      );
+    expect(replies).toHaveLength(0);
+  });
+
+  it('escalates and notifies the PT while paused without a patient reply', async () => {
+    await db
+      .update(messages)
+      .set({ content: 'HELP' })
+      .where(eq(messages.id, inbound.id));
+    await db
+      .update(pts)
+      .set({ assistantPaused: true })
+      .where(eq(pts.id, ptId));
+    const model = new MockLanguageModelV3({
+      doGenerate: vi.fn(() => {
+        throw new Error('model should not run');
+      }),
+    });
+
+    await expect(
+      runTurnCore({
+        inboundMessage: inbound,
+        model,
+        modelId: 'requested/model',
+      }),
+    ).rejects.toMatchObject({
+      code: 'assistant_paused',
+    } satisfies Partial<ConversationEngineError>);
+    expect(model.doGenerateCalls).toHaveLength(0);
+
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conversation.aiActive).toBe(false);
+    expect(conversation.escalationState).toBe('requested');
+
+    const eventRows = await db
+      .select({ type: events.type })
+      .from(events)
+      .where(eq(events.ptId, ptId));
+    expect(eventRows).toEqual([{ type: 'conversation.escalated' }]);
+    expect(inngest.send).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'conversation.escalated' }),
+    );
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.ptId, ptId));
+    expect(
+      audits.some((row) => row.action === 'ai.tool.escalate_to_human'),
+    ).toBe(true);
+
+    const replies = await db
+      .select()
+      .from(messages)
+      .where(
+        and(eq(messages.role, 'ai'), eq(messages.replyToMessageId, inbound.id)),
+      );
+    expect(replies).toHaveLength(0);
   });
 
   it('refuses a new turn while a human owns the conversation', async () => {

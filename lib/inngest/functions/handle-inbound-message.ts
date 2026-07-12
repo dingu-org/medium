@@ -6,6 +6,7 @@ import {
   conversations,
   messages,
   patients,
+  pts,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
@@ -16,7 +17,10 @@ import type {
   ReminderTurnContext,
 } from '@/lib/conversation/types';
 import { createLogger } from '@/lib/log';
-import { handleReminderResponse } from '@/lib/reminders/response-handler';
+import {
+  handleReminderResponse,
+  type ReminderHandlingResult,
+} from '@/lib/reminders/response-handler';
 import { inngest } from '../client';
 
 type RunTurn = typeof import('@/lib/conversation/engine').runTurn;
@@ -26,6 +30,7 @@ type RunReminderTurn =
 export type InboundJobContext = {
   inbound: Omit<InboundMessage, 'occurredAt'> & { occurredAt: string };
   aiActive: boolean;
+  assistantPaused: boolean;
   connectionId: string | null;
   recipient: string | null;
 };
@@ -55,10 +60,12 @@ export async function loadInboundJobContext(args: {
       aiPauseReason: conversations.aiPauseReason,
       patientId: patients.id,
       waId: patients.waId,
+      assistantPaused: pts.assistantPaused,
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
     .innerJoin(patients, eq(conversations.patientId, patients.id))
+    .innerJoin(pts, eq(conversations.ptId, pts.id))
     .where(
       and(
         eq(messages.id, args.messageId),
@@ -125,6 +132,7 @@ export async function loadInboundJobContext(args: {
       occurredAt: row.createdAt.toISOString(),
     },
     aiActive,
+    assistantPaused: row.assistantPaused,
     connectionId: connection?.id ?? null,
     recipient: row.waId,
   };
@@ -148,7 +156,8 @@ export async function runInboundTurn(
     if (
       error instanceof ConversationEngineError &&
       (error.code === 'conversation_not_found' ||
-        error.code === 'conversation_inactive')
+        error.code === 'conversation_inactive' ||
+        error.code === 'assistant_paused')
     ) {
       return { kind: 'skipped', reason: error.code };
     }
@@ -299,9 +308,14 @@ export const handleInboundMessage = inngest.createFunction(
       return { skipped: 'delivery_context_missing' };
     }
 
-    const reminder = await step.run('handle-reminder-response', () =>
-      handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
-    );
+    // Globally paused ⇒ no automated reminder mutation or confirmation reply
+    // either; the inbound routes through the engine, which skips it as
+    // `assistant_paused` (the single logging/skip choke point).
+    const reminder: ReminderHandlingResult = context.assistantPaused
+      ? { kind: 'none' }
+      : await step.run('handle-reminder-response', () =>
+          handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
+        );
     if (reminder.kind === 'outbound') {
       const delivery = await step.run('send-reminder-response', () =>
         sendInboundReply({

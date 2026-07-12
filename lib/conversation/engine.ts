@@ -56,6 +56,7 @@ type PersistedContext = {
   aiGreeting: string | null;
   escalationKeyword: string | null;
   retentionDays: number;
+  assistantPaused: boolean;
 };
 
 type ModelTurnMetadata = {
@@ -198,6 +199,7 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       aiGreeting: pts.aiGreeting,
       escalationKeyword: pts.aiEscalationKeyword,
       retentionDays: pts.retentionDays,
+      assistantPaused: pts.assistantPaused,
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -241,6 +243,7 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
     aiGreeting: row.aiGreeting,
     escalationKeyword: row.escalationKeyword,
     retentionDays: row.retentionDays,
+    assistantPaused: row.assistantPaused,
   };
 }
 
@@ -334,24 +337,28 @@ async function persistReply(args: {
   throw new Error('AI reply insert conflicted but no existing reply was found');
 }
 
-async function runDeterministicEscalation(
+async function escalateForSafety(
   context: PersistedContext,
   reason: SafetyEscalationReason,
-): Promise<OutboundMessage> {
-  const toolContext = {
-    ptId: context.inbound.ptId,
-    patientId: context.inbound.patientId,
-    conversationId: context.inbound.conversationId,
-  };
+): Promise<void> {
   const result = await dispatchTool(
     'escalate_to_human',
     { reason },
-    toolContext,
+    {
+      ptId: context.inbound.ptId,
+      patientId: context.inbound.patientId,
+      conversationId: context.inbound.conversationId,
+    },
   );
   if (!result.ok) {
     throw new Error(`Deterministic escalation failed: ${result.error.code}`);
   }
+}
 
+async function persistSafetyReply(
+  context: PersistedContext,
+  reason: SafetyEscalationReason,
+): Promise<OutboundMessage> {
   return persistReply({
     inbound: context.inbound,
     content: safetyEscalationResponse(
@@ -365,6 +372,20 @@ async function runDeterministicEscalation(
     cachedTokens: 0,
     costMicrousd: 0,
   });
+}
+
+function logAssistantPausedSkip(
+  context: PersistedContext,
+  phase: 'inbound' | 'safety_escalation',
+): void {
+  createLogger({
+    pt_id: context.inbound.ptId,
+    conversation_id: context.inbound.conversationId,
+  }).info(
+    'ai.assistant_paused',
+    'Assistant globally paused; patient reply suppressed',
+    { message_id: context.inbound.id, phase },
+  );
 }
 
 function failedTurnHandoffResponse(practiceName: string): string {
@@ -437,7 +458,25 @@ async function runTurnCoreUnlocked(args: {
     context.escalationKeyword,
   );
   if (safetyReason) {
-    return runDeterministicEscalation(context, safetyReason);
+    // Detection is not communication: flip state + notify the PT even when
+    // paused. Only the patient-facing reply is withheld while paused.
+    await escalateForSafety(context, safetyReason);
+    if (context.assistantPaused) {
+      logAssistantPausedSkip(context, 'safety_escalation');
+      throw new ConversationEngineError(
+        'assistant_paused',
+        'Assistant is globally paused; escalation notified but reply suppressed',
+      );
+    }
+    return persistSafetyReply(context, safetyReason);
+  }
+
+  if (context.assistantPaused) {
+    logAssistantPausedSkip(context, 'inbound');
+    throw new ConversationEngineError(
+      'assistant_paused',
+      'Assistant is globally paused; no reply generated or sent',
+    );
   }
 
   const history = await loadHistory(context.inbound);
@@ -551,17 +590,26 @@ export async function runReminderTurn(args: {
       cancellationActor: 'patient',
     });
   } catch (error) {
-    logger.error('conversation.turn_failed', 'Conversation turn failed', {
-      pt_id: args.inboundMessage.ptId,
-      conversation_id: args.inboundMessage.conversationId,
-      message_id: args.inboundMessage.id,
-      model: modelId,
-      error_code:
-        error instanceof ConversationEngineError
-          ? error.code
-          : 'unhandled_error',
-      ...serializeError(error),
-    });
+    // A paused skip is benign (already info-logged in the engine core), not a
+    // turn failure.
+    if (
+      !(
+        error instanceof ConversationEngineError &&
+        error.code === 'assistant_paused'
+      )
+    ) {
+      logger.error('conversation.turn_failed', 'Conversation turn failed', {
+        pt_id: args.inboundMessage.ptId,
+        conversation_id: args.inboundMessage.conversationId,
+        message_id: args.inboundMessage.id,
+        model: modelId,
+        error_code:
+          error instanceof ConversationEngineError
+            ? error.code
+            : 'unhandled_error',
+        ...serializeError(error),
+      });
+    }
     throw error;
   }
 }
@@ -605,17 +653,26 @@ export async function runTurn(args: {
       model: getOpenRouterModel(modelId),
     });
   } catch (error) {
-    logger.error('conversation.turn_failed', 'Conversation turn failed', {
-      pt_id: args.inboundMessage.ptId,
-      conversation_id: args.inboundMessage.conversationId,
-      message_id: args.inboundMessage.id,
-      model: modelId,
-      error_code:
-        error instanceof ConversationEngineError
-          ? error.code
-          : 'unhandled_error',
-      ...serializeError(error),
-    });
+    // A paused skip is benign (already info-logged in the engine core), not a
+    // turn failure.
+    if (
+      !(
+        error instanceof ConversationEngineError &&
+        error.code === 'assistant_paused'
+      )
+    ) {
+      logger.error('conversation.turn_failed', 'Conversation turn failed', {
+        pt_id: args.inboundMessage.ptId,
+        conversation_id: args.inboundMessage.conversationId,
+        message_id: args.inboundMessage.id,
+        model: modelId,
+        error_code:
+          error instanceof ConversationEngineError
+            ? error.code
+            : 'unhandled_error',
+        ...serializeError(error),
+      });
+    }
     throw error;
   }
 }
