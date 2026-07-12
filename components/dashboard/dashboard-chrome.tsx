@@ -85,6 +85,7 @@ export function DashboardChrome({
           unreadCount={notificationCount}
           notifications={notifications}
           action={action}
+          showAccountMenu={pathname !== '/settings'}
         />
       )}
       {searchParams.get('from') === 'onboarding' && (

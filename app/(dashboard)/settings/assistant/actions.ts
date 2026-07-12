@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
+import type { SettingsState } from '../constants';
 
 async function requirePtId(): Promise<string> {
   const supabase = await createServerClient();
@@ -32,4 +33,56 @@ async function setAssistantPausedImpl(paused: boolean): Promise<void> {
 export const setAssistantPaused = instrumentedAction(
   'settings.setAssistantPaused',
   setAssistantPausedImpl,
+);
+
+const emptyToUndefined = (v: unknown) =>
+  typeof v === 'string' && v.trim() === '' ? undefined : v;
+
+const identitySchema = z.object({
+  aiName: z.preprocess(emptyToUndefined, z.string().trim().max(60).optional()),
+  aiGreeting: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().max(1000).optional(),
+  ),
+  aiEscalationKeyword: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().max(40).optional(),
+  ),
+});
+
+async function updateAssistantIdentityImpl(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const ptId = await requirePtId();
+
+  const parsed = identitySchema.safeParse({
+    aiName: formData.get('aiName') ?? undefined,
+    aiGreeting: formData.get('aiGreeting') ?? undefined,
+    aiEscalationKeyword: formData.get('aiEscalationKeyword') ?? undefined,
+  });
+  if (!parsed.success) {
+    return {
+      error: null,
+      success: false,
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  await db
+    .update(pts)
+    .set({
+      aiName: parsed.data.aiName ?? null,
+      aiGreeting: parsed.data.aiGreeting ?? null,
+      aiEscalationKeyword: parsed.data.aiEscalationKeyword ?? null,
+    })
+    .where(eq(pts.id, ptId));
+
+  revalidatePath('/settings/assistant');
+  return { error: null, success: true, fieldErrors: null };
+}
+
+export const updateAssistantIdentity = instrumentedAction(
+  'settings.updateAssistantIdentity',
+  updateAssistantIdentityImpl,
 );

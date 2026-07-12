@@ -1,37 +1,58 @@
-import { CalendarClock, Stethoscope } from 'lucide-react';
+import {
+  Bell,
+  Clock,
+  MessageSquare,
+  Phone,
+  Settings,
+  Sparkles,
+  User,
+} from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { SnapshotCache } from '@/components/pwa/snapshot-cache';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { AssistantCard } from '@/components/settings/assistant-card';
+import { VersionFoot } from '@/components/settings/version-foot';
 import { GroupedList, GroupedListRow } from '@/components/ui/grouped-list';
-import { ChannelChip } from '@/components/ui/channel-chip';
-import { StatusPill } from '@/components/ui/status-pill';
-import { GRAPH_VERSION } from '@/lib/channels/whatsapp/constants';
 import { t } from '@/lib/i18n';
 import { getSettingsSnapshot } from '@/lib/pwa/read-models';
+import { getServices } from '@/lib/services/queries';
+import {
+  getAvailabilityWeekdays,
+  weekdaySummary,
+} from '@/lib/settings/availability-summary';
 import { createServerClient } from '@/lib/supabase/server';
-import { ConnectWhatsApp } from './connect-whatsapp';
-import { DangerZone } from './danger-zone';
-import { ExportData } from './export-data';
-import { PracticeSettingsForm } from './practice-settings-form';
-import { PushNotifications } from './push-notifications';
+import { cn } from '@/lib/utils';
+import { setAssistantPaused } from './assistant/actions';
+import { ProfileCard } from './profile-card';
+import { SignOutRow } from './sign-out-row';
 
-export const metadata = { title: `${t.settings.title} · Medium` };
+export const metadata = { title: `${t.settings.hubTitle} · Medium` };
 
-function ConnectionBadge({ status }: { status: string | null }) {
-  if (status === 'active') return <ChannelChip state="connected" />;
-  if (status === 'revoked') return <ChannelChip state="reconnect" />;
-  if (status === 'pending') return <ChannelChip state="pending" />;
+const DOT_TONES: Record<string, string> = {
+  active: 'bg-[var(--success-500)]',
+  pending: 'bg-[var(--warning-500)]',
+  revoked: 'bg-destructive',
+};
+
+function StatusDot({ status }: { status: string | null }) {
   return (
-    <StatusPill tone="neutral">
-      {t.settings.connectionBadgeNotConnected}
-    </StatusPill>
+    <span
+      className={cn(
+        'h-[9px] w-[9px] shrink-0 rounded-full',
+        DOT_TONES[status ?? ''] ?? 'bg-[var(--neutral-300)]',
+      )}
+      aria-hidden="true"
+    />
   );
+}
+
+const WA_VALUES: Record<string, string> = {
+  active: t.settings.connected,
+  pending: t.settings.connectionBadgePending,
+  revoked: t.settings.reconnect,
+};
+
+function cityOf(address: string): string {
+  return address.split(',').pop()?.trim() ?? '';
 }
 
 export default async function SettingsPage() {
@@ -41,89 +62,94 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
 
-  const snapshot = await getSettingsSnapshot(user.id);
-  const status = snapshot.whatsappStatus;
-  const connected = status === 'active';
-  const appId = process.env.NEXT_PUBLIC_META_APP_ID ?? '';
-  const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID ?? '';
+  const [snapshot, services, weekdays] = await Promise.all([
+    getSettingsSnapshot(user.id),
+    getServices(user.id),
+    getAvailabilityWeekdays(user.id),
+  ]);
+  const activeCount = services.filter((s) => s.active).length;
+  const email = user.email ?? '';
+  const profileName = snapshot.fullName || snapshot.practiceName || email;
+  const profileSubtitle = [snapshot.title, cityOf(snapshot.address)]
+    .filter(Boolean)
+    .join(' · ');
+  const waValue =
+    WA_VALUES[snapshot.whatsappStatus ?? ''] ??
+    t.settings.connectionBadgeNotConnected;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <SnapshotCache cacheKey="settings" kind="settings" payload={snapshot} />
-      <PracticeSettingsForm
-        practiceName={snapshot.practiceName}
-        timezone={snapshot.timezone}
-        aiName={snapshot.aiName}
-        aiGreeting={snapshot.aiGreeting}
-        aiEscalationKeyword={snapshot.aiEscalationKeyword}
-        retentionDays={snapshot.retentionDays}
-        notificationPrefs={snapshot.notificationPrefs}
+      <ProfileCard
+        name={profileName}
+        subtitle={profileSubtitle || undefined}
+        email={email}
+        href="/settings/profile"
+      />
+      <AssistantCard
+        paused={snapshot.assistantPaused}
+        onToggle={setAssistantPaused}
       />
 
-      <PushNotifications />
-
-      <GroupedList>
+      <GroupedList title={t.settings.groupPraktika}>
         <GroupedListRow
-          href="/settings/availability"
-          icon={CalendarClock}
-          title={t.settings.availability}
-          description={t.settings.availabilitySub}
+          href="/settings/profile"
+          icon={User}
+          title={t.settings.profileBusiness}
         />
         <GroupedListRow
           href="/settings/services"
-          icon={Stethoscope}
+          icon={MessageSquare}
           title={t.settings.services}
-          description={t.settings.servicesSub}
+          value={String(activeCount)}
+        />
+        <GroupedListRow
+          href="/settings/availability"
+          icon={Clock}
+          title={t.settings.availability}
+          value={weekdaySummary(weekdays) || undefined}
         />
       </GroupedList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-2">
-            WhatsApp
-            <ConnectionBadge status={status} />
-          </CardTitle>
-          <CardDescription>{t.settings.whatsappCardSub}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {status === 'revoked' && (
-            <p className="text-destructive text-sm">
-              {t.settings.whatsappRevoked}
-            </p>
-          )}
-          {connected && snapshot.whatsappPhoneNumberId && (
-            <p className="text-muted-foreground text-sm">
-              {t.settings.whatsappConnectedId}{' '}
-              <span className="font-mono">
-                {snapshot.whatsappPhoneNumberId}
-              </span>
-            </p>
-          )}
-          <ConnectWhatsApp
-            appId={appId}
-            configId={configId}
-            graphVersion={GRAPH_VERSION}
-            connected={connected}
-          />
-          {(!appId || !configId) && (
-            <p className="text-muted-foreground text-xs">
-              {t.settings.whatsappEnvNote}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <GroupedList title={t.settings.groupMedium}>
+        <GroupedListRow
+          href="/settings/assistant"
+          icon={Sparkles}
+          title={t.settings.assistant}
+          value={
+            snapshot.assistantPaused
+              ? t.settings.assistantPaused
+              : t.settings.assistantActive
+          }
+        />
+        <GroupedListRow
+          href="/settings/whatsapp"
+          leading={<StatusDot status={snapshot.whatsappStatus} />}
+          title={t.settings.whatsappBusiness}
+          value={waValue}
+        />
+        <GroupedListRow
+          href="/settings/notifications"
+          icon={Bell}
+          title={t.settings.sectionNotifications}
+        />
+      </GroupedList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t.settings.exportData}</CardTitle>
-          <CardDescription>{t.settings.exportSub}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ExportData />
-        </CardContent>
-      </Card>
+      <GroupedList title={t.settings.groupLlogaria}>
+        <GroupedListRow
+          href="/settings/account"
+          icon={Settings}
+          title={t.settings.accountAndData}
+        />
+        <GroupedListRow
+          href="/help"
+          icon={Phone}
+          title={t.settings.helpAndContact}
+        />
+        <SignOutRow />
+      </GroupedList>
 
-      <DangerZone connected={connected} practiceName={snapshot.practiceName} />
+      <VersionFoot />
     </div>
   );
 }

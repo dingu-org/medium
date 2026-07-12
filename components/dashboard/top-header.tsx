@@ -19,6 +19,7 @@ export function TopHeader({
   unreadCount,
   notifications,
   action,
+  showAccountMenu = true,
 }: {
   title: string;
   ptId: string;
@@ -27,6 +28,7 @@ export function TopHeader({
   unreadCount: number;
   notifications: NotificationView[];
   action?: React.ReactNode;
+  showAccountMenu?: boolean;
 }) {
   return (
     <header className="bg-background sticky top-0 z-10">
@@ -41,21 +43,23 @@ export function TopHeader({
           unreadCount={unreadCount}
           items={notifications}
         />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            aria-label="Hap menunë e llogarisë"
-            className="focus-visible:ring-ring rounded-full shadow-[var(--shadow-card)] outline-none focus-visible:ring-2"
-          >
-            <InitialsAvatar name={practiceName} fallback={email} size={44} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 p-1.5">
-            <DropdownMenuLabel className="text-muted-foreground truncate px-2.5 py-2 text-xs font-normal">
-              {email}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <SignOutMenuItem />
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {showAccountMenu && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Hap menunë e llogarisë"
+              className="focus-visible:ring-ring rounded-full shadow-[var(--shadow-card)] outline-none focus-visible:ring-2"
+            >
+              <InitialsAvatar name={practiceName} fallback={email} size={44} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 p-1.5">
+              <DropdownMenuLabel className="text-muted-foreground truncate px-2.5 py-2 text-xs font-normal">
+                {email}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <SignOutMenuItem />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </header>
   );

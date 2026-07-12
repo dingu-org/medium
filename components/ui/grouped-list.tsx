@@ -6,10 +6,12 @@ import { cn } from '@/lib/utils';
 
 export function GroupedList({
   title,
+  footer,
   children,
   className,
 }: {
   title?: string;
+  footer?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
@@ -23,6 +25,11 @@ export function GroupedList({
       <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
         {children}
       </div>
+      {footer && (
+        <p className="px-2 pt-2 text-[12.5px] leading-relaxed text-ink-3">
+          {footer}
+        </p>
+      )}
     </div>
   );
 }
@@ -31,8 +38,10 @@ export function GroupedListRow({
   icon: Icon,
   leading,
   title,
+  titleWeight = 'semibold',
   description,
   value,
+  valueMono = false,
   accessory,
   href,
   onClick,
@@ -42,8 +51,10 @@ export function GroupedListRow({
   icon?: LucideIcon;
   leading?: ReactNode;
   title: string;
+  titleWeight?: 'semibold' | 'medium';
   description?: string;
   value?: ReactNode;
+  valueMono?: boolean;
   accessory?: ReactNode;
   href?: string;
   onClick?: () => void;
@@ -66,7 +77,8 @@ export function GroupedListRow({
       <span className="min-w-0 flex-1">
         <span
           className={cn(
-            'block truncate text-[15px] font-semibold tracking-[-0.005em]',
+            'block truncate text-[15px] tracking-[-0.005em]',
+            titleWeight === 'medium' ? 'font-medium' : 'font-semibold',
             danger ? 'text-destructive' : 'text-foreground',
           )}
         >
@@ -79,7 +91,14 @@ export function GroupedListRow({
         )}
       </span>
       {value && (
-        <span className="shrink-0 text-sm text-ink-2 tabular-nums">{value}</span>
+        <span
+          className={cn(
+            'shrink-0 text-sm text-ink-2 tabular-nums',
+            valueMono && 'font-mono',
+          )}
+        >
+          {value}
+        </span>
       )}
       {accessory}
       {interactive && (

@@ -164,6 +164,34 @@ export const settings = {
   deleteFailed: 'Nuk u fshi llogaria. Provo sërish.',
   disconnecting: 'Po shkëputet…',
   deleting: 'Po fshihet…',
+
+  // Hub (Ti)
+  hubTitle: 'Ti',
+  groupPraktika: 'Praktika',
+  groupMedium: 'Medium',
+  groupLlogaria: 'Llogaria',
+  profileBusiness: 'Profili i biznesit',
+  assistant: 'Asistenti',
+  accountAndData: 'Llogaria & të dhënat',
+  helpAndContact: 'Ndihmë & kontakt',
+  signOut: 'Dil nga llogaria',
+  assistantActive: 'Aktiv',
+  assistantPaused: 'Në pauzë',
+
+  // AssistantCard (hub + assistant screen)
+  assistantCardActiveTitle: 'Medium po përgjigjet',
+  assistantCardActiveSub: 'Përgjigjet dhe rezervon vetë në WhatsApp.',
+  assistantCardPausedTitle: 'Medium është në pauzë',
+  assistantCardPausedSub: 'Pacientët nuk marrin asnjë përgjigje në WhatsApp.',
+  assistantToggleLabel: 'Ndiz ose fik asistentin',
+  pauseFailed: 'Nuk u ndryshua gjendja e asistentit. Provo sërish.',
+
+  // OfflineNote (shared gate)
+  offlineNote: 'Je jashtë linje — ndryshimet nuk ruhen dot tani.',
+
+  // VersionFoot
+  versionLabel: (version?: string, build?: string) =>
+    `Medium ${version ?? '—'}${build ? ` · ${build}` : ''}`,
 } as const;
 
 /** Availability editor (weekly hours + blocked periods). */
