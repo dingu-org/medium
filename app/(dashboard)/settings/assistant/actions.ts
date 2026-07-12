@@ -69,15 +69,22 @@ async function updateAssistantIdentityImpl(
     };
   }
 
+  // Partial-update: per-row sheets submit ONE field; absent fields stay
+  // untouched, present-but-blank fields clear to null.
   await db
     .update(pts)
     .set({
-      aiName: parsed.data.aiName ?? null,
-      aiGreeting: parsed.data.aiGreeting ?? null,
-      aiEscalationKeyword: parsed.data.aiEscalationKeyword ?? null,
+      ...(formData.has('aiName') ? { aiName: parsed.data.aiName ?? null } : {}),
+      ...(formData.has('aiGreeting')
+        ? { aiGreeting: parsed.data.aiGreeting ?? null }
+        : {}),
+      ...(formData.has('aiEscalationKeyword')
+        ? { aiEscalationKeyword: parsed.data.aiEscalationKeyword ?? null }
+        : {}),
     })
     .where(eq(pts.id, ptId));
 
+  revalidatePath('/settings');
   revalidatePath('/settings/assistant');
   return { error: null, success: true, fieldErrors: null };
 }

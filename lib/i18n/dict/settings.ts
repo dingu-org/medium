@@ -196,6 +196,17 @@ export const settings = {
   assistantToggleLabel: 'Ndiz ose fik asistentin',
   pauseFailed: 'Nuk u ndryshua gjendja e asistentit. Provo sërish.',
 
+  // Assistant identity (Asistenti screen — Identiteti group)
+  assistantIdentityGroup: 'Identiteti',
+  assistantIdentityFooter:
+    'Kur pacienti shkruan NDIHMË — ose Medium nuk kupton — biseda kalon te ti automatikisht.',
+  assistantGreetingRow: 'Prezantimi',
+  assistantKeywordRow: 'Fjala e ndihmës',
+  assistantValueUnset: 'Pa vendosur',
+  assistantNameHelp: 'Emri me të cilin Medium u prezantohet pacientëve.',
+  assistantGreetingHelp:
+    'Mesazhi i parë që dërgon Medium kur pacienti shkruan për herë të parë.',
+
   // OfflineNote (shared gate)
   offlineNote: 'Je jashtë linje — ndryshimet nuk ruhen dot tani.',
 

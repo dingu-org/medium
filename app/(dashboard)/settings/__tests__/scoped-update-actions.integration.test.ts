@@ -14,6 +14,7 @@ import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import type { SettingsState } from '../constants';
 import { updateAccountPrefs } from '../account/actions';
+import { updateAssistantIdentity } from '../assistant/actions';
 import { updateNotificationPrefs } from '../notifications/actions';
 import { updateProfile } from '../profile/actions';
 
@@ -90,6 +91,9 @@ async function readPt() {
       timezone: pts.timezone,
       retentionDays: pts.retentionDays,
       notificationPrefs: pts.notificationPrefs,
+      aiName: pts.aiName,
+      aiGreeting: pts.aiGreeting,
+      aiEscalationKeyword: pts.aiEscalationKeyword,
     })
     .from(pts)
     .where(eq(pts.id, ptId))
@@ -215,5 +219,53 @@ describe('updateProfile', () => {
 
     const after = await readPt();
     expect(after.practiceName).toBe(before.practiceName);
+  });
+});
+
+// These tests mutate the shared seeded pts row; keep them sequential and
+// assert only against values set in-test, never the initial column state.
+describe('updateAssistantIdentity', () => {
+  it('partial update leaves sibling fields intact', async () => {
+    // Seed all three via one full submit.
+    const seed = new FormData();
+    seed.set('aiName', 'Medium');
+    seed.set('aiGreeting', 'Përshëndetje nga Fizioterapi Hoxha.');
+    seed.set('aiEscalationKeyword', 'NDIHMË');
+    await updateAssistantIdentity(initialState, seed);
+
+    // Submit ONLY aiName.
+    const one = new FormData();
+    one.set('aiName', 'Mia');
+    const result = await updateAssistantIdentity(initialState, one);
+    expect(result).toEqual({ error: null, success: true, fieldErrors: null });
+
+    const row = await readPt();
+    expect(row.aiName).toBe('Mia');
+    expect(row.aiGreeting).toBe('Përshëndetje nga Fizioterapi Hoxha.'); // untouched
+    expect(row.aiEscalationKeyword).toBe('NDIHMË'); // untouched
+  });
+
+  it('clears a present-but-blank field to null', async () => {
+    const fd = new FormData();
+    fd.set('aiGreeting', '   ');
+    const result = await updateAssistantIdentity(initialState, fd);
+    expect(result.success).toBe(true);
+
+    const row = await readPt();
+    expect(row.aiGreeting).toBeNull();
+    expect(row.aiName).toBe('Mia'); // sibling still untouched
+  });
+
+  it('rejects an over-max aiName without writing', async () => {
+    const before = await readPt();
+
+    const fd = new FormData();
+    fd.set('aiName', 'x'.repeat(61));
+    const result = await updateAssistantIdentity(initialState, fd);
+    expect(result.success).toBe(false);
+    expect(result.fieldErrors?.aiName).toBeTruthy();
+
+    const after = await readPt();
+    expect(after.aiName).toBe(before.aiName); // unchanged
   });
 });
