@@ -7,6 +7,7 @@ export type ServiceRecord = {
   name: string;
   durationMinutes: number;
   active: boolean;
+  priceLek: number | null;
 };
 
 export async function getServices(
@@ -22,6 +23,7 @@ export async function getServices(
       name: services.name,
       durationMinutes: services.durationMin,
       active: services.active,
+      priceLek: services.priceLek,
     })
     .from(services)
     .where(and(...filters))
@@ -49,6 +51,7 @@ export async function getActiveService(
       name: services.name,
       durationMinutes: services.durationMin,
       active: services.active,
+      priceLek: services.priceLek,
     })
     .from(services)
     .where(

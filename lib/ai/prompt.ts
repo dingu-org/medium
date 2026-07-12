@@ -6,8 +6,14 @@ export type PromptContext = {
   aiName: string | null;
   aiGreeting: string | null;
   escalationKeyword: string | null;
+  title: string | null;
+  address: string | null;
   retentionDays: number;
-  configuredServices?: Array<{ name: string; durationMinutes: number }>;
+  configuredServices?: Array<{
+    name: string;
+    durationMinutes: number;
+    priceLek?: number | null;
+  }>;
   now?: Date;
 };
 
@@ -34,8 +40,18 @@ export function buildSystemPrompt(context: PromptContext): string {
     `Përshëndetje! Jam asistenti i rezervimeve për ${practiceName}. Mund t'ju ndihmoj të rezervoni, ricaktoni ose anuloni një takim.`;
   const escalationKeyword = context.escalationKeyword?.trim() || 'NDIHMË';
   const now = context.now ?? new Date();
+
+  const title = context.title?.trim();
+  const address = context.address?.trim();
+  const titleLine = title ? `- Practitioner title: ${title}\n` : '';
+  const addressLine = address ? `- Practice address: ${address}\n` : '';
+
   const serviceLines = (context.configuredServices ?? [])
-    .map((service) => `- ${service.name}: ${service.durationMinutes} minuta`)
+    .map((service) => {
+      const price =
+        service.priceLek != null ? `, ${service.priceLek} Lekë` : '';
+      return `- ${service.name}: ${service.durationMinutes} minuta${price}`;
+    })
     .join('\n');
 
   return `${SCHEDULING_ASSISTANT_PROMPT}
@@ -43,7 +59,7 @@ export function buildSystemPrompt(context: PromptContext): string {
 ## Practice context
 
 - Practice: ${practiceName}
-- Assistant name: ${aiName}
+${titleLine}${addressLine}- Assistant name: ${aiName}
 - Timezone: ${context.timezone}
 - Current time: ${now.toISOString()}
 - Practice-local current time: ${formatPracticeLocalTime(now, context.timezone)}
@@ -53,5 +69,5 @@ export function buildSystemPrompt(context: PromptContext): string {
 - Available services (use these exact names only):
 ${serviceLines || '- No active services are configured; do not offer or book a service.'}
 
-Do not invent a clinic address, public phone number, insurance policy, price, or service detail that is not present above.`;
+Only state the practice address, practitioner title, or a service price if it is listed above, and quote it exactly; if a service has no price listed, tell the patient it is not available rather than guessing. Never invent a public phone number, insurance policy, address, price, or any other detail that is not present above.`;
 }

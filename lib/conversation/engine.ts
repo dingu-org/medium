@@ -55,6 +55,8 @@ type PersistedContext = {
   aiName: string | null;
   aiGreeting: string | null;
   escalationKeyword: string | null;
+  title: string | null;
+  address: string | null;
   retentionDays: number;
   assistantPaused: boolean;
 };
@@ -198,6 +200,8 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       aiName: pts.aiName,
       aiGreeting: pts.aiGreeting,
       escalationKeyword: pts.aiEscalationKeyword,
+      title: pts.title,
+      address: pts.address,
       retentionDays: pts.retentionDays,
       assistantPaused: pts.assistantPaused,
     })
@@ -242,6 +246,8 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
     aiName: row.aiName,
     aiGreeting: row.aiGreeting,
     escalationKeyword: row.escalationKeyword,
+    title: row.title,
+    address: row.address,
     retentionDays: row.retentionDays,
     assistantPaused: row.assistantPaused,
   };
@@ -489,6 +495,8 @@ async function runTurnCoreUnlocked(args: {
     aiName: context.aiName,
     aiGreeting: context.aiGreeting,
     escalationKeyword: context.escalationKeyword,
+    title: context.title,
+    address: context.address,
     retentionDays: context.retentionDays,
     configuredServices,
     now: args.now,

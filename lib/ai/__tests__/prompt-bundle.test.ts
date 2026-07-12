@@ -16,6 +16,8 @@ describe('buildSystemPrompt bundle safety', () => {
       aiName: null,
       aiGreeting: null,
       escalationKeyword: null,
+      title: null,
+      address: null,
       retentionDays: 30,
       now: new Date('2026-06-15T12:00:00.000Z'),
     });
