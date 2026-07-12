@@ -11,6 +11,7 @@ import {
   messageTemplates,
   messages,
   patients,
+  pts,
   services,
   whatsappConnections,
 } from '@/lib/db/schema';
@@ -85,7 +86,7 @@ beforeEach(async () => {
   });
   await db
     .insert(services)
-    .values({ ptId, name: 'Consult', durationMin: 30 });
+    .values({ ptId, name: 'Consult', durationMin: 30, priceLek: 5000 });
   await db.insert(availabilityRules).values({
     ptId,
     weekday: 1,
@@ -126,8 +127,21 @@ beforeEach(async () => {
     phoneNumberId: `pn-${Date.now()}`,
     wabaId: 'WABA_EXPORT',
     accessTokenEncrypted: encrypted,
+    displayPhoneNumber: '+355 69 123 4567',
     status: 'active',
   });
+
+  // The pts row itself comes from the signup trigger; set the Phase 15
+  // profile fields on it so the export assertions can see them.
+  await db
+    .update(pts)
+    .set({
+      fullName: 'Dr. Test',
+      title: 'Fizioterapeut',
+      address: 'Rr. Test 1, Tiranë',
+      assistantPaused: true,
+    })
+    .where(eq(pts.id, ptId));
 });
 
 describe('buildPatientExport', () => {
@@ -230,6 +244,15 @@ describe('buildPtExport', () => {
     expect(exp.whatsapp_connection).not.toBeNull();
     expect(exp.whatsapp_connection!.accessTokenEncrypted).toBe('REDACTED');
     expect(exp.whatsapp_connection).not.toHaveProperty('access_token_encrypted');
+
+    // Phase 15 columns round-trip: pts/services via SELECT *, the
+    // whatsapp_connections explicit column list via displayPhoneNumber.
+    expect(exp.pt.fullName).toBe('Dr. Test');
+    expect(exp.pt.title).toBe('Fizioterapeut');
+    expect(exp.pt.address).toBe('Rr. Test 1, Tiranë');
+    expect(exp.pt.assistantPaused).toBe(true);
+    expect(exp.services[0].priceLek).toBe(5000);
+    expect(exp.whatsapp_connection!.displayPhoneNumber).toBe('+355 69 123 4567');
   });
 
   it('produces a JSON-round-trippable object (no Dates or Buffers leak)', async () => {

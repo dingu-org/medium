@@ -195,6 +195,7 @@ export async function buildPtExport(ptId: string): Promise<PtExport> {
       coexistenceLastError: whatsappConnections.coexistenceLastError,
       tier: whatsappConnections.tier,
       qualityRating: whatsappConnections.qualityRating,
+      displayPhoneNumber: whatsappConnections.displayPhoneNumber,
       connectedAt: whatsappConnections.connectedAt,
       tokenExpiresAt: whatsappConnections.tokenExpiresAt,
       expiryWarningSentAt: whatsappConnections.expiryWarningSentAt,

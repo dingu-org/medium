@@ -85,10 +85,20 @@ export const pts = pgTable('pts', {
   id: uuid('id').primaryKey(),
   email: text('email').notNull(),
   practiceName: text('practice_name'),
+  // Personal + practice profile (Phase 15). Optional; feed the assistant's
+  // answers (title/address) and the profile screen. Null = not set.
+  fullName: text('full_name'),
+  title: text('title'),
+  address: text('address'),
   timezone: text('timezone').notNull().default('Europe/Berlin'),
   aiName: text('ai_name'),
   aiGreeting: text('ai_greeting'),
   aiEscalationKeyword: text('ai_escalation_keyword'),
+  // Global assistant kill-switch (Phase 15). When true the dispatcher generates
+  // and sends NO AI reply to inbound patient messages; keyword-escalation
+  // detection + PT notifications + appointment reminders still run. Wired to the
+  // dispatcher in a later Phase 15 task.
+  assistantPaused: boolean('assistant_paused').notNull().default(false),
   servicesConfiguredAt: tsTz('services_configured_at'),
   retentionDays: integer('retention_days').notNull().default(90),
   // Web Push notification preferences (event type → enabled). Wired in Phase 9;
@@ -124,6 +134,10 @@ export const whatsappConnections = pgTable(
     coexistenceLastError: text('coexistence_last_error'),
     tier: text('tier'),
     qualityRating: text('quality_rating'),
+    // Human-readable connected number, e.g. "+355 69 …" (Phase 15). Fetched from
+    // Graph at connect and backfilled for existing rows in a later Phase 15
+    // task; NULL until then.
+    displayPhoneNumber: text('display_phone_number'),
     connectedAt: tsTz('connected_at'),
     tokenExpiresAt: tsTz('token_expires_at'),
     expiryWarningSentAt: tsTz('expiry_warning_sent_at'),
@@ -181,12 +195,17 @@ export const services = pgTable(
     ptId: ptIdRef(),
     name: text('name').notNull(),
     durationMin: integer('duration_min').notNull(),
+    // Optional price quote in whole Albanian Lekë (Phase 15). Null = no price
+    // set; the assistant only quotes a price when this is present. Wired into
+    // getServices/prompt in a later Phase 15 task.
+    priceLek: integer('price_lek'),
     active: boolean('active').notNull().default(true),
     createdAt: tsTz('created_at').notNull().default(now),
   },
   (t) => [
     check('services_name_not_blank', sql`length(btrim(${t.name})) > 0`),
     check('services_duration_range', sql`${t.durationMin} BETWEEN 5 AND 480`),
+    check('services_price_positive', sql`${t.priceLek} > 0`),
     uniqueIndex('services_pt_name_uq').on(t.ptId, sql`lower(btrim(${t.name}))`),
     index('services_pt_active_idx').on(t.ptId, t.active, t.createdAt),
   ],

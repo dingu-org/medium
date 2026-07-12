@@ -127,6 +127,13 @@
       "when": 1783805708542,
       "tag": "0017_phase11_cost_daily",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783866164283,
+      "tag": "0018_phase15_settings_fields",
+      "breakpoints": true
     }
   ]
 }

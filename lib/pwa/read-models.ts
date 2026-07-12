@@ -95,14 +95,19 @@ export type ChatThreadSnapshot = {
 
 export type SettingsSnapshot = {
   practiceName: string;
+  fullName: string;
+  title: string;
+  address: string;
   timezone: string;
   aiName: string;
   aiGreeting: string;
   aiEscalationKeyword: string;
+  assistantPaused: boolean;
   retentionDays: number;
   notificationPrefs: NotificationPrefs;
   whatsappStatus: string | null;
   whatsappPhoneNumberId: string | null;
+  whatsappDisplayPhoneNumber: string | null;
   metaAppIdConfigured: boolean;
   metaConfigIdConfigured: boolean;
   graphVersion: string;
@@ -399,10 +404,14 @@ export async function getSettingsSnapshot(
     db
       .select({
         practiceName: pts.practiceName,
+        fullName: pts.fullName,
+        title: pts.title,
+        address: pts.address,
         timezone: pts.timezone,
         aiName: pts.aiName,
         aiGreeting: pts.aiGreeting,
         aiEscalationKeyword: pts.aiEscalationKeyword,
+        assistantPaused: pts.assistantPaused,
         retentionDays: pts.retentionDays,
         notificationPrefs: pts.notificationPrefs,
       })
@@ -413,6 +422,7 @@ export async function getSettingsSnapshot(
       .select({
         status: whatsappConnections.status,
         phoneNumberId: whatsappConnections.phoneNumberId,
+        displayPhoneNumber: whatsappConnections.displayPhoneNumber,
       })
       .from(whatsappConnections)
       .where(eq(whatsappConnections.ptId, ptId))
@@ -422,14 +432,19 @@ export async function getSettingsSnapshot(
 
   return {
     practiceName: pt?.practiceName ?? '',
+    fullName: pt?.fullName ?? '',
+    title: pt?.title ?? '',
+    address: pt?.address ?? '',
     timezone: pt?.timezone ?? 'Europe/Berlin',
     aiName: pt?.aiName ?? '',
     aiGreeting: pt?.aiGreeting ?? '',
     aiEscalationKeyword: pt?.aiEscalationKeyword ?? '',
+    assistantPaused: pt?.assistantPaused ?? false,
     retentionDays: pt?.retentionDays ?? 90,
     notificationPrefs: resolveNotificationPrefs(pt?.notificationPrefs),
     whatsappStatus: connection?.status ?? null,
     whatsappPhoneNumberId: connection?.phoneNumberId ?? null,
+    whatsappDisplayPhoneNumber: connection?.displayPhoneNumber ?? null,
     metaAppIdConfigured: Boolean(process.env.NEXT_PUBLIC_META_APP_ID),
     metaConfigIdConfigured: Boolean(process.env.NEXT_PUBLIC_META_CONFIG_ID),
     graphVersion: GRAPH_VERSION,
