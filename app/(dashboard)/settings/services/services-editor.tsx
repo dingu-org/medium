@@ -1,12 +1,15 @@
 'use client';
 
-import { Pencil, Plus } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { AddDashed } from '@/components/settings/add-dashed';
+import { DURATION_PRESETS, DurChips } from '@/components/settings/dur-chips';
+import { OfflineNote } from '@/components/settings/offline-note';
+import { SetField } from '@/components/settings/set-field';
 import { EmptyState } from '@/components/states';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { GroupedList } from '@/components/ui/grouped-list';
 import {
   Sheet,
   SheetContent,
@@ -16,14 +19,21 @@ import {
 } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
-import { t } from '@/lib/i18n';
+import { formatLek, t } from '@/lib/i18n';
 import type { ServiceRecord } from '@/lib/services/queries';
-import { createService, setServiceActive, updateService } from './actions';
+import { cn } from '@/lib/utils';
+import {
+  createService,
+  deleteService,
+  setServiceActive,
+  updateService,
+} from './actions';
 
 export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
   const online = useOnlineStatus();
   const [editing, setEditing] = useState<ServiceRecord | 'new' | null>(null);
   const [pending, startTransition] = useTransition();
+  const activeCount = services.filter((s) => s.active).length;
 
   function toggle(service: ServiceRecord, active: boolean) {
     if (!online) return toast.error(t.settings.serviceOnlineOnly);
@@ -34,12 +44,8 @@ export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
   }
 
   return (
-    <>
-      {!online && (
-        <p className="rounded-md border border-[var(--warning-200)] bg-[var(--warning-50)] px-3 py-2 text-sm text-[var(--warning-700)]">
-          {t.settings.serviceOnlineOnly}
-        </p>
-      )}
+    <div className="space-y-4 pt-1">
+      <OfflineNote />
 
       {services.length === 0 ? (
         <EmptyState
@@ -54,58 +60,59 @@ export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
           }
         />
       ) : (
-        <div className="border-border bg-card overflow-hidden rounded-md border">
-          {services.map((service) => (
-            <div
-              key={service.id}
-              className="border-border flex min-h-16 items-center gap-3 border-b px-4 py-3 last:border-b-0"
-            >
-              <button
-                type="button"
-                className="min-w-0 flex-1 text-left"
-                onClick={() => setEditing(service)}
-                disabled={!online}
+        <>
+          <GroupedList title={t.settings.serviceActiveCount(activeCount)}>
+            {services.map((service) => (
+              <div
+                key={service.id}
+                className={cn(
+                  'flex min-h-[60px] items-center gap-[13px] px-[18px] py-[14px]',
+                  !service.active && 'opacity-55',
+                )}
               >
-                <span className="block truncate text-sm font-medium">
-                  {service.name}
-                </span>
-                <span className="text-muted-foreground block text-xs">
-                  {service.durationMinutes} min ·{' '}
-                  {service.active
-                    ? t.settings.serviceActive
-                    : t.settings.serviceInactive}
-                </span>
-              </button>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => setEditing(service)}
-                disabled={!online}
-                aria-label={`${t.settings.serviceEdit}: ${service.name}`}
-              >
-                <Pencil className="h-4 w-4" aria-hidden />
-              </Button>
-              <Switch
-                checked={service.active}
-                onCheckedChange={(active) => toggle(service, active)}
-                disabled={!online || pending}
-                aria-label={`${service.name}: ${t.settings.serviceActive}`}
-              />
-            </div>
-          ))}
-        </div>
-      )}
+                <button
+                  type="button"
+                  onClick={() => setEditing(service)}
+                  disabled={!online}
+                  aria-label={`${t.settings.serviceEdit}: ${service.name}`}
+                  className="flex min-w-0 flex-1 items-center gap-[13px] text-left"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold tracking-[-0.005em] text-foreground">
+                      {service.name}
+                    </span>
+                    <span className="mt-[3px] block text-[12.5px] text-ink-3 tabular-nums">
+                      {t.settings.serviceMeta(
+                        service.durationMinutes,
+                        service.priceLek != null
+                          ? formatLek(service.priceLek)
+                          : null,
+                      )}
+                    </span>
+                  </span>
+                </button>
+                <Switch
+                  checked={service.active}
+                  onCheckedChange={(active) => toggle(service, active)}
+                  disabled={!online || pending}
+                  aria-label={`${service.name}: ${t.settings.serviceActive}`}
+                />
+                <ChevronRight
+                  className="h-[17px] w-[17px] shrink-0 text-ink-3/70"
+                  aria-hidden
+                />
+              </div>
+            ))}
+          </GroupedList>
 
-      {services.length > 0 && (
-        <Button
-          className="w-full"
-          onClick={() => setEditing('new')}
-          disabled={!online}
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          {t.settings.serviceAdd}
-        </Button>
+          <AddDashed onClick={() => setEditing('new')} disabled={!online}>
+            {t.settings.serviceAdd}
+          </AddDashed>
+
+          <p className="px-2 pt-1 text-[12.5px] leading-[1.5] text-ink-3">
+            {t.settings.serviceListFooter}
+          </p>
+        </>
       )}
 
       <ServiceSheet
@@ -113,7 +120,7 @@ export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
         open={editing !== null}
         onOpenChange={(open) => !open && setEditing(null)}
       />
-    </>
+    </div>
   );
 }
 
@@ -126,77 +133,157 @@ function ServiceSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [pending, startTransition] = useTransition();
-  const key = service === 'new' || service === null ? 'new' : service.id;
+  const isEdit = service !== 'new' && service !== null;
+  const title = isEdit ? service.name : t.settings.serviceAdd;
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="mx-auto max-w-md rounded-t-lg">
         <SheetHeader>
-          <SheetTitle>
-            {service === 'new' ? t.settings.serviceAdd : t.settings.serviceEdit}
-          </SheetTitle>
-          <SheetDescription>{t.settings.servicesIntro}</SheetDescription>
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription className="sr-only">
+            {t.settings.servicesIntro}
+          </SheetDescription>
         </SheetHeader>
-        <form
-          key={key}
-          className="space-y-4 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            const input = {
-              name: String(data.get('name') ?? ''),
-              durationMinutes: Number(data.get('duration')),
-            };
-            startTransition(async () => {
-              const result =
-                service === 'new' || service === null
-                  ? await createService(input)
-                  : await updateService(service.id, input);
-              if (!result.ok) {
-                toast.error(result.error);
-                return;
-              }
-              toast.success(t.settings.serviceSaved);
-              onOpenChange(false);
-            });
-          }}
-        >
-          <div className="space-y-2">
-            <Label htmlFor="service-name">{t.settings.serviceName}</Label>
-            <Input
-              id="service-name"
-              name="name"
-              defaultValue={
-                service === 'new' || service === null ? '' : service.name
-              }
-              required
-              maxLength={80}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="service-duration">
-              {t.settings.serviceDuration}
-            </Label>
-            <Input
-              id="service-duration"
-              name="duration"
-              type="number"
-              min={5}
-              max={480}
-              step={1}
-              defaultValue={
-                service === 'new' || service === null
-                  ? 30
-                  : service.durationMinutes
-              }
-              required
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? t.calendar.saving : t.settings.serviceSave}
-          </Button>
-        </form>
+        {service !== null && (
+          <ServiceForm
+            key={isEdit ? service.id : 'new'}
+            service={service}
+            onDone={() => onOpenChange(false)}
+          />
+        )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function isPreset(m: number) {
+  return (DURATION_PRESETS as readonly number[]).includes(m);
+}
+
+function ServiceForm({
+  service,
+  onDone,
+}: {
+  service: ServiceRecord | 'new';
+  onDone: () => void;
+}) {
+  const online = useOnlineStatus();
+  const [pending, startTransition] = useTransition();
+  const isEdit = service !== 'new';
+  const initialMinutes = isEdit ? service.durationMinutes : 30;
+
+  const [minutes, setMinutes] = useState(String(initialMinutes));
+  const [custom, setCustom] = useState(
+    isEdit ? !isPreset(service.durationMinutes) : false,
+  );
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!online) return toast.error(t.settings.serviceOnlineOnly);
+    const data = new FormData(event.currentTarget);
+    const priceRaw = String(data.get('price') ?? '').trim();
+    const input = {
+      name: String(data.get('name') ?? ''),
+      durationMinutes: Number(minutes),
+      priceLek: priceRaw === '' ? null : Number(priceRaw),
+    };
+    startTransition(async () => {
+      const result = isEdit
+        ? await updateService(service.id, input)
+        : await createService(input);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(t.settings.serviceSaved);
+      onDone();
+    });
+  }
+
+  function handleDelete() {
+    if (!isEdit) return;
+    if (!online) return toast.error(t.settings.serviceOnlineOnly);
+    startTransition(async () => {
+      const result = await deleteService(service.id);
+      // HAS_APPOINTMENTS error text suggests deactivating instead.
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(t.settings.serviceDeleted);
+      onDone();
+    });
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+    >
+      <OfflineNote />
+
+      <SetField
+        label={t.settings.serviceName}
+        name="name"
+        defaultValue={isEdit ? service.name : ''}
+        disabled={!online}
+      />
+
+      <div className="flex flex-col gap-[7px]">
+        <label className="text-[13px] font-semibold tracking-[-0.005em] text-[#303744]">
+          {t.settings.serviceDuration}
+        </label>
+        <DurChips
+          minutes={Number(minutes)}
+          custom={custom}
+          disabled={!online}
+          onPreset={(m) => {
+            setCustom(false);
+            setMinutes(String(m));
+          }}
+          onCustom={() => setCustom(true)}
+        />
+      </div>
+
+      {custom && (
+        <SetField
+          label={t.settings.serviceMinutesLabel}
+          type="number"
+          value={minutes}
+          onChange={setMinutes}
+          suffix={t.settings.serviceMinutesSuffix}
+          help={t.settings.serviceMinutesHelp}
+          disabled={!online}
+        />
+      )}
+
+      <SetField
+        label={t.settings.servicePriceLabel}
+        name="price"
+        type="number"
+        defaultValue={
+          isEdit && service.priceLek != null ? String(service.priceLek) : ''
+        }
+        suffix={t.settings.servicePriceSuffix}
+        disabled={!online}
+      />
+
+      <div className="flex flex-col gap-2 pt-2">
+        <Button type="submit" className="w-full" disabled={pending || !online}>
+          {pending ? t.actions.saving : t.settings.serviceSave}
+        </Button>
+        {isEdit && (
+          <Button
+            type="button"
+            variant="ghost-danger"
+            className="w-full"
+            onClick={handleDelete}
+            disabled={pending || !online}
+          >
+            {t.settings.serviceDelete}
+          </Button>
+        )}
+      </div>
+    </form>
   );
 }

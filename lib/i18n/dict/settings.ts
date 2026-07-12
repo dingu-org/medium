@@ -213,6 +213,23 @@ export const settings = {
   // VersionFoot
   versionLabel: (version?: string, build?: string) =>
     `Medium ${version ?? '—'}${build ? ` · ${build}` : ''}`,
+
+  // Services list (Phase 15 redesign)
+  serviceActiveCount: (n: number) => `${n} aktive`,
+  serviceListFooter: 'Medium u ofron pacientëve vetëm shërbimet aktive.',
+  serviceMeta: (durationMinutes: number, price: string | null) =>
+    price ? `${durationMinutes} min · ${price} Lekë` : `${durationMinutes} min`,
+
+  // Service edit sheet
+  serviceDurationChip: (m: number) => `${m}′`,
+  serviceDurationOther: 'Tjetër',
+  serviceMinutesLabel: 'Minuta',
+  serviceMinutesSuffix: 'min',
+  serviceMinutesHelp: 'Nga 5 deri në 480 minuta.',
+  servicePriceLabel: 'Çmimi',
+  servicePriceSuffix: 'Lekë',
+  serviceDelete: 'Fshi shërbimin',
+  serviceDeleted: 'Shërbimi u fshi.',
 } as const;
 
 /** Availability editor (weekly hours + blocked periods). */

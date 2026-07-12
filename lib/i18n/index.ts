@@ -9,3 +9,4 @@ export const t = sq;
 export { sq };
 export type { Dictionary } from './sq';
 export * from './datetime';
+export * from './number';

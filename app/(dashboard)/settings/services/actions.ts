@@ -1,12 +1,12 @@
 'use server';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getPostgresErrorCode } from '@/lib/db/postgres-errors';
-import { services } from '@/lib/db/schema';
+import { appointments, services } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 
@@ -14,13 +14,16 @@ export type ServiceMutationResult =
   | { ok: true }
   | {
       ok: false;
-      code: 'INVALID' | 'DUPLICATE' | 'NOT_FOUND' | 'UNKNOWN';
+      code: 'INVALID' | 'DUPLICATE' | 'NOT_FOUND' | 'HAS_APPOINTMENTS' | 'UNKNOWN';
       error: string;
     };
 
 const serviceSchema = z.object({
   name: z.string().trim().min(1).max(80),
   durationMinutes: z.number().int().min(5).max(480),
+  // Aligned with the DB CHECK (price_lek > 0); max keeps int4 overflow a
+  // clean INVALID instead of a Postgres 22003.
+  priceLek: z.number().int().positive().max(2_147_483_647).nullable(),
 });
 
 async function requirePtId(): Promise<string> {
@@ -50,6 +53,7 @@ function failure(error: unknown): ServiceMutationResult {
 async function createServiceImpl(input: {
   name: string;
   durationMinutes: number;
+  priceLek: number | null;
 }): Promise<ServiceMutationResult> {
   const ptId = await requirePtId();
   const parsed = serviceSchema.safeParse(input);
@@ -57,7 +61,7 @@ async function createServiceImpl(input: {
     return {
       ok: false,
       code: 'INVALID',
-      error: 'Kontrollo emrin dhe kohëzgjatjen.',
+      error: 'Kontrollo emrin, kohëzgjatjen dhe çmimin.',
     };
   }
   try {
@@ -65,8 +69,10 @@ async function createServiceImpl(input: {
       ptId,
       name: parsed.data.name,
       durationMin: parsed.data.durationMinutes,
+      priceLek: parsed.data.priceLek,
     });
     revalidatePath('/settings/services');
+    revalidatePath('/settings');
     revalidatePath('/onboarding');
     return { ok: true };
   } catch (error) {
@@ -81,7 +87,7 @@ export const createService = instrumentedAction(
 
 async function updateServiceImpl(
   serviceId: string,
-  input: { name: string; durationMinutes: number },
+  input: { name: string; durationMinutes: number; priceLek: number | null },
 ): Promise<ServiceMutationResult> {
   const ptId = await requirePtId();
   const parsed = serviceSchema.safeParse(input);
@@ -89,13 +95,18 @@ async function updateServiceImpl(
     return {
       ok: false,
       code: 'INVALID',
-      error: 'Kontrollo emrin dhe kohëzgjatjen.',
+      error: 'Kontrollo emrin, kohëzgjatjen dhe çmimin.',
     };
   }
   try {
     const [updated] = await db
       .update(services)
-      .set({ name: parsed.data.name, durationMin: parsed.data.durationMinutes })
+      // priceLek is always set — null clears an existing price.
+      .set({
+        name: parsed.data.name,
+        durationMin: parsed.data.durationMinutes,
+        priceLek: parsed.data.priceLek,
+      })
       .where(and(eq(services.id, serviceId), eq(services.ptId, ptId)))
       .returning({ id: services.id });
     if (!updated)
@@ -125,6 +136,7 @@ async function setServiceActiveImpl(
   if (!updated)
     return { ok: false, code: 'NOT_FOUND', error: 'Shërbimi nuk u gjet.' };
   revalidatePath('/settings/services');
+  revalidatePath('/settings');
   revalidatePath('/onboarding');
   return { ok: true };
 }
@@ -132,4 +144,51 @@ async function setServiceActiveImpl(
 export const setServiceActive = instrumentedAction(
   'services.setServiceActive',
   setServiceActiveImpl,
+);
+
+async function deleteServiceImpl(
+  serviceId: string,
+): Promise<ServiceMutationResult> {
+  const ptId = await requirePtId();
+
+  // Appointments link to a service by name (service_type text), not a FK.
+  const [svc] = await db
+    .select({ name: services.name })
+    .from(services)
+    .where(and(eq(services.id, serviceId), eq(services.ptId, ptId)))
+    .limit(1);
+  if (!svc) return { ok: false, code: 'NOT_FOUND', error: 'Shërbimi nuk u gjet.' };
+
+  // Guard: any appointment (any status) referencing this service by name blocks
+  // deletion — the service must be deactivated instead, preserving history.
+  const [ref] = await db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.ptId, ptId),
+        sql`lower(btrim(${appointments.serviceType})) = lower(btrim(${svc.name}))`,
+      ),
+    )
+    .limit(1);
+  if (ref)
+    return {
+      ok: false,
+      code: 'HAS_APPOINTMENTS',
+      error:
+        'Ky shërbim përdoret nga takime ekzistuese. Çaktivizoje në vend që ta fshish.',
+    };
+
+  await db
+    .delete(services)
+    .where(and(eq(services.id, serviceId), eq(services.ptId, ptId)));
+  revalidatePath('/settings/services');
+  revalidatePath('/settings');
+  revalidatePath('/onboarding');
+  return { ok: true };
+}
+
+export const deleteService = instrumentedAction(
+  'services.deleteService',
+  deleteServiceImpl,
 );
