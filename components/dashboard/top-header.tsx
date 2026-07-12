@@ -48,8 +48,8 @@ export function TopHeader({
           >
             <InitialsAvatar name={practiceName} fallback={email} size={44} />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="text-muted-foreground truncate text-xs font-normal">
+          <DropdownMenuContent align="end" className="w-56 p-1.5">
+            <DropdownMenuLabel className="text-muted-foreground truncate px-2.5 py-2 text-xs font-normal">
               {email}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

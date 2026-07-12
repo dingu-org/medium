@@ -93,7 +93,7 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
             </span>
             <div className="min-w-0">
               <p className="text-[15.5px] font-semibold text-[var(--success-600)]">
-                Asgjë s&apos;kërkon ty
+                Asgjë nuk kërkon vëmendjen tënde
               </p>
               <p className="mt-0.5 text-[13.5px] text-[var(--success-600)] opacity-80">
                 Medium po i mban të gjitha bisedat.
@@ -217,7 +217,7 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
 /** One inline stat inside the "Kjo javë" strip (big number + small label). */
 function WeekStat({ value, label }: { value: number; label: string }) {
   return (
-    <div className="min-w-0 flex-1 text-center first:text-left">
+    <div className="min-w-0 flex-1 text-center">
       <span className="font-heading block text-[22px] leading-none font-semibold tracking-[-0.02em] tabular-nums">
         {value}
       </span>
