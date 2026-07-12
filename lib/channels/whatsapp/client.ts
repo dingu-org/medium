@@ -255,12 +255,37 @@ export async function sendTemplate(
   return { messageId: res.messages?.[0]?.id ?? null };
 }
 
+type TemplateBodyComponent = {
+  type: 'BODY';
+  text: string;
+  example?: { body_text: string[][] };
+};
+
+/**
+ * Build the BODY component for a template submission/edit. Meta rejects a
+ * variable-bearing body (`{{1}}` …) submitted without sample values with
+ * INVALID_FORMAT, so attach `example.body_text` whenever the body has
+ * variables. A static body must omit `example` entirely — an empty example is
+ * itself invalid.
+ */
+function buildTemplateBodyComponent(
+  body: string,
+  exampleValues: string[],
+): TemplateBodyComponent {
+  const component: TemplateBodyComponent = { type: 'BODY', text: body };
+  if (body.includes('{{')) {
+    component.example = { body_text: [exampleValues] };
+  }
+  return component;
+}
+
 /** Submit a UTILITY template to Meta for approval (Business Management API). */
 export async function submitTemplate(
   connectionId: string,
   name: string,
   language: string,
   body: string,
+  exampleValues: string[] = [],
 ): Promise<{ metaId: string; status: string }> {
   const conn = await getConnection(connectionId);
   const res = await authedGraph<{ id: string; status?: string }>(
@@ -272,11 +297,35 @@ export async function submitTemplate(
         name,
         language,
         category: 'UTILITY',
-        components: [{ type: 'BODY', text: body }],
+        components: [buildTemplateBodyComponent(body, exampleValues)],
       },
     },
   );
   return { metaId: res.id, status: res.status ?? 'PENDING' };
+}
+
+/**
+ * Re-submit an existing template's content (Business Management API). Name and
+ * language are immutable at edit time, so only `category` + `components` are
+ * sent. Editing a REJECTED template re-enters Meta review, flipping its status
+ * back to PENDING — this is how we repair templates Meta rejected for
+ * INVALID_FORMAT (variables without example values).
+ */
+export async function editTemplate(
+  connectionId: string,
+  metaTemplateId: string,
+  body: string,
+  exampleValues: string[] = [],
+): Promise<{ success: boolean }> {
+  const conn = await getConnection(connectionId);
+  const res = await authedGraph<{ success?: boolean }>(conn, metaTemplateId, {
+    method: 'POST',
+    body: {
+      category: 'UTILITY',
+      components: [buildTemplateBodyComponent(body, exampleValues)],
+    },
+  });
+  return { success: res.success ?? true };
 }
 
 /** Poll a submitted template's approval status (consumed by Phase 5). */

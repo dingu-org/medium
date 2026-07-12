@@ -24,7 +24,13 @@ import {
   OutsideWindowError,
   TemplateNotApprovedError,
 } from '../errors';
-import { getQualityRating, sendFreeForm, sendTemplate } from '../client';
+import {
+  editTemplate,
+  getQualityRating,
+  sendFreeForm,
+  sendTemplate,
+  submitTemplate,
+} from '../client';
 
 const TOKEN = 'PT_TOKEN_supersecret_value';
 const WA_ID = '447700900111';
@@ -203,6 +209,91 @@ describe('sendTemplate', () => {
     expect(payload.type).toBe('template');
     expect(payload.template.name).toBe('appointment_reminder_24h');
     expect(payload.template.components[0].parameters).toHaveLength(2);
+  });
+});
+
+describe('submitTemplate', () => {
+  const VAR_BODY = 'Hi {{1}}, appointment with {{2}} on {{3}}.';
+  const EXAMPLES = ['Ana', 'Fizio Vita', 'Monday 9:00 AM'];
+  const submitResponse = () =>
+    new Response(JSON.stringify({ id: 'TPL_META_ID', status: 'PENDING' }), {
+      status: 200,
+    });
+
+  it('attaches example.body_text for a variable-bearing body', async () => {
+    const fetchMock = makeFetch(() => submitResponse());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await submitTemplate(
+      connectionId,
+      'appointment_reminder_24h_v2',
+      'en_US',
+      VAR_BODY,
+      EXAMPLES,
+    );
+    expect(res).toEqual({ metaId: 'TPL_META_ID', status: 'PENDING' });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('/message_templates');
+    const payload = JSON.parse(init!.body as string);
+    expect(payload.category).toBe('UTILITY');
+    expect(payload.components[0]).toEqual({
+      type: 'BODY',
+      text: VAR_BODY,
+      example: { body_text: [EXAMPLES] },
+    });
+  });
+
+  it('omits example for a variable-free body', async () => {
+    const fetchMock = makeFetch(() => submitResponse());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await submitTemplate(
+      connectionId,
+      'static_template',
+      'en_US',
+      'No variables here.',
+      [],
+    );
+
+    const payload = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(payload.components[0]).toEqual({
+      type: 'BODY',
+      text: 'No variables here.',
+    });
+    expect(payload.components[0]).not.toHaveProperty('example');
+  });
+});
+
+describe('editTemplate', () => {
+  const VAR_BODY = 'Hi {{1}}, appointment with {{2}} on {{3}}.';
+  const EXAMPLES = ['Ana', 'Fizio Vita', 'Monday 9:00 AM'];
+
+  it('POSTs category + BODY-with-example to the template id', async () => {
+    const fetchMock = makeFetch(
+      () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await editTemplate(
+      connectionId,
+      'META_TPL_9',
+      VAR_BODY,
+      EXAMPLES,
+    );
+    expect(res).toEqual({ success: true });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('META_TPL_9');
+    expect(init!.method).toBe('POST');
+    const payload = JSON.parse(init!.body as string);
+    expect(payload).toEqual({
+      category: 'UTILITY',
+      components: [
+        { type: 'BODY', text: VAR_BODY, example: { body_text: [EXAMPLES] } },
+      ],
+    });
+    expect(payload).not.toHaveProperty('name');
   });
 });
 

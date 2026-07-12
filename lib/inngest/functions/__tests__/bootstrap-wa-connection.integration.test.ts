@@ -20,7 +20,10 @@ import {
   applyTemplateStatus,
   bootstrapWaConnectionCore,
 } from '../bootstrap-wa-connection';
-import { reconcileAlbanianReminderTemplatesCore } from '../reconcile-reminder-templates';
+import {
+  reconcileAlbanianReminderTemplatesCore,
+  repairedBody,
+} from '../reconcile-reminder-templates';
 
 const META_TEMPLATE_ID = 'TEMPLATE_META_ID_123';
 
@@ -211,5 +214,94 @@ describe('bootstrapWaConnectionCore', () => {
         { name: REMINDER_TEMPLATE.name, status: 'approved' },
       ]),
     );
+  });
+});
+
+describe('reconcileAlbanianReminderTemplatesCore — rejected repair', () => {
+  const recordFetch = (bodyObj: unknown = { success: true }) =>
+    vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      void input;
+      void init;
+      return Promise.resolve(
+        new Response(JSON.stringify(bodyObj), { status: 200 }),
+      );
+    });
+
+  it('repairs a rejected template once — edits with examples, stamps body, re-enters review', async () => {
+    await db.insert(messageTemplates).values({
+      ptId,
+      name: REMINDER_TEMPLATE.name,
+      language: REMINDER_TEMPLATE.language,
+      status: 'rejected',
+      metaId: 'REJECTED_META',
+      body: REMINDER_TEMPLATE.body,
+    });
+
+    const fetchMock = recordFetch();
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    await expect(
+      reconcileAlbanianReminderTemplatesCore({ ptId, connectionId }),
+    ).resolves.toEqual({ name: REMINDER_TEMPLATE.name, status: 'pending' });
+
+    // Exactly one Graph call: the edit POST to the rejected template's id.
+    expect(fetchMock.mock.calls).toHaveLength(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('REJECTED_META');
+    expect(init!.method).toBe('POST');
+    const payload = JSON.parse(init!.body as string);
+    expect(payload.category).toBe('UTILITY');
+    expect(payload.components[0]).toEqual({
+      type: 'BODY',
+      text: REMINDER_TEMPLATE.body,
+      example: { body_text: [REMINDER_TEMPLATE.exampleValues] },
+    });
+
+    const [row] = await db
+      .select()
+      .from(messageTemplates)
+      .where(eq(messageTemplates.ptId, ptId));
+    expect(row.status).toBe('pending');
+    expect(row.body).toBe(repairedBody(REMINDER_TEMPLATE.body));
+  });
+
+  it('does not re-edit a rejected template already carrying the repair marker', async () => {
+    await db.insert(messageTemplates).values([
+      {
+        ptId,
+        name: REMINDER_TEMPLATE.name,
+        language: REMINDER_TEMPLATE.language,
+        status: 'rejected',
+        metaId: 'REJECTED_META',
+        body: repairedBody(REMINDER_TEMPLATE.body),
+      },
+      {
+        ptId,
+        name: FALLBACK_REMINDER_TEMPLATE.name,
+        language: FALLBACK_REMINDER_TEMPLATE.language,
+        status: 'rejected',
+        metaId: 'FB_META',
+        body: repairedBody(FALLBACK_REMINDER_TEMPLATE.body),
+      },
+    ]);
+
+    const fetchMock = recordFetch();
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    await expect(
+      reconcileAlbanianReminderTemplatesCore({ ptId, connectionId }),
+    ).resolves.toEqual({
+      name: FALLBACK_REMINDER_TEMPLATE.name,
+      status: 'rejected',
+    });
+
+    // Both rows are already marked repaired: no edit, no resubmit.
+    expect(fetchMock.mock.calls).toHaveLength(0);
+
+    const rows = await db
+      .select({ status: messageTemplates.status })
+      .from(messageTemplates)
+      .where(eq(messageTemplates.ptId, ptId));
+    expect(rows.every((r) => r.status === 'rejected')).toBe(true);
   });
 });
