@@ -174,6 +174,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     expect(row.coexistenceSyncStatus).toBe('pending');
     expect(row.coexistenceSyncDeadlineAt).toBeInstanceOf(Date);
     expect(row.status).toBe('active');
+    expect(row.displayPhoneNumber).toBeNull();
     expect(row.connectedAt).toBeInstanceOf(Date);
     expect(row.accessTokenEncrypted).toBeInstanceOf(Buffer);
     expect(await decryptToken(row.accessTokenEncrypted!)).toBe(BIZ_TOKEN);
@@ -254,6 +255,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
       .where(eq(whatsappConnections.ptId, ptId));
     expect(row.phoneNumberId).toBe(phoneNumberId);
     expect(row.mode).toBe('coexistence');
+    expect(row.displayPhoneNumber).toBe('+15551234567');
     expect(
       fetchSpy.mock.calls.some(([input]) => String(input).includes('/register')),
     ).toBe(false);
@@ -281,6 +283,60 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
       .from(whatsappConnections)
       .where(eq(whatsappConnections.ptId, ptId));
     expect(rows).toHaveLength(1);
+  });
+
+  it('captures display_phone_number via the dedicated fetch when the id is provided', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const phoneNumberId = nextPni();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.includes('/oauth/access_token')) {
+          return new Response(JSON.stringify({ access_token: BIZ_TOKEN }), {
+            status: 200,
+          });
+        }
+        if (url.includes('fields=display_phone_number')) {
+          return new Response(
+            JSON.stringify({
+              display_phone_number: '+15559998888',
+              verified_name: 'Fizio Vita',
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ success: true }), { status: 200 });
+      }) as unknown as typeof fetch,
+    );
+
+    const res = await POST(makePost(validBody(phoneNumberId, 'cloud_api')));
+    expect(res.status).toBe(200);
+
+    const [row] = await db
+      .select()
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+    expect(row.displayPhoneNumber).toBe('+15559998888');
+  });
+
+  it('still persists when the display-number fetch fails (best-effort)', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    vi.stubGlobal(
+      'fetch',
+      fetchWith('fields=display_phone_number', 500, {
+        error: { message: 'nope' },
+      }),
+    );
+
+    const res = await POST(makePost(validBody(nextPni(), 'cloud_api')));
+    expect(res.status).toBe(200);
+
+    const [row] = await db
+      .select()
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+    expect(row.displayPhoneNumber).toBeNull();
   });
 
   it('still saves the connection when phone register fails (best-effort)', async () => {

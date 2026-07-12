@@ -15,6 +15,7 @@
     "db:studio": "drizzle-kit studio",
     "db:reset:test": "tsx --env-file=.env.test scripts/db-reset.ts",
     "rotate:token-key": "tsx --env-file=.env.local scripts/rotate-token-key.ts",
+    "backfill:wa-display-number": "tsx --env-file=.env.local scripts/backfill-display-number.ts",
     "seed": "tsx --env-file=.env.test scripts/seed.ts",
     "seed:reset": "tsx --env-file=.env.test scripts/seed-reset.ts",
     "seed:qa": "tsx --env-file=.env.test scripts/seed-qa.ts",

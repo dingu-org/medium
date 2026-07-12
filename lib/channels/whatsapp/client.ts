@@ -356,6 +356,23 @@ export async function getQualityRating(connectionId: string): Promise<{
   };
 }
 
+export async function getDisplayNumber(connectionId: string): Promise<{
+  displayPhoneNumber: string | null;
+  verifiedName: string | null;
+}> {
+  const conn = await getConnection(connectionId);
+  const result = await authedGraph<{
+    display_phone_number?: string;
+    verified_name?: string;
+  }>(conn, conn.phoneNumberId, {
+    searchParams: { fields: 'display_phone_number,verified_name' },
+  });
+  return {
+    displayPhoneNumber: result.display_phone_number ?? null,
+    verifiedName: result.verified_name ?? null,
+  };
+}
+
 export async function requestCoexistenceSync(
   connectionId: string,
   syncType: CoexistenceSyncType,

@@ -79,17 +79,22 @@ export async function POST(req: NextRequest) {
 
   try {
     const token = await exchangeCodeForToken(code);
-    const phoneNumberId = await resolvePhoneNumberId({
-      wabaId,
-      token: token.accessToken,
-      providedPhoneNumberId: payload.phoneNumberId,
-      mode,
-    });
+    const { phoneNumberId, displayPhoneNumber: resolvedDisplay } =
+      await resolvePhoneNumberId({
+        wabaId,
+        token: token.accessToken,
+        providedPhoneNumberId: payload.phoneNumberId,
+        mode,
+      });
 
     if (mode === 'cloud_api') {
       await registerPhoneNumber(phoneNumberId, token.accessToken);
     }
     await subscribeApp(wabaId, token.accessToken); // also validates the token before we persist
+
+    const displayPhoneNumber =
+      resolvedDisplay ??
+      (await fetchDisplayPhoneNumber(phoneNumberId, token.accessToken));
 
     const encrypted = await encryptToken(token.accessToken);
     const tokenExpiresAt = new Date(
@@ -107,6 +112,7 @@ export async function POST(req: NextRequest) {
         persistConnection({
           ptId,
           phoneNumberId,
+          displayPhoneNumber,
           wabaId,
           mode,
           encrypted,
@@ -141,8 +147,13 @@ async function resolvePhoneNumberId(args: {
   token: string;
   providedPhoneNumberId?: string;
   mode: 'cloud_api' | 'coexistence';
-}): Promise<string> {
-  if (args.providedPhoneNumberId) return args.providedPhoneNumberId;
+}): Promise<{ phoneNumberId: string; displayPhoneNumber: string | null }> {
+  if (args.providedPhoneNumberId) {
+    return {
+      phoneNumberId: args.providedPhoneNumberId,
+      displayPhoneNumber: null,
+    };
+  }
   if (args.mode === 'cloud_api') {
     throw new MetaSignupError(
       'rejected',
@@ -181,7 +192,10 @@ async function resolvePhoneNumberId(args: {
       'Could not resolve a unique WhatsApp Business app phone number',
     );
   }
-  return chosen.id;
+  return {
+    phoneNumberId: chosen.id,
+    displayPhoneNumber: chosen.display_phone_number ?? null,
+  };
 }
 
 /** Exchange the Embedded Signup auth code for the long-lived business token. */
@@ -241,6 +255,33 @@ async function registerPhoneNumber(
   }
 }
 
+/** Best-effort human-readable number for display. A failure must not block connect. */
+async function fetchDisplayPhoneNumber(
+  phoneNumberId: string,
+  token: string,
+): Promise<string | null> {
+  try {
+    const res = await graphFetch<{
+      display_phone_number?: string;
+      verified_name?: string;
+    }>(phoneNumberId, {
+      token,
+      searchParams: { fields: 'display_phone_number,verified_name' },
+    });
+    return res.display_phone_number ?? null;
+  } catch (err) {
+    createLogger().warn(
+      'meta_embedded.display_number_skipped',
+      'Display number fetch skipped/failed (continuing)',
+      {
+        phone_number_id: phoneNumberId,
+        status: err instanceof GraphApiError ? err.status : undefined,
+      },
+    );
+    return null;
+  }
+}
+
 /** Subscribe our app to this WABA so its inbound messages reach our webhook. */
 async function subscribeApp(wabaId: string, token: string): Promise<void> {
   await graphFetch(`${wabaId}/subscribed_apps`, { method: 'POST', token });
@@ -273,14 +314,23 @@ function isUniqueViolation(err: unknown): boolean {
 async function persistConnection(args: {
   ptId: string;
   phoneNumberId: string;
+  displayPhoneNumber: string | null;
   wabaId: string;
   mode: 'cloud_api' | 'coexistence';
   encrypted: Buffer;
   tokenExpiresAt: Date;
   traceId: string;
 }): Promise<{ connectionId: string; eventId: string }> {
-  const { ptId, phoneNumberId, wabaId, mode, encrypted, tokenExpiresAt, traceId } =
-    args;
+  const {
+    ptId,
+    phoneNumberId,
+    displayPhoneNumber,
+    wabaId,
+    mode,
+    encrypted,
+    tokenExpiresAt,
+    traceId,
+  } = args;
   const svc = getServiceClient(ptId);
   const coexistence = mode === 'coexistence';
 
@@ -291,6 +341,7 @@ async function persistConnection(args: {
         .values({
           ptId,
           phoneNumberId,
+          displayPhoneNumber,
           wabaId,
           accessTokenEncrypted: encrypted,
           mode,
@@ -337,6 +388,8 @@ async function persistConnection(args: {
       await tx
         .update(whatsappConnections)
         .set({
+          // A null fresh fetch must not clobber a previously captured number.
+          ...(displayPhoneNumber != null ? { displayPhoneNumber } : {}),
           wabaId,
           accessTokenEncrypted: encrypted,
           mode,
