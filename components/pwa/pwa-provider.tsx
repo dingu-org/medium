@@ -140,6 +140,19 @@ export function PwaProvider() {
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
+    // Serwist's build is disabled in dev (next.config.ts), so /sw.js on disk
+    // is a stale production worker whose precache would poison localhost.
+    // Don't register it — and unregister any leftover from a previous prod
+    // build so already-poisoned dev browsers heal on next visit.
+    if (process.env.NODE_ENV === 'development') {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) =>
+          Promise.all(registrations.map((reg) => reg.unregister())),
+        )
+        .catch(() => undefined);
+      return;
+    }
     let reloading = false;
     navigator.serviceWorker
       .register('/sw.js', { scope: '/', updateViaCache: 'none' })
