@@ -19,17 +19,18 @@ export const settings = {
   notifCancellations: 'Anulime',
   notifReschedules: 'Ricaktime',
   notifEscalations: 'Eskalime',
-  notifReminders: 'Kujtesa ditore',
   notifReminderFailure: 'Dështime të kujtesave',
   notifConnection: 'Shkëputje e WhatsApp',
   notifResumeOffer: 'Rikthim i asistentit',
+  notifGroupAppointments: 'Takimet',
+  notifGroupConversations: 'Bisedat',
+  notifGroupSystem: 'Sistemi',
+  notifEscalationSub: 'Kur biseda kalon te ti',
+  notifSaveFailed: 'Nuk u ruajt njoftimi. Provo sërish.',
 
-  // Push notifications (per-browser) card
+  // Push notifications (per-device) master card
   pushCardTitle: 'Njoftimet në këtë pajisje',
-  pushCardSub: 'Merr njoftime edhe kur aplikacioni është i mbyllur.',
-  pushEnable: 'Aktivizo njoftimet',
-  pushDisable: 'Çaktivizo njoftimet',
-  pushEnabled: 'Njoftimet janë aktive në këtë pajisje.',
+  pushDeviceGeneric: 'Kjo pajisje',
   pushBlocked:
     'Njoftimet janë të bllokuara. Lejoji te cilësimet e shfletuesit për këtë faqe.',
   pushUnsupported: 'Ky shfletues nuk mbështet njoftime push.',
@@ -98,10 +99,6 @@ export const settings = {
   aiGreetingPlaceholder: 'Ej! Faleminderit që na shkruat…',
   aiEscalationLabel: 'Fjala kyçe e eskalimit',
   aiEscalationHint: 'Kur pacienti dërgon këtë fjalë, AI ia kalon bisedën ty.',
-
-  // Notifications card
-  notifCardSub: 'Cilat ngjarje dërgojnë njoftime push.',
-  emailComingSoon: 'Njoftimet me email — së shpejti.',
 
   // Retention card
   retentionCardSub: 'Sa kohë mbahen mesazhet dhe historia e pacientëve.',

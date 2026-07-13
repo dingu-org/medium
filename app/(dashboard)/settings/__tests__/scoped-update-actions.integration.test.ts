@@ -15,7 +15,7 @@ import { pts } from '@/lib/db/schema';
 import type { SettingsState } from '../constants';
 import { updateAccountPrefs } from '../account/actions';
 import { updateAssistantIdentity } from '../assistant/actions';
-import { updateNotificationPrefs } from '../notifications/actions';
+import { setNotificationPref } from '../notifications/actions';
 import { updateProfile } from '../profile/actions';
 
 const { getUserMock, redirectMock } = vi.hoisted(() => ({
@@ -101,27 +101,44 @@ async function readPt() {
   return row;
 }
 
-describe('updateNotificationPrefs', () => {
-  it('rebuilds all seven prefs from the notify_* checkboxes', async () => {
-    const formData = new FormData();
-    formData.set('notify_booking', 'on');
-    formData.set('notify_escalation', 'on');
-    // The remaining notify_* fields are absent/empty → false.
-    formData.set('notify_cancellation', '');
+async function resetPrefs() {
+  await db.update(pts).set({ notificationPrefs: null }).where(eq(pts.id, ptId));
+}
 
-    const result = await updateNotificationPrefs(initialState, formData);
-    expect(result).toEqual({ error: null, success: true, fieldErrors: null });
+describe('setNotificationPref', () => {
+  it('merges a single key without clobbering the others', async () => {
+    await resetPrefs();
+    await setNotificationPref('booking', false);
+    await setNotificationPref('escalation', false);
 
     const row = await readPt();
-    expect(row.notificationPrefs).toEqual({
-      booking: true,
-      cancellation: false,
-      reschedule: false,
-      escalation: true,
-      reminderFailure: false,
-      connection: false,
-      resumeOffer: false,
-    });
+    // atomic jsonb merge: only the two touched keys are written, the rest stay
+    // absent (absent → treated as opted-in `true` by resolveNotificationPrefs
+    // on read).
+    expect(row.notificationPrefs).toEqual({ booking: false, escalation: false });
+  });
+
+  it('flips a key back on and leaves the sibling key intact', async () => {
+    await resetPrefs();
+    await setNotificationPref('booking', false);
+    await setNotificationPref('escalation', false);
+    await setNotificationPref('escalation', true);
+
+    const row = await readPt();
+    expect(row.notificationPrefs).toEqual({ booking: false, escalation: true });
+  });
+
+  it('rejects an unknown pref key without writing', async () => {
+    await resetPrefs();
+    await setNotificationPref('booking', false);
+
+    await expect(
+      // cast past the typed signature to exercise the runtime enum guard
+      setNotificationPref('totally-not-a-key' as never, true),
+    ).rejects.toThrow();
+
+    const row = await readPt();
+    expect(row.notificationPrefs).toEqual({ booking: false });
   });
 });
 
