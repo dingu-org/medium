@@ -13,7 +13,7 @@ import {
 import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import type { SettingsState } from '../constants';
-import { updateAccountPrefs } from '../account/actions';
+import { updateRetention } from '../account/actions';
 import { updateAssistantIdentity } from '../assistant/actions';
 import { setNotificationPref } from '../notifications/actions';
 import { updateProfile } from '../profile/actions';
@@ -88,7 +88,6 @@ async function readPt() {
       fullName: pts.fullName,
       title: pts.title,
       address: pts.address,
-      timezone: pts.timezone,
       retentionDays: pts.retentionDays,
       notificationPrefs: pts.notificationPrefs,
       aiName: pts.aiName,
@@ -142,13 +141,9 @@ describe('setNotificationPref', () => {
   });
 });
 
-describe('updateAccountPrefs', () => {
-  it('persists retentionDays', async () => {
-    const formData = new FormData();
-    formData.set('retentionDays', '180');
-
-    const result = await updateAccountPrefs(initialState, formData);
-    expect(result).toEqual({ error: null, success: true, fieldErrors: null });
+describe('updateRetention', () => {
+  it('persists a retention period from RETENTION_OPTIONS', async () => {
+    await updateRetention(180);
 
     const row = await readPt();
     expect(row.retentionDays).toBe(180);
@@ -157,12 +152,7 @@ describe('updateAccountPrefs', () => {
   it('rejects a retention period outside RETENTION_OPTIONS without writing', async () => {
     const before = await readPt();
 
-    const formData = new FormData();
-    formData.set('retentionDays', '7');
-
-    const result = await updateAccountPrefs(initialState, formData);
-    expect(result.success).toBe(false);
-    expect(result.fieldErrors?.retentionDays).toBeTruthy();
+    await expect(updateRetention(7)).rejects.toThrow();
 
     const after = await readPt();
     expect(after.retentionDays).toBe(before.retentionDays);

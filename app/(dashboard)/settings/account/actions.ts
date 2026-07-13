@@ -8,49 +8,35 @@ import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
-import { RETENTION_OPTIONS, type SettingsState } from '../constants';
+import { RETENTION_OPTIONS } from '../constants';
 
-const schema = z.object({
-  retentionDays: z.coerce
-    .number()
-    .int()
-    .refine(
-      (n) => (RETENTION_OPTIONS as readonly number[]).includes(n),
-      'Invalid retention period',
-    ),
-});
-
-async function updateAccountPrefsImpl(
-  _prev: SettingsState,
-  formData: FormData,
-): Promise<SettingsState> {
+async function requirePtId(): Promise<string> {
   const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
-
-  const parsed = schema.safeParse({
-    retentionDays: formData.get('retentionDays'),
-  });
-  if (!parsed.success) {
-    return {
-      error: null,
-      success: false,
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-
-  await db
-    .update(pts)
-    .set({ retentionDays: parsed.data.retentionDays })
-    .where(eq(pts.id, user.id));
-
-  revalidatePath('/settings/account');
-  return { error: null, success: true, fieldErrors: null };
+  return user.id;
 }
 
-export const updateAccountPrefs = instrumentedAction(
-  'settings.updateAccountPrefs',
-  updateAccountPrefsImpl,
+const retentionSchema = z.coerce
+  .number()
+  .int()
+  .refine(
+    (n) => (RETENTION_OPTIONS as readonly number[]).includes(n),
+    'Invalid retention period',
+  );
+
+/** Set how long conversations are retained; the client only ever sends a
+ *  RETENTION_OPTIONS value, so an out-of-range value throws (surfaced as a toast). */
+async function updateRetentionImpl(days: number): Promise<void> {
+  const value = retentionSchema.parse(days);
+  const ptId = await requirePtId();
+  await db.update(pts).set({ retentionDays: value }).where(eq(pts.id, ptId));
+  revalidatePath('/settings/account');
+}
+
+export const updateRetention = instrumentedAction(
+  'settings.updateRetention',
+  updateRetentionImpl,
 );

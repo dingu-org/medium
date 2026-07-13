@@ -1,18 +1,13 @@
+import { User } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { NavBar } from '@/components/dashboard/nav-bar';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { OfflineNote } from '@/components/settings/offline-note';
+import { GroupedList, GroupedListRow } from '@/components/ui/grouped-list';
 import { t } from '@/lib/i18n';
 import { getSettingsSnapshot } from '@/lib/pwa/read-models';
 import { createServerClient } from '@/lib/supabase/server';
-import { DangerZone } from '../danger-zone';
-import { ExportData } from '../export-data';
-import { AccountForm } from './account-form';
+import { AccountDanger } from './account-danger';
+import { DataGroup } from './data-group';
 
 export const metadata = { title: `${t.settings.accountAndData} · Medium` };
 
@@ -24,24 +19,26 @@ export default async function AccountSettingsPage() {
   if (!user) redirect('/sign-in');
 
   const snapshot = await getSettingsSnapshot(user.id);
+  const email = user.email ?? '';
 
   return (
     <div className="-mx-4 -mt-4">
       <NavBar title={t.settings.accountAndData} backHref="/settings" />
-      <div className="space-y-4 px-5 pt-2 pb-4">
-        <AccountForm retentionDays={snapshot.retentionDays} />
+      <div className="space-y-6 px-5 pt-2 pb-7">
+        <OfflineNote />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.settings.exportData}</CardTitle>
-            <CardDescription>{t.settings.exportSub}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ExportData />
-          </CardContent>
-        </Card>
+        <GroupedList title={t.settings.accountSection}>
+          <GroupedListRow
+            icon={User}
+            title={t.settings.emailRow}
+            titleWeight="medium"
+            value={email}
+          />
+        </GroupedList>
 
-        <DangerZone practiceName={snapshot.practiceName} />
+        <DataGroup retentionDays={snapshot.retentionDays} />
+
+        <AccountDanger practiceName={snapshot.practiceName} />
       </div>
     </div>
   );

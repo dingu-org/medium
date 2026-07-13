@@ -40,8 +40,7 @@ export const settings = {
   pushErrorToast: 'Nuk u aktivizuan njoftimet. Provo sërish.',
 
   exportData: 'Eksporto të dhënat',
-  exportSub: 'Takime, pacientë, biseda · JSON',
-  retention: 'Ruajtja e të dhënave',
+  exportSub: 'Takime, klientë, biseda · JSON',
   retentionDays: (n: number) => `${n} ditë`,
 
   practiceName: 'Klinika ose praktika',
@@ -77,9 +76,7 @@ export const settings = {
   disconnectConfirm: 'Shkëput',
   deleteTitle: 'Fshi llogarinë?',
   deleteBody:
-    "Kjo fshin përgjithmonë praktikën, pacientët, takimet, bisedat dhe lidhjen me WhatsApp. S'kthehet.",
-  deleteTypePrompt: (name: string) =>
-    `Shkruaj "${name}" për të konfirmuar`,
+    "Kjo fshin përgjithmonë praktikën, klientët, takimet, bisedat dhe lidhjen me WhatsApp. S'kthehet.",
   deleteConfirm: 'Fshi llogarinë',
   savedToast: 'Ndryshimet u ruajtën.',
 
@@ -100,8 +97,16 @@ export const settings = {
   aiEscalationLabel: 'Fjala kyçe e eskalimit',
   aiEscalationHint: 'Kur pacienti dërgon këtë fjalë, AI ia kalon bisedën ty.',
 
-  // Retention card
-  retentionCardSub: 'Sa kohë mbahen mesazhet dhe historia e pacientëve.',
+  // Account & data screen (Phase 15 · task 12)
+  accountSection: 'Llogaria',
+  emailRow: 'Email',
+  dataSection: 'Të dhënat',
+  dataFooter:
+    'Bisedat më të vjetra se afati fshihen vetë. Takimet dhe klientët ruhen gjithmonë.',
+  retentionRow: 'Ruajtja e bisedave',
+  retentionFailed: 'Nuk u ruajt afati. Provo sërish.',
+  deleteTypePromptPre: 'Shkruaj ',
+  deleteTypePromptPost: ' për të konfirmuar',
 
   // Save button / offline states
   saveSettings: 'Ruaj cilësimet',
