@@ -17,7 +17,7 @@ export const onboarding = {
 
   steps: {
     profileTitle: 'Profili yt',
-    profileSub: 'Shto emrin e praktikës dhe zonën kohore.',
+    profileSub: 'Shto emrin e praktikës dhe të dhënat e biznesit.',
     profileCta: 'Rregullo profilin',
     whatsappTitle: 'Lidh WhatsApp',
     whatsappSub: 'Lidh numrin tënd të WhatsApp Business që pacientët të shkruajnë.',

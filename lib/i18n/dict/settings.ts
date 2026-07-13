@@ -1,12 +1,7 @@
 /** Settings (profile / AI / notifications / retention / WhatsApp / danger zone)
  *  + the availability editor. */
 export const settings = {
-  title: 'Llogaria & të dhënat',
-  sectionChannel: 'Kanali',
   sectionNotifications: 'Njoftimet',
-  sectionData: 'Të dhënat e tua',
-  sectionProfile: 'Profili',
-  sectionAi: 'Asistenti',
   dangerZone: 'Zona e rrezikut',
   dangerNote: "Veprimet e zonës së rrezikut s'kthehen.",
 
@@ -43,17 +38,11 @@ export const settings = {
   exportSub: 'Takime, klientë, biseda · JSON',
   retentionDays: (n: number) => `${n} ditë`,
 
-  practiceName: 'Klinika ose praktika',
   fullName: 'Emri',
-  timezone: 'Zona kohore',
   aiName: 'Emri i asistentit',
-  aiGreeting: 'Përshëndetja',
-  aiEscalationKeyword: 'Fjala kyçe e eskalimit',
 
   availability: 'Disponueshmëria',
-  availabilitySub: 'Orët e punës, ditët e bllokuara dhe kohëzgjatja e takimit.',
   services: 'Shërbimet',
-  servicesSub: 'Shërbimet që ofron dhe kohëzgjatja e tyre.',
   servicesTitle: 'Shërbimet',
   servicesIntro: 'Menaxho shërbimet që mund të rezervojnë klientët.',
   serviceName: 'Emri i shërbimit',
@@ -62,7 +51,6 @@ export const settings = {
   serviceEdit: 'Ndrysho shërbimin',
   serviceSave: 'Ruaj',
   serviceActive: 'Aktiv',
-  serviceInactive: 'Joaktiv',
   serviceEmpty: 'Ende asnjë shërbim',
   serviceEmptySub: 'Shto të paktën një shërbim për të pranuar rezervime.',
   serviceOnlineOnly: 'Shërbimet mund të ndryshohen vetëm kur je online.',
@@ -80,21 +68,10 @@ export const settings = {
   deleteConfirm: 'Fshi llogarinë',
   savedToast: 'Ndryshimet u ruajtën.',
 
-  exportRun: 'Shkarko JSON',
-  exporting: 'Po eksportohet…',
   exportFailed: 'Eksporti dështoi. Provo sërish.',
 
-  // Practice card
-  practiceCard: 'Klinika',
-  practiceCardSub: 'Emri dhe zona kohore e klinikës.',
-
-  // AI assistant card
-  aiCard: 'Asistenti AI',
-  aiCardSub: 'Si prezantohet asistenti dhe kur të të lajmërojë.',
-  aiNameLabel: 'Emri i asistentit',
-  aiGreetingLabel: 'Mesazhi i mirëseardhjes',
+  // Assistant identity fields (assistant screen)
   aiGreetingPlaceholder: 'Ej! Faleminderit që na shkruat…',
-  aiEscalationLabel: 'Fjala kyçe e eskalimit',
   aiEscalationHint: 'Kur pacienti dërgon këtë fjalë, AI ia kalon bisedën ty.',
 
   // Account & data screen (Phase 15 · task 12)
@@ -108,13 +85,10 @@ export const settings = {
   deleteTypePromptPre: 'Shkruaj ',
   deleteTypePromptPost: ' për të konfirmuar',
 
-  // Save button / offline states
-  saveSettings: 'Ruaj cilësimet',
-  requiresConnection: 'Ndryshimet kërkojnë lidhje me internet.',
+  // Offline states
   settingsRequireConnection: 'Cilësimet kërkojnë lidhje.',
 
   // WhatsApp connection badge labels
-  connectionBadgeActionNeeded: 'Kërkohet veprim',
   connectionBadgePending: 'Në pritje',
   connectionBadgeNotConnected: 'Nuk është lidhur',
 
@@ -194,8 +168,6 @@ export const settings = {
   whatsappCommonReasons: 'Arsye të zakonshme',
 
   // Danger zone toasts / inline
-  accountAndWhatsappRequireConnection:
-    'Veprimet e llogarisë dhe lidhjes WhatsApp kërkojnë lidhje.',
   disconnectRequiresConnection: 'Shkëputja e WhatsApp kërkon lidhje.',
   deleteRequiresConnection: 'Fshirja e llogarisë kërkon lidhje.',
   disconnectedToast: 'WhatsApp u shkëput.',
@@ -315,5 +287,16 @@ export const availability = {
     4: 'E enjte',
     5: 'E premte',
     6: 'E shtunë',
+  } as Record<number, string>,
+
+  // Short weekday labels (JS getDay() index) for summary chips.
+  daysShort: {
+    0: 'Die',
+    1: 'Hën',
+    2: 'Mar',
+    3: 'Mër',
+    4: 'Enj',
+    5: 'Pre',
+    6: 'Sht',
   } as Record<number, string>,
 } as const;

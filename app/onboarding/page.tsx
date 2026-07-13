@@ -37,7 +37,7 @@ export default async function OnboardingPage() {
       title: t.onboarding.steps.profileTitle,
       description: t.onboarding.steps.profileSub,
       done: state.profile,
-      href: '/settings',
+      href: '/settings/profile',
       cta: t.onboarding.steps.profileCta,
     },
     {
@@ -45,7 +45,7 @@ export default async function OnboardingPage() {
       title: t.onboarding.steps.whatsappTitle,
       description: t.onboarding.steps.whatsappSub,
       done: state.whatsapp,
-      href: '/settings',
+      href: '/settings/whatsapp',
       cta: t.onboarding.steps.whatsappCta,
     },
     {

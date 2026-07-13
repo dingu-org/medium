@@ -210,7 +210,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
           className="mt-5"
         />
 
-        {/* Danger zone (canvas parity with settings/danger-zone.tsx): export + erase. */}
+        {/* Danger zone (canvas parity with settings/account/account-danger.tsx): export + erase. */}
         <section className="mt-6">
           <SectionLabel>{t.clients.dangerZone}</SectionLabel>
           <div className="border-line space-y-2 rounded-[12px] border bg-card p-3 shadow-[var(--shadow-card)]">
