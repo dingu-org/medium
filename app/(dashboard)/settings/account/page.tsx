@@ -30,10 +30,7 @@ export default async function AccountSettingsPage() {
     <div className="-mx-4 -mt-4">
       <NavBar title={t.settings.accountAndData} backHref="/settings" />
       <div className="space-y-4 px-5 pt-2 pb-4">
-        <AccountForm
-          timezone={snapshot.timezone}
-          retentionDays={snapshot.retentionDays}
-        />
+        <AccountForm retentionDays={snapshot.retentionDays} />
 
         <Card>
           <CardHeader>

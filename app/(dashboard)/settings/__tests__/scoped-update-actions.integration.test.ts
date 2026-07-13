@@ -126,16 +126,14 @@ describe('updateNotificationPrefs', () => {
 });
 
 describe('updateAccountPrefs', () => {
-  it('persists timezone and retentionDays', async () => {
+  it('persists retentionDays', async () => {
     const formData = new FormData();
-    formData.set('timezone', 'Europe/Tirane');
     formData.set('retentionDays', '180');
 
     const result = await updateAccountPrefs(initialState, formData);
     expect(result).toEqual({ error: null, success: true, fieldErrors: null });
 
     const row = await readPt();
-    expect(row.timezone).toBe('Europe/Tirane');
     expect(row.retentionDays).toBe(180);
   });
 
@@ -143,7 +141,6 @@ describe('updateAccountPrefs', () => {
     const before = await readPt();
 
     const formData = new FormData();
-    formData.set('timezone', 'Europe/Tirane');
     formData.set('retentionDays', '7');
 
     const result = await updateAccountPrefs(initialState, formData);
@@ -151,7 +148,6 @@ describe('updateAccountPrefs', () => {
     expect(result.fieldErrors?.retentionDays).toBeTruthy();
 
     const after = await readPt();
-    expect(after.timezone).toBe(before.timezone);
     expect(after.retentionDays).toBe(before.retentionDays);
   });
 });

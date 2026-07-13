@@ -10,19 +10,7 @@ import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 import { RETENTION_OPTIONS, type SettingsState } from '../constants';
 
-// Timezone lives here transitionally; task 9 moves it to the availability screen.
 const schema = z.object({
-  timezone: z
-    .string()
-    .min(1, 'Select a timezone')
-    .refine((tz) => {
-      try {
-        new Intl.DateTimeFormat('en', { timeZone: tz });
-        return true;
-      } catch {
-        return false;
-      }
-    }, 'Invalid timezone'),
   retentionDays: z.coerce
     .number()
     .int()
@@ -43,7 +31,6 @@ async function updateAccountPrefsImpl(
   if (!user) redirect('/sign-in');
 
   const parsed = schema.safeParse({
-    timezone: formData.get('timezone'),
     retentionDays: formData.get('retentionDays'),
   });
   if (!parsed.success) {
@@ -56,10 +43,7 @@ async function updateAccountPrefsImpl(
 
   await db
     .update(pts)
-    .set({
-      timezone: parsed.data.timezone,
-      retentionDays: parsed.data.retentionDays,
-    })
+    .set({ retentionDays: parsed.data.retentionDays })
     .where(eq(pts.id, user.id));
 
   revalidatePath('/settings/account');

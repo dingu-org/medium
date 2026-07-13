@@ -1,15 +1,15 @@
 import { TZDate } from '@date-fns/tz';
+import { isSameDay } from 'date-fns';
 import { asc, eq } from 'drizzle-orm';
-import { format, isSameDay } from 'date-fns';
-import { ChevronLeft } from 'lucide-react';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db';
 import { availabilityRules, blockedPeriods, pts } from '@/lib/db/schema';
+import { t } from '@/lib/i18n';
+import { formatDate, formatTime } from '@/lib/i18n/datetime';
 import { createServerClient } from '@/lib/supabase/server';
 import { AvailabilityEditor, type BlockView } from './availability-editor';
 
-export const metadata = { title: 'Availability · Medium' };
+export const metadata = { title: `${t.availability.title} · Medium` };
 
 export default async function AvailabilityPage() {
   const supabase = await createServerClient();
@@ -60,23 +60,19 @@ export default async function AvailabilityPage() {
   const blockViews: BlockView[] = blocks.map((b) => {
     const start = new TZDate(b.startsAt, timezone);
     const end = new TZDate(b.endsAt, timezone);
-    const day = format(start, 'EEE d MMM');
-    const times = isSameDay(start, end)
-      ? `${format(start, 'HH:mm')}–${format(end, 'HH:mm')}`
-      : `${format(start, 'HH:mm')} → ${format(end, 'EEE d MMM HH:mm')}`;
-    return { id: b.id, when: `${day} · ${times}`, label: b.label };
+    const when = isSameDay(start, end)
+      ? `${formatDate(start)} · ${formatTime(start)} – ${formatTime(end)}`
+      : `${formatDate(start)} ${formatTime(start)} → ${formatDate(end)} ${formatTime(end)}`;
+    return { id: b.id, when, label: b.label };
   });
 
   return (
-    <div className="space-y-4">
-      <Link
-        href="/settings"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        Settings
-      </Link>
-      <AvailabilityEditor initialRules={initialRules} blocks={blockViews} />
+    <div className="-mx-4 -mt-4">
+      <AvailabilityEditor
+        initialRules={initialRules}
+        blocks={blockViews}
+        timezone={timezone}
+      />
     </div>
   );
 }

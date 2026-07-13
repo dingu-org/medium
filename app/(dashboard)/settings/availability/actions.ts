@@ -68,6 +68,41 @@ export const saveAvailability = instrumentedAction(
   saveAvailabilityImpl,
 );
 
+const validTimezone = (tz: string): boolean => {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const timezoneSchema = z.object({
+  timezone: z.string().min(1).refine(validTimezone, 'Invalid timezone'),
+});
+
+/** Persist the PT timezone (moved here from /settings/account in Phase 15). */
+async function saveTimezoneImpl(input: {
+  timezone: string;
+}): Promise<AvailabilityResult> {
+  const ptId = await requirePtId();
+  const parsed = timezoneSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid' };
+  }
+  await db
+    .update(pts)
+    .set({ timezone: parsed.data.timezone })
+    .where(eq(pts.id, ptId));
+  revalidatePath('/settings/availability');
+  return { ok: true };
+}
+
+export const saveTimezone = instrumentedAction(
+  'availability.saveTimezone',
+  saveTimezoneImpl,
+);
+
 const blockSchema = z
   .object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date'),

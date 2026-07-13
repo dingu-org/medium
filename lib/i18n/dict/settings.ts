@@ -232,39 +232,34 @@ export const settings = {
   serviceDeleted: 'Shërbimi u fshi.',
 } as const;
 
-/** Availability editor (weekly hours + blocked periods). */
+/** Availability editor (weekly hours + blocked periods + timezone). */
 export const availability = {
   title: 'Disponueshmëria',
-  daysAndHours: 'Ditët dhe orët',
-  appointmentLength: 'Kohëzgjatja e takimeve',
   blockedPeriods: 'Periudha të bllokuara',
   addBlocked: 'Shto periudhë',
-  copyToAll: 'Kopjo te të gjitha',
-  from: 'Nga',
-  to: 'Deri',
   closed: 'Mbyllur',
-  label: 'Etiketa',
-  minutes: (n: number) => `${n} min`,
 
-  // Weekly hours card
-  weeklyHours: 'Orët javore',
-  weeklyHoursSub: 'Kur mund të rezervojnë pacientët. Takimet janë 60 minuta.',
-  requiresConnection: 'Ndryshimet e disponueshmërisë kërkojnë lidhje.',
-  copyToAllToast: 'Orët u kopjuan te të gjitha ditët e aktivizuara.',
+  // Weekly hours section
+  weeklyScheduleLabel: 'Orari javor',
+  copyMonday: 'Kopjo të hënën kudo',
+  copyMondayToast: 'Orari i së hënës u kopjua te të gjitha ditët.',
   endAfterStart: 'Ora e mbarimit duhet të jetë pas orës së fillimit.',
-  saveAvailability: 'Ruaj disponueshmërinë',
   savedToast: 'Disponueshmëria u ruajt.',
 
-  // Blocked periods card
-  blockedPeriodsSub: "Pushime ose kohë personale kur s'merr takime.",
-  noBlocked: 'Asnjë periudhë e bllokuar',
+  // Blocked periods section + add sheet
   deleteBlockedAriaLabel: 'Fshi periudhën e bllokuar',
   addBlockDate: 'Data',
+  timeRangeLabel: 'Orari',
   addBlockLabelOptional: 'Etiketa (opsionale)',
   addBlockLabelPlaceholder: 'p.sh. Pushim',
   pickDate: 'Zgjidh një datë për të bllokuar.',
-  blockedRequiresConnection: 'Periudhat e bllokuara kërkojnë lidhje.',
   addedToast: 'Periudha e bllokuar u shtua.',
+
+  // Timezone group + picker sheet
+  timezone: 'Zona kohore',
+  timezoneSearch: 'Kërko zonën kohore',
+  timezoneSaved: 'Zona kohore u ruajt.',
+  timezoneFailed: 'Zona kohore nuk u ruajt. Provo sërish.',
 
   // Aria labels for time inputs
   startTimeAriaLabel: (day: string) => `${day} ora e fillimit`,
@@ -282,7 +277,4 @@ export const availability = {
     5: 'E premte',
     6: 'E shtunë',
   } as Record<number, string>,
-
-  // Settings back-link label on availability page
-  backToSettings: 'Cilësimet',
 } as const;

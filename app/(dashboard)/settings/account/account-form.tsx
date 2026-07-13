@@ -1,6 +1,6 @@
 'use client';
 
-import { type FormEvent, useActionState, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useActionState, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,42 +28,19 @@ const initialState: SettingsState = {
   fieldErrors: null,
 };
 
-function useTimezones(current: string): string[] {
-  return useMemo(() => {
-    let zones: string[] = [];
-    try {
-      const supported = (
-        Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
-      ).supportedValuesOf;
-      if (supported) zones = supported('timeZone');
-    } catch {
-      zones = [];
-    }
-    if (zones.length === 0) {
-      zones = ['UTC', 'Europe/Berlin', 'Europe/London', current];
-    }
-    if (!zones.includes(current)) zones = [current, ...zones];
-    return zones;
-  }, [current]);
-}
-
 export function AccountForm({
-  timezone: initialTimezone,
   retentionDays: initialRetentionDays,
 }: {
-  timezone: string;
   retentionDays: number;
 }) {
   const [state, action, pending] = useActionState(
     updateAccountPrefs,
     initialState,
   );
-  const [timezone, setTimezone] = useState(initialTimezone);
   const [retentionDays, setRetentionDays] = useState(
     String(initialRetentionDays),
   );
   const online = useOnlineStatus();
-  const timezones = useTimezones(initialTimezone);
 
   useEffect(() => {
     if (state.success) toast.success(t.settings.savedToast);
@@ -78,34 +55,8 @@ export function AccountForm({
 
   return (
     <form action={action} onSubmit={onSubmit} className="space-y-4">
-      {/* Hidden inputs carry the controlled Select values into FormData. */}
-      <input type="hidden" name="timezone" value={timezone} />
+      {/* Hidden input carries the controlled Select value into FormData. */}
       <input type="hidden" name="retentionDays" value={retentionDays} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t.settings.timezone}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Select value={timezone} onValueChange={setTimezone}>
-            <SelectTrigger id="timezone" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {timezones.map((tz) => (
-                <SelectItem key={tz} value={tz}>
-                  {tz.replace(/_/g, ' ')}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {state.fieldErrors?.timezone && (
-            <p className="mt-2 text-sm text-destructive">
-              {state.fieldErrors.timezone[0]}
-            </p>
-          )}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
