@@ -12,11 +12,8 @@ export const settings = {
 
   whatsappBusiness: 'WhatsApp Business',
   connected: 'I lidhur',
-  disconnected: 'I shkëputur',
   reconnect: 'Rilidh',
   comingSoon: 'Së shpejti',
-  reminderTemplate: 'Shablloni i kujtesave',
-  approved: 'Miratuar',
 
   notifNewBookings: 'Rezervime të reja',
   notifCancellations: 'Anulime',
@@ -75,7 +72,7 @@ export const settings = {
   deleteAccount: 'Fshi llogarinë',
   disconnectTitle: 'Shkëput WhatsApp?',
   disconnectBody:
-    'Pacientët nuk do të mund të shkruajnë derisa ta rilidhësh. Takimet dhe historiku ruhen.',
+    'Pacientët nuk do të marrin asnjë përgjigje derisa ta rilidhësh. Takimet dhe historiku ruhen.',
   disconnectConfirm: 'Shkëput',
   deleteTitle: 'Fshi llogarinë?',
   deleteBody:
@@ -119,14 +116,54 @@ export const settings = {
   connectionBadgePending: 'Në pritje',
   connectionBadgeNotConnected: 'Nuk është lidhur',
 
-  // WhatsApp card
-  whatsappCardSub:
-    'Lidh numrin tënd WhatsApp Business që pacientët të të shkruajnë klinikës.',
-  whatsappRevoked:
-    'Lidhja juaj WhatsApp u revokua. Rilidh për të rifilluar mesazhet.',
-  whatsappConnectedId: 'ID e numrit të lidhur:',
+  // WhatsApp env note (dev affordance)
   whatsappEnvNote:
     'Vendos NEXT_PUBLIC_META_APP_ID dhe NEXT_PUBLIC_META_CONFIG_ID për të aktivizuar regjistrimin.',
+
+  // WhatsApp — not connected (wa-connect)
+  whatsappConnectBullets: [
+    {
+      title: 'Numri yt i WhatsApp Business',
+      sub: 'Jo një numër personal — duhet llogari Business.',
+    },
+    {
+      title: 'Verifikim përmes Meta-s',
+      sub: 'Hapet dritarja e Meta-s; ti zgjedh numrin dhe jep leje.',
+    },
+    {
+      title: 'Pas lidhjes, Medium fillon vetë',
+      sub: 'Shabllonet e kujtesave krijohen automatikisht.',
+    },
+  ],
+  whatsappConnectNote: 'Hapet te Meta · zgjat ~2 minuta',
+
+  // WhatsApp — pending (client in-flight, wa-pending)
+  whatsappPendingTitle: 'Po lidhet me Meta-n',
+  whatsappPendingBody:
+    'Po verifikojmë numrin dhe lejet. Zakonisht zgjat më pak se një minutë.',
+
+  // WhatsApp — connected (wa-connected)
+  whatsappRemindersLabel: 'Kujtesat',
+  whatsappTemplateEyebrow: 'Shablloni i kujtesës',
+  whatsappTemplateApproved: 'Miratuar',
+  whatsappTemplatePending: 'Në pritje',
+  whatsappTemplateRejected: 'Refuzuar',
+  whatsappTemplatePreparing: 'Po krijohet…',
+  whatsappTemplateNote:
+    'Shablloni miratohet nga Meta dhe nuk ndryshohet nga aplikacioni.',
+  // Sample bubble (keywords are KwTag chips → t.ops.confirm / t.ops.cancel)
+  whatsappTemplatePreviewLead:
+    'Kujtesë: keni një takim nesër në 14:30. Përgjigjuni ',
+  whatsappTemplatePreviewMid: ' për ta konfirmuar ose ',
+  whatsappTemplatePreviewTail: ' për ta anuluar.',
+
+  // WhatsApp — revoked (wa-revoked)
+  whatsappRevokedTitle: 'Lidhja u revokua',
+  whatsappRevokedBody: (number?: string) =>
+    number
+      ? `Meta e ndërpreu lejen për numrin ${number}. Pacientët nuk po marrin përgjigje.`
+      : 'Meta e ndërpreu lejen. Pacientët nuk po marrin përgjigje.',
+  whatsappReconnectNote: 'Rilidhja mban numrin dhe historikun',
 
   // ConnectWhatsApp button + toasts
   whatsappConnecting: 'Po lidhet…',

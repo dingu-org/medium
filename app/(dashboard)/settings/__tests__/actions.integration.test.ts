@@ -11,8 +11,8 @@ import {
   vi,
 } from 'vitest';
 import { db } from '@/lib/db';
-import { auditLog } from '@/lib/db/schema';
-import { deleteAccount, exportPt } from '../actions';
+import { auditLog, whatsappConnections } from '@/lib/db/schema';
+import { deleteAccount, disconnectWhatsApp, exportPt } from '../actions';
 
 const {
   getUserMock,
@@ -115,6 +115,34 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.clearAllMocks();
+});
+
+describe('disconnectWhatsApp', () => {
+  it('flips the latest active connection to revoked', async () => {
+    const [inserted] = await db
+      .insert(whatsappConnections)
+      .values({
+        ptId,
+        phoneNumberId: `pn-disconnect-${Date.now()}`,
+        wabaId: 'WABA_DISCONNECT',
+        status: 'active',
+      })
+      .returning({ id: whatsappConnections.id });
+
+    try {
+      await disconnectWhatsApp();
+
+      const [row] = await db
+        .select({ status: whatsappConnections.status })
+        .from(whatsappConnections)
+        .where(eq(whatsappConnections.id, inserted.id));
+      expect(row.status).toBe('revoked');
+    } finally {
+      await db
+        .delete(whatsappConnections)
+        .where(eq(whatsappConnections.id, inserted.id));
+    }
+  });
 });
 
 describe('deleteAccount', () => {

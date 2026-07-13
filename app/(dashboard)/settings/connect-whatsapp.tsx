@@ -1,7 +1,8 @@
 'use client';
 
-import { AlertCircle, X } from 'lucide-react';
+import { AlertCircle, Clock, Loader2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { AppBanner } from '@/components/ui/app-banner';
@@ -13,7 +14,12 @@ type Props = {
   appId: string;
   configId: string;
   graphVersion: string;
-  connected: boolean;
+  /** Picks the CTA label; the revoked screen passes 'reconnect'. */
+  variant?: 'connect' | 'reconnect';
+  /** Clock helper line under the CTA. */
+  note?: string;
+  /** Explainer / warning card above the CTA; hidden while pending. */
+  children?: ReactNode;
 };
 
 // Minimal slice of the Facebook JS SDK we depend on.
@@ -98,7 +104,9 @@ export function ConnectWhatsApp({
   appId,
   configId,
   graphVersion,
-  connected,
+  variant = 'connect',
+  note,
+  children,
 }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -107,6 +115,12 @@ export function ConnectWhatsApp({
   // Meta delivers phone_number_id + waba_id via a postMessage during the popup,
   // separately from the FB.login auth code — capture it here.
   const sessionInfo = useRef<{ phoneNumberId?: string; wabaId?: string }>({});
+  // Honest cancel scope: we cannot force-close Meta's browser-owned popup, but
+  // cancel discards the pending result (and aborts an in-flight POST). If the
+  // server persisted before the abort landed, the DB is the source of truth —
+  // the next server render shows connected.
+  const cancelledRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -152,6 +166,7 @@ export function ConnectWhatsApp({
     }
     setPending(true);
     setStatus(null);
+    cancelledRef.current = false;
     sessionInfo.current = {};
     try {
       await loadFbSdk(appId, graphVersion);
@@ -174,6 +189,11 @@ export function ConnectWhatsApp({
         });
       });
 
+      if (cancelledRef.current) {
+        setPending(false);
+        return;
+      }
+
       const code = loginResp.authResponse?.code;
       const { phoneNumberId, wabaId } = sessionInfo.current;
       if (!code || !wabaId) {
@@ -182,13 +202,16 @@ export function ConnectWhatsApp({
           title: t.settings.whatsappIncompleteTitle,
           body: t.settings.whatsappIncomplete,
         });
+        setPending(false);
         return;
       }
 
+      abortRef.current = new AbortController();
       const res = await fetch('/api/auth/meta-embedded', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',
+        signal: abortRef.current.signal,
         body: JSON.stringify({
           code,
           phoneNumberId,
@@ -198,6 +221,8 @@ export function ConnectWhatsApp({
       });
 
       if (res.ok) {
+        // Leave `pending` true — the spinner stays up until the RSC re-renders
+        // as 'active' and this component unmounts (no explainer flash).
         toast.success(t.settings.whatsappSuccess);
         router.refresh();
         return;
@@ -205,15 +230,50 @@ export function ConnectWhatsApp({
 
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       setStatus(errorStatus(body.error));
+      setPending(false);
     } catch {
+      if (cancelledRef.current) return;
       setStatus(errorStatus(undefined));
-    } finally {
       setPending(false);
     }
   }, [appId, configId, graphVersion, online, router]);
 
+  const handleCancel = useCallback(() => {
+    cancelledRef.current = true;
+    abortRef.current?.abort();
+    setPending(false);
+    setStatus(null);
+  }, []);
+
+  if (pending) {
+    return (
+      <div className="flex flex-col items-center pt-[90px] text-center">
+        <div className="mb-[22px] inline-flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[var(--brand-50)]">
+          <Loader2
+            className="h-[30px] w-[30px] animate-spin text-primary"
+            strokeWidth={3}
+          />
+        </div>
+        <p className="font-heading text-[22px] font-bold tracking-[-0.025em] text-foreground">
+          {t.settings.whatsappPendingTitle}
+        </p>
+        <p className="mt-[9px] max-w-[280px] text-sm leading-[1.55] text-ink-2">
+          {t.settings.whatsappPendingBody}
+        </p>
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="mt-[26px] text-sm font-semibold text-ink-2"
+        >
+          {t.actions.cancel}
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {children}
       {status && (
         <AppBanner
           tone={status.tone}
@@ -244,17 +304,21 @@ export function ConnectWhatsApp({
         type="button"
         onClick={handleClick}
         disabled={pending || !appId || !configId || !online}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] text-[15px] font-bold tracking-[-0.01em] text-white transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
+        className="flex h-[52px] w-full items-center justify-center gap-2.5 rounded-full bg-[#25D366] text-[15.5px] font-bold tracking-[-0.01em] text-white shadow-[0_10px_24px_-12px_rgba(37,211,102,0.5)] transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
       >
-        <WhatsAppMark size={18} fill="#ffffff" />
-        {pending
-          ? t.settings.whatsappConnecting
-          : connected
-            ? t.settings.whatsappReconnectBusiness
-            : t.settings.whatsappConnectBusiness}
+        <WhatsAppMark size={20} fill="#ffffff" />
+        {variant === 'reconnect'
+          ? t.settings.whatsappReconnectBusiness
+          : t.settings.whatsappConnectBusiness}
       </button>
+      {note && (
+        <div className="flex items-center justify-center gap-1.5 text-xs text-ink-3">
+          <Clock className="h-[13px] w-[13px]" aria-hidden />
+          {note}
+        </div>
+      )}
       {!online && (
-        <p className="text-ink-3 text-xs">
+        <p className="text-ink-3 text-center text-xs">
           {t.settings.whatsappRequiresConnection}
         </p>
       )}

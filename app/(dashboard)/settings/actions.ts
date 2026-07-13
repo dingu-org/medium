@@ -41,6 +41,7 @@ async function disconnectWhatsAppImpl(): Promise<void> {
   }
 
   revalidatePath('/settings');
+  revalidatePath('/settings/whatsapp');
 }
 
 export const disconnectWhatsApp = instrumentedAction(

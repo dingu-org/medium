@@ -24,7 +24,6 @@ export default async function AccountSettingsPage() {
   if (!user) redirect('/sign-in');
 
   const snapshot = await getSettingsSnapshot(user.id);
-  const connected = snapshot.whatsappStatus === 'active';
 
   return (
     <div className="-mx-4 -mt-4">
@@ -42,7 +41,7 @@ export default async function AccountSettingsPage() {
           </CardContent>
         </Card>
 
-        <DangerZone connected={connected} practiceName={snapshot.practiceName} />
+        <DangerZone practiceName={snapshot.practiceName} />
       </div>
     </div>
   );

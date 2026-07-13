@@ -1,7 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { pts, whatsappConnections } from '@/lib/db/schema';
+import { messageTemplates, pts, whatsappConnections } from '@/lib/db/schema';
+import {
+  FALLBACK_REMINDER_TEMPLATE,
+  REMINDER_TEMPLATE,
+} from '@/lib/inngest/functions/bootstrap-wa-connection';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getSettingsSnapshot } from '../read-models';
 
@@ -76,5 +80,57 @@ describe('getSettingsSnapshot', () => {
     expect(snap.assistantPaused).toBe(false);
     expect(snap.whatsappDisplayPhoneNumber).toBeNull();
     expect(snap.whatsappStatus).toBeNull();
+    expect(snap.whatsappTemplateStatus).toBeNull();
+  });
+});
+
+describe('getSettingsSnapshot · whatsappTemplateStatus', () => {
+  function seedTemplate(
+    name: string,
+    status: 'approved' | 'pending' | 'rejected',
+  ) {
+    return db
+      .insert(messageTemplates)
+      .values({ ptId, name, language: 'sq', status, body: 'x' });
+  }
+
+  beforeEach(async () => {
+    await db.delete(messageTemplates).where(eq(messageTemplates.ptId, ptId));
+  });
+
+  it('is null with no message_templates rows', async () => {
+    const snap = await getSettingsSnapshot(ptId);
+    expect(snap.whatsappTemplateStatus).toBeNull();
+  });
+
+  it('reports approved for an approved priority template', async () => {
+    await seedTemplate(REMINDER_TEMPLATE.name, 'approved');
+    const snap = await getSettingsSnapshot(ptId);
+    expect(snap.whatsappTemplateStatus).toBe('approved');
+  });
+
+  it('reports pending when only a pending row exists', async () => {
+    await seedTemplate(REMINDER_TEMPLATE.name, 'pending');
+    const snap = await getSettingsSnapshot(ptId);
+    expect(snap.whatsappTemplateStatus).toBe('pending');
+  });
+
+  it('reports rejected when only a rejected row exists', async () => {
+    await seedTemplate(REMINDER_TEMPLATE.name, 'rejected');
+    const snap = await getSettingsSnapshot(ptId);
+    expect(snap.whatsappTemplateStatus).toBe('rejected');
+  });
+
+  it('best-wins: approved beats rejected across priority names', async () => {
+    await seedTemplate(REMINDER_TEMPLATE.name, 'rejected');
+    await seedTemplate(FALLBACK_REMINDER_TEMPLATE.name, 'approved');
+    const snap = await getSettingsSnapshot(ptId);
+    expect(snap.whatsappTemplateStatus).toBe('approved');
+  });
+
+  it('ignores non-priority template names', async () => {
+    await seedTemplate('some_marketing_tpl', 'approved');
+    const snap = await getSettingsSnapshot(ptId);
+    expect(snap.whatsappTemplateStatus).toBeNull();
   });
 });

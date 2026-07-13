@@ -16,12 +16,14 @@ import {
   appointments,
   conversations,
   messages,
+  messageTemplates,
   patients,
   pts,
   reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { privacyName } from '@/lib/format/name';
+import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
 import { formatMonthYear, formatWeekdayShort } from '@/lib/i18n';
 import { getServices, type ServiceRecord } from '@/lib/services/queries';
 import {
@@ -108,6 +110,7 @@ export type SettingsSnapshot = {
   whatsappStatus: string | null;
   whatsappPhoneNumberId: string | null;
   whatsappDisplayPhoneNumber: string | null;
+  whatsappTemplateStatus: 'approved' | 'pending' | 'rejected' | null;
   metaAppIdConfigured: boolean;
   metaConfigIdConfigured: boolean;
   graphVersion: string;
@@ -400,7 +403,7 @@ export function resolveNotificationPrefs(raw: unknown): NotificationPrefs {
 export async function getSettingsSnapshot(
   ptId: string,
 ): Promise<SettingsSnapshot> {
-  const [[pt], [connection]] = await Promise.all([
+  const [[pt], [connection], templateRows] = await Promise.all([
     db
       .select({
         practiceName: pts.practiceName,
@@ -428,7 +431,31 @@ export async function getSettingsSnapshot(
       .where(eq(whatsappConnections.ptId, ptId))
       .orderBy(desc(whatsappConnections.createdAt))
       .limit(1),
+    db
+      .select({ status: messageTemplates.status })
+      .from(messageTemplates)
+      .where(
+        and(
+          eq(messageTemplates.ptId, ptId),
+          inArray(
+            messageTemplates.name,
+            REMINDER_TEMPLATE_PRIORITY.map((tpl) => tpl.name),
+          ),
+        ),
+      ),
   ]);
+
+  // Best-of across the reminder-template variants: reminders send if any
+  // priority template is approved, so the screen reports the best status.
+  const templateStatuses = templateRows.map((r) => r.status);
+  const whatsappTemplateStatus: 'approved' | 'pending' | 'rejected' | null =
+    templateStatuses.includes('approved')
+      ? 'approved'
+      : templateStatuses.includes('pending')
+        ? 'pending'
+        : templateStatuses.includes('rejected')
+          ? 'rejected'
+          : null;
 
   return {
     practiceName: pt?.practiceName ?? '',
@@ -445,6 +472,7 @@ export async function getSettingsSnapshot(
     whatsappStatus: connection?.status ?? null,
     whatsappPhoneNumberId: connection?.phoneNumberId ?? null,
     whatsappDisplayPhoneNumber: connection?.displayPhoneNumber ?? null,
+    whatsappTemplateStatus,
     metaAppIdConfigured: Boolean(process.env.NEXT_PUBLIC_META_APP_ID),
     metaConfigIdConfigured: Boolean(process.env.NEXT_PUBLIC_META_CONFIG_ID),
     graphVersion: GRAPH_VERSION,
