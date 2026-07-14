@@ -79,6 +79,7 @@ function appointmentView(
     conversationId: string | null;
     reminderStatus: string | null;
     reminderResponse: string | null;
+    reminderSkippedReason: string | null;
   },
   timezone: string,
 ): TodayAppointment {
@@ -95,7 +96,11 @@ function appointmentView(
     status: row.status,
     notes: row.notes,
     reminder: row.reminderStatus
-      ? { status: row.reminderStatus, responseType: row.reminderResponse }
+      ? {
+          status: row.reminderStatus,
+          responseType: row.reminderResponse,
+          skippedReason: row.reminderSkippedReason,
+        }
       : null,
     startLabel: new Intl.DateTimeFormat('sq-AL', {
       timeZone: timezone,
@@ -149,6 +154,7 @@ export async function getTodaySnapshot(
         conversationId: conversations.id,
         reminderStatus: reminderJobs.status,
         reminderResponse: reminderJobs.responseType,
+        reminderSkippedReason: reminderJobs.skippedReason,
       })
       .from(appointments)
       .innerJoin(patients, eq(appointments.patientId, patients.id))
@@ -204,6 +210,7 @@ export async function getTodaySnapshot(
         notes: appointments.notes,
         reminderStatus: reminderJobs.status,
         reminderResponse: reminderJobs.responseType,
+        reminderSkippedReason: reminderJobs.skippedReason,
       })
       .from(reminderJobs)
       .innerJoin(appointments, eq(reminderJobs.appointmentId, appointments.id))

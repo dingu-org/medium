@@ -1,5 +1,6 @@
 import type { InngestFunction } from 'inngest';
 import { handleAppointmentEvent } from './functions/appointment-events';
+import { billingUsageMonitor } from './functions/billing-usage-monitor';
 import { bootstrapWaConnection } from './functions/bootstrap-wa-connection';
 import { dailyCostRollup } from './functions/daily-cost-rollup';
 import { dispatchPushNotification } from './functions/dispatch-push';
@@ -31,4 +32,5 @@ export const functions: InngestFunction.Like[] = [
   publishEventOutbox,
   dispatchPushNotification,
   dailyCostRollup,
+  billingUsageMonitor,
 ];

@@ -58,6 +58,11 @@ export async function aggregateCostDailyCore(
     GROUP BY pt_id
   `);
 
+  // TODO(c4-meta-cost): switch to actual-first costing. Aggregate billable
+  // `wa_message_statuses` per PT-day by pricing_category × META_RATE_CARD, write
+  // `meta_billable_messages` + `meta_cost_source='actual'`, and fall back to the
+  // estimate (source='estimated') only for days with no status rows. Columns
+  // ship in migration 0021 (C3); this rollup still writes the estimate today.
   const rows: CostRollupRow[] = aggregated.map((row) => {
     const metaConversations = Number(row.metaConvos);
     return {

@@ -88,5 +88,6 @@ export const reminder = {
   cancelledByPatient: 'Anuluar nga pacienti',
   wantsReschedule: 'Kërkon ricaktim',
   skipped: 'Kujtesa u anashkalua',
+  quotaReached: 'Kufiri i kujtesave u arrit',
   failed: 'Kujtesa dështoi',
 } as const;

@@ -8,6 +8,10 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { sendTemplate } from '@/lib/channels/whatsapp/client';
+import {
+  emitReminderLimitReachedOnce,
+  reminderQuotaAvailable,
+} from '@/lib/billing/usage';
 import { inngest } from '../client';
 import {
   REMINDER_TEMPLATE_PRIORITY,
@@ -205,6 +209,15 @@ export async function loadReminderAttempt(args: {
   }
   if (!context.connectionId || !context.recipient || !context.conversationId) {
     return { kind: 'skipped', reason: 'connection_inactive' };
+  }
+
+  // Plan reminder quota (Phase 16 C3): (delivered + in-flight) this month vs the
+  // plan limit. Exhausted → skip, not retry (quota won't free within the retry
+  // window and the appointment must be flagged now). The caller marks the job
+  // skipped with `plan_reminder_quota` (surfaced on the appointment badge) and
+  // emits `billing.limit_reached{kind:'reminders'}` — nothing fails silently.
+  if (!(await reminderQuotaAvailable(args.ptId, now))) {
+    return { kind: 'skipped', reason: 'plan_reminder_quota' };
   }
 
   const [connection] = await db
@@ -484,6 +497,13 @@ export const sendReminder = inngest.createFunction(
           name: 'reminder.skipped',
           data: { ptId, appointmentId, reason: state.reason },
         });
+        // The reminder cap is a hard stop: notify the PT once this month
+        // (billing.limit_reached → push/bell), on top of the flagged badge.
+        if (state.reason === 'plan_reminder_quota') {
+          await step.run(`emit-reminder-quota-reached-${attempt}`, () =>
+            emitReminderLimitReachedOnce(ptId, new Date()),
+          );
+        }
         return { skipped: state.reason };
       }
 

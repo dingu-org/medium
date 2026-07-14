@@ -20,7 +20,7 @@ Key invariants (do not violate — details in the architecture doc):
 
 - [x] C1 Entitlements foundation — plans.ts, entitlements.ts, migration 0020, per-plan model seam, plan threading; pilots → lifetime via SQL
 - [x] C2 Conversation metering & gate — usage.ts, cap-handoff, gate step in handle-inbound-message, limit events + push/bell, chat cap banner (depends C1)
-- [ ] C3 Delivery truth & reminder gate — statuses webhook handler, migration 0021, reminder quota gate, billing-usage-monitor cron (predictive warn), failed-delivery flagging (depends C1; parallel with C2)
+- [x] C3 Delivery truth & reminder gate — statuses webhook handler, migration 0021, reminder quota gate, billing-usage-monitor cron (predictive warn), failed-delivery flagging (depends C1; parallel with C2)
 - [ ] C4 Meta cost rollup — rate card by pricing category, actual-first rollup + admin live cost, €0.06 placeholder → fallback only (depends C3)
 - [ ] C5 POK payments — staging spike (ALL currency/minor units/webhook/capture semantics), pok client + payments boundary, migration 0022 billing_orders, webhook route + reconcile cron, smoke script (depends C1 + POK credentials [BLOCKED ON YOU])
 - [ ] C6 Billing lifecycle & surfaces — renewal-monitor cron (renew/grace/downgrade), retention clamp, identity/services guards, /settings/billing UI, onboarding plan step, landing pricing section, i18n (depends C2+C5 + designs [BLOCKED ON YOU])

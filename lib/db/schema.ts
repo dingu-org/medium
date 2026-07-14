@@ -396,6 +396,11 @@ export const reminderJobs = pgTable(
     lastError: text('last_error'),
     skippedReason: text('skipped_reason'),
     sentAt: tsTz('sent_at'),
+    // Set only when Meta confirms delivery via the `statuses` webhook (Phase 16
+    // C3). This — never send/queue — is what a reminder is counted on for the
+    // monthly plan quota. First-write-wins; the partial index below serves the
+    // per-month delivered count.
+    deliveredAt: tsTz('delivered_at'),
     messageId: uuid('message_id').references(() => messages.id, {
       onDelete: 'set null',
     }),
@@ -414,6 +419,11 @@ export const reminderJobs = pgTable(
     uniqueIndex('reminder_jobs_response_message_id_uq')
       .on(t.responseMessageId)
       .where(sql`response_message_id IS NOT NULL`),
+    // Serves the monthly "delivered reminders" count that drives the plan quota
+    // gate (Phase 16 C3); partial so it only indexes confirmed deliveries.
+    index('reminder_jobs_pt_delivered_idx')
+      .on(t.ptId, t.deliveredAt)
+      .where(sql`delivered_at IS NOT NULL`),
   ],
 );
 
@@ -512,9 +522,54 @@ export const costDaily = pgTable(
     metaCostMicroEur: bigint('meta_cost_micro_eur', { mode: 'number' })
       .notNull()
       .default(0),
+    // Meta billing truth (Phase 16). Columns added by C3; POPULATED BY C4:
+    // `metaBillableMessages` = count of billable `wa_message_statuses` per
+    // PT-day; `metaCostSource` flips to 'actual' when the rollup uses the
+    // per-message rate card, staying 'estimated' for the placeholder path.
+    metaBillableMessages: integer('meta_billable_messages')
+      .notNull()
+      .default(0),
+    metaCostSource: text('meta_cost_source').notNull().default('estimated'),
     computedAt: tsTz('computed_at').notNull().default(now),
   },
   (t) => [uniqueIndex('cost_daily_pt_day_uq').on(t.ptId, t.day)],
+);
+
+// Meta (WhatsApp) delivery-status truth per outbound message (Phase 16 C3).
+// Content-free and patient-free, so it survives message-retention purge and
+// patient erasure; FK'd only to `pts`. Written exclusively by the `statuses`
+// webhook via the RLS-bypassing owner connection — deny-all RLS for
+// authenticated (operator data, not PT-facing; mirrors `erasure_archive`).
+// `delivered_at` is the authoritative signal for the reminder plan quota;
+// `pricing_*`/`billable` feed C4's actual-cost rollup.
+export const waMessageStatuses = pgTable(
+  'wa_message_statuses',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    // Meta wamid; joins `messages.external_id` while that row lives.
+    externalId: text('external_id').notNull(),
+    // Highest status reached: sent | delivered | read | failed. Monotonic —
+    // never regressed by an out-of-order webhook (see handleStatusesChange).
+    lastStatus: text('last_status').notNull(),
+    sentAt: tsTz('sent_at'),
+    deliveredAt: tsTz('delivered_at'),
+    readAt: tsTz('read_at'),
+    failedAt: tsTz('failed_at'),
+    // Meta pricing object (category/type/model + billable flag — no amount).
+    billable: boolean('billable'),
+    pricingCategory: text('pricing_category'),
+    pricingType: text('pricing_type'),
+    pricingModel: text('pricing_model'),
+    errorCode: integer('error_code'),
+    createdAt: tsTz('created_at').notNull().default(now),
+    updatedAt: tsTz('updated_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('wa_message_statuses_external_id_uq').on(t.externalId),
+    index('wa_message_statuses_pt_delivered_idx').on(t.ptId, t.deliveredAt),
+    index('wa_message_statuses_pt_created_idx').on(t.ptId, t.createdAt),
+  ],
 );
 
 // Conversation metering fact table (Phase 16): one row per active patient-day

@@ -25,6 +25,7 @@ export function StatusBadge({ status }: { status: AppointmentStatus }) {
 export type ReminderInfo = {
   status: string;
   responseType: string | null;
+  skippedReason?: string | null;
 } | null;
 
 export function reminderBadge(
@@ -44,6 +45,10 @@ export function reminderBadge(
         return { label: t.reminder.wantsReschedule, tone: 'warning' };
       return { label: t.reminder.sent, tone: 'neutral' };
     case 'skipped':
+      // A plan-cap skip is a flag, not a routine skip: warn tone + explicit copy
+      // so the PT sees why the reminder didn't go out (Phase 16 C3).
+      if (r.skippedReason === 'plan_reminder_quota')
+        return { label: t.reminder.quotaReached, tone: 'warning' };
       return { label: t.reminder.skipped, tone: 'neutral' };
     case 'failed':
       return { label: t.reminder.failed, tone: 'danger' };

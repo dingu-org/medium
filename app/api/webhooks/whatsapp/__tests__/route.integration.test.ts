@@ -12,10 +12,13 @@ import { and, eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import {
+  appointments,
   conversations,
   events,
   messages,
   patients,
+  reminderJobs,
+  waMessageStatuses,
   whatsappConnections,
   whatsappContacts,
 } from '@/lib/db/schema';
@@ -299,6 +302,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await db.delete(patients).where(eq(patients.ptId, ptId));
   await db.delete(whatsappContacts).where(eq(whatsappContacts.ptId, ptId));
+  await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptId));
   await db.delete(events).where(eq(events.ptId, ptId));
   await db
     .update(whatsappConnections)
@@ -731,6 +735,261 @@ describe('POST /api/webhooks/whatsapp — account_update', () => {
         }),
       }),
     );
+  });
+});
+
+type StatusFixture = {
+  id: string;
+  status: string;
+  timestamp?: string;
+  pricing?: {
+    billable?: boolean;
+    category?: string;
+    type?: string;
+    pricing_model?: string;
+  };
+  errors?: { code: number; title?: string; message?: string }[];
+};
+
+function buildStatusesPayload(statuses: StatusFixture[]) {
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'WABA_ID',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: PHONE_NUMBER_ID,
+              },
+              statuses: statuses.map((s) => ({
+                timestamp: '1700000000',
+                recipient_id: WA_ID,
+                ...s,
+              })),
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/** Seed a delivered/failed-ready reminder: patient + appointment + AI reminder
+ *  message carrying `wamid`, plus a reminder_jobs row pointing at it. */
+async function seedReminderForWamid(opts: {
+  wamid: string;
+  jobStatus?: 'sent' | 'scheduled';
+  deliveredAt?: Date | null;
+  responseType?: 'confirm' | null;
+}): Promise<{ appointmentId: string; reminderJobId: string }> {
+  const suffix = `${Date.now()}-${++externalIdCounter}`;
+  const [patient] = await db
+    .insert(patients)
+    .values({ ptId, name: 'Reminder Pat', phone: `+1666${suffix}`, waId: `rem-${suffix}` })
+    .returning({ id: patients.id });
+  const [conversation] = await db
+    .insert(conversations)
+    .values({ ptId, patientId: patient.id, channel: 'whatsapp' })
+    .returning({ id: conversations.id });
+  const [appointment] = await db
+    .insert(appointments)
+    .values({
+      ptId,
+      patientId: patient.id,
+      startsAt: new Date(Date.now() + 86_400_000),
+      endsAt: new Date(Date.now() + 90_000_000),
+      status: 'confirmed',
+    })
+    .returning({ id: appointments.id });
+  const [message] = await db
+    .insert(messages)
+    .values({
+      ptId,
+      conversationId: conversation.id,
+      externalId: opts.wamid,
+      role: 'ai',
+      channel: 'whatsapp',
+      content: 'Kujtesë',
+      templateId: crypto.randomUUID(),
+    })
+    .returning({ id: messages.id });
+  const [job] = await db
+    .insert(reminderJobs)
+    .values({
+      ptId,
+      appointmentId: appointment.id,
+      scheduledFor: new Date(Date.now() + 3_600_000),
+      status: opts.jobStatus ?? 'sent',
+      sentAt: new Date(),
+      deliveredAt: opts.deliveredAt ?? null,
+      messageId: message.id,
+      responseType: opts.responseType ?? null,
+    })
+    .returning({ id: reminderJobs.id });
+  return { appointmentId: appointment.id, reminderJobId: job.id };
+}
+
+describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
+  it('upserts a wa_message_statuses row and captures the pricing object', async () => {
+    const wamid = nextExternalId();
+    const res = await POST(
+      makePost(
+        buildStatusesPayload([
+          {
+            id: wamid,
+            status: 'delivered',
+            pricing: {
+              billable: true,
+              category: 'utility',
+              type: 'regular',
+              pricing_model: 'PMP',
+            },
+          },
+        ]),
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    const [row] = await db
+      .select()
+      .from(waMessageStatuses)
+      .where(eq(waMessageStatuses.externalId, wamid));
+    expect(row.lastStatus).toBe('delivered');
+    expect(row.deliveredAt).toBeInstanceOf(Date);
+    expect(row.billable).toBe(true);
+    expect(row.pricingCategory).toBe('utility');
+    expect(row.pricingModel).toBe('PMP');
+  });
+
+  it('never regresses last_status for an out-of-order webhook', async () => {
+    const wamid = nextExternalId();
+    // delivered arrives first, then a late sent.
+    await POST(makePost(buildStatusesPayload([{ id: wamid, status: 'delivered' }])));
+    await POST(makePost(buildStatusesPayload([{ id: wamid, status: 'sent' }])));
+
+    const [row] = await db
+      .select()
+      .from(waMessageStatuses)
+      .where(eq(waMessageStatuses.externalId, wamid));
+    expect(row.lastStatus).toBe('delivered');
+    // Both per-status timestamps are stamped independently.
+    expect(row.deliveredAt).toBeInstanceOf(Date);
+    expect(row.sentAt).toBeInstanceOf(Date);
+  });
+
+  it('advances last_status on a normal sent → delivered → read progression', async () => {
+    const wamid = nextExternalId();
+    await POST(makePost(buildStatusesPayload([{ id: wamid, status: 'sent' }])));
+    await POST(makePost(buildStatusesPayload([{ id: wamid, status: 'delivered' }])));
+    await POST(makePost(buildStatusesPayload([{ id: wamid, status: 'read' }])));
+
+    const [row] = await db
+      .select()
+      .from(waMessageStatuses)
+      .where(eq(waMessageStatuses.externalId, wamid));
+    expect(row.lastStatus).toBe('read');
+    expect(row.readAt).toBeInstanceOf(Date);
+  });
+
+  it('stamps reminder_jobs.delivered_at on a delivered status (first-write-wins)', async () => {
+    const wamid = nextExternalId();
+    const { reminderJobId } = await seedReminderForWamid({ wamid });
+
+    await POST(
+      makePost(
+        buildStatusesPayload([
+          { id: wamid, status: 'delivered', timestamp: '1700000000' },
+        ]),
+      ),
+    );
+    const [first] = await db
+      .select({ deliveredAt: reminderJobs.deliveredAt })
+      .from(reminderJobs)
+      .where(eq(reminderJobs.id, reminderJobId));
+    expect(first.deliveredAt).toBeInstanceOf(Date);
+    const firstStamp = first.deliveredAt!.getTime();
+
+    // A later delivered webhook must not move the first delivery timestamp.
+    await POST(
+      makePost(
+        buildStatusesPayload([
+          { id: wamid, status: 'delivered', timestamp: '1700009999' },
+        ]),
+      ),
+    );
+    const [second] = await db
+      .select({ deliveredAt: reminderJobs.deliveredAt })
+      .from(reminderJobs)
+      .where(eq(reminderJobs.id, reminderJobId));
+    expect(second.deliveredAt!.getTime()).toBe(firstStamp);
+  });
+
+  it('marks the reminder failed and emits reminder.failed on a failed status', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const wamid = nextExternalId();
+    const { appointmentId, reminderJobId } = await seedReminderForWamid({ wamid });
+
+    const res = await POST(
+      makePost(
+        buildStatusesPayload([
+          {
+            id: wamid,
+            status: 'failed',
+            errors: [{ code: 131049, title: 'Message undeliverable' }],
+          },
+        ]),
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    const [job] = await db
+      .select({ status: reminderJobs.status })
+      .from(reminderJobs)
+      .where(eq(reminderJobs.id, reminderJobId));
+    expect(job.status).toBe('failed');
+
+    const [statusRow] = await db
+      .select({ failedAt: waMessageStatuses.failedAt, errorCode: waMessageStatuses.errorCode })
+      .from(waMessageStatuses)
+      .where(eq(waMessageStatuses.externalId, wamid));
+    expect(statusRow.failedAt).toBeInstanceOf(Date);
+    expect(statusRow.errorCode).toBe(131049);
+
+    const failEvents = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+    expect(failEvents).toHaveLength(1);
+    expect(failEvents[0].payload).toMatchObject({ appointmentId });
+  });
+
+  it('does not re-flag a reminder that was already delivered', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const wamid = nextExternalId();
+    const { reminderJobId } = await seedReminderForWamid({
+      wamid,
+      deliveredAt: new Date(),
+    });
+
+    await POST(
+      makePost(buildStatusesPayload([{ id: wamid, status: 'failed' }])),
+    );
+
+    const [job] = await db
+      .select({ status: reminderJobs.status })
+      .from(reminderJobs)
+      .where(eq(reminderJobs.id, reminderJobId));
+    expect(job.status).toBe('sent');
+    const failEvents = await db
+      .select({ id: events.id })
+      .from(events)
+      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+    expect(failEvents).toHaveLength(0);
   });
 });
 

@@ -19,6 +19,7 @@ import {
   pwaMutations,
   reminderJobs,
   services,
+  waMessageStatuses,
   whatsappConnections,
   whatsappContacts,
 } from '@/lib/db/schema';
@@ -132,6 +133,11 @@ const seedFactories: Record<
     month_key: new Date().toISOString().slice(0, 7),
   }),
   erasure_archive: ({ ptId }) => ({ pt_id: ptId, scope: 'account' }),
+  wa_message_statuses: ({ ptId }) => ({
+    pt_id: ptId,
+    external_id: `wamid-${Date.now()}-${Math.random()}`,
+    last_status: 'sent',
+  }),
 };
 
 const TENANT_ID_COL: Record<string, 'pt_id' | 'id'> = { pts: 'id' };
@@ -246,6 +252,11 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     targetTable: 'patients',
   });
   await db.insert(erasureArchive).values({ ptId, scope: 'account' });
+  await db.insert(waMessageStatuses).values({
+    ptId,
+    externalId: `wamid-${Date.now()}-${Math.random()}`,
+    lastStatus: 'sent',
+  });
   await db.insert(conversationDays).values({
     ptId,
     patientId: pat.id,

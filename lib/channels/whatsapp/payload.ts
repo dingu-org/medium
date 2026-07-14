@@ -43,6 +43,42 @@ const webhookError = z
   })
   .passthrough();
 
+// Meta message-status object (delivery truth, Phase 16 C3). `status` is a
+// lenient string, NOT an enum: a new Meta status value must not fail the whole
+// webhook schema (which would 400 the batch and drop every status in it). The
+// handler narrows to sent|delivered|read|failed and ignores the rest. The
+// pricing object carries category/type/model + billable (no amount).
+export const statusEvent = z
+  .object({
+    id: z.string().min(1),
+    status: z.string().min(1),
+    timestamp: z.string().min(1),
+    recipient_id: z.string().optional(),
+    conversation: z
+      .object({
+        id: z.string().optional(),
+        origin: z
+          .object({ type: z.string().optional() })
+          .passthrough()
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+    pricing: z
+      .object({
+        billable: z.boolean().optional(),
+        pricing_model: z.string().optional(),
+        category: z.string().optional(),
+        type: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    errors: z.array(webhookError).optional(),
+  })
+  .passthrough();
+
+export type WhatsappStatusEvent = z.infer<typeof statusEvent>;
+
 const historyItem = z
   .object({
     metadata: z
@@ -88,7 +124,7 @@ const change = z.object({
       metadata: metadata.optional(),
       contacts: z.array(contact).optional(),
       messages: z.array(inboundMessage).optional(),
-      statuses: z.array(z.unknown()).optional(),
+      statuses: z.array(statusEvent).optional(),
       errors: z.array(webhookError).optional(),
       history: z.array(historyItem).optional(),
       state_sync: z.array(appStateSyncItem).optional(),

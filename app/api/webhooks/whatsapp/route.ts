@@ -1,10 +1,11 @@
 import { type NextRequest } from 'next/server';
-import { sql, eq, and, or, isNull } from 'drizzle-orm';
+import { sql, eq, and, or, isNull, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { db, type DBTransaction } from '@/lib/db';
 import {
   conversations,
   messages,
   patients,
+  waMessageStatuses,
   whatsappConnections,
   whatsappContacts,
 } from '@/lib/db/schema';
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
       switch (change.field) {
         case 'messages':
           await handleMessagesChange(change.value, trace_id);
+          await handleStatusesChange(change.value, trace_id);
           break;
         case 'history':
           await handleHistoryChange(change.value, trace_id);
@@ -275,6 +277,198 @@ async function handleMessagesChange(
         conversation_id: result.conversationId,
         message_id: result.messageId,
       });
+    }
+  }
+}
+
+// Monotonic status progression: never let an out-of-order webhook downgrade
+// `last_status`. `delivered` and `failed` tie at 2 (mutually-exclusive outcomes
+// at the same stage) — the first to arrive holds `last_status`, and neither can
+// overwrite `read` (3) nor be overwritten by `sent` (1). Per-status timestamp
+// columns are stamped independently (first-write-wins), so `delivered_at` — the
+// billing signal — is never lost to a late `failed`.
+const WA_STATUS_RANK: Record<string, number> = {
+  sent: 1,
+  delivered: 2,
+  failed: 2,
+  read: 3,
+};
+
+const WA_STATUS_TS_COLUMN = {
+  sent: 'sentAt',
+  delivered: 'deliveredAt',
+  read: 'readAt',
+  failed: 'failedAt',
+} as const;
+
+/** `CASE`-based rank of a status expression (column or SQL), per WA_STATUS_RANK. */
+function statusRankSql(expr: SQLWrapper): SQL {
+  return sql`CASE ${expr} WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'failed' THEN 2 WHEN 'read' THEN 3 ELSE 0 END`;
+}
+
+async function upsertMessageStatus(args: {
+  ptId: string;
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  ts: Date;
+  externalId: string;
+  billable: boolean | null;
+  pricingCategory: string | null;
+  pricingType: string | null;
+  pricingModel: string | null;
+  errorCode: number | null;
+}): Promise<void> {
+  const tsColumn = WA_STATUS_TS_COLUMN[args.status];
+  await db
+    .insert(waMessageStatuses)
+    .values({
+      ptId: args.ptId,
+      externalId: args.externalId,
+      lastStatus: args.status,
+      sentAt: tsColumn === 'sentAt' ? args.ts : null,
+      deliveredAt: tsColumn === 'deliveredAt' ? args.ts : null,
+      readAt: tsColumn === 'readAt' ? args.ts : null,
+      failedAt: tsColumn === 'failedAt' ? args.ts : null,
+      billable: args.billable,
+      pricingCategory: args.pricingCategory,
+      pricingType: args.pricingType,
+      pricingModel: args.pricingModel,
+      errorCode: args.errorCode,
+    })
+    .onConflictDoUpdate({
+      target: waMessageStatuses.externalId,
+      set: {
+        lastStatus: sql`CASE WHEN ${statusRankSql(sql`excluded.last_status`)} > ${statusRankSql(waMessageStatuses.lastStatus)} THEN excluded.last_status ELSE ${waMessageStatuses.lastStatus} END`,
+        sentAt: sql`COALESCE(${waMessageStatuses.sentAt}, excluded.sent_at)`,
+        deliveredAt: sql`COALESCE(${waMessageStatuses.deliveredAt}, excluded.delivered_at)`,
+        readAt: sql`COALESCE(${waMessageStatuses.readAt}, excluded.read_at)`,
+        failedAt: sql`COALESCE(${waMessageStatuses.failedAt}, excluded.failed_at)`,
+        billable: sql`COALESCE(${waMessageStatuses.billable}, excluded.billable)`,
+        pricingCategory: sql`COALESCE(${waMessageStatuses.pricingCategory}, excluded.pricing_category)`,
+        pricingType: sql`COALESCE(${waMessageStatuses.pricingType}, excluded.pricing_type)`,
+        pricingModel: sql`COALESCE(${waMessageStatuses.pricingModel}, excluded.pricing_model)`,
+        errorCode: sql`COALESCE(${waMessageStatuses.errorCode}, excluded.error_code)`,
+        updatedAt: sql`now()`,
+      },
+    });
+}
+
+/** First-write-wins: stamp `delivered_at` on the reminder job for this wamid. */
+async function markReminderDelivered(
+  ptId: string,
+  wamid: string,
+  ts: Date,
+): Promise<void> {
+  await db.execute(sql`
+    UPDATE reminder_jobs AS rj
+    SET delivered_at = ${ts.toISOString()}::timestamptz
+    FROM messages AS m
+    WHERE m.external_id = ${wamid}
+      AND m.pt_id = ${ptId}
+      AND rj.message_id = m.id
+      AND rj.pt_id = ${ptId}
+      AND rj.delivered_at IS NULL
+  `);
+}
+
+/**
+ * A `failed` status for a reminder whose template Meta accepted then dropped:
+ * mark the job failed and emit `reminder.failed` (existing push/bell/flag
+ * pipeline). Guarded so an already-delivered or already-answered reminder is
+ * never re-flagged.
+ */
+async function failReminderDelivery(args: {
+  ptId: string;
+  wamid: string;
+  reason: string;
+  trace_id: string;
+}): Promise<void> {
+  const log = createLogger({ trace_id: args.trace_id });
+  const result = await db.transaction(async (tx) => {
+    const affected = await tx.execute<{ appointmentId: string }>(sql`
+      UPDATE reminder_jobs AS rj
+      SET status = 'failed', last_error = ${args.reason}, skipped_reason = NULL
+      FROM messages AS m
+      WHERE m.external_id = ${args.wamid}
+        AND m.pt_id = ${args.ptId}
+        AND rj.message_id = m.id
+        AND rj.pt_id = ${args.ptId}
+        AND rj.status = 'sent'
+        AND rj.delivered_at IS NULL
+        AND rj.response_type IS NULL
+      RETURNING rj.appointment_id AS "appointmentId"
+    `);
+    const [row] = affected;
+    if (!row) return null;
+    const eventId = await appendBackgroundEvent(tx, {
+      type: 'reminder.failed',
+      data: {
+        ptId: args.ptId,
+        appointmentId: row.appointmentId,
+        reason: args.reason,
+        traceId: args.trace_id,
+      },
+    });
+    return { eventId, appointmentId: row.appointmentId };
+  });
+
+  if (result) {
+    await tryPublishOutboxEvent(result.eventId);
+    log.info(
+      'webhook.reminder_delivery_failed',
+      'Reminder template delivery failed',
+      { pt_id: args.ptId, appointment_id: result.appointmentId },
+    );
+  }
+}
+
+async function handleStatusesChange(
+  value: WhatsappChangeValue,
+  trace_id: string,
+): Promise<void> {
+  const log = createLogger({ trace_id });
+  const statuses = value.statuses ?? [];
+  if (statuses.length === 0) return;
+
+  const connection = await loadConnectionByPhoneNumberId(
+    value.metadata?.phone_number_id,
+    'statuses',
+    trace_id,
+  );
+  if (!connection) return;
+  const { ptId } = connection;
+
+  for (const status of statuses) {
+    if (!(status.status in WA_STATUS_RANK)) {
+      log.warn(
+        'webhook.unknown_message_status',
+        'Ignoring unrecognized message status',
+        { status: status.status, externalId: status.id },
+      );
+      continue;
+    }
+    const narrowed = status.status as 'sent' | 'delivered' | 'read' | 'failed';
+    const ts = parseWebhookTimestamp(status.timestamp);
+
+    await upsertMessageStatus({
+      ptId,
+      status: narrowed,
+      ts,
+      externalId: status.id,
+      billable: status.pricing?.billable ?? null,
+      pricingCategory: status.pricing?.category ?? null,
+      pricingType: status.pricing?.type ?? null,
+      pricingModel: status.pricing?.pricing_model ?? null,
+      errorCode: status.errors?.[0]?.code ?? null,
+    });
+
+    if (narrowed === 'delivered') {
+      await markReminderDelivered(ptId, status.id, ts);
+    } else if (narrowed === 'failed') {
+      const firstError = status.errors?.[0];
+      const reason = firstError
+        ? errorText(firstError)
+        : 'template_delivery_failed';
+      await failReminderDelivery({ ptId, wamid: status.id, reason, trace_id });
     }
   }
 }

@@ -57,6 +57,7 @@ export type CalendarAppointmentSnapshot = {
   reminder: {
     status: string;
     responseType: string | null;
+    skippedReason?: string | null;
   } | null;
   dayKey: string;
   startLabel: string;
@@ -180,6 +181,7 @@ export async function getCalendarSnapshot(
         conversationId: conversations.id,
         reminderStatus: reminderJobs.status,
         reminderResponse: reminderJobs.responseType,
+        reminderSkippedReason: reminderJobs.skippedReason,
       })
       .from(appointments)
       .innerJoin(patients, eq(appointments.patientId, patients.id))
@@ -216,7 +218,11 @@ export async function getCalendarSnapshot(
       status: r.status as CalendarAppointmentSnapshot['status'],
       notes: r.notes,
       reminder: r.reminderStatus
-        ? { status: r.reminderStatus, responseType: r.reminderResponse }
+        ? {
+            status: r.reminderStatus,
+            responseType: r.reminderResponse,
+            skippedReason: r.reminderSkippedReason,
+          }
         : null,
       dayKey: format(tzStart, 'yyyy-MM-dd'),
       startLabel: format(tzStart, 'HH:mm'),
