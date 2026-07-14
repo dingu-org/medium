@@ -4,6 +4,8 @@ import {
   estimateMetaConversationCostMicroEur,
   metaCostFromBillableCounts,
 } from '@/lib/billing/meta';
+import { resolveEffectivePlan } from '@/lib/billing/entitlements';
+import { EXPIRY_GRACE_DAYS, type PlanId } from '@/lib/billing/plans';
 
 /**
  * Cross-tenant operator metrics for the Phase 11 admin dashboard.
@@ -375,5 +377,496 @@ export async function getAdminMetrics(now?: Date): Promise<AdminMetrics> {
     cohort,
     cost: { yesterday, currentMonth, today },
     push,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 16 C7 — Monetization success metrics.
+//
+// A SEPARATE fan-out from getAdminMetrics (its own Promise.all + withTimeout) so
+// the existing AdminMetrics type/query set stays untouched. Every loader takes
+// an explicit `nowDate` for deterministic tests. All queries run on the same
+// RLS-bypassing owner `db`, cross-tenant, gated only by ADMIN_EMAILS in the
+// caller. Currency discipline holds end to end: AI cost is µUSD, Meta cost is
+// µEUR — surfaced separately, never summed or converted.
+// ---------------------------------------------------------------------------
+
+/** Point-in-time PT count by EFFECTIVE plan (lapsed solo folds into free). */
+export type PlanDistribution = {
+  free: number;
+  solo: number;
+  lifetime: number;
+  total: number;
+};
+
+/**
+ * All-time conversion (lifetime PTs excluded — pilots never "converted"), plus a
+ * this-month first-payment counter and average/median time-to-upgrade. Every
+ * rate ships with its raw numerator/denominator so a tiny launch N reads honestly.
+ */
+export type ConversionMetric = {
+  paidPts: number;
+  eligiblePts: number;
+  rate: number;
+  newThisMonth: number;
+  avgDaysToUpgrade: number | null;
+  medianDaysToUpgrade: number | null;
+};
+
+/**
+ * Ledger-only renewal signal. A "due boundary" is a paid order whose granted
+ * expiry has already passed; it counts as renewed iff a later paid order landed
+ * by expiry + EXPIRY_GRACE_DAYS. 90d window + all-time, both with raw counts.
+ */
+export type RenewalMetric = {
+  renewed90d: number;
+  due90d: number;
+  rate90d: number;
+  renewedAllTime: number;
+  dueAllTime: number;
+};
+
+/** Downgrade counts from the C6 `billing.downgraded` event (0 until C6 emits). */
+export type DowngradeMetric = {
+  thisMonth: number;
+  prevMonth: number;
+  distinctPtsThisMonth: number;
+};
+
+/** Per-kind cap-hit: distinct capped PTs over active PTs (shared denominator). */
+export type CapHitKind = { pts: number; activePts: number; rate: number };
+export type CapHitMetric = { conversations: CapHitKind; reminders: CapHitKind };
+
+/**
+ * Current-month cost of the effective-FREE cohort. AI (µUSD) and Meta (µEUR)
+ * stay in separate figures — never summed. `metaCostSource` is a window-level
+ * label derived from the actual/estimated PT-day split (see PtCostRow's note).
+ */
+export type FreeCogsMetric = {
+  freePtCount: number;
+  aiCostMicrousd: number;
+  metaCostMicroEur: number;
+  metaCostSource: 'actual' | 'estimated' | 'mixed';
+  metaBillableMessages: number;
+  actualPtDays: number;
+  estimatedPtDays: number;
+  avgAiCostMicrousd: number;
+  avgMetaCostMicroEur: number;
+};
+
+/**
+ * A billing_orders row joined to the PT email. Amounts stay RAW: `amountMinor`
+ * is POK minor units and the ALL minor-unit factor is UNCONFIRMED (C5 spike),
+ * so there is deliberately no converted major-unit field here.
+ */
+export type PaymentRow = {
+  orderId: string;
+  ptId: string;
+  email: string;
+  plan: string;
+  period: string;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+  paidAt: string | null;
+  pokOrderId: string;
+  previousExpiresAt: string | null;
+  newExpiresAt: string | null;
+};
+
+export type BillingMetrics = {
+  planDistribution: PlanDistribution;
+  conversion: ConversionMetric;
+  renewal: RenewalMetric;
+  downgrades: DowngradeMetric;
+  capHits: CapHitMetric;
+  freeCogs: FreeCogsMetric;
+  recentPayments: PaymentRow[];
+};
+
+function num(value: number | string | null | undefined): number {
+  return value == null ? 0 : Number(value);
+}
+
+function numOrNull(value: number | string | null | undefined): number | null {
+  return value == null ? null : Number(value);
+}
+
+// `db.execute` returns timestamptz columns as Postgres text
+// ("2026-04-10 10:00:00+00"), not JS Dates — normalize to ISO 8601.
+function toIso(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value as string);
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+}
+
+const SECONDS_PER_DAY = 86_400;
+
+async function loadPlanDistribution(nowDate: Date): Promise<PlanDistribution> {
+  const rows = await db.execute<{
+    plan: string;
+    planLifetime: boolean;
+    planExpiresAt: Date | string | null;
+  }>(sql`
+    SELECT plan AS "plan",
+      plan_lifetime AS "planLifetime",
+      plan_expires_at AS "planExpiresAt"
+    FROM pts
+  `);
+  let free = 0;
+  let solo = 0;
+  let lifetime = 0;
+  for (const row of rows) {
+    if (row.planLifetime === true) {
+      lifetime += 1;
+      continue;
+    }
+    const effective = resolveEffectivePlan(
+      {
+        plan: row.plan as PlanId,
+        planLifetime: false,
+        planExpiresAt: row.planExpiresAt ? new Date(row.planExpiresAt) : null,
+      },
+      nowDate,
+    );
+    if (effective === 'solo') solo += 1;
+    else free += 1;
+  }
+  return { free, solo, lifetime, total: free + solo + lifetime };
+}
+
+async function loadConversion(nowDate: Date): Promise<ConversionMetric> {
+  const nowIso = nowDate.toISOString();
+  const [row] = await db.execute<{
+    eligiblePts: string | number;
+    paidPts: string | number;
+    newThisMonth: string | number;
+    avgSeconds: string | number | null;
+    medianSeconds: string | number | null;
+  }>(sql`
+    WITH first_paid AS (
+      SELECT o.pt_id, MIN(o.paid_at) AS first_paid_at
+      FROM billing_orders o
+      WHERE o.status = 'paid' AND o.paid_at IS NOT NULL
+      GROUP BY o.pt_id
+    )
+    SELECT
+      (SELECT count(*) FROM pts WHERE plan_lifetime = false)::bigint
+        AS "eligiblePts",
+      (SELECT count(*) FROM first_paid fp
+        JOIN pts p ON p.id = fp.pt_id
+        WHERE p.plan_lifetime = false)::bigint AS "paidPts",
+      (SELECT count(*) FROM first_paid fp
+        JOIN pts p ON p.id = fp.pt_id
+        WHERE p.plan_lifetime = false
+          AND fp.first_paid_at >= date_trunc('month', ${nowIso}::timestamptz)
+          AND fp.first_paid_at
+            < date_trunc('month', ${nowIso}::timestamptz) + interval '1 month'
+        )::bigint AS "newThisMonth",
+      (SELECT avg(EXTRACT(EPOCH FROM (fp.first_paid_at - p.created_at)))
+        FROM first_paid fp
+        JOIN pts p ON p.id = fp.pt_id
+        WHERE p.plan_lifetime = false) AS "avgSeconds",
+      (SELECT percentile_cont(0.5) WITHIN GROUP (
+          ORDER BY EXTRACT(EPOCH FROM (fp.first_paid_at - p.created_at)))
+        FROM first_paid fp
+        JOIN pts p ON p.id = fp.pt_id
+        WHERE p.plan_lifetime = false) AS "medianSeconds"
+  `);
+  const eligiblePts = num(row.eligiblePts);
+  const paidPts = num(row.paidPts);
+  const avgSeconds = numOrNull(row.avgSeconds);
+  const medianSeconds = numOrNull(row.medianSeconds);
+  return {
+    paidPts,
+    eligiblePts,
+    rate: eligiblePts ? paidPts / eligiblePts : 0,
+    newThisMonth: num(row.newThisMonth),
+    avgDaysToUpgrade: avgSeconds == null ? null : avgSeconds / SECONDS_PER_DAY,
+    medianDaysToUpgrade:
+      medianSeconds == null ? null : medianSeconds / SECONDS_PER_DAY,
+  };
+}
+
+async function loadRenewalRate(nowDate: Date): Promise<RenewalMetric> {
+  const nowIso = nowDate.toISOString();
+  const [row] = await db.execute<{
+    due90d: string | number;
+    renewed90d: string | number;
+    dueAllTime: string | number;
+    renewedAllTime: string | number;
+  }>(sql`
+    WITH paid AS (
+      SELECT pt_id, new_expires_at, paid_at
+      FROM billing_orders
+      WHERE status = 'paid'
+        AND new_expires_at IS NOT NULL
+        AND paid_at IS NOT NULL
+    ),
+    boundaries AS (
+      SELECT b.new_expires_at,
+        EXISTS (
+          SELECT 1 FROM paid r
+          WHERE r.pt_id = b.pt_id
+            AND r.new_expires_at > b.new_expires_at
+            AND r.paid_at
+              <= b.new_expires_at + (${EXPIRY_GRACE_DAYS}::int * interval '1 day')
+        ) AS renewed
+      FROM paid b
+      WHERE b.new_expires_at < ${nowIso}::timestamptz
+    )
+    SELECT
+      count(*) FILTER (
+        WHERE new_expires_at >= ${nowIso}::timestamptz - interval '90 days'
+      )::bigint AS "due90d",
+      count(*) FILTER (
+        WHERE new_expires_at >= ${nowIso}::timestamptz - interval '90 days'
+          AND renewed
+      )::bigint AS "renewed90d",
+      count(*)::bigint AS "dueAllTime",
+      count(*) FILTER (WHERE renewed)::bigint AS "renewedAllTime"
+    FROM boundaries
+  `);
+  const due90d = num(row.due90d);
+  const renewed90d = num(row.renewed90d);
+  return {
+    renewed90d,
+    due90d,
+    rate90d: due90d ? renewed90d / due90d : 0,
+    renewedAllTime: num(row.renewedAllTime),
+    dueAllTime: num(row.dueAllTime),
+  };
+}
+
+async function loadDowngrades(nowDate: Date): Promise<DowngradeMetric> {
+  const nowIso = nowDate.toISOString();
+  // `billing.downgraded` is a C6 event read here by string type. Until C6 emits
+  // it there are simply no matching rows and every count is 0.
+  const [row] = await db.execute<{
+    thisMonth: string | number;
+    prevMonth: string | number;
+    distinctPtsThisMonth: string | number;
+  }>(sql`
+    SELECT
+      count(*) FILTER (
+        WHERE occurred_at >= date_trunc('month', ${nowIso}::timestamptz)
+          AND occurred_at
+            < date_trunc('month', ${nowIso}::timestamptz) + interval '1 month'
+      )::bigint AS "thisMonth",
+      count(*) FILTER (
+        WHERE occurred_at
+            >= date_trunc('month', ${nowIso}::timestamptz) - interval '1 month'
+          AND occurred_at < date_trunc('month', ${nowIso}::timestamptz)
+      )::bigint AS "prevMonth",
+      count(DISTINCT pt_id) FILTER (
+        WHERE occurred_at >= date_trunc('month', ${nowIso}::timestamptz)
+          AND occurred_at
+            < date_trunc('month', ${nowIso}::timestamptz) + interval '1 month'
+      )::bigint AS "distinctPtsThisMonth"
+    FROM events
+    WHERE type = 'billing.downgraded'
+  `);
+  return {
+    thisMonth: num(row.thisMonth),
+    prevMonth: num(row.prevMonth),
+    distinctPtsThisMonth: num(row.distinctPtsThisMonth),
+  };
+}
+
+async function loadCapHits(nowDate: Date): Promise<CapHitMetric> {
+  const nowIso = nowDate.toISOString();
+  const monthKey = nowIso.slice(0, 7);
+  const [hits] = await db.execute<{
+    conversations: string | number;
+    reminders: string | number;
+  }>(sql`
+    SELECT
+      count(DISTINCT pt_id) FILTER (WHERE payload->>'kind' = 'conversations')::bigint
+        AS "conversations",
+      count(DISTINCT pt_id) FILTER (WHERE payload->>'kind' = 'reminders')::bigint
+        AS "reminders"
+    FROM events
+    WHERE type = 'billing.limit_reached'
+      AND occurred_at >= date_trunc('month', ${nowIso}::timestamptz)
+      AND occurred_at
+        < date_trunc('month', ${nowIso}::timestamptz) + interval '1 month'
+  `);
+  const [active] = await db.execute<{ activePts: string | number }>(sql`
+    SELECT count(DISTINCT pt_id)::bigint AS "activePts"
+    FROM conversation_days
+    WHERE month_key = ${monthKey}
+  `);
+  const activePts = num(active.activePts);
+  const convPts = num(hits.conversations);
+  const remPts = num(hits.reminders);
+  return {
+    conversations: {
+      pts: convPts,
+      activePts,
+      rate: activePts ? convPts / activePts : 0,
+    },
+    reminders: {
+      pts: remPts,
+      activePts,
+      rate: activePts ? remPts / activePts : 0,
+    },
+  };
+}
+
+async function loadFreeCogs(nowDate: Date): Promise<FreeCogsMetric> {
+  const nowIso = nowDate.toISOString();
+  const rows = await db.execute<{
+    plan: string;
+    planLifetime: boolean;
+    planExpiresAt: Date | string | null;
+    ai: string | number;
+    meta: string | number;
+    billableMsgs: string | number;
+    actualDays: string | number;
+    totalDays: string | number;
+  }>(sql`
+    SELECT p.plan AS "plan",
+      p.plan_lifetime AS "planLifetime",
+      p.plan_expires_at AS "planExpiresAt",
+      COALESCE(SUM(c.ai_cost_microusd), 0)::bigint AS "ai",
+      COALESCE(SUM(c.meta_cost_micro_eur), 0)::bigint AS "meta",
+      COALESCE(SUM(c.meta_billable_messages), 0)::bigint AS "billableMsgs",
+      count(*) FILTER (WHERE c.meta_cost_source = 'actual')::int AS "actualDays",
+      count(*)::int AS "totalDays"
+    FROM cost_daily c
+    JOIN pts p ON p.id = c.pt_id
+    WHERE c.day >= date_trunc('month', ${nowIso}::timestamptz)::date
+      AND c.day
+        < (date_trunc('month', ${nowIso}::timestamptz) + interval '1 month')::date
+    GROUP BY c.pt_id, p.plan, p.plan_lifetime, p.plan_expires_at
+  `);
+
+  let freePtCount = 0;
+  let aiCostMicrousd = 0;
+  let metaCostMicroEur = 0;
+  let metaBillableMessages = 0;
+  let actualPtDays = 0;
+  let totalPtDays = 0;
+  for (const row of rows) {
+    if (row.planLifetime === true) continue;
+    const effective = resolveEffectivePlan(
+      {
+        plan: row.plan as PlanId,
+        planLifetime: false,
+        planExpiresAt: row.planExpiresAt ? new Date(row.planExpiresAt) : null,
+      },
+      nowDate,
+    );
+    if (effective !== 'free') continue;
+    freePtCount += 1;
+    aiCostMicrousd += num(row.ai);
+    metaCostMicroEur += num(row.meta);
+    metaBillableMessages += num(row.billableMsgs);
+    actualPtDays += num(row.actualDays);
+    totalPtDays += num(row.totalDays);
+  }
+  const estimatedPtDays = totalPtDays - actualPtDays;
+  const metaCostSource: FreeCogsMetric['metaCostSource'] =
+    totalPtDays === 0 || actualPtDays === 0
+      ? 'estimated'
+      : actualPtDays === totalPtDays
+        ? 'actual'
+        : 'mixed';
+  return {
+    freePtCount,
+    aiCostMicrousd,
+    metaCostMicroEur,
+    metaCostSource,
+    metaBillableMessages,
+    actualPtDays,
+    estimatedPtDays,
+    avgAiCostMicrousd: freePtCount ? aiCostMicrousd / freePtCount : 0,
+    avgMetaCostMicroEur: freePtCount ? metaCostMicroEur / freePtCount : 0,
+  };
+}
+
+async function loadRecentPayments(nowDate: Date): Promise<PaymentRow[]> {
+  const nowIso = nowDate.toISOString();
+  const rows = await db.execute<{
+    orderId: string;
+    ptId: string;
+    email: string;
+    plan: string;
+    period: string;
+    amountMinor: number;
+    currency: string;
+    status: string;
+    createdAt: Date | string;
+    paidAt: Date | string | null;
+    pokOrderId: string;
+    previousExpiresAt: Date | string | null;
+    newExpiresAt: Date | string | null;
+  }>(sql`
+    SELECT o.id AS "orderId", o.pt_id AS "ptId", p.email AS "email",
+      o.plan AS "plan", o.period AS "period", o.amount_minor AS "amountMinor",
+      o.currency AS "currency", o.status AS "status",
+      o.created_at AS "createdAt", o.paid_at AS "paidAt",
+      o.pok_order_id AS "pokOrderId",
+      o.previous_expires_at AS "previousExpiresAt",
+      o.new_expires_at AS "newExpiresAt"
+    FROM billing_orders o
+    JOIN pts p ON p.id = o.pt_id
+    WHERE o.created_at >= date_trunc('month', ${nowIso}::timestamptz)
+      AND o.created_at
+        < date_trunc('month', ${nowIso}::timestamptz) + interval '1 month'
+    ORDER BY o.created_at DESC
+    LIMIT 50
+  `);
+  return rows.map((row) => ({
+    orderId: row.orderId,
+    ptId: row.ptId,
+    email: row.email,
+    plan: row.plan,
+    period: row.period,
+    amountMinor: num(row.amountMinor),
+    currency: row.currency,
+    status: row.status,
+    createdAt: toIso(row.createdAt) ?? '',
+    paidAt: toIso(row.paidAt),
+    pokOrderId: row.pokOrderId,
+    previousExpiresAt: toIso(row.previousExpiresAt),
+    newExpiresAt: toIso(row.newExpiresAt),
+  }));
+}
+
+export async function getBillingMetrics(now?: Date): Promise<BillingMetrics> {
+  const nowDate = now ?? new Date();
+  const [
+    planDistribution,
+    conversion,
+    renewal,
+    downgrades,
+    capHits,
+    freeCogs,
+    recentPayments,
+  ] = await withTimeout(
+    Promise.all([
+      loadPlanDistribution(nowDate),
+      loadConversion(nowDate),
+      loadRenewalRate(nowDate),
+      loadDowngrades(nowDate),
+      loadCapHits(nowDate),
+      loadFreeCogs(nowDate),
+      loadRecentPayments(nowDate),
+    ]),
+    METRICS_TIMEOUT_MS,
+    'getBillingMetrics',
+  );
+
+  return {
+    planDistribution,
+    conversion,
+    renewal,
+    downgrades,
+    capHits,
+    freeCogs,
+    recentPayments,
   };
 }

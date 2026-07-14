@@ -3,6 +3,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import {
   appointments,
+  billingOrders,
+  conversationDays,
   conversations,
   costDaily,
   events,
@@ -13,7 +15,7 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
-import { getAdminMetrics } from '@/lib/metrics/admin';
+import { getAdminMetrics, getBillingMetrics } from '@/lib/metrics/admin';
 
 // Fixed evaluation instant. All seeded timestamps live in June 2026 so the
 // (past) funnel windows contain only this test's manipulated rows.
@@ -158,6 +160,78 @@ async function seedPushEvent(args: {
       sent: args.sent,
       removed: args.removed,
     },
+    occurredAt: args.occurredAt,
+  });
+}
+
+// --- Phase 16 C7 billing-metric seeding helpers ---------------------------
+
+async function setPlan(
+  ptId: string,
+  fields: {
+    plan?: 'free' | 'solo';
+    planLifetime?: boolean;
+    planExpiresAt?: Date | null;
+  },
+): Promise<void> {
+  await db.update(pts).set(fields).where(eq(pts.id, ptId));
+}
+
+let orderSeq = 0;
+async function seedOrder(args: {
+  ptId: string;
+  status: 'created' | 'paid' | 'failed' | 'expired';
+  plan?: 'free' | 'solo';
+  period?: 'monthly' | 'yearly';
+  amountMinor?: number;
+  createdAt: Date;
+  paidAt?: Date | null;
+  previousExpiresAt?: Date | null;
+  newExpiresAt?: Date | null;
+}): Promise<void> {
+  await db.insert(billingOrders).values({
+    ptId: args.ptId,
+    pokOrderId: `admin-order-${Date.now()}-${orderSeq++}-${Math.floor(
+      Math.random() * 1e9,
+    )}`,
+    plan: args.plan ?? 'solo',
+    period: args.period ?? 'monthly',
+    amountMinor: args.amountMinor ?? 250000,
+    currency: 'ALL',
+    status: args.status,
+    createdAt: args.createdAt,
+    paidAt: args.paidAt ?? null,
+    previousExpiresAt: args.previousExpiresAt ?? null,
+    newExpiresAt: args.newExpiresAt ?? null,
+  });
+}
+
+async function seedConvDay(args: {
+  ptId: string;
+  localDay: string;
+  monthKey: string;
+}): Promise<void> {
+  const patientId = await newPatient(args.ptId);
+  const conversationId = await newConversation(args.ptId, patientId);
+  await db.insert(conversationDays).values({
+    ptId: args.ptId,
+    patientId,
+    conversationId,
+    localDay: args.localDay,
+    monthKey: args.monthKey,
+  });
+}
+
+async function seedBillingEvent(args: {
+  ptId: string;
+  type: string;
+  payload: Record<string, unknown>;
+  occurredAt: Date;
+}): Promise<void> {
+  await db.insert(events).values({
+    ptId: args.ptId,
+    type: args.type,
+    payload: args.payload,
     occurredAt: args.occurredAt,
   });
 }
@@ -445,5 +519,239 @@ describe('getAdminMetrics — Meta cost provenance (C4)', () => {
       metaCostMicroEur: 42_000, // 2 × 21_000 + 1 × 0
       aiCostMicrousd: 0,
     });
+  });
+});
+
+// --- Monetization success metrics (Phase 16 C7) ---------------------------
+// Every metric is asserted as a DELTA against a baseline captured before this
+// block seeds, so other suites' rows (and the concurrent C6 agent sharing this
+// local Postgres) coexist. NOW is fixed to 2026-06-15, so all "current month"
+// windows are June 2026 — isolated from any real-time-`now()` writes elsewhere.
+describe('getBillingMetrics (C7)', () => {
+  const SIGNUP = at('2026-05-01T10:00:00.000Z');
+  let baseline: Awaited<ReturnType<typeof getBillingMetrics>>;
+  let ptDowngrade: Pt;
+
+  beforeAll(async () => {
+    baseline = await getBillingMetrics(NOW);
+
+    // Plan distribution + Free-COGS source PT (effective free).
+    const ptFree = await makeUser('bill-free', SIGNUP);
+    await seedCostDaily({
+      ptId: ptFree.id,
+      day: '2026-06-10',
+      ai: 1000,
+      meta: 42_000,
+      metaCostSource: 'actual',
+      metaBillableMessages: 3,
+    });
+    await seedCostDaily({
+      ptId: ptFree.id,
+      day: '2026-06-11',
+      ai: 500,
+      meta: 60_000,
+      metaCostSource: 'estimated',
+      metaBillableMessages: 0,
+    });
+
+    // Effective solo (active expiry) + the this-month converter. Its cost_daily
+    // must be EXCLUDED from Free-COGS (asserted by the exact µUSD/µEUR deltas).
+    const ptSoloActive = await makeUser('bill-solo', SIGNUP);
+    await setPlan(ptSoloActive.id, {
+      plan: 'solo',
+      planExpiresAt: at('2026-07-15T00:00:00.000Z'),
+    });
+    await seedOrder({
+      ptId: ptSoloActive.id,
+      status: 'paid',
+      createdAt: at('2026-06-01T09:00:00.000Z'),
+      paidAt: at('2026-06-06T09:00:00.000Z'),
+      newExpiresAt: at('2026-07-06T00:00:00.000Z'), // future → not a renewal boundary
+    });
+    await seedCostDaily({
+      ptId: ptSoloActive.id,
+      day: '2026-06-10',
+      ai: 9999,
+      meta: 99_999,
+      metaCostSource: 'actual',
+      metaBillableMessages: 5,
+    });
+
+    // Lapsed solo (past expiry + grace) → effective free.
+    const ptSoloLapsed = await makeUser('bill-lapsed', SIGNUP);
+    await setPlan(ptSoloLapsed.id, {
+      plan: 'solo',
+      planExpiresAt: at('2026-06-01T00:00:00.000Z'),
+    });
+
+    // Lifetime pilot → its own bucket, excluded from conversion.
+    const ptLifetime = await makeUser('bill-lifetime', SIGNUP);
+    await setPlan(ptLifetime.id, { planLifetime: true });
+
+    // Renewal chain: R1 comes due (June 5) and is renewed by R2 (paid within grace).
+    const ptRenewer = await makeUser('bill-renewer', SIGNUP);
+    await seedOrder({
+      ptId: ptRenewer.id,
+      status: 'paid',
+      createdAt: at('2026-05-01T09:00:00.000Z'),
+      paidAt: at('2026-05-05T09:00:00.000Z'),
+      newExpiresAt: at('2026-06-05T00:00:00.000Z'),
+    });
+    await seedOrder({
+      ptId: ptRenewer.id,
+      status: 'paid',
+      createdAt: at('2026-06-01T09:00:00.000Z'),
+      paidAt: at('2026-06-04T09:00:00.000Z'), // <= 06-05 + 3d grace
+      previousExpiresAt: at('2026-06-05T00:00:00.000Z'),
+      newExpiresAt: at('2026-07-05T00:00:00.000Z'),
+    });
+
+    // Non-renewer: a single due boundary (June 10) with no follow-on paid order.
+    const ptNonRenewer = await makeUser('bill-nonrenewer', SIGNUP);
+    await seedOrder({
+      ptId: ptNonRenewer.id,
+      status: 'paid',
+      createdAt: at('2026-05-01T09:00:00.000Z'),
+      paidAt: at('2026-05-10T09:00:00.000Z'),
+      newExpiresAt: at('2026-06-10T00:00:00.000Z'),
+    });
+
+    // Cap hits (by kind) + the active-PT denominator (conversation_days).
+    const ptCapConv = await makeUser('bill-capconv', SIGNUP);
+    await seedConvDay({
+      ptId: ptCapConv.id,
+      localDay: '2026-06-10',
+      monthKey: '2026-06',
+    });
+    await seedBillingEvent({
+      ptId: ptCapConv.id,
+      type: 'billing.limit_reached',
+      payload: {
+        ptId: ptCapConv.id,
+        kind: 'conversations',
+        used: 30,
+        limit: 30,
+        monthKey: '2026-06',
+      },
+      occurredAt: at('2026-06-10T12:00:00.000Z'),
+    });
+
+    const ptCapRem = await makeUser('bill-caprem', SIGNUP);
+    await seedConvDay({
+      ptId: ptCapRem.id,
+      localDay: '2026-06-10',
+      monthKey: '2026-06',
+    });
+    await seedBillingEvent({
+      ptId: ptCapRem.id,
+      type: 'billing.limit_reached',
+      payload: {
+        ptId: ptCapRem.id,
+        kind: 'reminders',
+        used: 10,
+        limit: 10,
+        monthKey: '2026-06',
+      },
+      occurredAt: at('2026-06-10T12:00:00.000Z'),
+    });
+
+    // Active this month but never capped — denominator only.
+    const ptActiveOnly = await makeUser('bill-active', SIGNUP);
+    await seedConvDay({
+      ptId: ptActiveOnly.id,
+      localDay: '2026-06-11',
+      monthKey: '2026-06',
+    });
+
+    // Downgrades: one this month, one previous month (read by string type;
+    // `billing.downgraded` is a C6 event that this worktree does not emit).
+    ptDowngrade = await makeUser('bill-downgrade', SIGNUP);
+    await seedBillingEvent({
+      ptId: ptDowngrade.id,
+      type: 'billing.downgraded',
+      payload: { ptId: ptDowngrade.id },
+      occurredAt: at('2026-06-12T12:00:00.000Z'),
+    });
+    await seedBillingEvent({
+      ptId: ptDowngrade.id,
+      type: 'billing.downgraded',
+      payload: { ptId: ptDowngrade.id },
+      occurredAt: at('2026-05-12T12:00:00.000Z'),
+    });
+  });
+
+  it('buckets PTs by effective plan (lapsed solo → free, lifetime its own bucket)', async () => {
+    const m = await getBillingMetrics(NOW);
+    const d = m.planDistribution;
+    const b = baseline.planDistribution;
+    expect(d.free - b.free).toBe(8);
+    expect(d.solo - b.solo).toBe(1);
+    expect(d.lifetime - b.lifetime).toBe(1);
+    expect(d.total - b.total).toBe(10);
+  });
+
+  it('computes all-time conversion (lifetime excluded) + this-month first payments', async () => {
+    const m = await getBillingMetrics(NOW);
+    const c = m.conversion;
+    const b = baseline.conversion;
+    expect(c.eligiblePts - b.eligiblePts).toBe(9);
+    expect(c.paidPts - b.paidPts).toBe(3);
+    expect(c.newThisMonth - b.newThisMonth).toBe(1);
+    expect(c.rate).toBeCloseTo(c.paidPts / c.eligiblePts, 9);
+    expect(c.avgDaysToUpgrade).not.toBeNull();
+    expect(c.avgDaysToUpgrade ?? -1).toBeGreaterThanOrEqual(0);
+    expect(c.medianDaysToUpgrade).not.toBeNull();
+  });
+
+  it('computes ledger-only renewal (renewed chain vs non-renewed due boundary)', async () => {
+    const m = await getBillingMetrics(NOW);
+    const r = m.renewal;
+    const b = baseline.renewal;
+    expect(r.dueAllTime - b.dueAllTime).toBe(2);
+    expect(r.renewedAllTime - b.renewedAllTime).toBe(1);
+    expect(r.due90d - b.due90d).toBe(2);
+    expect(r.renewed90d - b.renewed90d).toBe(1);
+  });
+
+  it('counts billing.downgraded events this + previous month', async () => {
+    const m = await getBillingMetrics(NOW);
+    const dg = m.downgrades;
+    const b = baseline.downgrades;
+    expect(dg.thisMonth - b.thisMonth).toBe(1);
+    expect(dg.prevMonth - b.prevMonth).toBe(1);
+    expect(dg.distinctPtsThisMonth - b.distinctPtsThisMonth).toBe(1);
+  });
+
+  it('computes cap-hits per kind over the active-PT denominator', async () => {
+    const m = await getBillingMetrics(NOW);
+    const b = baseline.capHits;
+    expect(m.capHits.conversations.pts - b.conversations.pts).toBe(1);
+    expect(m.capHits.reminders.pts - b.reminders.pts).toBe(1);
+    expect(m.capHits.conversations.activePts - b.conversations.activePts).toBe(3);
+    expect(m.capHits.reminders.activePts - b.reminders.activePts).toBe(3);
+  });
+
+  it('aggregates Free-tier COGS only for effective-free PTs, µUSD/µEUR separate', async () => {
+    const m = await getBillingMetrics(NOW);
+    const f = m.freeCogs;
+    const b = baseline.freeCogs;
+    // Only ptFree (effective free) contributes; ptSoloActive's cost is excluded.
+    expect(f.freePtCount - b.freePtCount).toBe(1);
+    expect(f.aiCostMicrousd - b.aiCostMicrousd).toBe(1500); // µUSD
+    expect(f.metaCostMicroEur - b.metaCostMicroEur).toBe(102_000); // µEUR
+    expect(f.metaBillableMessages - b.metaBillableMessages).toBe(3);
+    expect(f.actualPtDays - b.actualPtDays).toBe(1);
+    expect(f.estimatedPtDays - b.estimatedPtDays).toBe(1);
+  });
+
+  it('lists current-month payments joined to the PT email', async () => {
+    const m = await getBillingMetrics(NOW);
+    // ptSoloActive's order was created 2026-06-01 (current month for NOW).
+    const soloRow = m.recentPayments.find(
+      (p) => p.status === 'paid' && p.amountMinor === 250000 && p.currency === 'ALL',
+    );
+    expect(soloRow).toBeTruthy();
+    // Downgrade PT never bought anything → absent from the payments list.
+    expect(m.recentPayments.some((p) => p.ptId === ptDowngrade.id)).toBe(false);
   });
 });
