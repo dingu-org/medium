@@ -148,6 +148,16 @@ function CostCard({ title, rows }: { title: string; rows: PtCostRow[] }) {
                     </td>
                     <td className="py-1">
                       {formatMicro(row.metaCostMicroEur, '€')}
+                      <span className="text-muted-foreground">
+                        {' · '}
+                        {metaSourceLabel(row.metaCostSource)}
+                      </span>
+                      {row.metaBillableMessages > 0 && (
+                        <span className="text-muted-foreground block text-xs">
+                          {row.metaBillableMessages} billable msg
+                          {row.metaBillableMessages === 1 ? '' : 's'}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -172,4 +182,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 /** Micro-currency (1e6 units) → a 2-decimal display amount with symbol. */
 function formatMicro(micro: number, symbol: string): string {
   return `${symbol}${(micro / 1_000_000).toFixed(2)}`;
+}
+
+/** Short operator-facing label for the Meta cost provenance. */
+function metaSourceLabel(source: PtCostRow['metaCostSource']): string {
+  return source === 'estimated' ? 'est.' : source;
 }

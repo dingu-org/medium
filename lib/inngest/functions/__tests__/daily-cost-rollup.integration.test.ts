@@ -13,9 +13,13 @@ import {
   costDaily,
   messages,
   patients,
+  waMessageStatuses,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
-import { aggregateCostDailyCore } from '../daily-cost-rollup';
+import {
+  aggregateCostDailyCore,
+  aggregateCostDailyWindow,
+} from '../daily-cost-rollup';
 
 // Fixed target UTC day, well clear of "now" so in/out-of-window seeding is exact.
 const DAY = new Date('2026-06-15T12:00:00.000Z');
@@ -222,5 +226,188 @@ describe('aggregateCostDailyCore', () => {
     expect(rows[0].computedAt.getTime()).toBeGreaterThanOrEqual(
       first.computedAt.getTime(),
     );
+  });
+
+  it('has no status rows in the base fixtures → estimated fallback for ptA/ptB', async () => {
+    await aggregateCostDailyCore(DAY);
+    const a = await rowFor(ptA);
+    const b = await rowFor(ptB);
+    expect(a.metaCostSource).toBe('estimated');
+    expect(a.metaBillableMessages).toBe(0);
+    expect(a.metaCostMicroEur).toBe(120_000); // estimate(2 convos)
+    expect(b.metaCostSource).toBe('estimated');
+    expect(b.metaBillableMessages).toBe(0);
+    expect(b.metaCostMicroEur).toBe(60_000); // estimate(1 convo)
+  });
+});
+
+// --- Actual-first Meta costing off wa_message_statuses (Phase 16 C4) ---------
+describe('aggregateCostDailyCore — Meta actual-first cost', () => {
+  let ptC = '';
+  let statusSeq = 0;
+
+  async function seedStatus(args: {
+    sentAt: Date | null;
+    createdAt?: Date;
+    billable: boolean | null;
+    pricingCategory: string | null;
+    lastStatus?: string;
+  }): Promise<void> {
+    await db.insert(waMessageStatuses).values({
+      ptId: ptC,
+      externalId: `wamid.c.${Date.now()}.${statusSeq++}.${Math.floor(
+        Math.random() * 1e9,
+      )}`,
+      lastStatus: args.lastStatus ?? 'sent',
+      sentAt: args.sentAt,
+      billable: args.billable,
+      pricingCategory: args.pricingCategory,
+      createdAt: args.createdAt ?? args.sentAt ?? new Date(),
+    });
+  }
+
+  async function rowForC() {
+    const [row] = await db
+      .select()
+      .from(costDaily)
+      .where(and(eq(costDaily.ptId, ptC), eq(costDaily.day, '2026-06-15')));
+    return row;
+  }
+
+  beforeAll(async () => {
+    ptC = await makeUser('c');
+  });
+
+  beforeEach(async () => {
+    await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptC));
+    await db.delete(costDaily).where(eq(costDaily.ptId, ptC));
+    await db.delete(patients).where(eq(patients.ptId, ptC));
+  });
+
+  afterAll(async () => {
+    await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptC));
+    await db.delete(costDaily).where(eq(costDaily.ptId, ptC));
+    await createServiceClient().auth.admin.deleteUser(ptC);
+  });
+
+  it('prices mixed billable categories from the rate card and marks source=actual', async () => {
+    await seedStatus({
+      sentAt: inDay('10:00'),
+      billable: true,
+      pricingCategory: 'utility',
+    });
+    await seedStatus({
+      sentAt: inDay('11:00'),
+      billable: true,
+      pricingCategory: 'UTILITY', // case is normalized to the same rate
+    });
+    await seedStatus({
+      sentAt: inDay('12:00'),
+      billable: true,
+      pricingCategory: 'service', // billable but €0 rate
+    });
+    await seedStatus({
+      sentAt: inDay('13:00'),
+      billable: false,
+      pricingCategory: 'utility', // non-billable → excluded from cost
+    });
+
+    await aggregateCostDailyCore(DAY);
+    const row = await rowForC();
+    expect(row.metaCostSource).toBe('actual');
+    expect(row.metaBillableMessages).toBe(3); // 2 utility + 1 service billable
+    expect(row.metaCostMicroEur).toBe(2 * 21_000 + 1 * 0); // 42_000
+  });
+
+  it('records source=actual with €0 when every status row is non-billable', async () => {
+    await seedStatus({
+      sentAt: inDay('09:00'),
+      billable: false,
+      pricingCategory: 'utility',
+    });
+    await seedStatus({
+      sentAt: inDay('10:00'),
+      billable: false,
+      pricingCategory: 'service',
+    });
+
+    await aggregateCostDailyCore(DAY);
+    const row = await rowForC();
+    expect(row.metaCostSource).toBe('actual');
+    expect(row.metaBillableMessages).toBe(0);
+    expect(row.metaCostMicroEur).toBe(0);
+  });
+
+  it('prices an unknown billable category at the utility fallback, not €0', async () => {
+    await seedStatus({
+      sentAt: inDay('08:00'),
+      billable: true,
+      pricingCategory: 'referral_conversion', // not in the known set
+    });
+
+    await aggregateCostDailyCore(DAY);
+    const row = await rowForC();
+    expect(row.metaCostSource).toBe('actual');
+    expect(row.metaBillableMessages).toBe(1);
+    expect(row.metaCostMicroEur).toBe(21_000); // fallback rate
+  });
+
+  it('buckets by send time: 23:59:59Z counts, the next midnight does not; null sent_at falls back to created_at', async () => {
+    await seedStatus({
+      sentAt: new Date('2026-06-15T23:59:59.000Z'),
+      billable: true,
+      pricingCategory: 'utility',
+    });
+    await seedStatus({
+      sentAt: new Date('2026-06-16T00:00:00.000Z'), // next UTC day
+      billable: true,
+      pricingCategory: 'utility',
+    });
+    await seedStatus({
+      sentAt: null, // buckets by created_at instead
+      createdAt: inDay('06:00'),
+      billable: true,
+      pricingCategory: 'utility',
+    });
+
+    await aggregateCostDailyCore(DAY);
+    const row = await rowForC();
+    expect(row.metaCostSource).toBe('actual');
+    expect(row.metaBillableMessages).toBe(2); // 23:59:59 + null-sentAt/in-day
+    expect(row.metaCostMicroEur).toBe(2 * 21_000);
+  });
+
+  it('flips a day from estimated to actual when a status row lands on re-run (backfill window)', async () => {
+    // Day starts with only a patient message → estimated fallback.
+    const conv = await newConversation(ptC);
+    await seedMessage({
+      ptId: ptC,
+      conversationId: conv,
+      role: 'patient',
+      createdAt: inDay('09:00'),
+    });
+
+    await aggregateCostDailyWindow(DAY, 1);
+    const before = await rowForC();
+    expect(before.metaCostSource).toBe('estimated');
+    expect(before.metaBillableMessages).toBe(0);
+    expect(before.metaCostMicroEur).toBe(60_000); // estimate(1 convo)
+
+    // Meta status webhook lands afterwards; re-running the window flips it.
+    await seedStatus({
+      sentAt: inDay('10:00'),
+      billable: true,
+      pricingCategory: 'utility',
+    });
+    await aggregateCostDailyWindow(DAY, 1);
+
+    const after = await db
+      .select()
+      .from(costDaily)
+      .where(and(eq(costDaily.ptId, ptC), eq(costDaily.day, '2026-06-15')));
+    expect(after).toHaveLength(1); // idempotent upsert, not a duplicate
+    expect(after[0].metaCostSource).toBe('actual');
+    expect(after[0].metaBillableMessages).toBe(1);
+    expect(after[0].metaCostMicroEur).toBe(21_000);
   });
 });

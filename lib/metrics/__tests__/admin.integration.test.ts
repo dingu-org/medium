@@ -9,6 +9,7 @@ import {
   messages,
   patients,
   pts,
+  waMessageStatuses,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -109,12 +110,36 @@ async function seedCostDaily(args: {
   day: string;
   ai: number;
   meta: number;
+  metaCostSource?: 'actual' | 'estimated';
+  metaBillableMessages?: number;
 }): Promise<void> {
   await db.insert(costDaily).values({
     ptId: args.ptId,
     day: args.day,
     aiCostMicrousd: args.ai,
     metaCostMicroEur: args.meta,
+    metaCostSource: args.metaCostSource ?? 'estimated',
+    metaBillableMessages: args.metaBillableMessages ?? 0,
+  });
+}
+
+let waStatusSeq = 0;
+async function seedStatus(args: {
+  ptId: string;
+  sentAt: Date;
+  billable: boolean;
+  pricingCategory: string;
+}): Promise<void> {
+  await db.insert(waMessageStatuses).values({
+    ptId: args.ptId,
+    externalId: `wamid.admin.${Date.now()}.${waStatusSeq++}.${Math.floor(
+      Math.random() * 1e9,
+    )}`,
+    lastStatus: 'sent',
+    sentAt: args.sentAt,
+    billable: args.billable,
+    pricingCategory: args.pricingCategory,
+    createdAt: args.sentAt,
   });
 }
 
@@ -307,5 +332,118 @@ describe('getAdminMetrics', () => {
   it('aggregates 7d push delivery counts', async () => {
     const m = await getAdminMetrics(NOW);
     expect(m.push).toEqual({ sent: 5, removed: 1, dispatches: 2 });
+  });
+
+  it('reports today live cost as estimated when a PT has messages but no status rows', async () => {
+    const m = await getAdminMetrics(NOW);
+    const todayPtY = m.cost.today.find((r) => r.ptId === ptY.id);
+    expect(todayPtY).toMatchObject({
+      metaCostSource: 'estimated',
+      metaBillableMessages: 0,
+      metaCostMicroEur: 60_000,
+    });
+  });
+});
+
+// --- Meta cost provenance: actual / estimated / mixed labels (Phase 16 C4) ---
+// New PTs are created here (after the funnel/cohort assertions above have run)
+// with an out-of-window signup date so they never perturb those counts.
+describe('getAdminMetrics — Meta cost provenance (C4)', () => {
+  let ptActual: Pt;
+  let ptMixed: Pt;
+  let ptTodayActual: Pt;
+  const OUT_OF_WINDOW = at('2026-05-01T10:00:00.000Z');
+
+  beforeAll(async () => {
+    // All-actual current-month rows → 'actual', billable-message SUM = 4.
+    ptActual = await makeUser('actual', OUT_OF_WINDOW);
+    await seedCostDaily({
+      ptId: ptActual.id,
+      day: '2026-06-12',
+      ai: 100,
+      meta: 42_000,
+      metaCostSource: 'actual',
+      metaBillableMessages: 3,
+    });
+    await seedCostDaily({
+      ptId: ptActual.id,
+      day: '2026-06-13',
+      ai: 50,
+      meta: 21_000,
+      metaCostSource: 'actual',
+      metaBillableMessages: 1,
+    });
+
+    // One actual + one estimated day in the month → derived 'mixed' label.
+    ptMixed = await makeUser('mixed', OUT_OF_WINDOW);
+    await seedCostDaily({
+      ptId: ptMixed.id,
+      day: '2026-06-12',
+      ai: 80,
+      meta: 21_000,
+      metaCostSource: 'actual',
+      metaBillableMessages: 1,
+    });
+    await seedCostDaily({
+      ptId: ptMixed.id,
+      day: '2026-06-13',
+      ai: 20,
+      meta: 60_000,
+      metaCostSource: 'estimated',
+      metaBillableMessages: 0,
+    });
+
+    // Status rows today, no messages → today live cost is 'actual' off the union.
+    ptTodayActual = await makeUser('today-actual', OUT_OF_WINDOW);
+    await seedStatus({
+      ptId: ptTodayActual.id,
+      sentAt: at('2026-06-15T08:00:00.000Z'),
+      billable: true,
+      pricingCategory: 'utility',
+    });
+    await seedStatus({
+      ptId: ptTodayActual.id,
+      sentAt: at('2026-06-15T09:00:00.000Z'),
+      billable: true,
+      pricingCategory: 'utility',
+    });
+    await seedStatus({
+      ptId: ptTodayActual.id,
+      sentAt: at('2026-06-15T10:00:00.000Z'),
+      billable: true,
+      pricingCategory: 'service', // billable but €0 rate
+    });
+  });
+
+  it('labels an all-actual month row "actual" and sums billable messages', async () => {
+    const m = await getAdminMetrics(NOW);
+    const row = m.cost.currentMonth.find((r) => r.ptId === ptActual.id);
+    expect(row).toMatchObject({
+      metaCostSource: 'actual',
+      metaBillableMessages: 4,
+      metaCostMicroEur: 63_000,
+      aiCostMicrousd: 150,
+    });
+  });
+
+  it('labels a month spanning actual + estimated days "mixed"', async () => {
+    const m = await getAdminMetrics(NOW);
+    const row = m.cost.currentMonth.find((r) => r.ptId === ptMixed.id);
+    expect(row).toMatchObject({
+      metaCostSource: 'mixed',
+      metaBillableMessages: 1,
+      metaCostMicroEur: 81_000,
+    });
+  });
+
+  it('prices today live cost from status rows as "actual" even with no messages', async () => {
+    const m = await getAdminMetrics(NOW);
+    const row = m.cost.today.find((r) => r.ptId === ptTodayActual.id);
+    expect(row).toMatchObject({
+      metaCostSource: 'actual',
+      metaBillableMessages: 3, // 2 utility + 1 service billable
+      metaCostMicroEur: 42_000, // 2 × 21_000 + 1 × 0
+      aiCostMicrousd: 0,
+    });
   });
 });
