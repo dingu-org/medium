@@ -42,6 +42,8 @@ export const chat = {
   noticeNotConnected: 'WhatsApp nuk është i lidhur.',
   connectNow: 'Lidhe tani',
 
+  noticeCapReached:
+    'Ke arritur kufirin e bisedave për këtë muaj. Bisedat e reja i menaxhon ti derisa të rinovohet muaji.',
   noticeEscalated:
     'Pacienti kërkoi të flasë me një person. Medium ndaloi përgjigjet.',
   noticeTakeover: "Ti po bisedon — Medium është në pauzë derisa t'ia kthesh.",

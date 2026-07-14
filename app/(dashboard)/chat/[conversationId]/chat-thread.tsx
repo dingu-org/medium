@@ -3,6 +3,7 @@
 import {
   Archive,
   Bell,
+  CircleGauge,
   HandHeart,
   Link2Off,
   Pause,
@@ -52,6 +53,7 @@ type Props = {
   aiPauseReason: string | null;
   connectionStatus: string | null;
   upcomingAppointment: { startsAt: string; serviceType: string | null } | null;
+  capReached?: boolean;
 };
 
 type OptimisticMessage = LiveMessage & {
@@ -79,6 +81,7 @@ export function ChatThread({
   aiPauseReason,
   connectionStatus,
   upcomingAppointment,
+  capReached = false,
 }: Props) {
   const router = useRouter();
   const { messages } = useMessages(conversationId, initialMessages);
@@ -320,6 +323,11 @@ export function ChatThread({
           onToggle={onToggle}
           disabled={closed || statePending}
         />
+        {capReached && (
+          <ChatNotice tone="warning" icon={CircleGauge}>
+            {t.chat.noticeCapReached}
+          </ChatNotice>
+        )}
         {escalated && (
           <ChatNotice tone="danger" icon={Bell}>
             {t.chat.noticeEscalated}

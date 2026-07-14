@@ -39,6 +39,11 @@ const GROUPS: {
     rows: [
       { key: 'connection', label: t.settings.notifConnection },
       { key: 'reminderFailure', label: t.settings.notifReminderFailure },
+      {
+        key: 'billing',
+        label: t.settings.notifBilling,
+        description: t.settings.notifBillingSub,
+      },
     ],
   },
 ];

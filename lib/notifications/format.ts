@@ -14,6 +14,8 @@ export const NOTIFICATION_TYPES = [
   'conversation.failed',
   'reminder.failed',
   'wa.connection.revoked',
+  'billing.limit_warning',
+  'billing.limit_reached',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -121,6 +123,20 @@ export function formatNotification(
         title: 'WhatsApp u shkëput. Duhet rilidhur.',
         icon: 'unplug',
         href: '/settings',
+      };
+    case 'billing.limit_warning':
+      return {
+        ...base,
+        title: 'Po i afrohesh kufirit mujor',
+        icon: 'alert',
+        href: '/settings/billing',
+      };
+    case 'billing.limit_reached':
+      return {
+        ...base,
+        title: 'Arrite kufirin mujor',
+        icon: 'alert',
+        href: '/settings/billing',
       };
     default:
       return {

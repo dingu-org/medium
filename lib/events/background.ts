@@ -132,6 +132,27 @@ export const backgroundEventSchemas = {
     reason: z.string().min(1),
     traceId,
   }),
+  // Phase 16 billing usage warnings/stops. One row per (pt, type, kind, month)
+  // — the emitter dedupes on an events-exists check. `kind` covers C3's reminder
+  // events too so that chunk doesn't have to re-touch this shared schema.
+  'billing.limit_warning': z.object({
+    ptId: z.uuid(),
+    kind: z.enum(['conversations', 'reminders', 'reminders_predictive']),
+    used: z.number().int().nonnegative(),
+    limit: z.number().int().nonnegative(),
+    remaining: z.number().int(),
+    monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+    upcoming: z.number().int().nonnegative().optional(),
+    traceId,
+  }),
+  'billing.limit_reached': z.object({
+    ptId: z.uuid(),
+    kind: z.enum(['conversations', 'reminders']),
+    used: z.number().int().nonnegative(),
+    limit: z.number().int().nonnegative(),
+    monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+    traceId,
+  }),
   // Phase 11 internal-metrics events. Counts/ids only. These have NO Inngest
   // consumer (no registered trigger), so their outbox rows simply drain and
   // no-op — only the `events` row is used, for funnel/delivery metrics.

@@ -14,7 +14,9 @@ export type PushEvent =
   | Ev<'conversation.escalated'>
   | Ev<'conversation.resume_offered'>
   | Ev<'wa.connection.revoked'>
-  | Ev<'reminder.failed'>;
+  | Ev<'reminder.failed'>
+  | Ev<'billing.limit_warning'>
+  | Ev<'billing.limit_reached'>;
 
 /** Maps each push event to the Settings toggle that gates it. */
 export function pushPrefKey(event: PushEvent): keyof NotificationPrefs {
@@ -35,6 +37,9 @@ export function pushPrefKey(event: PushEvent): keyof NotificationPrefs {
       return 'connection';
     case 'reminder.failed':
       return 'reminderFailure';
+    case 'billing.limit_warning':
+    case 'billing.limit_reached':
+      return 'billing';
   }
 }
 
@@ -105,6 +110,22 @@ export function buildPushPayload(
         body: 'Një kujtesë për një takim nuk arriti të dërgohej.',
         url: `/calendar?appointmentId=${event.data.appointmentId}`,
         tag: `appointment-${event.data.appointmentId}-reminder-failed`,
+      };
+    // Neutral "monthly limit" copy fits both conversation and reminder kinds;
+    // the tag keeps kind separate so the two never collapse on the device.
+    case 'billing.limit_warning':
+      return {
+        title: 'Po i afrohesh kufirit mujor',
+        body: 'Prek për të parë përdorimin e këtij muaji.',
+        url: '/settings/billing',
+        tag: `billing-warning-${event.data.kind}-${event.data.monthKey}`,
+      };
+    case 'billing.limit_reached':
+      return {
+        title: 'Arrite kufirin mujor',
+        body: 'Ke arritur kufirin tënd mujor. Prek për detaje.',
+        url: '/settings/billing',
+        tag: `billing-reached-${event.data.kind}-${event.data.monthKey}`,
       };
   }
 }

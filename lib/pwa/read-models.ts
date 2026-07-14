@@ -22,6 +22,7 @@ import {
   reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
+import { getConversationUsage } from '@/lib/billing/usage';
 import { privacyName } from '@/lib/format/name';
 import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
 import { formatMonthYear, formatWeekdayShort } from '@/lib/i18n';
@@ -93,6 +94,8 @@ export type ChatThreadSnapshot = {
   aiPauseReason: string | null;
   connectionStatus: string | null;
   upcomingAppointment: { startsAt: string; serviceType: string | null } | null;
+  /** Monthly conversation cap state (Phase 16 C2) — drives the chat banner. */
+  conversationCap: { atCap: boolean; used: number; limit: number };
 };
 
 export type SettingsSnapshot = {
@@ -270,7 +273,7 @@ export async function getChatThreadSnapshot(
 
   if (!conversation) return null;
 
-  const [rows, connectionRows, upcomingRows] = await Promise.all([
+  const [rows, connectionRows, upcomingRows, usage] = await Promise.all([
     db
       .select({
         id: messages.id,
@@ -304,6 +307,7 @@ export async function getChatThreadSnapshot(
       )
       .orderBy(asc(appointments.startsAt))
       .limit(1),
+    getConversationUsage(ptId),
   ]);
 
   return {
@@ -331,6 +335,11 @@ export async function getChatThreadSnapshot(
           serviceType: upcomingRows[0].serviceType,
         }
       : null,
+    conversationCap: {
+      atCap: usage.atCap,
+      used: usage.used,
+      limit: usage.limit,
+    },
   };
 }
 

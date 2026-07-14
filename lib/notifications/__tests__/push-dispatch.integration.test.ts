@@ -131,6 +131,17 @@ function eventForPref(key: keyof NotificationPrefs): PushEvent {
         name: 'reminder.failed',
         data: { ptId, appointmentId: randomUUID(), reason: 'send_failed' },
       };
+    case 'billing':
+      return {
+        name: 'billing.limit_reached',
+        data: {
+          ptId,
+          kind: 'conversations',
+          used: 30,
+          limit: 30,
+          monthKey: '2026-07',
+        },
+      };
   }
 }
 

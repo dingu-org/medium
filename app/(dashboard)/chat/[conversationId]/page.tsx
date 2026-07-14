@@ -32,6 +32,7 @@ export default async function ConversationPage({
       aiPauseReason={snapshot.aiPauseReason}
       connectionStatus={snapshot.connectionStatus}
       upcomingAppointment={snapshot.upcomingAppointment}
+      capReached={snapshot.conversationCap.atCap}
     />
   );
 }

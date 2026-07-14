@@ -17,6 +17,8 @@ export const settings = {
   notifReminderFailure: 'Dështime të kujtesave',
   notifConnection: 'Shkëputje e WhatsApp',
   notifResumeOffer: 'Rikthim i asistentit',
+  notifBilling: 'Kufijtë mujorë',
+  notifBillingSub: 'Kur i afrohesh ose arrin kufirin e muajit',
   notifGroupAppointments: 'Takimet',
   notifGroupConversations: 'Bisedat',
   notifGroupSystem: 'Sistemi',

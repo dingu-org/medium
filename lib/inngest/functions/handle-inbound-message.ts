@@ -11,7 +11,9 @@ import {
 } from '@/lib/db/schema';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
 import { resolveEffectivePlan } from '@/lib/billing/entitlements';
+import { markCapHandoff, prepareCapHandoff } from '@/lib/billing/cap-handoff';
 import type { PlanId } from '@/lib/billing/plans';
+import { checkAndRecordConversation } from '@/lib/billing/usage';
 import { ConversationEngineError } from '@/lib/conversation/errors';
 import type {
   InboundMessage,
@@ -35,6 +37,8 @@ export type InboundJobContext = {
   assistantPaused: boolean;
   /** Effective (grace-aware) plan resolved at load time (Phase 16 C1). */
   plan: PlanId;
+  /** PT timezone — the calendar boundary for conversation-day metering (C2). */
+  timezone: string;
   connectionId: string | null;
   recipient: string | null;
 };
@@ -68,6 +72,7 @@ export async function loadInboundJobContext(args: {
       plan: pts.plan,
       planLifetime: pts.planLifetime,
       planExpiresAt: pts.planExpiresAt,
+      timezone: pts.timezone,
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -148,6 +153,7 @@ export async function loadInboundJobContext(args: {
       },
       new Date(),
     ),
+    timezone: row.timezone,
     connectionId: connection?.id ?? null,
     recipient: row.waId,
   };
@@ -360,6 +366,77 @@ export const handleInboundMessage = inngest.createFunction(
       };
     }
 
+    // Takeover on a non-fallback inbound is the PT handling it manually — never
+    // metered. (A reminder AI fallback runs even during takeover, so it is
+    // excluded here and does get metered below.)
+    if (reminder.kind !== 'fallback' && !context.aiActive) {
+      return { skipped: 'conversation_inactive' };
+    }
+
+    // Meter the conversation-day and enforce the monthly cap. Paused
+    // conversations skip the gate (not counted) — the engine still runs so
+    // safety-escalation-while-paused works, then self-skips as
+    // `assistant_paused`. The metering instant is the patient message's own
+    // timestamp (not wall-clock) so Inngest retries land on the same billing
+    // day and month.
+    if (!context.assistantPaused) {
+      const gate = await step.run('check-conversation-cap', () =>
+        checkAndRecordConversation({
+          ptId: context.inbound.ptId,
+          patientId: context.inbound.patientId,
+          conversationId: context.inbound.conversationId,
+          plan: context.plan,
+          timezone: context.timezone,
+          inboundMessageId: context.inbound.id,
+          instant: new Date(context.inbound.occurredAt),
+          traceId: event.data.traceId,
+        }),
+      );
+
+      if (gate.status === 'at_cap') {
+        const prep = await step.run('prepare-cap-handoff', () =>
+          prepareCapHandoff({
+            inbound: hydrateInbound(context.inbound),
+            timezone: context.timezone,
+            instant: new Date(context.inbound.occurredAt),
+          }),
+        );
+        if (prep.action === 'skip') {
+          log.info('inbound.capped', 'Conversation cap reached; handoff already sent today', {
+            message_id: event.data.messageId,
+          });
+          return { capped: true, handoffSent: false };
+        }
+
+        const delivery = await step.run('send-cap-handoff', () =>
+          sendInboundReply({
+            outbound: prep.outbound,
+            connectionId: context.connectionId!,
+            recipient: context.recipient!,
+          }),
+        );
+        await step.run('persist-cap-handoff-delivery', () =>
+          persistInboundReplyDelivery({
+            outboundId: prep.outbound.id,
+            messageId: delivery.messageId,
+          }),
+        );
+        await step.run('mark-cap-handoff', () =>
+          markCapHandoff({
+            ptId: context.inbound.ptId,
+            conversationId: context.inbound.conversationId,
+            instant: new Date(context.inbound.occurredAt),
+          }),
+        );
+
+        log.info('inbound.capped', 'Conversation cap reached; static handoff sent', {
+          message_id: event.data.messageId,
+          wa_message_id: delivery.messageId,
+        });
+        return { capped: true, handoffSent: true };
+      }
+    }
+
     let turn:
       | { kind: 'outbound'; outbound: OutboundMessage }
       | { kind: 'skipped'; reason: string };
@@ -368,7 +445,6 @@ export const handleInboundMessage = inngest.createFunction(
         runReminderFallbackTurn(context, reminder.reminder),
       );
     } else {
-      if (!context.aiActive) return { skipped: 'conversation_inactive' };
       turn = await step.run('run-ai-turn', () => runInboundTurn(context));
     }
     if (turn.kind === 'skipped') return { skipped: turn.reason };
