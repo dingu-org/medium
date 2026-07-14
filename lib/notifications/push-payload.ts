@@ -16,7 +16,10 @@ export type PushEvent =
   | Ev<'wa.connection.revoked'>
   | Ev<'reminder.failed'>
   | Ev<'billing.limit_warning'>
-  | Ev<'billing.limit_reached'>;
+  | Ev<'billing.limit_reached'>
+  | Ev<'billing.renewal_due'>
+  | Ev<'billing.grace_started'>
+  | Ev<'billing.downgraded'>;
 
 /** Maps each push event to the Settings toggle that gates it. */
 export function pushPrefKey(event: PushEvent): keyof NotificationPrefs {
@@ -39,6 +42,9 @@ export function pushPrefKey(event: PushEvent): keyof NotificationPrefs {
       return 'reminderFailure';
     case 'billing.limit_warning':
     case 'billing.limit_reached':
+    case 'billing.renewal_due':
+    case 'billing.grace_started':
+    case 'billing.downgraded':
       return 'billing';
   }
 }
@@ -126,6 +132,36 @@ export function buildPushPayload(
         body: 'Ke arritur kufirin tënd mujor. Prek për detaje.',
         url: '/settings/billing',
         tag: `billing-reached-${event.data.kind}-${event.data.monthKey}`,
+      };
+    // Lifecycle pushes (C6). Day-0 renewal copy differs from grace copy so the
+    // two reminders that share an expiry date never read the same on-device.
+    case 'billing.renewal_due':
+      return event.data.daysLeft <= 0
+        ? {
+            title: 'Plani skadon sot',
+            body: 'Rinovoje që asistenti të vazhdojë pa ndërprerje.',
+            url: '/settings/billing',
+            tag: `billing-renewal-0-${event.data.expiresAt}`,
+          }
+        : {
+            title: 'Rinovo planin Solo',
+            body: `Plani yt skadon pas ${event.data.daysLeft} ditësh.`,
+            url: '/settings/billing',
+            tag: `billing-renewal-${event.data.daysLeft}-${event.data.expiresAt}`,
+          };
+    case 'billing.grace_started':
+      return {
+        title: 'Plani skadoi',
+        body: 'Ke edhe pak ditë ta rinovosh para se të kalosh te Falas.',
+        url: '/settings/billing',
+        tag: `billing-grace-${event.data.expiresAt}`,
+      };
+    case 'billing.downgraded':
+      return {
+        title: 'Kalove te plani Falas',
+        body: 'Plani Solo skadoi. Rinovo kur të duash për ta rikthyer.',
+        url: '/settings/billing',
+        tag: 'billing-downgraded',
       };
   }
 }

@@ -1,13 +1,80 @@
 import { Check, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { PLANS } from '@/lib/billing/plans';
 import { Button } from '@/components/ui/button';
-import { t } from '@/lib/i18n';
+import { formatLek, t } from '@/lib/i18n';
 import { getOnboardingState } from '@/lib/onboarding/state';
 import { getServices } from '@/lib/services/queries';
 import { createServerClient } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils';
-import { confirmServices, continueSetup, dismissAndGo } from './actions';
+import {
+  confirmServices,
+  continueSetup,
+  dismissAndGo,
+  skipPlanStep,
+} from './actions';
+
+/**
+ * Compressed, skippable plan card (Phase 16 C6). Reads as optional — "Zgjidh
+ * Solo" routes to /settings/billing (via continueSetup, which sets the setup
+ * cookie so the dashboard gate lets the PT through); "Vazhdo me Falas" records
+ * the skip. It never blocks reaching the dashboard.
+ */
+function PlanStep() {
+  const free = PLANS.free;
+  const solo = PLANS.solo;
+  return (
+    <section className="border-border bg-card mt-8 rounded-lg border p-5 text-left">
+      <h2 className="text-lg font-semibold">{t.billing.onboardingTitle}</h2>
+      <p className="text-muted-foreground mt-1 text-sm leading-6">
+        {t.billing.onboardingSub}
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="border-border rounded-md border p-4">
+          <p className="font-heading font-semibold">{t.billing.planFree}</p>
+          <ul className="text-ink-2 mt-2 space-y-1 text-[13px]">
+            <li>{t.billing.featConversations(free.conversationsPerMonth)}</li>
+            <li>{t.billing.featReminders(free.remindersPerMonth)}</li>
+            <li>{t.billing.featOneService}</li>
+          </ul>
+        </div>
+        <div className="rounded-md border border-[var(--brand-500)] bg-[var(--brand-50)] p-4">
+          <div className="flex items-center justify-between">
+            <p className="font-heading font-semibold">{t.billing.planSolo}</p>
+            <span className="rounded-full bg-[var(--brand-500)] px-2 py-0.5 text-[11px] font-semibold text-white">
+              {t.billing.landingSoloTag}
+            </span>
+          </div>
+          <ul className="text-ink-2 mt-2 space-y-1 text-[13px]">
+            <li>{t.billing.featConversations(solo.conversationsPerMonth)}</li>
+            <li>{t.billing.featReminders(solo.remindersPerMonth)}</li>
+            <li>{t.billing.featEverything}</li>
+          </ul>
+          {solo.price && (
+            <p className="text-ink-3 mt-2 text-[12.5px] tabular-nums">
+              {t.billing.priceMonthly(formatLek(solo.price.monthly))}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        <form action={continueSetup}>
+          <input type="hidden" name="href" value="/settings/billing" />
+          <Button type="submit" className="w-full">
+            {t.billing.onboardingChooseSolo}
+            <ChevronRight className="h-4 w-4" aria-hidden />
+          </Button>
+        </form>
+        <form action={skipPlanStep}>
+          <Button type="submit" variant="outline" className="w-full">
+            {t.billing.onboardingContinueFree}
+          </Button>
+        </form>
+      </div>
+    </section>
+  );
+}
 
 export const metadata = { title: t.onboarding.metaTitle };
 
@@ -97,6 +164,7 @@ export default async function OnboardingPage() {
           <p className="text-muted-foreground mt-2 text-sm leading-6">
             {t.onboarding.allSetSub}
           </p>
+          {!state.plan && <PlanStep />}
           <Button asChild className="mt-8 w-full">
             <Link href="/today">{t.onboarding.goToApp}</Link>
           </Button>
@@ -230,6 +298,8 @@ export default async function OnboardingPage() {
                 </Link>
               </p>
             </div>
+
+            {!state.plan && <PlanStep />}
           </main>
         </>
       )}

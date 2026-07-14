@@ -8,6 +8,7 @@
  */
 import { appointment } from './dict/appointment';
 import { auth } from './dict/auth';
+import { billing } from './dict/billing';
 import { calendar, reminder, status } from './dict/calendar';
 import { chat } from './dict/chat';
 import { clients } from './dict/clients';
@@ -20,6 +21,7 @@ import { today } from './dict/today';
 export const sq = {
   ...common,
   auth,
+  billing,
   onboarding,
   calendar,
   status,

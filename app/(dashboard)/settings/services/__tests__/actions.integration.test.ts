@@ -9,8 +9,9 @@ import {
   it,
   vi,
 } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { appointments, patients } from '@/lib/db/schema';
+import { appointments, patients, pts } from '@/lib/db/schema';
 import { getServices } from '@/lib/services/queries';
 import { createService, deleteService, updateService } from '../actions';
 
@@ -63,8 +64,12 @@ afterAll(async () => {
   if (ptId) await realService.auth.admin.deleteUser(ptId);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  // This suite covers create/update/delete behavior, not the Phase 16 C6
+  // active-service cap (which is Free-only and has its own plan-gate suite).
+  // Grant lifetime Solo so createService isn't capped by the seeded services.
+  await db.update(pts).set({ planLifetime: true }).where(eq(pts.id, ptId));
 });
 
 afterEach(() => {

@@ -44,6 +44,23 @@ const reminderFailed: PushEvent = {
   name: 'reminder.failed',
   data: { ptId: PT, appointmentId: APPT, reason: 'window_closed' },
 };
+const EXPIRES = '2026-08-01T00:00:00.000Z';
+const renewalDay5: PushEvent = {
+  name: 'billing.renewal_due',
+  data: { ptId: PT, expiresAt: EXPIRES, daysLeft: 5, offset: 5 },
+};
+const renewalDay0: PushEvent = {
+  name: 'billing.renewal_due',
+  data: { ptId: PT, expiresAt: EXPIRES, daysLeft: 0, offset: 0 },
+};
+const graceStarted: PushEvent = {
+  name: 'billing.grace_started',
+  data: { ptId: PT, expiresAt: EXPIRES },
+};
+const downgraded: PushEvent = {
+  name: 'billing.downgraded',
+  data: { ptId: PT, from: 'solo', to: 'free' },
+};
 
 describe('pushPrefKey', () => {
   it('maps every push event to its Settings toggle', () => {
@@ -54,6 +71,39 @@ describe('pushPrefKey', () => {
     expect(pushPrefKey(resumeOffered)).toBe('resumeOffer');
     expect(pushPrefKey(revoked)).toBe('connection');
     expect(pushPrefKey(reminderFailed)).toBe('reminderFailure');
+  });
+
+  it('routes every billing lifecycle push through the billing toggle', () => {
+    expect(pushPrefKey(renewalDay5)).toBe('billing');
+    expect(pushPrefKey(renewalDay0)).toBe('billing');
+    expect(pushPrefKey(graceStarted)).toBe('billing');
+    expect(pushPrefKey(downgraded)).toBe('billing');
+  });
+});
+
+describe('buildPushPayload — billing lifecycle', () => {
+  it('deep-links every billing push to /settings/billing', () => {
+    for (const event of [renewalDay5, renewalDay0, graceStarted, downgraded]) {
+      expect(buildPushPayload(event, { timezone: TZ })?.url).toBe(
+        '/settings/billing',
+      );
+    }
+  });
+
+  it('differentiates the day-0 reminder from the grace notice (same expiry)', () => {
+    const day0 = buildPushPayload(renewalDay0, { timezone: TZ });
+    const grace = buildPushPayload(graceStarted, { timezone: TZ });
+    expect(day0?.title).not.toBe(grace?.title);
+    // Tags carry the expiry so the two pushes don't collapse on-device.
+    expect(day0?.tag).not.toBe(grace?.tag);
+    expect(day0?.tag).toContain(EXPIRES);
+    expect(grace?.tag).toContain(EXPIRES);
+  });
+
+  it('tags the 5-day and day-0 reminders distinctly', () => {
+    expect(buildPushPayload(renewalDay5, { timezone: TZ })?.tag).not.toBe(
+      buildPushPayload(renewalDay0, { timezone: TZ })?.tag,
+    );
   });
 });
 

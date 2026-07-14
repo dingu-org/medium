@@ -7,6 +7,9 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
+import { getPlan } from '@/lib/billing/plans';
+import { loadEffectivePlan } from '@/lib/billing/read-model';
+import { t } from '@/lib/i18n';
 import { createServerClient } from '@/lib/supabase/server';
 import type { SettingsState } from '../constants';
 
@@ -67,6 +70,18 @@ async function updateAssistantIdentityImpl(
       success: false,
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
+  }
+
+  // Plan gate: custom name/greeting are Solo-only. The escalation keyword is
+  // EXEMPT — safety routing is never plan-gated. Reject a name/greeting write on
+  // Free with an upgrade prompt (the UI also locks those rows).
+  const writesIdentity =
+    formData.has('aiName') || formData.has('aiGreeting');
+  if (writesIdentity) {
+    const plan = await loadEffectivePlan(ptId);
+    if (!getPlan(plan).customAssistantIdentity) {
+      return { error: t.billing.gateIdentity, success: false, fieldErrors: null };
+    }
   }
 
   // Partial-update: per-row sheets submit ONE field; absent fields stay

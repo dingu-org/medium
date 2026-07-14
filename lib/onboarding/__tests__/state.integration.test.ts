@@ -37,3 +37,44 @@ describe('onboarding service confirmation', () => {
     });
   });
 });
+
+describe('onboarding plan step (soft, never gates the dashboard)', () => {
+  it('is false for a Free PT who has not seen the step', async () => {
+    await db
+      .update(pts)
+      .set({ plan: 'free', planStepSeenAt: null })
+      .where(eq(pts.id, ptId));
+    const state = await getOnboardingState(ptId);
+    expect(state.plan).toBe(false);
+    // The plan step must NEVER change the 5-step completion gate.
+    expect(state.total).toBe(5);
+    expect(state.complete).toBe(state.completedCount === 5);
+  });
+
+  it('is true for a Free PT who saw and skipped the step', async () => {
+    await db
+      .update(pts)
+      .set({ plan: 'free', planStepSeenAt: new Date() })
+      .where(eq(pts.id, ptId));
+    await expect(getOnboardingState(ptId)).resolves.toMatchObject({
+      plan: true,
+    });
+  });
+
+  it('is true for a paid (Solo) PT regardless of the seen flag', async () => {
+    await db
+      .update(pts)
+      .set({ plan: 'solo', planStepSeenAt: null })
+      .where(eq(pts.id, ptId));
+    await expect(getOnboardingState(ptId)).resolves.toMatchObject({
+      plan: true,
+    });
+  });
+
+  it('never counts the plan step toward completedCount', async () => {
+    // Even on Solo with the step satisfied, completedCount stays ≤ 5 steps.
+    const state = await getOnboardingState(ptId);
+    expect(state.completedCount).toBeLessThanOrEqual(5);
+    expect(state.total).toBe(5);
+  });
+});

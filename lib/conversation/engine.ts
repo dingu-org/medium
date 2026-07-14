@@ -15,6 +15,7 @@ import {
   type ToolName,
 } from '@/lib/ai/tools';
 import { selectModelForPlan } from '@/lib/ai/models';
+import { effectiveAssistantIdentity } from '@/lib/billing/entitlements';
 import type { PlanId } from '@/lib/billing/plans';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 import { conversations, messages, patients, pts } from '@/lib/db/schema';
@@ -501,11 +502,23 @@ async function runTurnCoreUnlocked(args: {
   const configuredServices = await getServices(context.inbound.ptId, {
     activeOnly: true,
   });
+  // Plan-gate the assistant identity: Free (and lapsed-past-grace Solo) fall
+  // back to the default persona, Solo/lifetime keep the custom name/greeting.
+  // Resolved from the raw stored plan on context; the escalation keyword is
+  // never gated (safety). Covers patient + reminder-fallback turns.
   const baseSystem = buildSystemPrompt({
     practiceName: context.practiceName,
     timezone: context.timezone,
-    aiName: context.aiName,
-    aiGreeting: context.aiGreeting,
+    ...effectiveAssistantIdentity(
+      {
+        plan: context.plan,
+        planLifetime: context.planLifetime,
+        planExpiresAt: context.planExpiresAt,
+        aiName: context.aiName,
+        aiGreeting: context.aiGreeting,
+      },
+      args.now ?? new Date(),
+    ),
     escalationKeyword: context.escalationKeyword,
     title: context.title,
     address: context.address,

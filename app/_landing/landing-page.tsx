@@ -10,6 +10,8 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
+import { PLANS } from '@/lib/billing/plans';
+import { formatLek, t } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import { LogoMark } from '@/components/ui/logo-mark';
 import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
@@ -72,6 +74,7 @@ export function LandingPage() {
         <Hero />
         <HowItWorks />
         <Features />
+        <Pricing />
         <WhoItsFor />
         <CtaBand />
       </main>
@@ -303,6 +306,118 @@ function Features() {
         </div>
       </div>
     </section>
+  );
+}
+
+function Pricing() {
+  const free = PLANS.free;
+  const solo = PLANS.solo;
+  return (
+    <section id="pricing" className="py-16 sm:py-24">
+      <div className="mx-auto max-w-5xl px-6">
+        <div className="max-w-xl">
+          <span className="text-[12px] font-bold tracking-[0.08em] text-[var(--brand-500)] uppercase">
+            {t.billing.landingEyebrow}
+          </span>
+          <h2 className="font-heading mt-3 text-3xl font-semibold tracking-tight">
+            {t.billing.landingTitle}
+          </h2>
+          <p className="text-ink-2 mt-3 text-base">{t.billing.landingSub}</p>
+        </div>
+
+        <div className="mt-10 grid items-start gap-5 sm:grid-cols-3">
+          {/* Falas */}
+          <div className="border-line bg-card rounded-2xl border p-6 shadow-[var(--shadow-card)]">
+            <h3 className="font-heading text-lg font-semibold">
+              {t.billing.planFree}
+            </h3>
+            <p className="text-ink-3 mt-1 text-sm">{t.billing.landingStartFree}</p>
+            <ul className="text-ink-2 mt-5 space-y-2 text-sm">
+              <PriceFeature>
+                {t.billing.featConversations(free.conversationsPerMonth)}
+              </PriceFeature>
+              <PriceFeature>
+                {t.billing.featReminders(free.remindersPerMonth)}
+              </PriceFeature>
+              <PriceFeature>{t.billing.featOneService}</PriceFeature>
+            </ul>
+            <Button asChild variant="outline" className="mt-6 w-full">
+              <Link href="/sign-up">{t.billing.landingStartFree}</Link>
+            </Button>
+          </div>
+
+          {/* Solo — favored */}
+          <div className="rounded-2xl border-2 border-[var(--brand-500)] bg-[var(--brand-50)] p-6 shadow-[var(--shadow-card)]">
+            <div className="flex items-center justify-between">
+              <h3 className="font-heading text-lg font-semibold">
+                {t.billing.planSolo}
+              </h3>
+              <span className="rounded-full bg-[var(--brand-500)] px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                {t.billing.landingSoloTag}
+              </span>
+            </div>
+            {solo.price && (
+              <div className="mt-2">
+                <p className="font-heading text-2xl font-semibold tabular-nums">
+                  {t.billing.priceMonthly(formatLek(solo.price.monthly))}
+                </p>
+                <p className="text-ink-3 mt-0.5 text-[13px] tabular-nums">
+                  {t.billing.priceYearly(formatLek(solo.price.yearly))} ·{' '}
+                  <span className="font-medium text-[var(--brand-600)]">
+                    {t.billing.twoMonthsFree}
+                  </span>
+                </p>
+              </div>
+            )}
+            <ul className="text-ink-2 mt-5 space-y-2 text-sm">
+              <PriceFeature>
+                {t.billing.featConversations(solo.conversationsPerMonth)}
+              </PriceFeature>
+              <PriceFeature>
+                {t.billing.featReminders(solo.remindersPerMonth)}
+              </PriceFeature>
+              <PriceFeature>{t.billing.featUnlimitedServices}</PriceFeature>
+              <PriceFeature>{t.billing.featCustomAssistant}</PriceFeature>
+              <PriceFeature>{t.billing.featLongRetention}</PriceFeature>
+            </ul>
+            <Button asChild className="mt-6 w-full">
+              <Link href="/sign-up">{t.billing.landingStartFree}</Link>
+            </Button>
+          </div>
+
+          {/* Dual / Multi — coming soon (muted) */}
+          <div className="border-line rounded-2xl border border-dashed p-6 opacity-70">
+            <div className="flex items-center justify-between">
+              <h3 className="font-heading text-ink-2 text-lg font-semibold">
+                Dual / Multi
+              </h3>
+              <span className="border-line text-ink-3 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold">
+                {t.billing.comingSoon}
+              </span>
+            </div>
+            <p className="text-ink-3 mt-3 text-sm leading-6">
+              Për praktika me disa terapistë. Së shpejti.
+            </p>
+          </div>
+        </div>
+
+        <p className="text-ink-3 mt-6 text-center text-[13px]">
+          {t.billing.vatNote}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function PriceFeature({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2">
+      <Check
+        className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand-500)]"
+        aria-hidden
+      />
+      <span>{children}</span>
+    </li>
   );
 }
 

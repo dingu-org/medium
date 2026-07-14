@@ -23,6 +23,8 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { getConversationUsage } from '@/lib/billing/usage';
+import { resolveEffectivePlan } from '@/lib/billing/entitlements';
+import { getPlan, type PlanId } from '@/lib/billing/plans';
 import { privacyName } from '@/lib/format/name';
 import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
 import { formatMonthYear, formatWeekdayShort } from '@/lib/i18n';
@@ -111,6 +113,13 @@ export type SettingsSnapshot = {
   assistantPaused: boolean;
   retentionDays: number;
   notificationPrefs: NotificationPrefs;
+  // Grace-aware effective plan + derived entitlement flags (Phase 16 C6). Drive
+  // the billing hub row + the upgrade-gate locks on assistant/account screens.
+  plan: PlanId;
+  planLifetime: boolean;
+  maxActiveServices: number | null;
+  customAssistantIdentity: boolean;
+  retentionMaxDays: number;
   whatsappStatus: string | null;
   whatsappPhoneNumberId: string | null;
   whatsappDisplayPhoneNumber: string | null;
@@ -432,6 +441,9 @@ export async function getSettingsSnapshot(
         assistantPaused: pts.assistantPaused,
         retentionDays: pts.retentionDays,
         notificationPrefs: pts.notificationPrefs,
+        plan: pts.plan,
+        planLifetime: pts.planLifetime,
+        planExpiresAt: pts.planExpiresAt,
       })
       .from(pts)
       .where(eq(pts.id, ptId))
@@ -472,6 +484,18 @@ export async function getSettingsSnapshot(
           ? 'rejected'
           : null;
 
+  const effectivePlan: PlanId = pt
+    ? resolveEffectivePlan(
+        {
+          plan: pt.plan,
+          planLifetime: pt.planLifetime,
+          planExpiresAt: pt.planExpiresAt,
+        },
+        new Date(),
+      )
+    : 'free';
+  const planConfig = getPlan(effectivePlan);
+
   return {
     practiceName: pt?.practiceName ?? '',
     fullName: pt?.fullName ?? '',
@@ -484,6 +508,11 @@ export async function getSettingsSnapshot(
     assistantPaused: pt?.assistantPaused ?? false,
     retentionDays: pt?.retentionDays ?? 90,
     notificationPrefs: resolveNotificationPrefs(pt?.notificationPrefs),
+    plan: effectivePlan,
+    planLifetime: pt?.planLifetime ?? false,
+    maxActiveServices: planConfig.maxActiveServices,
+    customAssistantIdentity: planConfig.customAssistantIdentity,
+    retentionMaxDays: planConfig.retentionMaxDays,
     whatsappStatus: connection?.status ?? null,
     whatsappPhoneNumberId: connection?.phoneNumberId ?? null,
     whatsappDisplayPhoneNumber: connection?.displayPhoneNumber ?? null,

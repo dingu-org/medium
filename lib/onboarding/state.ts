@@ -17,6 +17,13 @@ export type OnboardingState = {
   completedCount: number;
   total: number;
   complete: boolean;
+  /**
+   * The plan step (Phase 16 C6). DELIBERATELY separate from the 5-step gate:
+   * a Free PT must reach the dashboard without paying, so `plan` is NEVER part
+   * of completedCount/total/complete. True once the PT has picked a paid plan
+   * OR explicitly seen+skipped the step (plan_step_seen_at set).
+   */
+  plan: boolean;
 };
 
 /**
@@ -37,6 +44,8 @@ export async function getOnboardingState(
       .select({
         practiceName: pts.practiceName,
         servicesConfiguredAt: pts.servicesConfiguredAt,
+        plan: pts.plan,
+        planStepSeenAt: pts.planStepSeenAt,
       })
       .from(pts)
       .where(eq(pts.id, ptId))
@@ -78,6 +87,12 @@ export async function getOnboardingState(
   const steps = [profile, whatsapp, availability, hasServices, testMessage];
   const completedCount = steps.filter(Boolean).length;
 
+  // The plan step is soft: satisfied once the PT is on a paid plan or has seen
+  // and skipped the step. It is intentionally excluded from `steps` above.
+  const plan =
+    (profileRows[0]?.plan ?? 'free') !== 'free' ||
+    profileRows[0]?.planStepSeenAt != null;
+
   return {
     profile,
     whatsapp,
@@ -87,5 +102,6 @@ export async function getOnboardingState(
     completedCount,
     total: steps.length,
     complete: completedCount === steps.length,
+    plan,
   };
 }

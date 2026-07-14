@@ -33,6 +33,7 @@ export default async function AssistantSettingsPage() {
           aiName={snapshot.aiName}
           aiGreeting={snapshot.aiGreeting}
           aiEscalationKeyword={snapshot.aiEscalationKeyword}
+          customAssistantIdentity={snapshot.customAssistantIdentity}
         />
       </div>
     </div>

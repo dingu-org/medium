@@ -1,0 +1,125 @@
+import { TZDate } from '@date-fns/tz';
+import { redirect } from 'next/navigation';
+import { NavBar } from '@/components/dashboard/nav-bar';
+import { getBillingSnapshot } from '@/lib/billing/read-model';
+import { formatDate, formatLek, t } from '@/lib/i18n';
+import { createServerClient } from '@/lib/supabase/server';
+import { cn } from '@/lib/utils';
+import { CheckoutForm } from './checkout-form';
+import { PlanCard } from './plan-card';
+import { UsageMeter } from './usage-meter';
+
+export const metadata = { title: `${t.billing.navTitle} · Medium` };
+
+const PERIOD_LABEL = {
+  monthly: t.billing.periodMonthly,
+  yearly: t.billing.periodYearly,
+} as const;
+
+export default async function BillingSettingsPage() {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/sign-in');
+
+  const snapshot = await getBillingSnapshot(user.id);
+  const showCheckout = !snapshot.planLifetime && snapshot.price !== null;
+
+  return (
+    <div className="-mx-4 -mt-4">
+      <NavBar title={t.billing.navTitle} backHref="/settings" />
+      <div className="space-y-6 px-5 pt-2 pb-8">
+        <PlanCard snapshot={snapshot} />
+
+        {/* Usage meters — capacity, never punitive. */}
+        <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-card)]">
+          <h2 className="text-[11.5px] font-bold tracking-[0.07em] uppercase text-ink-3">
+            {t.billing.usageTitle}
+          </h2>
+          <div className="mt-4 space-y-4">
+            <UsageMeter
+              label={t.billing.meterConversations}
+              meter={snapshot.conversations}
+            />
+            <UsageMeter
+              label={t.billing.meterReminders}
+              meter={snapshot.reminders}
+            />
+          </div>
+        </section>
+
+        {/* Upgrade / renew — hidden for lifetime pilots. */}
+        {showCheckout && snapshot.price && (
+          <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-card)]">
+            <h2 className="font-heading text-lg font-semibold text-foreground">
+              {t.billing.upgradeTitle}
+            </h2>
+            <p className="text-ink-2 mt-1 text-[13.5px]">
+              {t.billing.upgradeSub}
+            </p>
+            <div className="mt-4">
+              <CheckoutForm price={snapshot.price} />
+            </div>
+          </section>
+        )}
+
+        {/* Receipts. */}
+        <section>
+          <h2 className="text-[11.5px] font-bold tracking-[0.07em] uppercase text-ink-3">
+            {t.billing.receiptsTitle}
+          </h2>
+          {snapshot.receipts.length === 0 ? (
+            <p className="text-ink-3 mt-3 text-[13.5px]">
+              {t.billing.receiptsEmpty}
+            </p>
+          ) : (
+            <ul className="mt-3 overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)]">
+              {snapshot.receipts.map((receipt) => {
+                const date = formatDate(
+                  new TZDate(new Date(receipt.createdAt), snapshot.timezone),
+                );
+                return (
+                  <li
+                    key={receipt.id}
+                    className="flex items-center justify-between border-b border-border px-4 py-3 last:border-b-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-medium text-foreground tabular-nums">
+                        {formatLek(receipt.amountAll)} ALL
+                      </p>
+                      <p className="text-ink-3 mt-0.5 text-[12.5px]">
+                        {date} · {PERIOD_LABEL[receipt.period]}
+                      </p>
+                    </div>
+                    <ReceiptStatus status={receipt.status} />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function ReceiptStatus({
+  status,
+}: {
+  status: 'paid' | 'failed' | 'expired';
+}) {
+  const paid = status === 'paid';
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-semibold',
+        paid
+          ? 'bg-[var(--success-50)] text-[var(--success-700)]'
+          : 'bg-muted text-ink-3',
+      )}
+    >
+      {paid ? t.billing.receiptPaid : t.billing.receiptFailed}
+    </span>
+  );
+}

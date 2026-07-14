@@ -1,6 +1,7 @@
 'use client';
 
-import { ArrowRight, Check, Clock } from 'lucide-react';
+import { ArrowRight, Check, Clock, Lock } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import {
@@ -33,7 +34,14 @@ function downloadJson(data: unknown, filename: string) {
 }
 
 /** "Të dhënat" group: retention bottom-sheet picker + GDPR JSON export. */
-export function DataGroup({ retentionDays }: { retentionDays: number }) {
+export function DataGroup({
+  retentionDays,
+  retentionMaxDays,
+}: {
+  retentionDays: number;
+  /** Plan cap: options above this are visible but plan-locked (Phase 16 C6). */
+  retentionMaxDays: number;
+}) {
   const online = useOnlineStatus();
   const [days, setDays] = useState(retentionDays);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -119,25 +127,44 @@ export function DataGroup({ retentionDays }: { retentionDays: number }) {
             <SheetTitle>{t.settings.retentionRow}</SheetTitle>
           </SheetHeader>
           <div className="flex flex-col pb-2">
-            {RETENTION_OPTIONS.map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                disabled={pending}
-                onClick={() => onPick(opt)}
-                className="flex items-center justify-between px-4 py-3 text-left text-[15px] disabled:opacity-55"
+            {RETENTION_OPTIONS.map((opt) => {
+              const locked = opt > retentionMaxDays;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  disabled={pending || locked}
+                  onClick={() => !locked && onPick(opt)}
+                  className="flex items-center justify-between px-4 py-3 text-left text-[15px] disabled:opacity-55"
+                >
+                  <span className="tabular-nums">
+                    {t.settings.retentionDays(opt)}
+                  </span>
+                  {locked ? (
+                    <span className="flex items-center gap-1 text-[12px] text-ink-3">
+                      <Lock className="h-3.5 w-3.5" aria-hidden />
+                      {t.billing.gateLockedHint}
+                    </span>
+                  ) : (
+                    opt === days && (
+                      <Check
+                        className="h-[18px] w-[18px] text-primary"
+                        aria-hidden
+                      />
+                    )
+                  )}
+                </button>
+              );
+            })}
+            {RETENTION_OPTIONS.some((opt) => opt > retentionMaxDays) && (
+              <Link
+                href="/settings/billing"
+                className="mx-4 mt-2 rounded-lg bg-[var(--brand-50)] px-3 py-2.5 text-center text-[13px] font-medium text-[var(--brand-600)]"
+                onClick={() => setSheetOpen(false)}
               >
-                <span className="tabular-nums">
-                  {t.settings.retentionDays(opt)}
-                </span>
-                {opt === days && (
-                  <Check
-                    className="h-[18px] w-[18px] text-primary"
-                    aria-hidden
-                  />
-                )}
-              </button>
-            ))}
+                {t.billing.gateRetention}
+              </Link>
+            )}
           </div>
         </SheetContent>
       </Sheet>

@@ -73,8 +73,13 @@ afterAll(async () => {
   if (ptId) await realService.auth.admin.deleteUser(ptId);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  // These cases exercise the non-gated behavior of the retention / identity
+  // actions; the Phase 16 C6 plan gates (retention > 30d, custom identity) are
+  // Solo-only and covered by their own suites. Grant lifetime Solo so the core
+  // behavior under test isn't blocked by the entitlement check.
+  await db.update(pts).set({ planLifetime: true }).where(eq(pts.id, ptId));
 });
 
 afterEach(() => {

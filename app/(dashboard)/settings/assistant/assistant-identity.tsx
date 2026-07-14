@@ -1,5 +1,7 @@
 'use client';
 
+import { Lock } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { SetField } from '@/components/settings/set-field';
@@ -58,19 +60,35 @@ const FIELD_CONFIG = {
   },
 } as const;
 
+function LockHint() {
+  return (
+    <span className="flex shrink-0 items-center gap-1 text-[12px] text-ink-3">
+      <Lock className="h-3.5 w-3.5" aria-hidden />
+      {t.billing.gateLockedHint}
+    </span>
+  );
+}
+
 export function AssistantIdentity({
   aiName,
   aiGreeting,
   aiEscalationKeyword,
+  customAssistantIdentity,
 }: {
   aiName: string;
   aiGreeting: string;
   aiEscalationKeyword: string;
+  customAssistantIdentity: boolean;
 }) {
   const online = useOnlineStatus();
   const [editing, setEditing] = useState<Field | null>(null);
 
+  // On Free the name/greeting are plan-locked (shown, not editable). The
+  // escalation keyword is NEVER gated — safety routing works on every plan.
+  const locked = !customAssistantIdentity;
   const open = (field: Field) => () => setEditing(field);
+  const editable = (field: Field) =>
+    online && (field === 'keyword' || !locked);
 
   return (
     <>
@@ -82,23 +100,36 @@ export function AssistantIdentity({
         <GroupedListRow
           title={t.settings.aiName}
           titleWeight="medium"
-          value={aiName || t.settings.assistantValueUnset}
-          onClick={online ? open('name') : undefined}
+          value={locked ? undefined : aiName || t.settings.assistantValueUnset}
+          accessory={locked ? <LockHint /> : undefined}
+          onClick={editable('name') ? open('name') : undefined}
         />
         <GroupedListRow
           title={t.settings.assistantGreetingRow}
           titleWeight="medium"
           description={aiGreeting || t.settings.assistantValueUnset}
-          onClick={online ? open('greeting') : undefined}
+          accessory={locked ? <LockHint /> : undefined}
+          onClick={editable('greeting') ? open('greeting') : undefined}
         />
         <GroupedListRow
           title={t.settings.assistantKeywordRow}
           titleWeight="medium"
           value={aiEscalationKeyword || t.ops.help}
           valueMono
-          onClick={online ? open('keyword') : undefined}
+          onClick={editable('keyword') ? open('keyword') : undefined}
         />
       </GroupedList>
+
+      {locked && (
+        <div className="border-border bg-card mt-3 rounded-lg border p-4">
+          <p className="text-ink-2 text-[13px] leading-5">
+            {t.billing.gateIdentity}
+          </p>
+          <Button asChild size="sm" className="mt-3">
+            <Link href="/settings/billing">{t.billing.gateCta}</Link>
+          </Button>
+        </div>
+      )}
 
       <AssistantIdentitySheet
         field={editing}

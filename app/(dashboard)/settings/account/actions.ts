@@ -7,6 +7,9 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
+import { getPlan } from '@/lib/billing/plans';
+import { loadEffectivePlan } from '@/lib/billing/read-model';
+import { t } from '@/lib/i18n';
 import { createServerClient } from '@/lib/supabase/server';
 import { RETENTION_OPTIONS } from '../constants';
 
@@ -32,6 +35,10 @@ const retentionSchema = z.coerce
 async function updateRetentionImpl(days: number): Promise<void> {
   const value = retentionSchema.parse(days);
   const ptId = await requirePtId();
+  // Plan gate: a longer retention window is Solo-only. Reject a request above
+  // the effective plan's max (the UI locks those options too).
+  const max = getPlan(await loadEffectivePlan(ptId)).retentionMaxDays;
+  if (value > max) throw new Error(t.billing.gateRetention);
   await db.update(pts).set({ retentionDays: value }).where(eq(pts.id, ptId));
   revalidatePath('/settings/account');
 }

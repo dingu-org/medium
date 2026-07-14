@@ -64,6 +64,22 @@ export async function continueSetup(formData: FormData): Promise<void> {
   redirect(`${path}${separator}from=onboarding`);
 }
 
+/**
+ * Skip the soft onboarding plan step (Phase 16 C6). Records that the PT saw and
+ * declined it (`plan_step_seen_at`) so the compressed plan card stops showing —
+ * it never gates the dashboard. "Zgjidh Solo" instead routes to /settings/billing
+ * via `continueSetup`; this is only the "Vazhdo me Falas" path.
+ */
+export async function skipPlanStep(): Promise<void> {
+  const userId = await requireUserId();
+  await db
+    .update(pts)
+    .set({ planStepSeenAt: new Date() })
+    .where(eq(pts.id, userId));
+  revalidatePath('/onboarding');
+  redirect('/onboarding');
+}
+
 export async function confirmServices(): Promise<void> {
   const userId = await requireUserId();
 

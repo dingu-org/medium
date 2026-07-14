@@ -16,6 +16,10 @@ export const NOTIFICATION_TYPES = [
   'wa.connection.revoked',
   'billing.limit_warning',
   'billing.limit_reached',
+  'billing.renewal_due',
+  'billing.grace_started',
+  'billing.downgraded',
+  'billing.payment_received',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -136,6 +140,37 @@ export function formatNotification(
         ...base,
         title: 'Arrite kufirin mujor',
         icon: 'alert',
+        href: '/settings/billing',
+      };
+    case 'billing.renewal_due': {
+      const daysLeft = Number(event.payload.daysLeft);
+      return {
+        ...base,
+        title:
+          daysLeft <= 0 ? 'Plani skadon sot' : 'Rinovo planin Solo',
+        icon: 'alert',
+        href: '/settings/billing',
+      };
+    }
+    case 'billing.grace_started':
+      return {
+        ...base,
+        title: 'Plani skadoi — rinovoje së shpejti',
+        icon: 'alert',
+        href: '/settings/billing',
+      };
+    case 'billing.downgraded':
+      return {
+        ...base,
+        title: 'Kalove te plani Falas',
+        icon: 'alert',
+        href: '/settings/billing',
+      };
+    case 'billing.payment_received':
+      return {
+        ...base,
+        title: 'Pagesa u krye — plani u rinovua',
+        icon: 'check',
         href: '/settings/billing',
       };
     default:

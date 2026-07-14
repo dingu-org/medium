@@ -19,6 +19,9 @@ export const dispatchPushNotification = inngest.createFunction(
     { event: 'reminder.failed' },
     { event: 'billing.limit_warning' },
     { event: 'billing.limit_reached' },
+    { event: 'billing.renewal_due' },
+    { event: 'billing.grace_started' },
+    { event: 'billing.downgraded' },
   ],
   async ({ event, step }) => {
     if (!event.id) throw new Error('Push event ID is required');

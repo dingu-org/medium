@@ -36,7 +36,10 @@ export default async function AccountSettingsPage() {
           />
         </GroupedList>
 
-        <DataGroup retentionDays={snapshot.retentionDays} />
+        <DataGroup
+          retentionDays={snapshot.retentionDays}
+          retentionMaxDays={snapshot.retentionMaxDays}
+        />
 
         <AccountDanger practiceName={snapshot.practiceName} />
       </div>

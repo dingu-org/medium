@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { auditLog, pts } from '@/lib/db/schema';
 import { sql } from 'drizzle-orm';
+import { effectiveRetentionDays } from '@/lib/billing/entitlements';
 import { inngest } from '../client';
 
 export type PurgeResult = {
@@ -75,12 +76,37 @@ export async function purgePtExpiredMessages(args: {
   });
 }
 
+/**
+ * Load every tenant with the retention window that applies at `now` (Phase 16
+ * C6). `effectiveRetentionDays` honors the PT's stored setting for 30 days after
+ * a plan downgrade, then clamps to the effective plan's max (30d on Free) —
+ * applyOrderOutcome nulls plan_downgraded_at on re-upgrade so the clamp lifts.
+ * Both purge entry points (this core AND the Inngest step) use this to stay
+ * identical.
+ */
+export async function loadRetentionTenants(
+  now: Date,
+): Promise<{ ptId: string; retentionDays: number }[]> {
+  const rows = await db
+    .select({
+      id: pts.id,
+      plan: pts.plan,
+      planLifetime: pts.planLifetime,
+      planExpiresAt: pts.planExpiresAt,
+      planDowngradedAt: pts.planDowngradedAt,
+      retentionDays: pts.retentionDays,
+    })
+    .from(pts);
+  return rows.map((pt) => ({
+    ptId: pt.id,
+    retentionDays: effectiveRetentionDays(pt, now),
+  }));
+}
+
 export async function purgeExpiredMessagesCore(
   now = new Date(),
 ): Promise<PurgeResult[]> {
-  const tenants = await db
-    .select({ ptId: pts.id, retentionDays: pts.retentionDays })
-    .from(pts);
+  const tenants = await loadRetentionTenants(now);
   const results: PurgeResult[] = [];
   for (const tenant of tenants) {
     results.push(await purgePtExpiredMessages({ ...tenant, now }));
@@ -97,7 +123,7 @@ export const purgeExpiredMessages = inngest.createFunction(
   { cron: '0 3 * * *' },
   async ({ step }) => {
     const tenants = await step.run('load-retention-tenants', () =>
-      db.select({ ptId: pts.id, retentionDays: pts.retentionDays }).from(pts),
+      loadRetentionTenants(new Date()),
     );
     const results: PurgeResult[] = [];
     for (const tenant of tenants) {

@@ -1,6 +1,7 @@
 import {
   Bell,
   Clock,
+  CreditCard,
   MessageSquare,
   Phone,
   Settings,
@@ -76,6 +77,11 @@ export default async function SettingsPage() {
   const waValue =
     WA_VALUES[snapshot.whatsappStatus ?? ''] ??
     t.settings.connectionBadgeNotConnected;
+  const planLabel = snapshot.planLifetime
+    ? t.billing.planLifetime
+    : snapshot.plan === 'solo'
+      ? t.billing.planSolo
+      : t.billing.planFree;
 
   return (
     <div className="space-y-6">
@@ -136,6 +142,12 @@ export default async function SettingsPage() {
       </GroupedList>
 
       <GroupedList title={t.settings.groupLlogaria}>
+        <GroupedListRow
+          href="/settings/billing"
+          icon={CreditCard}
+          title={t.billing.hubRow}
+          value={planLabel}
+        />
         <GroupedListRow
           href="/settings/account"
           icon={Settings}

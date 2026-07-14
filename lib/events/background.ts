@@ -164,6 +164,28 @@ export const backgroundEventSchemas = {
     newExpiresAt: isoDateTime,
     traceId,
   }),
+  // Phase 16 C6 lifecycle events, emitted by the billing-renewal-monitor cron.
+  // All three deep-link to /settings/billing and fan out to push + bell. The
+  // renewal reminder fires once per (pt, expiresAt, offset) so BOTH the 5-day
+  // and day-0 reminders send; grace/downgrade dedupe on (pt, expiresAt).
+  'billing.renewal_due': z.object({
+    ptId: z.uuid(),
+    expiresAt: isoDateTime,
+    daysLeft: z.number().int(),
+    offset: z.number().int().nonnegative(),
+    traceId,
+  }),
+  'billing.grace_started': z.object({
+    ptId: z.uuid(),
+    expiresAt: isoDateTime,
+    traceId,
+  }),
+  'billing.downgraded': z.object({
+    ptId: z.uuid(),
+    from: z.enum(['free', 'solo']),
+    to: z.enum(['free', 'solo']),
+    traceId,
+  }),
   // Phase 11 internal-metrics events. Counts/ids only. These have NO Inngest
   // consumer (no registered trigger), so their outbox rows simply drain and
   // no-op — only the `events` row is used, for funnel/delivery metrics.
