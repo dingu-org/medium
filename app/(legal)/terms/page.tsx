@@ -6,7 +6,7 @@ export const metadata = {
     'Terms for using Medium, the WhatsApp scheduling assistant for practices.',
 };
 
-const updatedAt = 'June 21, 2026';
+const updatedAt = 'July 14, 2026';
 
 export default function TermsPage() {
   return (
@@ -124,12 +124,65 @@ export default function TermsPage() {
         </ul>
       </TermsSection>
 
-      <TermsSection title="Fees">
+      <TermsSection title="Plans and fees">
         <p>
-          Any paid plan, pilot fee, usage fee, or pass-through messaging cost
-          will be described in a separate order, invoice, or written agreement.
-          You are responsible for taxes and third-party charges that apply to
-          your use unless a written agreement says otherwise.
+          Medium offers a free plan and a paid Solo plan. The Solo plan costs
+          2,500 ALL per month or 25,000 ALL per year (two months free),
+          VAT-inclusive. The current prices, billing periods, and plan limits
+          are shown in the app and may change with notice. You are responsible
+          for any additional taxes or third-party charges that apply to your use
+          unless a written agreement says otherwise.
+        </p>
+      </TermsSection>
+
+      <TermsSection title="Prepaid periods and renewals">
+        <p>
+          Paid plans are prepaid for a fixed period of one month or twelve
+          months. This version has no automatic recurring subscription and does
+          not charge a saved payment method on its own — to continue after a
+          period ends, you pay again for a new period. A purchased plan runs
+          until the end of the period you paid for.
+        </p>
+      </TermsSection>
+
+      <TermsSection title="Cancellation and refunds">
+        <p>
+          You may stop using a paid plan at any time. Stopping does not refund
+          the current period; the plan remains active until the end of the
+          period you already paid for. This version does not offer refunds.
+        </p>
+      </TermsSection>
+
+      <TermsSection title="Expiry, grace, and downgrade">
+        <p>
+          When a paid period ends without renewal, a 3-day grace period keeps
+          Solo benefits active. After the grace period, the account is
+          automatically downgraded to the free plan.
+        </p>
+        <p>
+          A downgrade deletes no data. If the account has more active services
+          than the free plan allows, services beyond that limit are deactivated;
+          the oldest active service remains and can be swapped for another.
+          Message retention is clamped to the free plan maximum after a further
+          30-day grace period following the downgrade.
+        </p>
+      </TermsSection>
+
+      <TermsSection title="Plan limits">
+        <p>
+          Each plan includes a monthly limit on the number of conversations and
+          the number of reminders. When usage reaches 100% of a limit, the
+          assistant stops sending automated replies, sends a single handoff
+          message telling the patient that someone will follow up, and flags the
+          conversation for review. The practice&apos;s own inbox and manual
+          replies are never blocked by these limits.
+        </p>
+      </TermsSection>
+
+      <TermsSection title="Payments">
+        <p>
+          Card payments are processed by POK (pokpay.io). Card details are
+          entered with POK and never pass through or are stored by Medium.
         </p>
       </TermsSection>
 

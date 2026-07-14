@@ -3,7 +3,7 @@ import Link from 'next/link';
 export const metadata = {
   title: 'Ndihmë · Medium',
   description:
-    'Udhëzime të shkurtra për të lidhur WhatsApp-in, caktuar oraret dhe kuptuar si rezervon takime asistenti i Medium.',
+    'Udhëzime të shkurtra për të lidhur WhatsApp-in, caktuar oraret, kuptuar si rezervon takime asistenti i Medium dhe njohur planet e pagesat.',
 };
 
 const guides = [
@@ -24,6 +24,12 @@ const guides = [
     description:
       'Si komunikon asistenti me pacientët dhe kur ia kalon bisedën një njeriu.',
   },
+  {
+    href: '/help/plans',
+    title: 'Planet dhe pagesat',
+    description:
+      'Çfarë përfshijnë Falas dhe Solo, si maten kufijtë dhe si kalon te Solo.',
+  },
 ] as const;
 
 export default function HelpIndexPage() {
@@ -34,7 +40,7 @@ export default function HelpIndexPage() {
           Ndihmë
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Tre udhëzues të shkurtër për t&apos;u nisur me Medium.
+          Katër udhëzues të shkurtër për t&apos;u nisur me Medium.
         </p>
       </header>
 

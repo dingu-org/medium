@@ -6,7 +6,7 @@ export const metadata = {
     'How Medium handles account, patient, WhatsApp, and scheduling data.',
 };
 
-const updatedAt = 'June 21, 2026';
+const updatedAt = 'July 14, 2026';
 
 export default function PrivacyPolicyPage() {
   return (
@@ -59,6 +59,13 @@ export default function PrivacyPolicyPage() {
             access.
           </li>
           <li>
+            Billing and subscription data, such as the selected plan, billing
+            period, expiry and renewal dates, payment status, POK order
+            identifiers, amounts, and receipts. Medium does not store card
+            numbers, CVV codes, or other cardholder data — those are handled
+            directly by POK.
+          </li>
+          <li>
             Operational data, such as audit logs, security logs, idempotency
             records, delivery status, and aggregate product metrics.
           </li>
@@ -103,6 +110,16 @@ export default function PrivacyPolicyPage() {
         </p>
       </PolicySection>
 
+      <PolicySection title="Payments">
+        <p>
+          POK (pokpay.io) processes card payments for paid plans. Card details
+          are entered with POK and are never received or stored by Medium.
+          Medium stores only the order reference, amount, currency, status, and
+          period returned by POK — the information needed to activate or renew
+          the plan and to show receipts.
+        </p>
+      </PolicySection>
+
       <PolicySection title="Subprocessors">
         <p>
           Medium relies on a small set of service providers to operate the
@@ -119,6 +136,10 @@ export default function PrivacyPolicyPage() {
             integration.
           </li>
           <li>OpenRouter and OpenAI for production AI inference.</li>
+          <li>
+            POK (pokpay.io), operated by Nebula, as the payment processor for
+            card payments.
+          </li>
         </ul>
         <p>We do not sell personal data.</p>
       </PolicySection>
