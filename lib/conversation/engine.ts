@@ -6,7 +6,7 @@ import {
   type ModelMessage,
 } from 'ai';
 import { buildSystemPrompt } from '@/lib/ai/prompt';
-import { getOpenRouterModel } from '@/lib/ai/client';
+import { buildModelSettings, getOpenRouterModel } from '@/lib/ai/client';
 import { dispatchTool } from '@/lib/ai/dispatcher';
 import {
   createConversationTools,
@@ -14,7 +14,8 @@ import {
   type ToolResult,
   type ToolName,
 } from '@/lib/ai/tools';
-import { selectModel } from '@/lib/ai/models';
+import { selectModelForPlan } from '@/lib/ai/models';
+import type { PlanId } from '@/lib/billing/plans';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 import { conversations, messages, patients, pts } from '@/lib/db/schema';
 import { createLogger, logger, serializeError } from '@/lib/log';
@@ -59,6 +60,11 @@ type PersistedContext = {
   address: string | null;
   retentionDays: number;
   assistantPaused: boolean;
+  // Billing plan state (Phase 16 C1). Pre-wiring only: selected here so the
+  // C2/C3 retention/identity gating has the fields; nothing acts on them yet.
+  plan: PlanId;
+  planLifetime: boolean;
+  planExpiresAt: Date | null;
 };
 
 type ModelTurnMetadata = {
@@ -204,6 +210,9 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       address: pts.address,
       retentionDays: pts.retentionDays,
       assistantPaused: pts.assistantPaused,
+      plan: pts.plan,
+      planLifetime: pts.planLifetime,
+      planExpiresAt: pts.planExpiresAt,
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -250,6 +259,9 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
     address: row.address,
     retentionDays: row.retentionDays,
     assistantPaused: row.assistantPaused,
+    plan: row.plan,
+    planLifetime: row.planLifetime,
+    planExpiresAt: row.planExpiresAt,
   };
 }
 
@@ -586,13 +598,15 @@ function reminderSystemAddendum(context: ReminderTurnContext): string {
 export async function runReminderTurn(args: {
   inboundMessage: InboundMessage;
   reminder: ReminderTurnContext;
+  plan?: PlanId;
 }): Promise<OutboundMessage> {
-  const modelId = selectModel();
+  const modelConfig = selectModelForPlan(args.plan ?? 'free');
+  const modelId = modelConfig.primary;
   try {
     return await runTurnCore({
       inboundMessage: args.inboundMessage,
       modelId,
-      model: getOpenRouterModel(modelId),
+      model: getOpenRouterModel(modelId, buildModelSettings(modelConfig)),
       allowInactive: true,
       systemAddendum: reminderSystemAddendum(args.reminder),
       cancellationActor: 'patient',
@@ -652,13 +666,15 @@ export async function handoffFailedTurn(args: {
 
 export async function runTurn(args: {
   inboundMessage: InboundMessage;
+  plan?: PlanId;
 }): Promise<OutboundMessage> {
-  const modelId = selectModel();
+  const modelConfig = selectModelForPlan(args.plan ?? 'free');
+  const modelId = modelConfig.primary;
   try {
     return await runTurnCore({
       inboundMessage: args.inboundMessage,
       modelId,
-      model: getOpenRouterModel(modelId),
+      model: getOpenRouterModel(modelId, buildModelSettings(modelConfig)),
     });
   } catch (error) {
     // A paused skip is benign (already info-logged in the engine core), not a

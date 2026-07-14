@@ -7,6 +7,7 @@ import {
   auditLog,
   availabilityRules,
   blockedPeriods,
+  conversationDays,
   conversations,
   erasureArchive,
   eventOutbox,
@@ -123,6 +124,13 @@ const seedFactories: Record<
     pt_id: ptId,
     day: new Date().toISOString().slice(0, 10),
   }),
+  conversation_days: ({ ptId, patientId, conversationId }) => ({
+    pt_id: ptId,
+    patient_id: patientId,
+    conversation_id: conversationId,
+    local_day: new Date().toISOString().slice(0, 10),
+    month_key: new Date().toISOString().slice(0, 7),
+  }),
   erasure_archive: ({ ptId }) => ({ pt_id: ptId, scope: 'account' }),
 };
 
@@ -238,6 +246,13 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     targetTable: 'patients',
   });
   await db.insert(erasureArchive).values({ ptId, scope: 'account' });
+  await db.insert(conversationDays).values({
+    ptId,
+    patientId: pat.id,
+    conversationId: conv.id,
+    localDay: new Date().toISOString().slice(0, 10),
+    monthKey: new Date().toISOString().slice(0, 7),
+  });
 
   return {
     ptId,

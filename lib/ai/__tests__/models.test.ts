@@ -1,10 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { selectModel } from '../models';
+import { selectModelForPlan } from '../models';
 
-describe('selectModel', () => {
-  it('uses the override before environment-specific models', () => {
+describe('selectModelForPlan', () => {
+  it('returns the plan config (haiku + fallback + low effort) when no env model is set', () => {
+    expect(selectModelForPlan('free', {}, 'production')).toEqual({
+      primary: 'anthropic/claude-haiku-4.5',
+      fallbacks: ['openai/gpt-5-mini'],
+      reasoningEffort: 'low',
+    });
+  });
+
+  it('returns the same model config for solo (one model for all plans today)', () => {
+    expect(selectModelForPlan('solo', {}, 'development')).toEqual(
+      selectModelForPlan('free', {}, 'development'),
+    );
+  });
+
+  it('env override wins and strips fallbacks + reasoning (legacy request shape)', () => {
     expect(
-      selectModel(
+      selectModelForPlan(
+        'free',
         {
           OPENROUTER_MODEL_OVERRIDE: 'custom/model',
           OPENROUTER_DEV_MODEL: 'dev/model',
@@ -12,27 +27,41 @@ describe('selectModel', () => {
         },
         'production',
       ),
-    ).toBe('custom/model');
+    ).toEqual({
+      primary: 'custom/model',
+      fallbacks: [],
+      reasoningEffort: undefined,
+    });
   });
 
-  it('uses the production model in production', () => {
+  it('uses the production env model in production', () => {
     expect(
-      selectModel({ OPENROUTER_PROD_MODEL: 'prod/model' }, 'production'),
-    ).toBe('prod/model');
+      selectModelForPlan(
+        'free',
+        { OPENROUTER_PROD_MODEL: 'prod/model' },
+        'production',
+      ),
+    ).toEqual({
+      primary: 'prod/model',
+      fallbacks: [],
+      reasoningEffort: undefined,
+    });
   });
 
-  it('uses the development model outside production', () => {
-    expect(selectModel({ OPENROUTER_DEV_MODEL: 'dev/model' }, 'test')).toBe(
-      'dev/model',
-    );
+  it('uses the development env model outside production', () => {
+    expect(
+      selectModelForPlan('free', { OPENROUTER_DEV_MODEL: 'dev/model' }, 'test')
+        .primary,
+    ).toBe('dev/model');
   });
 
-  it('throws instead of silently falling back when the selected variable is missing', () => {
-    expect(() => selectModel({}, 'production')).toThrow(
-      /OPENROUTER_PROD_MODEL is required/,
-    );
-    expect(() => selectModel({}, 'development')).toThrow(
-      /OPENROUTER_DEV_MODEL is required/,
-    );
+  it('ignores blank env values and falls back to the plan config', () => {
+    expect(
+      selectModelForPlan(
+        'free',
+        { OPENROUTER_MODEL_OVERRIDE: '  ', OPENROUTER_DEV_MODEL: '' },
+        'development',
+      ).primary,
+    ).toBe('anthropic/claude-haiku-4.5');
   });
 });

@@ -1,13 +1,14 @@
 import { generateText, stepCountIs, tool } from 'ai';
 import { z } from 'zod';
 import { getOpenRouterModel } from '@/lib/ai/client';
-import { selectModel } from '@/lib/ai/models';
+import { selectModelForPlan } from '@/lib/ai/models';
 
 async function main() {
-  const modelId = selectModel(
+  const modelId = selectModelForPlan(
+    'free',
     { ...process.env, OPENROUTER_MODEL_OVERRIDE: '' },
     'development',
-  );
+  ).primary;
   if (!modelId.endsWith(':free')) {
     throw new Error(
       `Refusing live smoke against non-free development model: ${modelId}`,

@@ -80,6 +80,7 @@ export const reminderResponseType = pgEnum('reminder_response_type', [
   'reschedule_requested',
   'opt_out',
 ]);
+export const plan = pgEnum('plan', ['free', 'solo']);
 
 export const pts = pgTable('pts', {
   id: uuid('id').primaryKey(),
@@ -101,6 +102,16 @@ export const pts = pgTable('pts', {
   assistantPaused: boolean('assistant_paused').notNull().default(false),
   servicesConfiguredAt: tsTz('services_configured_at'),
   retentionDays: integer('retention_days').notNull().default(90),
+  // Billing plan state (Phase 16). No internal subscription state machine:
+  // plan + expiry only, prepaid via POK one-off payments. `plan_lifetime`
+  // grants Solo forever (pilot PTs). `plan_downgraded_at` starts the retention
+  // clamp grace window; `plan_step_seen_at` marks the onboarding plan step.
+  // Entitlement resolution lives in lib/billing/entitlements.ts.
+  plan: plan('plan').notNull().default('free'),
+  planExpiresAt: tsTz('plan_expires_at'),
+  planLifetime: boolean('plan_lifetime').notNull().default(false),
+  planDowngradedAt: tsTz('plan_downgraded_at'),
+  planStepSeenAt: tsTz('plan_step_seen_at'),
   // Web Push notification preferences (event type → enabled). Wired in Phase 9;
   // the settings UI persists the toggles now. Null = use defaults.
   notificationPrefs: jsonb('notification_prefs'),
@@ -227,6 +238,9 @@ export const conversations = pgTable(
     aiPausedUntil: tsTz('ai_paused_until'),
     aiPauseReason: text('ai_pause_reason'),
     escalationState: text('escalation_state').notNull().default('idle'),
+    // When the conversation-cap hard stop sent its one static handoff message
+    // (Phase 16 C2). Null = never capped this cycle; reset on renewal.
+    limitHandoffAt: tsTz('limit_handoff_at'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
   (t) => [
@@ -282,6 +296,13 @@ export const messages = pgTable(
     uniqueIndex('messages_source_event_id_uq')
       .on(t.sourceEventId)
       .where(sql`source_event_id IS NOT NULL`),
+    // pt_id was previously unindexed (FKs aren't auto-indexed). This composite
+    // serves the admin funnel's `min(created_at) GROUP BY pt_id` and general
+    // per-tenant message lookups.
+    index('messages_pt_created_at_idx').on(t.ptId, t.createdAt),
+    // Serves the admin "today live cost" scan, which filters messages by a bare
+    // created_at range across all tenants.
+    index('messages_created_at_idx').on(t.createdAt),
   ],
 );
 
@@ -305,6 +326,9 @@ export const appointments = pgTable(
   (t) => [
     check('appointments_valid_range', sql`${t.endsAt} > ${t.startsAt}`),
     index('appointments_pt_starts_at_idx').on(t.ptId, t.startsAt),
+    // Serves the admin funnel's `min(created_at) GROUP BY pt_id` (first-booking
+    // window) — the existing starts_at index doesn't cover created_at.
+    index('appointments_pt_created_at_idx').on(t.ptId, t.createdAt),
     index('appointments_starts_at_active_idx')
       .on(t.startsAt)
       .where(sql`status IN ('pending', 'confirmed')`),
@@ -436,7 +460,12 @@ export const events = pgTable(
     payload: jsonb('payload').notNull(),
     occurredAt: tsTz('occurred_at').notNull().default(now),
   },
-  (t) => [index('events_pt_occurred_at_idx').on(t.ptId, t.occurredAt.desc())],
+  (t) => [
+    index('events_pt_occurred_at_idx').on(t.ptId, t.occurredAt.desc()),
+    // Serves the admin push-delivery aggregate, which filters by type +
+    // occurred_at with no pt_id (so the pt-scoped index above can't be used).
+    index('events_type_occurred_at_idx').on(t.type, t.occurredAt),
+  ],
 );
 
 export const eventOutbox = pgTable(
@@ -486,6 +515,38 @@ export const costDaily = pgTable(
     computedAt: tsTz('computed_at').notNull().default(now),
   },
   (t) => [uniqueIndex('cost_daily_pt_day_uq').on(t.ptId, t.day)],
+);
+
+// Conversation metering fact table (Phase 16): one row per active patient-day
+// in the PT's timezone. "Conversation" for billing = a patient-day, inserted
+// idempotently on the first patient message of that local day (C2 writes it).
+// `month_key` (e.g. '2026-07', PT timezone) serves the monthly usage count;
+// `first_message_id` is a bare uuid breadcrumb (no FK — the message may be
+// retention-erased while the billing fact must survive).
+export const conversationDays = pgTable(
+  'conversation_days',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    patientId: uuid('patient_id')
+      .notNull()
+      .references(() => patients.id, { onDelete: 'cascade' }),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    localDay: date('local_day', { mode: 'string' }).notNull(),
+    monthKey: text('month_key').notNull(),
+    firstMessageId: uuid('first_message_id'),
+    createdAt: tsTz('created_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('conversation_days_pt_patient_day_uq').on(
+      t.ptId,
+      t.patientId,
+      t.localDay,
+    ),
+    index('conversation_days_pt_month_idx').on(t.ptId, t.monthKey),
+  ],
 );
 
 export const auditLog = pgTable('audit_log', {

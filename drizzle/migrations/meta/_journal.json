@@ -134,6 +134,20 @@
       "when": 1783866164283,
       "tag": "0018_phase15_settings_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783960756002,
+      "tag": "0019_sudden_weapon_omega",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1783972861266,
+      "tag": "0020_steep_rattler",
+      "breakpoints": true
     }
   ]
 }

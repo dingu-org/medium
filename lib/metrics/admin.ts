@@ -194,6 +194,27 @@ async function loadPushDelivery(since: Date): Promise<PushDeliverySummary> {
   };
 }
 
+/**
+ * Wall-clock cap on the metrics fan-out. With the supporting indexes in place
+ * these queries return in well under a second; this only trips on a real
+ * regression (missing index, or a pooled socket the Supabase pooler silently
+ * dropped). Failing fast turns a black-holed, "pending forever" /admin request
+ * — which otherwise sits until Vercel kills the function — into a visible error.
+ */
+const METRICS_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} timed out after ${ms}ms`)),
+        ms,
+      ).unref?.(),
+    ),
+  ]);
+}
+
 export async function getAdminMetrics(now?: Date): Promise<AdminMetrics> {
   const nowDate = now ?? new Date();
   const todayStart = utcMidnight(nowDate);
@@ -205,17 +226,21 @@ export async function getAdminMetrics(now?: Date): Promise<AdminMetrics> {
   const nowIso = nowDate.toISOString();
 
   const [funnelYesterday, funnel7d, cohort, yesterday, currentMonth, today, push] =
-    await Promise.all([
-      loadFunnelWindow(yesterdayStart, yesterdayEnd),
-      loadFunnelWindow(sevenDaysAgo, nowDate),
-      loadCohort(),
-      loadRolledUpCost(sql`c.day = ${ydayStr}::date`),
-      loadRolledUpCost(
-        sql`c.day >= date_trunc('month', ${nowIso}::timestamptz)::date`,
-      ),
-      loadTodayLiveCost(todayStart, todayEnd),
-      loadPushDelivery(sevenDaysAgo),
-    ]);
+    await withTimeout(
+      Promise.all([
+        loadFunnelWindow(yesterdayStart, yesterdayEnd),
+        loadFunnelWindow(sevenDaysAgo, nowDate),
+        loadCohort(),
+        loadRolledUpCost(sql`c.day = ${ydayStr}::date`),
+        loadRolledUpCost(
+          sql`c.day >= date_trunc('month', ${nowIso}::timestamptz)::date`,
+        ),
+        loadTodayLiveCost(todayStart, todayEnd),
+        loadPushDelivery(sevenDaysAgo),
+      ]),
+      METRICS_TIMEOUT_MS,
+      'getAdminMetrics',
+    );
 
   return {
     funnelYesterday,

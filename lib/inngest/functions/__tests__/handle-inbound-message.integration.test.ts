@@ -473,6 +473,8 @@ describe('handleInboundMessage cores', () => {
         conversationId,
       }),
       reminder,
+      // Phase 16 C1: the resolved effective plan is threaded into the turn.
+      plan: 'free',
     });
   });
 });

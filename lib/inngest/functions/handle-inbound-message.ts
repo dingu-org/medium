@@ -10,6 +10,8 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
+import { resolveEffectivePlan } from '@/lib/billing/entitlements';
+import type { PlanId } from '@/lib/billing/plans';
 import { ConversationEngineError } from '@/lib/conversation/errors';
 import type {
   InboundMessage,
@@ -31,6 +33,8 @@ export type InboundJobContext = {
   inbound: Omit<InboundMessage, 'occurredAt'> & { occurredAt: string };
   aiActive: boolean;
   assistantPaused: boolean;
+  /** Effective (grace-aware) plan resolved at load time (Phase 16 C1). */
+  plan: PlanId;
   connectionId: string | null;
   recipient: string | null;
 };
@@ -61,6 +65,9 @@ export async function loadInboundJobContext(args: {
       patientId: patients.id,
       waId: patients.waId,
       assistantPaused: pts.assistantPaused,
+      plan: pts.plan,
+      planLifetime: pts.planLifetime,
+      planExpiresAt: pts.planExpiresAt,
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -133,6 +140,14 @@ export async function loadInboundJobContext(args: {
     },
     aiActive,
     assistantPaused: row.assistantPaused,
+    plan: resolveEffectivePlan(
+      {
+        plan: row.plan,
+        planLifetime: row.planLifetime,
+        planExpiresAt: row.planExpiresAt,
+      },
+      new Date(),
+    ),
     connectionId: connection?.id ?? null,
     recipient: row.waId,
   };
@@ -150,6 +165,7 @@ export async function runInboundTurn(
       runTurnFn ?? (await import('@/lib/conversation/engine')).runTurn;
     const outbound = await executeTurn({
       inboundMessage: hydrateInbound(context.inbound),
+      plan: context.plan,
     });
     return { kind: 'outbound', outbound };
   } catch (error) {
@@ -179,6 +195,7 @@ export async function runReminderFallbackTurn(
   const outbound = await executeTurn({
     inboundMessage: hydrateInbound(context.inbound),
     reminder,
+    plan: context.plan,
   });
   return { kind: 'outbound', outbound };
 }
