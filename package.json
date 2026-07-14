@@ -26,6 +26,7 @@
     "test:all": "vitest run",
     "ai:smoke": "tsx --env-file=.env.local scripts/smoke-ai.ts",
     "push:smoke": "tsx --env-file=.env.local scripts/smoke-push.ts",
+    "smoke:pok": "tsx --env-file=.env.local scripts/smoke-pok.ts",
     "prepare": "husky"
   },
   "lint-staged": {

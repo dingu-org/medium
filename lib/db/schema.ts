@@ -81,6 +81,13 @@ export const reminderResponseType = pgEnum('reminder_response_type', [
   'opt_out',
 ]);
 export const plan = pgEnum('plan', ['free', 'solo']);
+export const billingPeriod = pgEnum('billing_period', ['monthly', 'yearly']);
+export const billingOrderStatus = pgEnum('billing_order_status', [
+  'created',
+  'paid',
+  'failed',
+  'expired',
+]);
 
 export const pts = pgTable('pts', {
   id: uuid('id').primaryKey(),
@@ -601,6 +608,39 @@ export const conversationDays = pgTable(
       t.localDay,
     ),
     index('conversation_days_pt_month_idx').on(t.ptId, t.monthKey),
+  ],
+);
+
+// POK one-off payment ledger (Phase 16 C5). One row per checkout: a POK order id
+// plus the plan/period/amount purchased and the settle outcome. This is the money
+// ledger — tenants may READ their own receipts (RLS read-own, C6 /settings/billing)
+// but NEVER write; all writes go through the RLS-bypassing owner connection in
+// lib/billing/payments.ts. `previous/new_expires_at` snapshot the extension the
+// settle applied; `pok_payload` is a PII-free order snapshot (id/status/amount).
+export const billingOrders = pgTable(
+  'billing_orders',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    pokOrderId: text('pok_order_id').notNull(),
+    plan: plan('plan').notNull(),
+    period: billingPeriod('period').notNull(),
+    amountMinor: integer('amount_minor').notNull(),
+    currency: text('currency').notNull().default('ALL'),
+    status: billingOrderStatus('status').notNull().default('created'),
+    previousExpiresAt: tsTz('previous_expires_at'),
+    newExpiresAt: tsTz('new_expires_at'),
+    pokPayload: jsonb('pok_payload'),
+    createdAt: tsTz('created_at').notNull().default(now),
+    paidAt: tsTz('paid_at'),
+  },
+  (t) => [
+    uniqueIndex('billing_orders_pok_order_id_uq').on(t.pokOrderId),
+    index('billing_orders_pt_created_idx').on(t.ptId, t.createdAt),
+    // Partial index for the reconcile cron's scan of still-open orders.
+    index('billing_orders_pending_idx')
+      .on(t.createdAt)
+      .where(sql`status = 'created'`),
   ],
 );
 

@@ -1,0 +1,126 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createPokClient } from '@/lib/billing/pok/client';
+
+const CONFIG = {
+  apiBase: 'https://pok.test',
+  merchantId: 'm1',
+  keyId: 'k1',
+  keySecret: 's1',
+};
+
+function jsonResponse(status: number, body: unknown): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as unknown as Response;
+}
+
+function loginBody(token: string, expiresIn = 3600) {
+  return { data: { accessToken: token, expiresIn, tokenType: 'Bearer' } };
+}
+
+function isLoginCall(call: unknown[]): boolean {
+  return String(call[0]).endsWith('/auth/sdk/login');
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+describe('createPokClient', () => {
+  it('caches the login token across calls (one login hit)', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/auth/sdk/login')) return loginResponse();
+      return jsonResponse(200, { data: { id: 'ord1', status: 'CREATED' } });
+    });
+    function loginResponse() {
+      return jsonResponse(200, loginBody('tok'));
+    }
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createPokClient(CONFIG);
+    await client.getOrder('ord1');
+    await client.getOrder('ord1');
+
+    const loginCalls = fetchMock.mock.calls.filter(isLoginCall);
+    expect(loginCalls).toHaveLength(1);
+  });
+
+  it('re-fetches the token after it nears expiry', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-14T00:00:00.000Z'));
+
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/auth/sdk/login')) {
+        // expiresIn 100s → ttl 100_000ms, skew 10_000ms → reuse window 90_000ms.
+        return jsonResponse(200, loginBody('tok', 100));
+      }
+      return jsonResponse(200, { data: { id: 'ord1', status: 'CREATED' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createPokClient(CONFIG);
+    await client.getOrder('ord1');
+    expect(fetchMock.mock.calls.filter(isLoginCall)).toHaveLength(1);
+
+    vi.advanceTimersByTime(95_000);
+    await client.getOrder('ord1');
+    expect(fetchMock.mock.calls.filter(isLoginCall)).toHaveLength(2);
+  });
+
+  it('re-logs in once and retries on a 401, then succeeds', async () => {
+    let orderCalls = 0;
+    let loginCount = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/auth/sdk/login')) {
+        loginCount += 1;
+        return jsonResponse(200, loginBody(`tok${loginCount}`));
+      }
+      orderCalls += 1;
+      if (orderCalls === 1) return jsonResponse(401, { message: 'unauthorized' });
+      return jsonResponse(200, { data: { id: 'ord1', status: 'CAPTURED' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createPokClient(CONFIG);
+    const order = await client.getOrder('ord1');
+
+    expect(order.status).toBe('CAPTURED');
+    expect(fetchMock.mock.calls.filter(isLoginCall)).toHaveLength(2);
+    expect(orderCalls).toBe(2);
+  });
+
+  it('sends the amount in minor units (2500 ALL × 100 = 250000)', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/auth/sdk/login')) return jsonResponse(200, loginBody('tok'));
+      return jsonResponse(200, { data: { id: 'neworder' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createPokClient(CONFIG);
+    const created = await client.createOrder({
+      amountMinor: 2500 * 100,
+      currency: 'ALL',
+      extra: { description: 'Medium Solo (monthly)' },
+    });
+
+    expect(created.id).toBe('neworder');
+    const createCall = fetchMock.mock.calls.find((call) =>
+      String(call[0]).endsWith('/merchants/m1/sdk-orders'),
+    ) as unknown as [string, RequestInit] | undefined;
+    expect(createCall).toBeDefined();
+    const init = createCall![1];
+    const body = JSON.parse(init.body as string);
+    expect(body).toMatchObject({
+      amount: 250000,
+      currency: 'ALL',
+      description: 'Medium Solo (monthly)',
+    });
+    // Bearer token attached.
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer tok');
+  });
+});

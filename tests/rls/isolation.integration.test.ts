@@ -6,6 +6,7 @@ import {
   appointments,
   auditLog,
   availabilityRules,
+  billingOrders,
   blockedPeriods,
   conversationDays,
   conversations,
@@ -138,6 +139,15 @@ const seedFactories: Record<
     external_id: `wamid-${Date.now()}-${Math.random()}`,
     last_status: 'sent',
   }),
+  billing_orders: ({ ptId }) => ({
+    pt_id: ptId,
+    pok_order_id: `pok-${Date.now()}-${Math.random()}`,
+    plan: 'solo',
+    period: 'monthly',
+    amount_minor: 250000,
+    currency: 'ALL',
+    status: 'created',
+  }),
 };
 
 const TENANT_ID_COL: Record<string, 'pt_id' | 'id'> = { pts: 'id' };
@@ -263,6 +273,14 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     conversationId: conv.id,
     localDay: new Date().toISOString().slice(0, 10),
     monthKey: new Date().toISOString().slice(0, 7),
+  });
+  await db.insert(billingOrders).values({
+    ptId,
+    pokOrderId: `pok-${Date.now()}-${Math.random()}`,
+    plan: 'solo',
+    period: 'monthly',
+    amountMinor: 250000,
+    currency: 'ALL',
   });
 
   return {

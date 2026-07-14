@@ -153,6 +153,17 @@ export const backgroundEventSchemas = {
     monthKey: z.string().regex(/^\d{4}-\d{2}$/),
     traceId,
   }),
+  // Phase 16 C5: a POK order settled into prepaid plan time. Written by
+  // payments.applyOrderOutcome inside the settle tx. No Inngest function
+  // subscribes (push=no per architecture); the notification bell reads it from
+  // the events table. The push/bell formatter wiring is C6.
+  'billing.payment_received': z.object({
+    ptId: z.uuid(),
+    orderId: z.uuid(),
+    period: z.enum(['monthly', 'yearly']),
+    newExpiresAt: isoDateTime,
+    traceId,
+  }),
   // Phase 11 internal-metrics events. Counts/ids only. These have NO Inngest
   // consumer (no registered trigger), so their outbox rows simply drain and
   // no-op — only the `events` row is used, for funnel/delivery metrics.

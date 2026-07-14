@@ -13,6 +13,7 @@ import {
 import { publishEventOutbox } from './functions/publish-event-outbox';
 import { purgeExpiredMessages } from './functions/purge-expired-messages';
 import { reconcileAlbanianReminderTemplates } from './functions/reconcile-reminder-templates';
+import { reconcilePokOrders } from './functions/reconcile-pok-orders';
 import { resumeBusinessAppAi } from './functions/resume-business-app-ai';
 import { sendReminder } from './functions/send-reminder';
 import { syncWhatsappCoexistence } from './functions/sync-whatsapp-coexistence';
@@ -33,4 +34,5 @@ export const functions: InngestFunction.Like[] = [
   dispatchPushNotification,
   dailyCostRollup,
   billingUsageMonitor,
+  reconcilePokOrders,
 ];
