@@ -16,7 +16,6 @@ import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { ReminderBadge, StatusBadge } from '@/components/appointments/badges';
 import { AppointmentSheet } from '@/components/appointments/appointment-sheet';
 import type { AppointmentView } from '@/components/appointments/types';
-import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { EmptyState } from '@/components/states';
 import { Calendar } from '@/components/ui/calendar';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -182,21 +181,6 @@ export function CalendarClient({
 
   return (
     <div>
-      <SnapshotCache
-        cacheKey={`calendar:${anchorKey}:${view}`}
-        kind="calendar"
-        payload={{
-          ptId,
-          timezone,
-          view,
-          anchorKey,
-          todayKey,
-          monthLabel,
-          weekDays,
-          appointments,
-          activeServices,
-        }}
-      />
       <RealtimeRefresher table="appointments" filter={`pt_id=eq.${ptId}`} />
 
       {/* Canvas CalHeader: seg left, true-centered title, "Sot" pill right. */}

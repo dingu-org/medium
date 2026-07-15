@@ -2,6 +2,7 @@
 
 import { Bell, Clock, Loader2, Phone, Send } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,26 @@ export function ChatComposer({
   templateAvailable?: boolean;
   templatePending?: boolean;
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-grow: reset to `auto` then match content, clamped by the CSS max-height.
+  // Driven off `draft` (not just onChange) so the field also shrinks back after a
+  // send clears the draft, or when the parent sets the draft programmatically.
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
+
+  // Coarse pointers (touch) follow the mobile convention: Enter inserts a
+  // newline and sending is button-only. Evaluated client-side to avoid an SSR
+  // mismatch, so it starts `false` (send-on-Enter) until the effect runs.
+  const [coarsePointer, setCoarsePointer] = useState(false);
+  useEffect(() => {
+    setCoarsePointer(window.matchMedia('(pointer: coarse)').matches);
+  }, []);
+
   return (
     <div className="border-line bg-card fixed inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto max-w-md px-4 pt-3 pb-3.5">
@@ -79,13 +100,22 @@ export function ChatComposer({
         ) : (
           <div className="flex items-end gap-2.5">
             <textarea
+              ref={textareaRef}
               value={draft}
               onChange={(e) => onDraftChange(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  onSend();
-                }
+                if (e.key !== 'Enter') return;
+                // Never send mid-composition: on IME keyboards Enter commits the
+                // candidate, it does not submit the message.
+                if (e.nativeEvent.isComposing) return;
+                // Touch: Enter is a newline; sending is button-only. Desktop:
+                // Shift+Enter is a newline, plain Enter sends.
+                if (coarsePointer || e.shiftKey) return;
+                e.preventDefault();
+                // Guard against a rapid second Enter while a send is in flight —
+                // the send button is already disabled via `sending`, and
+                // free-form messages cannot be deduped server-side.
+                if (!sending) onSend();
               }}
               rows={1}
               placeholder={t.chat.messagePlaceholder}

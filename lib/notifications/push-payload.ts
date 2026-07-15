@@ -12,6 +12,7 @@ type Ev<K extends keyof BackgroundEventPayloads> = {
 export type PushEvent =
   | Ev<'notification.requested'>
   | Ev<'conversation.escalated'>
+  | Ev<'conversation.needs_reply'>
   | Ev<'conversation.resume_offered'>
   | Ev<'wa.connection.revoked'>
   | Ev<'reminder.failed'>
@@ -34,6 +35,8 @@ export function pushPrefKey(event: PushEvent): keyof NotificationPrefs {
     }
     case 'conversation.escalated':
       return 'escalation';
+    case 'conversation.needs_reply':
+      return 'manualReply';
     case 'conversation.resume_offered':
       return 'resumeOffer';
     case 'wa.connection.revoked':
@@ -95,6 +98,15 @@ export function buildPushPayload(
         body: `${who} kërkoi të flasë me ty`,
         url: `/chat/${event.data.conversationId}`,
         tag: `conversation-${event.data.conversationId}-escalated`,
+      };
+    // Manual-reply nudge. The tag is per-conversation (not per-message) so a
+    // burst of patient messages collapses into one on-device notification.
+    case 'conversation.needs_reply':
+      return {
+        title: 'Mesazh i ri',
+        body: `${who} të dërgoi një mesazh`,
+        url: `/chat/${event.data.conversationId}`,
+        tag: `conversation-${event.data.conversationId}-reply`,
       };
     case 'conversation.resume_offered':
       return {

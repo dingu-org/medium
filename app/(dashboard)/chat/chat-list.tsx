@@ -3,9 +3,10 @@
 import { MessageSquare, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { EmptyState } from '@/components/states';
+import { Button } from '@/components/ui/button';
 import { CountBadge } from '@/components/ui/count-badge';
 import { HandledBy, type HandledByWho } from '@/components/ui/handled-by';
 import { InitialsAvatar } from '@/components/ui/initials-avatar';
@@ -16,15 +17,18 @@ import { privacyName } from '@/lib/format/name';
 import { t } from '@/lib/i18n';
 import { formatRelativeShort } from '@/lib/i18n/datetime';
 import type { ChatListRowSnapshot } from '@/lib/pwa/read-models';
+import { loadMoreConversations } from './pagination-actions';
 
 export function ChatList({
   ptId,
   rows,
+  hasMore: initialHasMore,
   status,
   query: initialQuery,
 }: {
   ptId: string;
   rows: ChatListRowSnapshot[];
+  hasMore: boolean;
   status: 'active' | 'closed';
   query: string;
 }) {
@@ -33,14 +37,61 @@ export function ChatList({
   const searchOpen = searchParams.get('search') === '1' || !!initialQuery;
   const [query, setQuery] = useState(initialQuery);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // `rows` / `initialHasMore` are page 0 from the server; later pages accumulate
+  // here via the load-more action. A fresh server render (tab switch, search, or
+  // realtime refresh) hands us a new `rows` array — reset the accumulated pages
+  // so the OFFSET window can't drift out of sync with page 0.
+  const [extraRows, setExtraRows] = useState<ChatListRowSnapshot[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [loadingMore, startLoadMore] = useTransition();
+  const [baseRows, setBaseRows] = useState(rows);
+  if (rows !== baseRows) {
+    setBaseRows(rows);
+    setExtraRows([]);
+    setPage(0);
+    setHasMore(initialHasMore);
+  }
+
+  // OFFSET paging can occasionally re-surface a page-0 row on a later page when
+  // new activity arrives mid-scroll; dedupe by id so React keys stay unique.
+  const allRows = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: ChatListRowSnapshot[] = [];
+    for (const row of [...rows, ...extraRows]) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      merged.push(row);
+    }
+    return merged;
+  }, [rows, extraRows]);
+
   const needsYou =
     status === 'active'
-      ? rows.filter((row) => row.escalation_state !== 'idle' || !row.ai_active)
+      ? allRows.filter(
+          (row) => row.escalation_state !== 'idle' || !row.ai_active,
+        )
       : [];
   const managed =
     status === 'active'
-      ? rows.filter((row) => row.escalation_state === 'idle' && row.ai_active)
-      : rows;
+      ? allRows.filter(
+          (row) => row.escalation_state === 'idle' && row.ai_active,
+        )
+      : allRows;
+
+  function loadMore() {
+    startLoadMore(async () => {
+      const result = await loadMoreConversations({
+        status,
+        query: initialQuery.trim() || undefined,
+        page: page + 1,
+      });
+      setExtraRows((prev) => [...prev, ...result.rows]);
+      setPage(result.page);
+      setHasMore(result.hasMore);
+    });
+  }
 
   function navigate(nextStatus: 'active' | 'closed', nextQuery = query) {
     const params = new URLSearchParams();
@@ -101,7 +152,7 @@ export function ChatList({
         </div>
       )}
 
-      {rows.length === 0 ? (
+      {allRows.length === 0 ? (
         <EmptyState
           icon={query ? Search : MessageSquare}
           title={
@@ -132,6 +183,17 @@ export function ChatList({
               closed={status === 'closed'}
             />
           )}
+          {hasMore && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              onClick={loadMore}
+              disabled={loadingMore}
+            >
+              {loadingMore ? t.chat.loadingMore : t.chat.loadMore}
+            </Button>
+          )}
         </>
       )}
     </div>
@@ -155,12 +217,33 @@ function ConversationGroup({
       <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
         {rows.map((row) => {
           const alert = row.escalation_state !== 'idle';
+          // The assistant is temporarily paused (e.g. WhatsApp Business app echo)
+          // while `ai_active` stays true — mirror the thread's paused check so the
+          // row shows a distinct paused badge instead of the misleading plain AI one.
+          const paused = Boolean(
+            row.ai_pause_reason &&
+              row.ai_paused_until &&
+              new Date(row.ai_paused_until) > new Date(),
+          );
           const who: HandledByWho = closed
             ? 'closed'
-            : row.ai_active
-              ? 'ai'
-              : 'you';
+            : !row.ai_active
+              ? 'you'
+              : paused
+                ? 'paused'
+                : 'ai';
           const emphasized = alert || row.unread_count > 0;
+          // Sender marker on the preview line: the PT's own replies and the
+          // assistant's replies are prefixed; patient messages stay bare. Kept as
+          // plain text inside the truncating span so it shares the one clipped line.
+          const previewPrefix =
+            row.last_content == null
+              ? ''
+              : row.last_role === 'pt'
+                ? t.chat.youPrefix
+                : row.last_role === 'ai'
+                  ? t.chat.aiPrefix
+                  : '';
           return (
             <Link
               key={row.id}
@@ -170,7 +253,15 @@ function ConversationGroup({
               <InitialsAvatar
                 name={privacyName(row.patient_name)}
                 size={44}
-                dotTone={alert ? 'danger' : who === 'you' ? 'success' : 'brand'}
+                dotTone={
+                  alert
+                    ? 'danger'
+                    : who === 'you'
+                      ? 'success'
+                      : who === 'paused'
+                        ? 'warning'
+                        : 'brand'
+                }
               />
               <span className="min-w-0 flex-1">
                 <span className="mb-[3px] flex items-baseline justify-between gap-2">
@@ -191,6 +282,7 @@ function ConversationGroup({
                         : 'text-ink-2 min-w-0 flex-1 truncate text-[13.5px]'
                     }
                   >
+                    {previewPrefix}
                     {row.last_content ?? t.chat.noMessages}
                   </span>
                   {alert ? (

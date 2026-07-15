@@ -130,6 +130,8 @@ describe('handleInboundMessage cores', () => {
 
     expect(context).toMatchObject({
       aiActive: true,
+      // AI is handling the conversation, so no manual-reply nudge is warranted.
+      manualHandling: false,
       connectionId,
       recipient: '447700900100',
       inbound: {
@@ -159,6 +161,27 @@ describe('handleInboundMessage cores', () => {
     });
 
     expect(context?.aiActive).toBe(false);
+    // Echo pause excludes the manual-reply nudge: the PT is already replying
+    // from their WhatsApp Business app, so a push would be redundant.
+    expect(context?.manualHandling).toBe(false);
+  });
+
+  it('flags manual handling when the PT has taken the conversation over', async () => {
+    // Takeover leaves aiActive false with no echo pause reason — the state a
+    // manual-reply push targets.
+    await db
+      .update(conversations)
+      .set({ aiActive: false, aiPausedUntil: null, aiPauseReason: null })
+      .where(eq(conversations.id, conversationId));
+
+    const context = await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    });
+
+    expect(context?.aiActive).toBe(false);
+    expect(context?.manualHandling).toBe(true);
   });
 
   it('clears an expired Business app echo pause before processing inbound AI', async () => {

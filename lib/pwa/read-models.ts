@@ -9,7 +9,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
-import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, lte, or } from 'drizzle-orm';
 import { GRAPH_VERSION } from '@/lib/channels/whatsapp/constants';
 import { db } from '@/lib/db';
 import {
@@ -20,8 +20,14 @@ import {
   patients,
   pts,
   reminderJobs,
+  waMessageStatuses,
   whatsappConnections,
 } from '@/lib/db/schema';
+import {
+  CHAT_LIST_PAGE_SIZE,
+  type ChatListPage,
+  getChatListPage,
+} from '@/lib/chat/queries';
 import { getConversationUsage } from '@/lib/billing/usage';
 import { resolveEffectivePlan } from '@/lib/billing/entitlements';
 import { getPlan, type PlanId } from '@/lib/billing/plans';
@@ -77,12 +83,69 @@ export type CalendarSnapshot = {
   activeServices: ServiceRecord[];
 };
 
+/** Meta's monotonic delivery status for an outbound WhatsApp message. */
+export type WaDeliveryStatus = 'sent' | 'delivered' | 'read' | 'failed';
+
+const WA_DELIVERY_STATUSES: readonly WaDeliveryStatus[] = [
+  'sent',
+  'delivered',
+  'read',
+  'failed',
+];
+
+function normalizeDeliveryStatus(value: string | null): WaDeliveryStatus | null {
+  return value != null &&
+    (WA_DELIVERY_STATUSES as readonly string[]).includes(value)
+    ? (value as WaDeliveryStatus)
+    : null;
+}
+
 export type ChatMessageSnapshot = {
   id: string;
   role: 'patient' | 'ai' | 'pt';
   content: string;
   createdAt: string;
+  /**
+   * WhatsApp delivery status for outbound (`pt` / `ai`) messages, sourced from
+   * `wa_message_statuses` (the Meta `statuses` webhook, joined on the message's
+   * external id). `null` for inbound patient messages or outbound messages Meta
+   * has not reported on yet. Server-snapshot only — captured at load and
+   * refreshed on the next fetch; there is no realtime channel for it (the status
+   * table is deny-all RLS, read only via the owner connection).
+   */
+  deliveryStatus: WaDeliveryStatus | null;
 };
+
+/**
+ * A single `messages` row joined to its optional `wa_message_statuses` row, as
+ * selected by both the thread snapshot and the load-older keyset query below.
+ */
+type ChatMessageRow = {
+  id: string;
+  role: 'patient' | 'ai' | 'pt';
+  content: string;
+  createdAt: Date;
+  deliveryStatus: string | null;
+};
+
+/**
+ * Shared mapping from a `messages` (+ delivery-status) row to the serializable
+ * snapshot shape. Keeps the thread snapshot and the load-older page identical in
+ * how they surface `deliveryStatus` (never on inbound patient messages) and how
+ * they serialize timestamps to ISO strings.
+ */
+function toChatMessageSnapshot(row: ChatMessageRow): ChatMessageSnapshot {
+  return {
+    id: row.id,
+    role: row.role,
+    content: row.content,
+    createdAt: row.createdAt.toISOString(),
+    deliveryStatus:
+      row.role === 'patient'
+        ? null
+        : normalizeDeliveryStatus(row.deliveryStatus),
+  };
+}
 
 export type ChatThreadSnapshot = {
   conversationId: string;
@@ -295,8 +358,15 @@ export async function getChatThreadSnapshot(
         role: messages.role,
         content: messages.content,
         createdAt: messages.createdAt,
+        deliveryStatus: waMessageStatuses.lastStatus,
       })
       .from(messages)
+      // One status row per external id (unique index), so this cannot fan out
+      // the message list. Inbound messages never match an outbound status row.
+      .leftJoin(
+        waMessageStatuses,
+        eq(waMessageStatuses.externalId, messages.externalId),
+      )
       .where(eq(messages.conversationId, conversationId))
       .orderBy(desc(messages.createdAt), desc(messages.id))
       .limit(50),
@@ -329,12 +399,7 @@ export async function getChatThreadSnapshot(
     conversationId: conversation.id,
     patientName: privacyName(conversation.patientName),
     patientPhone: conversation.patientPhone,
-    initialMessages: [...rows].reverse().map((r) => ({
-      id: r.id,
-      role: r.role,
-      content: r.content,
-      createdAt: r.createdAt.toISOString(),
-    })),
+    initialMessages: [...rows].reverse().map(toChatMessageSnapshot),
     aiActive: conversation.aiActive,
     windowOpen: conversation.lastInboundAt
       ? Date.now() - conversation.lastInboundAt.getTime() <= WINDOW_MS
@@ -358,61 +423,89 @@ export async function getChatThreadSnapshot(
   };
 }
 
+/**
+ * One older page of a conversation's messages, for the thread's "load older"
+ * affordance. Keyset-paginated on `(created_at, id)` strictly BEFORE the cursor
+ * (the oldest message the client currently holds), so it never re-fetches a
+ * loaded row and never skips a tie at the boundary timestamp. `pt_id` is guarded
+ * alongside `conversation_id` so a caller can only page a conversation they own.
+ * Served by `messages_conversation_created_at_idx`.
+ *
+ * Fetches `limit + 1` rows newest-first to derive `hasMore`, then trims and
+ * reverses to ascending so the caller can prepend the batch as-is.
+ *
+ * The cursor timestamp is millisecond-precision: the snapshot reads `timestamptz`
+ * back as a JS `Date` (schema `mode: 'date'`), dropping the column's microseconds.
+ * Comparing that truncated value against the raw microsecond column would make the
+ * `created_at = cursor` tiebreaker never match, silently dropping any message that
+ * shares the cursor's millisecond. So compare at millisecond granularity via a
+ * one-millisecond window: rows in an earlier millisecond are unconditionally older;
+ * rows within the cursor's own millisecond are older only when their id sorts
+ * before the cursor's. Both branches compare the raw `created_at` column, so
+ * `messages_conversation_created_at_idx` still serves the scan.
+ */
+export async function getOlderChatMessages(
+  ptId: string,
+  conversationId: string,
+  cursor: { createdAt: string; id: string },
+  limit = 50,
+): Promise<{ messages: ChatMessageSnapshot[]; hasMore: boolean }> {
+  const lo = new Date(cursor.createdAt);
+  const hi = new Date(lo.getTime() + 1);
+  const rows = await db
+    .select({
+      id: messages.id,
+      role: messages.role,
+      content: messages.content,
+      createdAt: messages.createdAt,
+      deliveryStatus: waMessageStatuses.lastStatus,
+    })
+    .from(messages)
+    .leftJoin(
+      waMessageStatuses,
+      eq(waMessageStatuses.externalId, messages.externalId),
+    )
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.ptId, ptId),
+        or(
+          lt(messages.createdAt, lo),
+          and(
+            gte(messages.createdAt, lo),
+            lt(messages.createdAt, hi),
+            lt(messages.id, cursor.id),
+          ),
+        ),
+      ),
+    )
+    .orderBy(desc(messages.createdAt), desc(messages.id))
+    .limit(limit + 1);
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  return {
+    messages: [...page].reverse().map(toChatMessageSnapshot),
+    hasMore,
+  };
+}
+
+/**
+ * First page of the conversation list. Kept for the SSR entry point and existing
+ * callers; pagination lives in `getChatListPage` (re-exported below). Returns the
+ * page-0 rows so the shape stays `ChatListRowSnapshot[]`.
+ */
 export async function getChatListSnapshot(
   ptId: string,
   input: { status?: 'active' | 'closed'; query?: string } = {},
 ): Promise<ChatListRowSnapshot[]> {
-  const closed = input.status === 'closed';
-  const query = input.query?.trim();
-  return db.execute<ChatListRowSnapshot>(sql`
-    SELECT
-      c.id,
-      c.ai_active,
-      c.escalation_state,
-      p.name AS patient_name,
-      m.content AS last_content,
-      m.role AS last_role,
-      m.created_at AS last_at,
-      c.closed_at,
-      c.ai_paused_until,
-      c.ai_pause_reason,
-      (
-        SELECT count(*)::integer
-        FROM messages unread
-        WHERE unread.conversation_id = c.id
-          AND unread.role = 'patient'
-          AND unread.created_at > COALESCE(c.last_read_at, '-infinity'::timestamptz)
-      ) AS unread_count
-    FROM conversations c
-    JOIN patients p ON p.id = c.patient_id
-    LEFT JOIN LATERAL (
-      SELECT content, role, created_at
-      FROM messages
-      WHERE messages.conversation_id = c.id
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-    ) m ON true
-    WHERE c.pt_id = ${ptId}
-      AND ${closed ? sql`c.closed_at IS NOT NULL` : sql`c.closed_at IS NULL`}
-      ${
-        query
-          ? sql`AND (
-              p.name ILIKE ${`%${query}%`}
-              OR p.phone ILIKE ${`%${query}%`}
-              OR EXISTS (
-                SELECT 1 FROM messages searched
-                WHERE searched.conversation_id = c.id
-                  AND searched.content ILIKE ${`%${query}%`}
-              )
-            )`
-          : sql``
-      }
-    ORDER BY
-      CASE WHEN c.escalation_state <> 'idle' OR c.ai_active = false THEN 0 ELSE 1 END,
-      COALESCE(m.created_at, c.created_at) DESC
-    LIMIT 50
-  `);
+  const { rows } = await getChatListPage(ptId, input);
+  return rows;
 }
+
+// Pagination lives in the chat data layer (`lib/chat/queries`); re-export here so
+// the chat surfaces have a single import site alongside the other read models.
+export { CHAT_LIST_PAGE_SIZE, getChatListPage, type ChatListPage };
 
 export function resolveNotificationPrefs(raw: unknown): NotificationPrefs {
   const value = (raw ?? {}) as Record<string, unknown>;

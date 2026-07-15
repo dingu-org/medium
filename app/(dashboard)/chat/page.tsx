@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getChatListSnapshot } from '@/lib/pwa/read-models';
+import { getChatListPage } from '@/lib/pwa/read-models';
 import { createServerClient } from '@/lib/supabase/server';
 import { ChatList } from './chat-list';
 
@@ -17,8 +17,14 @@ export default async function ChatPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
-  const rows = await getChatListSnapshot(user.id, { status, query: q });
+  const { rows, hasMore } = await getChatListPage(user.id, { status, query: q });
   return (
-    <ChatList ptId={user.id} rows={rows} status={status} query={q ?? ''} />
+    <ChatList
+      ptId={user.id}
+      rows={rows}
+      hasMore={hasMore}
+      status={status}
+      query={q ?? ''}
+    />
   );
 }

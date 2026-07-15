@@ -9,7 +9,6 @@ import {
   User,
 } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { AssistantCard } from '@/components/settings/assistant-card';
 import { VersionFoot } from '@/components/settings/version-foot';
 import { GroupedList, GroupedListRow } from '@/components/ui/grouped-list';
@@ -85,7 +84,6 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <SnapshotCache cacheKey="settings" kind="settings" payload={snapshot} />
       <ProfileCard
         name={profileName}
         subtitle={profileSubtitle || undefined}

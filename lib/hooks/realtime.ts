@@ -7,6 +7,9 @@ import type {
 } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// Type-only import (erased at build): no server code is pulled into this client
+// module. `WaDeliveryStatus` is the snapshot's outbound-delivery status.
+import type { WaDeliveryStatus } from '@/lib/pwa/read-models';
 
 // The Supabase realtime client pulls in a large bundle, so we load it lazily
 // (a separate async chunk) the first time a subscription mounts — keeping it
@@ -211,6 +214,13 @@ export type LiveMessage = {
   role: 'patient' | 'ai' | 'pt';
   content: string;
   createdAt: string;
+  /**
+   * WhatsApp delivery status for outbound messages, seeded from the server
+   * snapshot (see `ChatMessageSnapshot`). Absent on realtime-delivered rows and
+   * inbound messages. There is no realtime channel for it — it updates only when
+   * the thread re-seeds from a fresh snapshot.
+   */
+  deliveryStatus?: WaDeliveryStatus | null;
 };
 
 type RawMessage = {
@@ -230,14 +240,33 @@ type RawMessage = {
 export function useMessages(
   conversationId: string,
   initial: LiveMessage[],
-): { messages: LiveMessage[]; status: RealtimeStatus } {
+): {
+  messages: LiveMessage[];
+  status: RealtimeStatus;
+  mergeMessages: (list: LiveMessage[]) => void;
+} {
   const router = useRouter();
   const [byId, setById] = useState<Map<string, LiveMessage>>(
     () => new Map(initial.map((m) => [m.id, m])),
   );
 
-  // Re-seed if the server payload changes (e.g. after router.refresh).
-  const seedKey = initial.map((m) => m.id).join(',');
+  // Upsert a batch of messages by id — same merge the seed effect performs, but
+  // driven imperatively (e.g. the thread prepending an older keyset page). Stable
+  // across renders so callers can depend on it without re-running effects.
+  const mergeMessages = useCallback((list: LiveMessage[]) => {
+    setById((prev) => {
+      const next = new Map(prev);
+      for (const m of list) next.set(m.id, m);
+      return next;
+    });
+  }, []);
+
+  // Re-seed if the server payload changes (e.g. after router.refresh) — keyed on
+  // both message ids and their delivery status so a status-only change (ticks
+  // arrive by snapshot refresh, never realtime) still re-seeds and re-renders.
+  const seedKey = initial
+    .map((m) => `${m.id}:${m.deliveryStatus ?? ''}`)
+    .join(',');
   useEffect(() => {
     setById((prev) => {
       const next = new Map(prev);
@@ -265,11 +294,15 @@ export function useMessages(
       if (!row?.id) return;
       setById((prev) => {
         const next = new Map(prev);
+        // Realtime rows never carry a delivery status; keep any status already
+        // seeded from the snapshot so a live UPDATE echo doesn't drop the tick.
+        const existing = prev.get(row.id);
         next.set(row.id, {
           id: row.id,
           role: row.role,
           content: row.content,
           createdAt: row.created_at,
+          deliveryStatus: existing?.deliveryStatus ?? null,
         });
         return next;
       });
@@ -287,7 +320,7 @@ export function useMessages(
     [byId],
   );
 
-  return { messages, status };
+  return { messages, status, mergeMessages };
 }
 
 /** Browser online/offline state for the top-bar sync indicator. */

@@ -15,14 +15,20 @@ import {
 import Link from 'next/link';
 import { t } from '@/lib/i18n';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react';
 import { toast } from 'sonner';
 import { ChatComposer } from '@/components/chat/composer';
 import { ChatNotice } from '@/components/chat/notice';
 import { ChatStatusRow, type ChatHandlingMode } from '@/components/chat/status-row';
 import { ChatSysLine } from '@/components/chat/sys-line';
 import { NavBar } from '@/components/dashboard/nav-bar';
-import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { ChatBubble } from '@/components/ui/chat-bubble';
 import { RoundButton } from '@/components/ui/round-button';
 import { formatDayLabel, formatTime } from '@/lib/i18n/datetime';
@@ -30,14 +36,19 @@ import { type LiveMessage, useMessages } from '@/lib/hooks/realtime';
 import {
   PWA_MUTATION_FAILED_EVENT,
   PWA_MUTATION_SYNCED_EVENT,
+  removeMutation,
 } from '@/lib/pwa/client-store';
-import { queueMessageSend } from '@/lib/pwa/mutation-client';
+import {
+  queueMessageSend,
+  type QueueMutationResult,
+} from '@/lib/pwa/mutation-client';
 import { setTakeover } from '../actions';
 import {
   markConversationRead,
   sendUpcomingReminderTemplate,
   setConversationClosed,
 } from '../actions';
+import { fetchOlderMessages } from '../pagination-actions';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 
 type Props = {
@@ -84,7 +95,10 @@ export function ChatThread({
   capReached = false,
 }: Props) {
   const router = useRouter();
-  const { messages } = useMessages(conversationId, initialMessages);
+  const { messages, mergeMessages } = useMessages(
+    conversationId,
+    initialMessages,
+  );
   const [aiActive, setAiActive] = useState(initialAiActive);
   const [windowClosed, setWindowClosed] = useState(!initialWindowOpen);
   const [closed, setClosed] = useState(initialClosed);
@@ -120,6 +134,19 @@ export function ChatThread({
   const [statePending, startStateTransition] = useTransition();
   const online = useOnlineStatus();
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Older-message pagination. `hasOlder` seeds from the initial batch size (a
+  // full page implies more history) and is then driven by each fetch's hasMore.
+  const [hasOlder, setHasOlder] = useState(initialMessages.length >= 50);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  // Set right before a prepend so the layout effect can restore the viewport
+  // once the older rows have rendered (see below).
+  const prependAdjustRef = useRef<{
+    prevHeight: number;
+    prevTop: number;
+  } | null>(null);
+  // Tracks the newest rendered message id so the auto-scroll fires on a genuinely
+  // new message, never on an older-page prepend.
+  const lastMessageIdRef = useRef<string | null>(null);
   const visibleMessages = useMemo(
     () =>
       [...messages, ...optimisticMessages].sort((a, b) =>
@@ -134,6 +161,23 @@ export function ChatThread({
         .at(-1)?.id ?? null,
     [messages],
   );
+  // The oldest persisted message drives the keyset cursor. Pick the minimum
+  // (createdAt, id) tuple explicitly — `messages` is ordered by createdAt only,
+  // so among equal timestamps the smallest id must still win, or a load-older
+  // fetch could re-pull an already-loaded row at the boundary.
+  const oldestPersisted = useMemo(() => {
+    let oldest: LiveMessage | null = null;
+    for (const m of messages) {
+      if (
+        !oldest ||
+        m.createdAt < oldest.createdAt ||
+        (m.createdAt === oldest.createdAt && m.id < oldest.id)
+      ) {
+        oldest = m;
+      }
+    }
+    return oldest;
+  }, [messages]);
   const hasFailed = optimisticMessages.some((m) => m.failed === true);
 
   const paused = Boolean(
@@ -148,16 +192,47 @@ export function ChatThread({
         ? 'paused'
         : 'ai';
 
-  // Auto-scroll to the newest message.
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [visibleMessages.length]);
+  // Restore the reading position after an older-page prepend: the new rows add
+  // height above the viewport, so shift scrollTop by the height delta to keep the
+  // same content under the PT's eyes. Runs before paint so there is no visible
+  // jump. No-op unless a prepend just set the ref.
+  useLayoutEffect(() => {
+    const adjust = prependAdjustRef.current;
+    if (!adjust) return;
+    prependAdjustRef.current = null;
+    const scroller = document.scrollingElement;
+    if (!scroller) return;
+    scroller.scrollTop = adjust.prevTop + (scroller.scrollHeight - adjust.prevHeight);
+  }, [visibleMessages]);
 
+  // Auto-scroll to the newest message — but only when the newest message id
+  // actually changes (a new inbound/outbound/optimistic row), never when older
+  // history is prepended above the current view.
+  useEffect(() => {
+    const newestId = visibleMessages.at(-1)?.id ?? null;
+    if (newestId === lastMessageIdRef.current) return;
+    lastMessageIdRef.current = newestId;
+    bottomRef.current?.scrollIntoView({ block: 'end' });
+  }, [visibleMessages]);
+
+  // Mark the conversation read — but only while the tab/PWA is actually visible,
+  // so a message that arrives in the background doesn't silently clear its unread
+  // badge before the PT has seen it. If hidden, defer until the document next
+  // becomes visible, marking through whatever the latest persisted id is by then.
   useEffect(() => {
     if (!latestPersistedMessageId) return;
-    void markConversationRead(conversationId, latestPersistedMessageId).then(
-      () => router.refresh(),
-    );
+    const id = latestPersistedMessageId;
+    function markRead() {
+      void markConversationRead(conversationId, id).then(() =>
+        router.refresh(),
+      );
+    }
+    if (document.visibilityState === 'visible') markRead();
+    function onVisible() {
+      if (document.visibilityState === 'visible') markRead();
+    }
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [conversationId, latestPersistedMessageId, router]);
 
   useEffect(() => {
@@ -195,11 +270,57 @@ export function ChatThread({
     });
   }
 
+  function markSendFailed(clientMutationId: string) {
+    setOptimisticMessages((items) =>
+      items.map((item) =>
+        item.clientMutationId === clientMutationId
+          ? { ...item, pending: false, failed: true }
+          : item,
+      ),
+    );
+  }
+
+  // Shared handling for a send result, used by both the initial send and a
+  // retry so the two can never diverge in how they apply sent/queued/failed.
+  function handleSendResult(
+    clientMutationId: string,
+    res: QueueMutationResult,
+  ) {
+    if (res.status === 'sent') {
+      setOptimisticMessages((items) =>
+        items.filter((item) => item.clientMutationId !== clientMutationId),
+      );
+      setAiActive(false);
+      setWindowClosed(false);
+      router.refresh();
+      return;
+    }
+    if (res.status === 'queued') {
+      // Bubble stays pending; background replay finishes it — an offline send
+      // once online, or a persist_pending reply once the server completes the
+      // local write (recovered under the same id, no second WhatsApp send).
+      setAiActive(false);
+      toast.success(
+        res.reason === 'offline' ? t.chat.msgQueued : t.chat.msgQueuedRetry,
+      );
+      return;
+    }
+    markSendFailed(clientMutationId);
+    if (res.code === 'outside_window') setWindowClosed(true);
+    toast.error(res.error);
+  }
+
   function onSend() {
     const body = draft.trim();
     if (!body) return;
     const clientMutationId = crypto.randomUUID();
     setDraft('');
+    // Clamp the optimistic timestamp to just after the newest message already on
+    // screen: a client clock skewed into the past would otherwise sort the bubble
+    // into the middle of history instead of at the bottom.
+    const newest = visibleMessages.at(-1);
+    const newestMs = newest ? new Date(newest.createdAt).getTime() + 1 : 0;
+    const createdAt = new Date(Math.max(Date.now(), newestMs)).toISOString();
     setOptimisticMessages((items) => [
       ...items,
       {
@@ -207,50 +328,18 @@ export function ChatThread({
         clientMutationId,
         role: 'pt',
         content: body,
-        createdAt: new Date().toISOString(),
+        createdAt,
         pending: true,
       },
     ]);
     startSend(async () => {
       try {
-        const res = await queueMessageSend({
+        handleSendResult(
           clientMutationId,
-          conversationId,
-          body,
-        });
-        if (res.status === 'sent') {
-          setOptimisticMessages((items) =>
-            items.filter((item) => item.clientMutationId !== clientMutationId),
-          );
-          setAiActive(false);
-          setWindowClosed(false);
-          router.refresh();
-          return;
-        }
-        if (res.status === 'queued') {
-          setAiActive(false);
-          toast.success(
-            res.reason === 'offline' ? t.chat.msgQueued : t.chat.msgQueuedRetry,
-          );
-          return;
-        }
-        setOptimisticMessages((items) =>
-          items.map((item) =>
-            item.clientMutationId === clientMutationId
-              ? { ...item, pending: false, failed: true }
-              : item,
-          ),
+          await queueMessageSend({ clientMutationId, conversationId, body }),
         );
-        if (res.code === 'outside_window') setWindowClosed(true);
-        toast.error(res.error);
       } catch (error) {
-        setOptimisticMessages((items) =>
-          items.map((item) =>
-            item.clientMutationId === clientMutationId
-              ? { ...item, pending: false, failed: true }
-              : item,
-          ),
-        );
+        markSendFailed(clientMutationId);
         toast.error(
           error instanceof Error ? error.message : t.chat.msgQueueError,
         );
@@ -282,13 +371,68 @@ export function ChatThread({
     });
   }
 
+  // Re-send a failed message under its ORIGINAL clientMutationId so the server
+  // recovers idempotently (replays a stored success, or finishes the DB write
+  // for an already-delivered Graph send) instead of minting a new id and sending
+  // the patient a duplicate WhatsApp message. The original body is resent
+  // verbatim — no edit on retry — so the transcript matches what Graph delivered.
   function retryFailed(message: OptimisticMessage) {
     setOptimisticMessages((items) =>
-      items.filter(
-        (item) => item.clientMutationId !== message.clientMutationId,
+      items.map((item) =>
+        item.clientMutationId === message.clientMutationId
+          ? { ...item, pending: true, failed: false }
+          : item,
       ),
     );
-    setDraft(message.content);
+    startSend(async () => {
+      try {
+        // Clear any inert failed queue record for this id first, so the sync
+        // indicator's failed count doesn't linger after a direct online retry.
+        await removeMutation(message.clientMutationId);
+        handleSendResult(
+          message.clientMutationId,
+          await queueMessageSend({
+            clientMutationId: message.clientMutationId,
+            conversationId,
+            body: message.content,
+          }),
+        );
+      } catch (error) {
+        markSendFailed(message.clientMutationId);
+        toast.error(
+          error instanceof Error ? error.message : t.chat.msgQueueError,
+        );
+      }
+    });
+  }
+
+  // Fetch one older keyset page and prepend it. Captures the scroll geometry
+  // before the merge so the layout effect can hold the viewport steady once the
+  // rows render; trusts the returned hasMore for whether the affordance stays.
+  async function loadOlder() {
+    if (loadingOlder || !hasOlder || !oldestPersisted) return;
+    setLoadingOlder(true);
+    const scroller = document.scrollingElement;
+    const prevHeight = scroller?.scrollHeight ?? 0;
+    const prevTop = scroller?.scrollTop ?? 0;
+    try {
+      const res = await fetchOlderMessages({
+        conversationId,
+        cursor: {
+          createdAt: oldestPersisted.createdAt,
+          id: oldestPersisted.id,
+        },
+      });
+      if (res.messages.length > 0) {
+        prependAdjustRef.current = { prevHeight, prevTop };
+        mergeMessages(res.messages);
+      }
+      setHasOlder(res.hasMore);
+    } catch {
+      // Leave `hasOlder` set so the button stays available for another attempt.
+    } finally {
+      setLoadingOlder(false);
+    }
   }
 
   const composerVisible = !closed && connectionStatus !== null;
@@ -301,18 +445,6 @@ export function ChatThread({
 
   return (
     <div className="-mx-4 -mt-4 flex flex-col">
-      <SnapshotCache
-        cacheKey={`chat:${conversationId}`}
-        kind="chat"
-        payload={{
-          conversationId,
-          patientName,
-          patientPhone,
-          initialMessages: messages,
-          aiActive,
-          windowOpen: !windowClosed,
-        }}
-      />
       <div className="bg-background sticky top-0 z-10">
         <NavBar
           backHref="/chat"
@@ -422,6 +554,18 @@ export function ChatThread({
 
       {/* Messages */}
       <div className="flex-1 space-y-[11px] px-4 py-4">
+        {hasOlder && (
+          <div className="flex justify-center pb-1">
+            <button
+              type="button"
+              onClick={loadOlder}
+              disabled={loadingOlder}
+              className="text-ink-2 bg-[#ecece7] rounded-full px-4 py-1.5 text-[12.5px] font-medium transition-opacity disabled:opacity-50"
+            >
+              {loadingOlder ? t.chat.loadingOlder : t.chat.loadOlder}
+            </button>
+          </div>
+        )}
         {visibleMessages.map((m, index) => {
           const previous = visibleMessages[index - 1];
           const newDay =
@@ -447,6 +591,7 @@ export function ChatThread({
                 role={m.role}
                 content={m.content}
                 createdAt={m.createdAt}
+                deliveryStatus={m.deliveryStatus ?? null}
                 pending={'pending' in m ? m.pending === true : false}
                 failed={'failed' in m ? m.failed === true : false}
                 grouped={grouped}

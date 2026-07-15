@@ -21,6 +21,7 @@ import type {
   ReminderTurnContext,
 } from '@/lib/conversation/types';
 import { createLogger } from '@/lib/log';
+import { dispatchPushForEvent } from '@/lib/notifications/push-dispatch';
 import {
   handleReminderResponse,
   type ReminderHandlingResult,
@@ -34,6 +35,14 @@ type RunReminderTurn =
 export type InboundJobContext = {
   inbound: Omit<InboundMessage, 'occurredAt'> & { occurredAt: string };
   aiActive: boolean;
+  /**
+   * The assistant is off for this conversation for a reason that warrants a
+   * manual-reply push (PT takeover or an open escalation) — i.e. `aiActive` is
+   * false and NOT because of a current WhatsApp Business app echo pause. During
+   * an echo pause the PT is already replying from their phone, so pushing would
+   * be redundant; that case is excluded here.
+   */
+  manualHandling: boolean;
   assistantPaused: boolean;
   /** Effective (grace-aware) plan resolved at load time (Phase 16 C1). */
   plan: PlanId;
@@ -144,6 +153,10 @@ export async function loadInboundJobContext(args: {
       occurredAt: row.createdAt.toISOString(),
     },
     aiActive,
+    // Echo-pause exclusion: only genuine manual handling (takeover/escalation)
+    // qualifies, never a Business app echo pause the PT is actively replying to.
+    manualHandling:
+      !aiActive && row.aiPauseReason !== 'whatsapp_business_app_echo',
     assistantPaused: row.assistantPaused,
     plan: resolveEffectivePlan(
       {
@@ -370,6 +383,25 @@ export const handleInboundMessage = inngest.createFunction(
     // metered. (A reminder AI fallback runs even during takeover, so it is
     // excluded here and does get metered below.)
     if (reminder.kind !== 'fallback' && !context.aiActive) {
+      // The assistant won't answer, so the patient's message needs a manual
+      // reply — push a nudge (push-only, no bell entry). Echo-paused
+      // conversations are excluded via `manualHandling`; the per-conversation
+      // device tag collapses a burst of messages into one notification. The
+      // function's messageId idempotency + step memoization keep it single-send
+      // across retries.
+      if (context.manualHandling) {
+        await step.run('notify-manual-reply', () =>
+          dispatchPushForEvent({
+            name: 'conversation.needs_reply',
+            data: {
+              ptId: context.inbound.ptId,
+              conversationId: context.inbound.conversationId,
+              patientId: context.inbound.patientId,
+              traceId: event.data.traceId,
+            },
+          }),
+        );
+      }
       return { skipped: 'conversation_inactive' };
     }
 

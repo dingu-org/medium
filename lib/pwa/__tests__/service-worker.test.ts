@@ -8,8 +8,6 @@ describe('PWA service worker source', () => {
 
     expect(source).toContain('medium-dashboard-pages');
     expect(source).toContain('medium-dashboard-rsc');
-    expect(source).toContain('medium-pwa-read-api');
-    expect(source).toContain('/api/pwa/snapshots/');
 
     for (const excluded of [
       '/api/webhooks',

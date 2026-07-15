@@ -3,6 +3,7 @@ export const NOTIFICATION_PREF_KEYS = [
   'cancellation',
   'reschedule',
   'escalation',
+  'manualReply',
   'reminderFailure',
   'connection',
   'resumeOffer',

@@ -119,6 +119,11 @@ function eventForPref(key: keyof NotificationPrefs): PushEvent {
         name: 'conversation.escalated',
         data: { ptId, conversationId: randomUUID(), patientId },
       };
+    case 'manualReply':
+      return {
+        name: 'conversation.needs_reply',
+        data: { ptId, conversationId: randomUUID(), patientId },
+      };
     case 'resumeOffer':
       return {
         name: 'conversation.resume_offered',

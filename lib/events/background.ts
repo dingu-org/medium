@@ -107,6 +107,16 @@ export const backgroundEventSchemas = {
     patientId: z.uuid(),
     traceId,
   }),
+  // A patient wrote to a conversation the assistant is NOT handling (PT takeover
+  // or an open escalation), so the message needs a manual reply. Push-only: it
+  // never lands in the `events` bell feed (it's emitted by the inbound handler,
+  // not via appendBackgroundEvent) — only the manual-reply push is produced.
+  'conversation.needs_reply': z.object({
+    ptId: z.uuid(),
+    conversationId: z.uuid(),
+    patientId: z.uuid(),
+    traceId,
+  }),
   'notification.requested': z.object({
     ptId: z.uuid(),
     kind: z.enum([

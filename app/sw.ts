@@ -7,7 +7,6 @@ import {
   NetworkFirst,
   NetworkOnly,
   Serwist,
-  StaleWhileRevalidate,
 } from 'serwist';
 import type { PrecacheEntry, RuntimeCaching } from 'serwist';
 
@@ -72,22 +71,6 @@ const runtimeCaching: RuntimeCaching[] = [
         okOnly(),
         new ExpirationPlugin({
           maxEntries: 48,
-          maxAgeSeconds: 7 * 24 * 60 * 60,
-        }),
-      ],
-    }),
-  },
-  {
-    matcher: ({ request, sameOrigin, url }) =>
-      request.method === 'GET' &&
-      sameOrigin &&
-      url.pathname.startsWith('/api/pwa/snapshots/'),
-    handler: new StaleWhileRevalidate({
-      cacheName: 'medium-pwa-read-api',
-      plugins: [
-        okOnly(),
-        new ExpirationPlugin({
-          maxEntries: 80,
           maxAgeSeconds: 7 * 24 * 60 * 60,
         }),
       ],

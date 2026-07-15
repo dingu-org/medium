@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import { EmptyState } from '@/components/states';
-import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar } from '@/components/ui/initials-avatar';
@@ -38,11 +37,6 @@ export function ClientsDirectory({
 
   return (
     <div className="space-y-4">
-      <SnapshotCache
-        cacheKey={`clients:${snapshot.query}`}
-        kind="clients"
-        payload={snapshot}
-      />
       <RealtimeRefresher
         table="patients"
         filter={`pt_id=eq.${snapshot.ptId}`}

@@ -31,6 +31,11 @@ const GROUPS: {
         label: t.settings.notifEscalations,
         description: t.settings.notifEscalationSub,
       },
+      {
+        key: 'manualReply',
+        label: t.settings.notifManualReply,
+        description: t.settings.notifManualReplySub,
+      },
       { key: 'resumeOffer', label: t.settings.notifResumeOffer },
     ],
   },

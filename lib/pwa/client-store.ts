@@ -25,13 +25,6 @@ export type PendingMutation = {
   lastError?: string;
 };
 
-export type SnapshotRecord = {
-  key: string;
-  kind: string;
-  payload: unknown;
-  cachedAt: number;
-};
-
 type QueueCounts = {
   pending: number;
   failed: number;
@@ -46,11 +39,6 @@ type SendResult =
   | { status: 'failed'; error: string; statusCode?: number; code?: string };
 
 interface MediumPwaDb extends DBSchema {
-  snapshots: {
-    key: string;
-    value: SnapshotRecord;
-    indexes: { kind: string };
-  };
   pendingMutations: {
     key: string;
     value: PendingMutation;
@@ -70,12 +58,6 @@ function browserDb(): Promise<IDBPDatabase<MediumPwaDb>> {
   if (!dbPromise) {
     dbPromise = openDB<MediumPwaDb>(DB_NAME, DB_VERSION, {
       upgrade(db) {
-        if (!db.objectStoreNames.contains('snapshots')) {
-          const snapshots = db.createObjectStore('snapshots', {
-            keyPath: 'key',
-          });
-          snapshots.createIndex('kind', 'kind');
-        }
         if (!db.objectStoreNames.contains('pendingMutations')) {
           const mutations = db.createObjectStore('pendingMutations', {
             keyPath: 'id',
@@ -94,20 +76,6 @@ function emit(name: string, detail?: unknown) {
   if (name !== PWA_QUEUE_CHANGED_EVENT) {
     window.dispatchEvent(new CustomEvent(PWA_QUEUE_CHANGED_EVENT));
   }
-}
-
-export async function putSnapshot(record: Omit<SnapshotRecord, 'cachedAt'>) {
-  const db = await browserDb();
-  await db.put('snapshots', { ...record, cachedAt: Date.now() });
-}
-
-export async function getSnapshot<T = unknown>(
-  key: string,
-): Promise<SnapshotRecord & { payload: T } | null> {
-  const db = await browserDb();
-  return ((await db.get('snapshots', key)) as
-    | (SnapshotRecord & { payload: T })
-    | undefined) ?? null;
 }
 
 export async function listPendingMutations(): Promise<PendingMutation[]> {
@@ -198,6 +166,21 @@ export async function sendOrQueueMutation(input: {
         error: response.error,
         statusCode: response.status,
         code: response.code,
+      };
+    }
+    // Non-final (5xx). `persist_pending` means the WhatsApp send already
+    // succeeded but the server has not finished the local write; enqueue under
+    // the same id so replay finishes it (the server recovers by skipping Graph,
+    // never re-sending). The optimistic bubble stays pending and heals without
+    // PT action. Other 5xx surface as failures for a deliberate retry.
+    if (response.code === 'persist_pending') {
+      return {
+        status: 'queued',
+        mutation: await enqueueMutation({
+          ...input,
+          lastError: response.error,
+        }),
+        reason: 'retryable',
       };
     }
     return {
@@ -304,11 +287,7 @@ export function subscribeToQueueChanges(listener: () => void): () => void {
 
 export async function clearPwaData(): Promise<void> {
   const db = await browserDb();
-  await Promise.all([
-    db.clear('snapshots'),
-    db.clear('pendingMutations'),
-    clearCaches(),
-  ]);
+  await Promise.all([db.clear('pendingMutations'), clearCaches()]);
   emit(PWA_QUEUE_CHANGED_EVENT);
 }
 

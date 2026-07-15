@@ -219,6 +219,45 @@ describe('PWA client mutation queue', () => {
     expect(await listPendingMutations()).toEqual([]);
   });
 
+  it('queues persist_pending sends for background replay under the same id', async () => {
+    // The WhatsApp send already succeeded; the server only failed to finish the
+    // local write (HTTP 503 + code). Enqueuing under the same id lets replay
+    // recover it (server skips Graph) instead of dead-ending as a failure.
+    installBrowserStubs({ online: true });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'Mesazhi u dërgua, po ruhet.',
+          code: 'persist_pending',
+        }),
+        { status: 503, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { queueMessageSend } = await import('@/lib/pwa/mutation-client');
+    const { listPendingMutations } = await import('@/lib/pwa/client-store');
+
+    const result = await queueMessageSend({
+      clientMutationId: 'message-persist-pending',
+      conversationId: 'conversation-1',
+      body: 'See you tomorrow',
+    });
+
+    expect(result).toEqual({
+      status: 'queued',
+      clientMutationId: 'message-persist-pending',
+      reason: 'retryable',
+    });
+    expect(await listPendingMutations()).toMatchObject([
+      {
+        id: 'message-persist-pending',
+        status: 'pending',
+        lastError: 'Mesazhi u dërgua, po ruhet.',
+        body: { clientMutationId: 'message-persist-pending' },
+      },
+    ]);
+  });
+
   it('queues thrown online requests as retryable instead of offline', async () => {
     installBrowserStubs({ online: true });
     vi.stubGlobal(

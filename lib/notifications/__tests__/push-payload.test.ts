@@ -32,6 +32,10 @@ const escalated: PushEvent = {
   name: 'conversation.escalated',
   data: { ptId: PT, conversationId: CONV, patientId: PATIENT },
 };
+const needsReply: PushEvent = {
+  name: 'conversation.needs_reply',
+  data: { ptId: PT, conversationId: CONV, patientId: PATIENT },
+};
 const resumeOffered: PushEvent = {
   name: 'conversation.resume_offered',
   data: { ptId: PT, conversationId: CONV, patientId: PATIENT },
@@ -68,6 +72,7 @@ describe('pushPrefKey', () => {
     expect(pushPrefKey(cancelled)).toBe('cancellation');
     expect(pushPrefKey(rescheduled)).toBe('reschedule');
     expect(pushPrefKey(escalated)).toBe('escalation');
+    expect(pushPrefKey(needsReply)).toBe('manualReply');
     expect(pushPrefKey(resumeOffered)).toBe('resumeOffer');
     expect(pushPrefKey(revoked)).toBe('connection');
     expect(pushPrefKey(reminderFailed)).toBe('reminderFailure');
@@ -125,10 +130,24 @@ describe('buildPushPayload', () => {
   });
 
   it('keeps the patient name out of the title (iOS lock-screen privacy)', () => {
-    for (const event of [booked, cancelled, rescheduled, escalated]) {
+    for (const event of [booked, cancelled, rescheduled, escalated, needsReply]) {
       const p = buildPushPayload(event, { patientName: NAME, timezone: TZ });
       expect(p?.title).not.toContain(NAME);
     }
+  });
+
+  it('nudges a manual reply to the thread with a per-conversation dedupe tag', () => {
+    const p = buildPushPayload(needsReply, { patientName: NAME, timezone: TZ });
+    expect(p).toMatchObject({
+      url: `/chat/${CONV}`,
+      // Per-conversation (not per-message) so a burst collapses on-device.
+      tag: `conversation-${CONV}-reply`,
+    });
+    expect(p?.body).toContain(NAME);
+    // Falls back to the neutral label when the patient is unknown.
+    expect(
+      buildPushPayload(needsReply, { timezone: TZ })?.body,
+    ).toContain('Një klient');
   });
 
   it('falls back to a neutral name when the patient is unknown', () => {

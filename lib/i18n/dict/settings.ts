@@ -14,6 +14,8 @@ export const settings = {
   notifCancellations: 'Anulime',
   notifReschedules: 'Ricaktime',
   notifEscalations: 'Eskalime',
+  notifManualReply: 'Mesazhe që presin ty',
+  notifManualReplySub: 'Kur ti menaxhon bisedën dhe pacienti të shkruan',
   notifReminderFailure: 'Dështime të kujtesave',
   notifConnection: 'Shkëputje e WhatsApp',
   notifResumeOffer: 'Rikthim i asistentit',

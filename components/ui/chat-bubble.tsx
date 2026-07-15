@@ -1,13 +1,50 @@
 import { format } from 'date-fns';
+import { AlertTriangle, Check, CheckCheck } from 'lucide-react';
 import { t } from '@/lib/i18n';
+import type { WaDeliveryStatus } from '@/lib/pwa/read-models';
 import { cn } from '@/lib/utils';
 
 export type ChatBubbleRole = 'patient' | 'ai' | 'pt';
+
+/**
+ * WhatsApp-style delivery indicator for the PT's own outbound messages: one
+ * check (sent), double check (delivered), coloured double check (read), or a
+ * failure marker. Sits in the timestamp row, so it inherits the same
+ * grouped-message visibility rule.
+ */
+function DeliveryTick({ status }: { status: WaDeliveryStatus }) {
+  if (status === 'failed') {
+    return (
+      <span className="text-destructive inline-flex items-center gap-1">
+        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+        {t.chat.deliveryFailed}
+      </span>
+    );
+  }
+  if (status === 'read') {
+    return (
+      <CheckCheck
+        className="text-primary h-3.5 w-3.5"
+        aria-label={t.chat.deliveryRead}
+      />
+    );
+  }
+  if (status === 'delivered') {
+    return (
+      <CheckCheck
+        className="h-3.5 w-3.5"
+        aria-label={t.chat.deliveryDelivered}
+      />
+    );
+  }
+  return <Check className="h-3.5 w-3.5" aria-label={t.chat.deliverySent} />;
+}
 
 export function ChatBubble({
   role,
   content,
   createdAt,
+  deliveryStatus = null,
   pending = false,
   failed = false,
   grouped = false,
@@ -15,6 +52,7 @@ export function ChatBubble({
   role: ChatBubbleRole;
   content: string;
   createdAt: string;
+  deliveryStatus?: WaDeliveryStatus | null;
   pending?: boolean;
   failed?: boolean;
   grouped?: boolean;
@@ -61,6 +99,9 @@ export function ChatBubble({
             <span>{format(new Date(createdAt), 'HH:mm')}</span>
             {pending && <span>{t.chat.pendingSync}</span>}
             {failed && <span>{t.chat.needsAttention}</span>}
+            {mine && !pending && !failed && deliveryStatus && (
+              <DeliveryTick status={deliveryStatus} />
+            )}
           </div>
         )}
       </div>

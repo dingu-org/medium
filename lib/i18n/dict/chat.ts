@@ -53,6 +53,10 @@ export const chat = {
   sent: 'dërguar',
   pendingSync: 'Në pritje',
   needsAttention: 'Kërkon vëmendje',
+  deliverySent: 'Dërguar',
+  deliveryDelivered: 'Dorëzuar',
+  deliveryRead: 'Lexuar',
+  deliveryFailed: 'Nuk u dërgua',
   fromYourPhone: 'nga telefoni yt',
   messagePlaceholder: 'Shkruaj një mesazh…',
 
@@ -73,6 +77,7 @@ export const chat = {
   backToChats: 'Kthehu te bisedat',
   noMessagesYet: 'Ende asnjë mesazh',
   youPrefix: 'Ti: ',
+  aiPrefix: 'Medium: ',
 
   msgQueued: 'Mesazh u radhit. Do të dërgohet kur të jesh online.',
   msgQueuedRetry: 'Mesazh u radhit. Do të provohet automatikisht.',
@@ -81,4 +86,10 @@ export const chat = {
   aiBadge: 'Medium',
   youBadge: 'Ti',
   closedBadge: 'Mbyllur',
+  pausedBadge: 'Në pauzë',
+
+  loadMore: 'Shfaq më shumë',
+  loadingMore: 'Po ngarkohet…',
+  loadOlder: 'Shfaq mesazhet e mëparshme',
+  loadingOlder: 'Po ngarkohen…',
 } as const;

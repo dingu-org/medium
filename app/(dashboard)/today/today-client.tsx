@@ -13,7 +13,6 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { AppointmentSheet } from '@/components/appointments/appointment-sheet';
 import { StatusBadge } from '@/components/appointments/badges';
-import { SnapshotCache } from '@/components/pwa/snapshot-cache';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { Button } from '@/components/ui/button';
 import { SectionLabel } from '@/components/ui/section-label';
@@ -45,7 +44,6 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
 
   return (
     <div>
-      <SnapshotCache cacheKey="today" kind="today" payload={snapshot} />
       <RealtimeRefresher
         table="appointments"
         filter={`pt_id=eq.${snapshot.ptId}`}
