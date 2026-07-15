@@ -8,22 +8,41 @@ import {
   it,
   vi,
 } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { conversations, messages, patients } from '@/lib/db/schema';
+import {
+  appointments,
+  conversations,
+  messageTemplates,
+  messages,
+  patients,
+  whatsappConnections,
+} from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getUnreadChatCount } from '@/lib/chat/queries';
 import { getChatListSnapshot } from '@/lib/pwa/read-models';
-import { markConversationRead } from '../actions';
+import { REMINDER_TEMPLATE } from '@/lib/inngest/functions/bootstrap-wa-connection';
+import {
+  markConversationRead,
+  sendUpcomingReminderTemplate,
+} from '../actions';
 
 const authState = vi.hoisted(() => ({ userId: '' as string | null }));
-const { errorSpy, redirectMock } = vi.hoisted(() => ({
+const { errorSpy, redirectMock, sendTemplateMock } = vi.hoisted(() => ({
   errorSpy: vi.fn(),
   redirectMock: vi.fn((path: string) => {
     const err = new Error(`REDIRECT:${path}`);
     (err as Error & { __isRedirect?: true }).__isRedirect = true;
     throw err;
   }),
+  sendTemplateMock: vi.fn(),
+}));
+
+vi.mock('@/lib/channels/whatsapp/client', () => ({
+  sendTemplate: sendTemplateMock,
+  sendFreeForm: vi.fn(),
+  getTemplateStatus: vi.fn(),
+  submitTemplate: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -213,5 +232,106 @@ describe('instrumentedAction wrapper (via markConversationRead)', () => {
       authState.userId = previous;
     }
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('sendUpcomingReminderTemplate', () => {
+  let templateId = '';
+
+  beforeEach(async () => {
+    errorSpy.mockClear();
+    sendTemplateMock.mockReset();
+    sendTemplateMock.mockResolvedValue({ messageId: 'wamid.tpl' });
+
+    // The outer beforeEach recreated the patient + whatsapp conversation (and
+    // cascade-cleared appointments/messages). Connections and templates key on
+    // ptId, so clear + reseed them here for a deterministic reminder path.
+    await db
+      .delete(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+    await db.delete(messageTemplates).where(eq(messageTemplates.ptId, ptId));
+
+    await db.insert(whatsappConnections).values({
+      ptId,
+      phoneNumberId: `PNI_${Date.now()}`,
+      wabaId: `WABA_${Date.now()}`,
+      status: 'active',
+    });
+    await db.insert(appointments).values({
+      ptId,
+      patientId,
+      startsAt: new Date('2026-08-01T09:00:00.000Z'),
+      endsAt: new Date('2026-08-01T10:00:00.000Z'),
+      status: 'confirmed',
+    });
+    const [template] = await db
+      .insert(messageTemplates)
+      .values({
+        ptId,
+        name: REMINDER_TEMPLATE.name,
+        language: REMINDER_TEMPLATE.language,
+        status: 'approved',
+        body: 'Kujtesë: {{1}} te {{2}} më {{3}}.',
+      })
+      .returning({ id: messageTemplates.id });
+    templateId = template.id;
+  });
+
+  it('persists the reminder and pauses the AI on a successful send', async () => {
+    const result = await sendUpcomingReminderTemplate(conversationId);
+    expect(result).toEqual({ ok: true });
+    expect(sendTemplateMock).toHaveBeenCalledTimes(1);
+
+    const stored = await db
+      .select({
+        externalId: messages.externalId,
+        templateId: messages.templateId,
+      })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.templateId, templateId),
+        ),
+      );
+    expect(stored).toHaveLength(1);
+    expect(stored[0].externalId).toBe('wamid.tpl');
+
+    const [conv] = await db
+      .select({ aiActive: conversations.aiActive })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conv.aiActive).toBe(false);
+  });
+
+  it('reports "sent but not saved" (not "not sent") and logs the wamid when persistence fails', async () => {
+    const txSpy = vi
+      .spyOn(db, 'transaction')
+      .mockRejectedValueOnce(new Error('boom'));
+
+    const result = await sendUpcomingReminderTemplate(conversationId);
+    txSpy.mockRestore();
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'Kujtesa u dërgua, por nuk u ruajt. Rifresko bisedën.',
+    });
+    // The paid template must NOT be re-sent, and no reminder row was persisted.
+    expect(sendTemplateMock).toHaveBeenCalledTimes(1);
+    const stored = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.templateId, templateId),
+        ),
+      );
+    expect(stored).toHaveLength(0);
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [eventName, , attrs] = errorSpy.mock.calls[0];
+    expect(eventName).toBe('chat.reminder_persist_failed');
+    expect(attrs).toMatchObject({ externalId: 'wamid.tpl' });
   });
 });

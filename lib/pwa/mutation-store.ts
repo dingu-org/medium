@@ -14,6 +14,7 @@ const STALE_PROCESSING_MS = 2 * 60 * 1000;
 
 export type MutationStart =
   | { kind: 'new'; id: string }
+  | { kind: 'recover'; id: string; externalMessageId: string | null }
   | { kind: 'success'; result: unknown }
   | { kind: 'failed'; error: string }
   | { kind: 'processing' };
@@ -70,10 +71,27 @@ export async function beginPwaMutation(input: {
   return existingState(existing);
 }
 
+function readGraphMessageId(result: unknown): string | null {
+  if (result && typeof result === 'object' && 'graphMessageId' in result) {
+    const value = (result as { graphMessageId: unknown }).graphMessageId;
+    return typeof value === 'string' ? value : null;
+  }
+  return null;
+}
+
 function existingState(existing: StoredMutation | undefined): MutationStart {
   if (!existing) return { kind: 'processing' };
   if (existing.status === 'success') {
     return { kind: 'success', result: existing.result };
+  }
+  // A confirmed Graph send whose local persistence did not complete: recover by
+  // finishing the DB write; the caller must NOT re-invoke the side-effect.
+  if (existing.status === 'sent') {
+    return {
+      kind: 'recover',
+      id: existing.id,
+      externalMessageId: readGraphMessageId(existing.result),
+    };
   }
   if (existing.status === 'failed') {
     return { kind: 'failed', error: existing.error ?? 'Mutation failed.' };
@@ -126,6 +144,56 @@ export async function failPwaMutation(input: {
       and(
         eq(pwaMutations.ptId, input.ptId),
         eq(pwaMutations.clientMutationId, input.clientMutationId),
+      ),
+    );
+}
+
+/**
+ * Record that the external side-effect (WhatsApp Graph send) succeeded, BEFORE
+ * the local rows are written. Status → 'sent' so that if persistence fails or
+ * the process crashes, a same-id retry recovers via begin()'s 'recover' path
+ * instead of re-sending. Guarded on 'processing' so it can never downgrade a
+ * row that already advanced to success/failed.
+ */
+export async function markPwaMutationSent(input: {
+  ptId: string;
+  clientMutationId: string;
+  externalMessageId: string | null;
+}): Promise<void> {
+  await db
+    .update(pwaMutations)
+    .set({
+      status: 'sent',
+      result: { graphMessageId: input.externalMessageId },
+      error: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(pwaMutations.ptId, input.ptId),
+        eq(pwaMutations.clientMutationId, input.clientMutationId),
+        eq(pwaMutations.status, 'processing'),
+      ),
+    );
+}
+
+/**
+ * Delete the ledger row for a mutation whose side-effect DID NOT happen (pre-send
+ * refusal / rejection). A same-id retry then starts as a clean 'new' attempt
+ * rather than dead-ending on a stored 'failed'. Guarded on 'processing' so a
+ * confirmed send ('sent'/'success') can never be discarded.
+ */
+export async function discardPwaMutation(input: {
+  ptId: string;
+  clientMutationId: string;
+}): Promise<void> {
+  await db
+    .delete(pwaMutations)
+    .where(
+      and(
+        eq(pwaMutations.ptId, input.ptId),
+        eq(pwaMutations.clientMutationId, input.clientMutationId),
+        eq(pwaMutations.status, 'processing'),
       ),
     );
 }

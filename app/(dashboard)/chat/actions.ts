@@ -3,12 +3,6 @@
 import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { z } from 'zod';
-import {
-  ConnectionRevokedError,
-  OutsideWindowError,
-} from '@/lib/channels/whatsapp/errors';
-import { sendFreeForm } from '@/lib/channels/whatsapp/client';
 import { sendTemplate } from '@/lib/channels/whatsapp/client';
 import { db } from '@/lib/db';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
@@ -23,6 +17,7 @@ import {
 } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
+import { logger, serializeError } from '@/lib/log';
 import { withAuditLog } from '@/lib/tenancy';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
@@ -36,100 +31,6 @@ async function requirePtId(): Promise<string> {
   if (!user) redirect('/sign-in');
   return user.id;
 }
-
-export type SendResult =
-  | { ok: true }
-  | {
-      ok: false;
-      reason: 'outside_window' | 'revoked' | 'no_connection' | 'error';
-    };
-
-const bodySchema = z.string().trim().min(1).max(4096);
-
-/**
- * Send a free-form WhatsApp message as the PT. Forces the conversation into
- * manual mode (ai_active = false) so the AI doesn't talk over the PT, persists
- * the outbound message, and surfaces window / connection errors to the UI.
- */
-async function sendPtMessageImpl(
-  conversationId: string,
-  rawBody: string,
-): Promise<SendResult> {
-  const ptId = await requirePtId();
-  const parsed = bodySchema.safeParse(rawBody);
-  if (!parsed.success) return { ok: false, reason: 'error' };
-  const body = parsed.data;
-
-  const [conversation] = await db
-    .select({
-      id: conversations.id,
-      patientId: conversations.patientId,
-      waId: patients.waId,
-    })
-    .from(conversations)
-    .innerJoin(patients, eq(conversations.patientId, patients.id))
-    .where(
-      and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
-    )
-    .limit(1);
-
-  if (!conversation?.waId) return { ok: false, reason: 'error' };
-
-  const [connection] = await db
-    .select({ id: whatsappConnections.id })
-    .from(whatsappConnections)
-    .where(
-      and(
-        eq(whatsappConnections.ptId, ptId),
-        eq(whatsappConnections.status, 'active'),
-      ),
-    )
-    .orderBy(desc(whatsappConnections.createdAt))
-    .limit(1);
-
-  if (!connection) return { ok: false, reason: 'no_connection' };
-
-  let messageId: string | null;
-  try {
-    const res = await sendFreeForm(connection.id, conversation.waId, body);
-    messageId = res.messageId;
-  } catch (error) {
-    if (error instanceof OutsideWindowError)
-      return { ok: false, reason: 'outside_window' };
-    if (error instanceof ConnectionRevokedError)
-      return { ok: false, reason: 'revoked' };
-    return { ok: false, reason: 'error' };
-  }
-
-  await db.transaction(async (tx) => {
-    await tx.insert(messages).values({
-      ptId,
-      conversationId,
-      role: 'pt',
-      channel: 'whatsapp',
-      content: body,
-      externalId: messageId,
-    });
-    await tx
-      .update(conversations)
-      .set({
-        aiActive: false,
-        aiPausedUntil: null,
-        aiPauseReason: null,
-      })
-      .where(
-        and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
-      );
-  });
-
-  revalidatePath(`/chat/${conversationId}`);
-  return { ok: true };
-}
-
-export const sendPtMessage = instrumentedAction(
-  'chat.sendPtMessage',
-  sendPtMessageImpl,
-);
 
 /**
  * Toggle who is handling a conversation. Taking over disables the AI and emits
@@ -208,7 +109,7 @@ async function markConversationReadImpl(
 ): Promise<{ ok: boolean }> {
   const ptId = await requirePtId();
   const [throughMessage] = await db
-    .select({ createdAt: messages.createdAt })
+    .select({ id: messages.id })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
     .where(
@@ -405,14 +306,25 @@ async function sendUpcomingReminderTemplateImpl(
       return { ok: true };
     }
 
+    let sent: { messageId: string | null };
     try {
-      const result = await sendTemplate(
+      sent = await sendTemplate(
         connection.id,
         waId,
         definition.name,
         definition.language,
         variables,
       );
+    } catch {
+      // Not sent (Graph refused/failed) — safe to invite a retry.
+      return { ok: false, error: 'Kujtesa nuk u dërgua. Provo sërish.' };
+    }
+
+    // The template HAS been sent (and billed). A persistence failure here must
+    // NOT return the "not sent, try again" copy: that lures the PT into a second
+    // paid template send that the 60s dedupe cannot catch (no messages row was
+    // written). Report a distinct "sent but not saved" state and log the wamid.
+    try {
       await db.transaction(async (tx) => {
         await tx.insert(messages).values({
           ptId,
@@ -421,7 +333,7 @@ async function sendUpcomingReminderTemplateImpl(
           channel: 'whatsapp',
           content: `Kujtesë për takimin më ${localTime}.`,
           templateId: template.id,
-          externalId: result.messageId,
+          externalId: sent.messageId,
         });
         await tx
           .update(conversations)
@@ -436,11 +348,24 @@ async function sendUpcomingReminderTemplateImpl(
             ),
           );
       });
-      revalidatePath(`/chat/${conversationId}`);
-      return { ok: true };
-    } catch {
-      return { ok: false, error: 'Kujtesa nuk u dërgua. Provo sërish.' };
+    } catch (error) {
+      logger.error(
+        'chat.reminder_persist_failed',
+        'Reminder template sent but not persisted',
+        {
+          ptId,
+          conversationId,
+          externalId: sent.messageId,
+          ...serializeError(error),
+        },
+      );
+      return {
+        ok: false,
+        error: 'Kujtesa u dërgua, por nuk u ruajt. Rifresko bisedën.',
+      };
     }
+    revalidatePath(`/chat/${conversationId}`);
+    return { ok: true };
   });
 }
 

@@ -11,7 +11,10 @@ import {
 } from 'vitest';
 import { POST as postAppointment } from '@/app/api/pwa/mutations/appointment/route';
 import { POST as postMessage } from '@/app/api/pwa/mutations/message/route';
-import { GraphApiError } from '@/lib/channels/whatsapp/errors';
+import {
+  GraphApiError,
+  OutsideWindowError,
+} from '@/lib/channels/whatsapp/errors';
 import { db } from '@/lib/db';
 import {
   appointments,
@@ -295,6 +298,262 @@ describe('PWA message mutation API', () => {
       )
       .limit(1);
     expect(storedMutation).toEqual({ status: 'success', error: null });
+  });
+
+  it('recovers a stamped-but-unpersisted send on the same clientMutationId without re-sending', async () => {
+    await seedConnection(ptId);
+    const { conversationId } = await seedConversation(ptId);
+    const clientMutationId = nextId();
+    const body = {
+      clientMutationId,
+      conversationId,
+      body: 'Recoverable hello',
+    };
+
+    // Fail the persist transaction on the first attempt only. The Graph send has
+    // already succeeded and been stamped ('sent') before the txn runs.
+    const txSpy = vi
+      .spyOn(db, 'transaction')
+      .mockRejectedValueOnce(new Error('boom'));
+
+    const first = await postMessage(
+      makePost('/api/pwa/mutations/message', body),
+    );
+
+    expect(first.status).toBe(503);
+    await expect(first.json()).resolves.toMatchObject({
+      ok: false,
+      code: 'persist_pending',
+    });
+    expect(sendFreeFormMock).toHaveBeenCalledTimes(1);
+
+    const [stamped] = await db
+      .select({ status: pwaMutations.status, result: pwaMutations.result })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      )
+      .limit(1);
+    expect(stamped.status).toBe('sent');
+    expect((stamped.result as { graphMessageId?: string }).graphMessageId).toBe(
+      'wamid.pwa-test',
+    );
+
+    const beforeRecover = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.ptId, ptId),
+          eq(messages.sourceEventId, clientMutationId),
+        ),
+      );
+    expect(beforeRecover).toHaveLength(0);
+
+    // Same id, real transaction now: recover path finishes the DB write and
+    // must NOT call Graph again.
+    txSpy.mockRestore();
+    const second = await postMessage(
+      makePost('/api/pwa/mutations/message', body),
+    );
+
+    expect(second.status).toBe(200);
+    expect(sendFreeFormMock).toHaveBeenCalledTimes(1);
+
+    const storedMessages = await db
+      .select({
+        externalId: messages.externalId,
+        sourceEventId: messages.sourceEventId,
+      })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.ptId, ptId),
+          eq(messages.sourceEventId, clientMutationId),
+        ),
+      );
+    expect(storedMessages).toHaveLength(1);
+    expect(storedMessages[0].externalId).toBe('wamid.pwa-test');
+
+    const [finalMutation] = await db
+      .select({ status: pwaMutations.status })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      )
+      .limit(1);
+    expect(finalMutation.status).toBe('success');
+  });
+
+  it('recovers directly from a pre-seeded sent ledger row', async () => {
+    await seedConnection(ptId);
+    const { conversationId } = await seedConversation(ptId);
+    const clientMutationId = nextId();
+    await db.insert(pwaMutations).values({
+      ptId,
+      clientMutationId,
+      type: 'message.send',
+      status: 'sent',
+      result: { graphMessageId: 'wamid.recover' },
+    });
+
+    const res = await postMessage(
+      makePost('/api/pwa/mutations/message', {
+        clientMutationId,
+        conversationId,
+        body: 'Recovered from sent',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(sendFreeFormMock).not.toHaveBeenCalled();
+
+    const storedMessages = await db
+      .select({ externalId: messages.externalId })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.ptId, ptId),
+          eq(messages.sourceEventId, clientMutationId),
+        ),
+      );
+    expect(storedMessages).toHaveLength(1);
+    expect(storedMessages[0].externalId).toBe('wamid.recover');
+
+    const [storedMutation] = await db
+      .select({ status: pwaMutations.status })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      )
+      .limit(1);
+    expect(storedMutation.status).toBe('success');
+  });
+
+  it('pre-send refusal discards the ledger so the same id can retry', async () => {
+    const { conversationId } = await seedConversation(ptId);
+    const clientMutationId = nextId();
+    const body = {
+      clientMutationId,
+      conversationId,
+      body: 'No connection yet',
+    };
+
+    const first = await postMessage(
+      makePost('/api/pwa/mutations/message', body),
+    );
+
+    expect(first.status).toBe(409);
+    await expect(first.json()).resolves.toMatchObject({
+      ok: false,
+      code: 'no_connection',
+    });
+    expect(sendFreeFormMock).not.toHaveBeenCalled();
+
+    const discarded = await db
+      .select({ id: pwaMutations.id })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      );
+    expect(discarded).toHaveLength(0);
+
+    await seedConnection(ptId);
+    const second = await postMessage(
+      makePost('/api/pwa/mutations/message', body),
+    );
+
+    expect(second.status).toBe(200);
+    expect(sendFreeFormMock).toHaveBeenCalledTimes(1);
+
+    const storedMessages = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.ptId, ptId),
+          eq(messages.sourceEventId, clientMutationId),
+        ),
+      );
+    expect(storedMessages).toHaveLength(1);
+  });
+
+  it('outside-window refusal discards the ledger', async () => {
+    await seedConnection(ptId);
+    const { conversationId } = await seedConversation(ptId);
+    const clientMutationId = nextId();
+    sendFreeFormMock.mockRejectedValueOnce(new OutsideWindowError());
+
+    const res = await postMessage(
+      makePost('/api/pwa/mutations/message', {
+        clientMutationId,
+        conversationId,
+        body: 'Window closed',
+      }),
+    );
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: false,
+      code: 'outside_window',
+    });
+
+    const rows = await db
+      .select({ id: pwaMutations.id })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('rate-limited (429) discards the ledger', async () => {
+    await seedConnection(ptId);
+    const { conversationId } = await seedConversation(ptId);
+    const clientMutationId = nextId();
+    sendFreeFormMock.mockRejectedValueOnce(
+      new GraphApiError({ status: 429, message: 'rate' }),
+    );
+
+    const res = await postMessage(
+      makePost('/api/pwa/mutations/message', {
+        clientMutationId,
+        conversationId,
+        body: 'Slow down',
+      }),
+    );
+
+    expect(res.status).toBe(429);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: false,
+      code: 'rate_limited',
+    });
+
+    const rows = await db
+      .select({ id: pwaMutations.id })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      );
+    expect(rows).toHaveLength(0);
   });
 });
 
