@@ -104,6 +104,25 @@ describe('getBillingSnapshot', () => {
     expect(snap.reminders.limit).toBe(10);
   });
 
+  it('derives currentPeriod from the most recent PAID order, ignoring failed ones', async () => {
+    await db
+      .update(pts)
+      .set({ plan: 'solo', planExpiresAt: new Date(NOW.getTime() + 20 * DAY) })
+      .where(eq(pts.id, ptId));
+    await seedOrder({ period: 'monthly', status: 'paid', ageDays: 40 });
+    await seedOrder({ period: 'yearly', status: 'paid', ageDays: 5 });
+    await seedOrder({ period: 'monthly', status: 'failed', ageDays: 1 });
+
+    const snap = await getBillingSnapshot(ptId, NOW);
+    // Most recent PAID order is the yearly one; the newer failed order is ignored.
+    expect(snap.currentPeriod).toBe('yearly');
+  });
+
+  it('reports currentPeriod null when the PT has no orders', async () => {
+    const snap = await getBillingSnapshot(ptId, NOW);
+    expect(snap.currentPeriod).toBeNull();
+  });
+
   it('lists settled receipts newest-first with whole-ALL amounts, excluding created orders', async () => {
     await seedOrder({ period: 'monthly', status: 'paid', ageDays: 40 });
     await seedOrder({ period: 'yearly', status: 'failed', ageDays: 10 });

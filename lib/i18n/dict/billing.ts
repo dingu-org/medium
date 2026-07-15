@@ -44,6 +44,14 @@ export const billing = {
   upgradeSub: 'Më shumë biseda, kujtesa dhe personalizim.',
   upgradeCta: 'Kalo te Solo',
 
+  // Active-Solo slot: monthly→yearly upsell, renew, and yearly reassurance
+  switchTitle: 'Kalo te plani vjetor',
+  switchSub: 'Të njëjtat përfitime, 2 muaj falas krahasuar me pagesën mujore.',
+  renewTitle: 'Rinovo planin',
+  renewSub: 'Rinovo Solo-n që të mos humbasësh asnjë ditë.',
+  reassureTitle: 'Ke planin më të plotë',
+  reassureBody: 'Solo vjetor është aktiv. Do të të kujtojmë kur t’i afrohet rinovimi.',
+
   // Period picker + price
   periodMonthly: 'Mujor',
   periodYearly: 'Vjetor',

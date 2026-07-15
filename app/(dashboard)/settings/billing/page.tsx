@@ -6,7 +6,7 @@ import {
   applyOrderOutcome,
   type ApplyOrderResult,
 } from '@/lib/billing/payments';
-import { getBillingSnapshot } from '@/lib/billing/read-model';
+import { getBillingSnapshot, resolveCheckoutSlot } from '@/lib/billing/read-model';
 import { db } from '@/lib/db';
 import { billingOrders } from '@/lib/db/schema';
 import { formatDate, formatLek, t } from '@/lib/i18n';
@@ -21,6 +21,12 @@ export const metadata = { title: `${t.billing.navTitle} · Medium` };
 const PERIOD_LABEL = {
   monthly: t.billing.periodMonthly,
   yearly: t.billing.periodYearly,
+} as const;
+
+const CHECKOUT_COPY = {
+  upgrade: { title: t.billing.upgradeTitle, sub: t.billing.upgradeSub },
+  switch: { title: t.billing.switchTitle, sub: t.billing.switchSub },
+  renew: { title: t.billing.renewTitle, sub: t.billing.renewSub },
 } as const;
 
 export default async function BillingSettingsPage({
@@ -55,7 +61,7 @@ export default async function BillingSettingsPage({
   }
 
   const snapshot = await getBillingSnapshot(user.id);
-  const showCheckout = !snapshot.planLifetime && snapshot.price !== null;
+  const slot = resolveCheckoutSlot(snapshot);
 
   return (
     <div className="-mx-4 -mt-4">
@@ -81,20 +87,39 @@ export default async function BillingSettingsPage({
           </div>
         </section>
 
-        {/* Upgrade / renew — hidden for lifetime pilots. */}
-        {showCheckout && snapshot.price && (
+        {/* Yearly-Solo reassurance — no form, they already hold the best plan. */}
+        {slot.kind === 'reassure' && (
           <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-card)]">
             <h2 className="font-heading text-lg font-semibold text-foreground">
-              {t.billing.upgradeTitle}
+              {t.billing.reassureTitle}
             </h2>
             <p className="text-ink-2 mt-1 text-[13.5px]">
-              {t.billing.upgradeSub}
+              {t.billing.reassureBody}
             </p>
-            <div className="mt-4">
-              <CheckoutForm price={snapshot.price} />
-            </div>
           </section>
         )}
+
+        {/* Upgrade / switch / renew — hidden for lifetime pilots and yearly Solo. */}
+        {snapshot.price &&
+          (slot.kind === 'upgrade' ||
+            slot.kind === 'switch' ||
+            slot.kind === 'renew') && (
+            <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-card)]">
+              <h2 className="font-heading text-lg font-semibold text-foreground">
+                {CHECKOUT_COPY[slot.kind].title}
+              </h2>
+              <p className="text-ink-2 mt-1 text-[13.5px]">
+                {CHECKOUT_COPY[slot.kind].sub}
+              </p>
+              <div className="mt-4">
+                <CheckoutForm
+                  price={snapshot.price}
+                  periods={slot.periods}
+                  defaultPeriod={slot.defaultPeriod}
+                />
+              </div>
+            </section>
+          )}
 
         {/* Receipts. */}
         <section>

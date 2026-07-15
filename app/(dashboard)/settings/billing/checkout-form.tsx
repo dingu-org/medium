@@ -18,10 +18,14 @@ import { createCheckoutAction } from './actions';
  */
 export function CheckoutForm({
   price,
+  periods = ['monthly', 'yearly'],
+  defaultPeriod = 'yearly',
 }: {
   price: { monthly: number; yearly: number };
+  periods?: BillingPeriod[];
+  defaultPeriod?: BillingPeriod;
 }) {
-  const [period, setPeriod] = useState<BillingPeriod>('yearly');
+  const [period, setPeriod] = useState<BillingPeriod>(defaultPeriod);
   const [pending, startTransition] = useTransition();
 
   function startCheckout() {
@@ -36,27 +40,48 @@ export function CheckoutForm({
     });
   }
 
-  const monthlyLabel = t.billing.priceMonthly(formatLek(price.monthly));
-  const yearlyLabel = t.billing.priceYearly(formatLek(price.yearly));
+  const OPTION = {
+    monthly: {
+      label: t.billing.periodMonthly,
+      price: t.billing.priceMonthly(formatLek(price.monthly)),
+    },
+    yearly: {
+      label: t.billing.periodYearly,
+      price: t.billing.priceYearly(formatLek(price.yearly)),
+      badge: t.billing.twoMonthsFree,
+    },
+  } as const;
 
   return (
     <div className="space-y-4">
-      {/* Period picker — annual favored ("2 muaj falas"). */}
-      <div className="grid grid-cols-2 gap-2" role="radiogroup">
-        <PeriodOption
-          selected={period === 'monthly'}
-          onSelect={() => setPeriod('monthly')}
-          label={t.billing.periodMonthly}
-          price={monthlyLabel}
-        />
-        <PeriodOption
-          selected={period === 'yearly'}
-          onSelect={() => setPeriod('yearly')}
-          label={t.billing.periodYearly}
-          price={yearlyLabel}
-          badge={t.billing.twoMonthsFree}
-        />
-      </div>
+      {/* Period picker — annual favored ("2 muaj falas"). Collapses to a single
+          read-only summary when only one period is offered (e.g. the upsell). */}
+      {periods.length > 1 ? (
+        <div className="grid grid-cols-2 gap-2" role="radiogroup">
+          {periods.map((p) => {
+            const opt = OPTION[p];
+            return (
+              <PeriodOption
+                key={p}
+                selected={period === p}
+                onSelect={() => setPeriod(p)}
+                label={opt.label}
+                price={opt.price}
+                badge={'badge' in opt ? opt.badge : undefined}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-border bg-card p-3">
+          <span className="text-[13.5px] font-semibold text-foreground">
+            {OPTION[periods[0]].label}
+          </span>
+          <span className="text-ink-2 mt-0.5 block text-[13px] tabular-nums">
+            {OPTION[periods[0]].price}
+          </span>
+        </div>
+      )}
 
       <p className="text-ink-3 text-[12.5px]">{t.billing.vatNote}</p>
 

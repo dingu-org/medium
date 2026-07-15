@@ -55,6 +55,8 @@ export type BillingSnapshot = {
   /** Delivered reminders vs the monthly cap (authoritative usage). */
   reminders: BillingUsageMeter;
   receipts: BillingReceipt[];
+  /** Period of the most recent PAID order — drives the upgrade/renew slot. null if never paid. */
+  currentPeriod: 'monthly' | 'yearly' | null;
   /** Whole-ALL VAT-inclusive Solo prices (null if Solo is not purchasable). */
   price: { monthly: number; yearly: number } | null;
 };
@@ -175,6 +177,8 @@ export async function getBillingSnapshot(
     status: row.status as BillingReceipt['status'],
   }));
 
+  const currentPeriod = receiptRows.find((r) => r.status === 'paid')?.period ?? null;
+
   return {
     timezone: pt?.timezone ?? 'Europe/Berlin',
     plan: effective,
@@ -189,6 +193,39 @@ export async function getBillingSnapshot(
     conversations: convMeter,
     reminders: reminderMeter,
     receipts,
+    currentPeriod,
     price: soloPrice ? { monthly: soloPrice.monthly, yearly: soloPrice.yearly } : null,
   };
+}
+
+export type CheckoutSlotKind = 'none' | 'upgrade' | 'switch' | 'reassure' | 'renew';
+export type CheckoutSlot = {
+  kind: CheckoutSlotKind;
+  periods?: ('monthly' | 'yearly')[];
+  defaultPeriod?: 'monthly' | 'yearly';
+};
+
+/**
+ * What the billing screen's payment slot should render, given the snapshot.
+ * Pure + unit-tested. Never sells to lifetime pilots or when Solo is not
+ * purchasable. Active Solo users are NOT shown "Upgrade to Solo": a monthly
+ * buyer gets the yearly-value upsell, a yearly buyer gets a reassurance note,
+ * and everyone gets a renew prompt once expiring / in grace.
+ */
+export function resolveCheckoutSlot(snapshot: BillingSnapshot): CheckoutSlot {
+  if (snapshot.planLifetime || snapshot.price === null) return { kind: 'none' };
+  switch (snapshot.state) {
+    case 'free':
+      return { kind: 'upgrade', periods: ['monthly', 'yearly'], defaultPeriod: 'yearly' };
+    case 'active':
+      if (snapshot.currentPeriod === 'monthly')
+        return { kind: 'switch', periods: ['yearly'], defaultPeriod: 'yearly' };
+      if (snapshot.currentPeriod === 'yearly') return { kind: 'reassure' };
+      return { kind: 'none' };
+    case 'expiring':
+    case 'grace':
+      return { kind: 'renew', periods: ['monthly', 'yearly'], defaultPeriod: 'yearly' };
+    default:
+      return { kind: 'none' };
+  }
 }
