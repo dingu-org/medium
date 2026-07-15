@@ -12,6 +12,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { conversations, messages, patients } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
+import { getUnreadChatCount } from '@/lib/chat/queries';
+import { getChatListSnapshot } from '@/lib/pwa/read-models';
 import { markConversationRead } from '../actions';
 
 const authState = vi.hoisted(() => ({ userId: '' as string | null }));
@@ -152,6 +154,31 @@ describe('markConversationRead', () => {
   it('returns ok:false for a message outside the conversation', async () => {
     const result = await markConversationRead(conversationId, randomUUID());
     expect(result).toEqual({ ok: false });
+  });
+
+  it('clears unread when the through-message uses the DB-default now() timestamp (regression: unread-microseconds)', async () => {
+    // Insert WITHOUT an explicit createdAt so the column default now() applies:
+    // that value carries microsecond precision, which the old JS-Date round-trip
+    // truncated to milliseconds — leaving the through-message counted as unread.
+    // Every other test passes explicit ms-precision Dates, which is exactly why
+    // this bug went uncaught.
+    const [fresh] = await db
+      .insert(messages)
+      .values({
+        ptId,
+        conversationId,
+        role: 'patient',
+        channel: 'whatsapp',
+        content: 'micros',
+      })
+      .returning({ id: messages.id });
+
+    const result = await markConversationRead(conversationId, fresh.id);
+    expect(result).toEqual({ ok: true });
+
+    const rows = await getChatListSnapshot(ptId);
+    expect(rows.find((r) => r.id === conversationId)?.unread_count).toBe(0);
+    await expect(getUnreadChatCount(ptId)).resolves.toBe(0);
   });
 });
 

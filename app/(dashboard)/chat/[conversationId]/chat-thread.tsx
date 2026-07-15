@@ -88,6 +88,29 @@ export function ChatThread({
   const [aiActive, setAiActive] = useState(initialAiActive);
   const [windowClosed, setWindowClosed] = useState(!initialWindowOpen);
   const [closed, setClosed] = useState(initialClosed);
+
+  // Reconcile server-derived status with local optimistic state: when
+  // router.refresh() delivers a new seeding-prop value (escalation, takeover,
+  // close, or a fresh inbound that reopens the window — possibly from another
+  // device), adopt it. Guarding on the previous prop value preserves optimistic
+  // updates applied between refreshes. This is the React "storing info from
+  // previous renders" pattern; the set fires during render, not in an effect.
+  const prevInitialAiActive = useRef(initialAiActive);
+  if (prevInitialAiActive.current !== initialAiActive) {
+    prevInitialAiActive.current = initialAiActive;
+    setAiActive(initialAiActive);
+  }
+  const prevInitialWindowOpen = useRef(initialWindowOpen);
+  if (prevInitialWindowOpen.current !== initialWindowOpen) {
+    prevInitialWindowOpen.current = initialWindowOpen;
+    setWindowClosed(!initialWindowOpen);
+  }
+  const prevInitialClosed = useRef(initialClosed);
+  if (prevInitialClosed.current !== initialClosed) {
+    prevInitialClosed.current = initialClosed;
+    setClosed(initialClosed);
+  }
+
   const [draft, setDraft] = useState('');
   const [optimisticMessages, setOptimisticMessages] = useState<
     OptimisticMessage[]
@@ -218,7 +241,7 @@ export function ChatThread({
               : item,
           ),
         );
-        if (res.error.includes('24-hour')) setWindowClosed(true);
+        if (res.code === 'outside_window') setWindowClosed(true);
         toast.error(res.error);
       } catch (error) {
         setOptimisticMessages((items) =>

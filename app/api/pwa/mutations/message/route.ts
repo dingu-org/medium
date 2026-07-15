@@ -29,8 +29,17 @@ const schema = z.object({
   body: z.string().trim().min(1).max(4096),
 });
 
-function jsonError(error: string, status: number) {
-  return NextResponse.json({ ok: false, error }, { status });
+type FailureCode =
+  | 'outside_window'
+  | 'connection_revoked'
+  | 'no_connection'
+  | 'rate_limited';
+
+function jsonError(error: string, status: number, code?: FailureCode) {
+  return NextResponse.json(
+    code ? { ok: false, error, code } : { ok: false, error },
+    { status },
+  );
 }
 
 export async function POST(request: Request) {
@@ -67,7 +76,7 @@ export async function POST(request: Request) {
       clientMutationId: input.clientMutationId,
       error: failure.error,
     });
-    return jsonError(failure.error, failure.status);
+    return jsonError(failure.error, failure.status, failure.code);
   }
 
   if (!result.ok) {
@@ -76,7 +85,7 @@ export async function POST(request: Request) {
       clientMutationId: input.clientMutationId,
       error: result.error,
     });
-    return jsonError(result.error, result.status);
+    return jsonError(result.error, result.status, result.code);
   }
 
   await completePwaMutation({
@@ -94,7 +103,7 @@ async function sendMessage(input: {
   body: string;
 }): Promise<
   | { ok: true; messageId: string | null; localMessageId: string | null }
-  | { ok: false; error: string; status: number }
+  | { ok: false; error: string; status: number; code?: FailureCode }
 > {
   const [conversation] = await db
     .select({
@@ -129,7 +138,12 @@ async function sendMessage(input: {
     .limit(1);
 
   if (!connection) {
-    return { ok: false, error: 'WhatsApp nuk është i lidhur.', status: 409 };
+    return {
+      ok: false,
+      error: 'WhatsApp nuk është i lidhur.',
+      status: 409,
+      code: 'no_connection',
+    };
   }
 
   let externalMessageId: string | null;
@@ -146,10 +160,16 @@ async function sendMessage(input: {
         ok: false,
         error: 'Dritarja 24-orëshe e përgjigjes është mbyllur.',
         status: 409,
+        code: 'outside_window',
       };
     }
     if (error instanceof ConnectionRevokedError) {
-      return { ok: false, error: 'WhatsApp nuk është i lidhur.', status: 409 };
+      return {
+        ok: false,
+        error: 'WhatsApp nuk është i lidhur.',
+        status: 409,
+        code: 'connection_revoked',
+      };
     }
     throw error;
   }
@@ -195,12 +215,17 @@ async function sendMessage(input: {
   return { ok: true, messageId: externalMessageId, localMessageId };
 }
 
-function messageFor(error: unknown): { error: string; status: number } {
+function messageFor(error: unknown): {
+  error: string;
+  status: number;
+  code?: FailureCode;
+} {
   if (error instanceof GraphApiError) {
     if (error.status === 429) {
       return {
         error: 'WhatsApp po kufizon mesazhet. Provo pas pak.',
         status: 429,
+        code: 'rate_limited',
       };
     }
     return {

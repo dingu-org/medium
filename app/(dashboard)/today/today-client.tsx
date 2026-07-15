@@ -50,10 +50,7 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
         table="appointments"
         filter={`pt_id=eq.${snapshot.ptId}`}
       />
-      <RealtimeRefresher
-        table="conversations"
-        filter={`pt_id=eq.${snapshot.ptId}`}
-      />
+      {/* conversations is subscribed app-wide in the dashboard layout. */}
       <RealtimeRefresher
         table="reminder_jobs"
         filter={`pt_id=eq.${snapshot.ptId}`}

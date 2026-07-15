@@ -6,7 +6,7 @@ import type {
   SupabaseClient,
 } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // The Supabase realtime client pulls in a large bundle, so we load it lazily
 // (a separate async chunk) the first time a subscription mounts — keeping it
@@ -98,11 +98,87 @@ export function useRealtimeChannel<T extends Record<string, unknown>>(
   return status;
 }
 
+// Catch-up refreshes collapse to at most one per second across the whole tab.
+// Several hook instances mount per screen (the chat list has two refreshers,
+// today has three) and a reconnect or foreground event fires every one of them
+// at once; without this throttle they would stampede router.refresh(). The
+// live-event path keeps its own 250ms debounce (see useRealtimeRefresh) — this
+// guards only the catch-up path.
+const CATCH_UP_THROTTLE_MS = 1_000;
+let lastCatchUpAt = 0;
+
+function triggerCatchUp(refresh: () => void): void {
+  const now = Date.now();
+  if (now - lastCatchUpAt < CATCH_UP_THROTTLE_MS) return;
+  lastCatchUpAt = now;
+  refresh();
+}
+
+/**
+ * Backfill realtime events a lazily-subscribed channel can't deliver. The
+ * socket connects after the server render, so any change in that window is
+ * lost; it also dies silently when the iOS PWA / tab is backgrounded, and a
+ * CHANNEL_ERROR/TIMED_OUT reconnect never replays what it missed. This re-runs
+ * `refresh` on the signals that mark such a gap: every transition INTO
+ * `connected` (initial subscribe and each re-subscribe — once per cycle, not
+ * per event), the tab returning to the foreground (visibilitychange), and a
+ * bfcache restore (pageshow with `persisted`). Refreshes are throttled
+ * module-wide (see triggerCatchUp). Watches the `status` value rather than
+ * touching useRealtimeChannel, so all public hook signatures stay unchanged.
+ */
+function useCatchUpRefresh(
+  status: RealtimeStatus,
+  refresh: () => void,
+  enabled = true,
+): void {
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  });
+
+  // Fire only when status crosses into `connected`, so a (re)subscribe
+  // refetches once — not on every subsequent event while already connected.
+  const prevStatus = useRef<RealtimeStatus | null>(null);
+  useEffect(() => {
+    if (
+      enabled &&
+      status === 'connected' &&
+      prevStatus.current !== 'connected'
+    ) {
+      triggerCatchUp(refreshRef.current);
+    }
+    prevStatus.current = status;
+  }, [status, enabled]);
+
+  // Foreground catch-up: the socket can die unnoticed while backgrounded, so
+  // refetch when the tab becomes visible again or is restored from the bfcache.
+  useEffect(() => {
+    if (!enabled) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        triggerCatchUp(refreshRef.current);
+      }
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) triggerCatchUp(refreshRef.current);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, [enabled]);
+}
+
 /**
  * For list views whose rows are joined server-side (calendar, conversation
  * list, notifications): on any change to `table`, trigger a soft
  * `router.refresh()` so the server re-renders with correct joins — no full
- * reload, client state preserved. Debounced to coalesce bursts.
+ * reload, client state preserved. Debounced to coalesce bursts. Also backfills
+ * events missed while the channel was not yet subscribed or the tab was
+ * backgrounded, by refetching on (re)connect and on foreground — same debounced
+ * refresh, throttled across instances (see useCatchUpRefresh).
  */
 export function useRealtimeRefresh(
   table: string,
@@ -119,15 +195,15 @@ export function useRealtimeRefresh(
     [],
   );
 
-  return useRealtimeChannel(
-    table,
-    filter,
-    () => {
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => router.refresh(), 250);
-    },
-    enabled,
-  );
+  // Soft refresh, debounced to coalesce bursts of live events into one refetch.
+  const refresh = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => router.refresh(), 250);
+  }, [router]);
+
+  const status = useRealtimeChannel(table, filter, refresh, enabled);
+  useCatchUpRefresh(status, refresh, enabled);
+  return status;
 }
 
 export type LiveMessage = {
@@ -148,11 +224,14 @@ type RawMessage = {
  * Live message thread for one conversation. Seeds from server-fetched messages
  * and applies realtime INSERT/UPDATE so new patient/AI/PT messages appear
  * instantly. Keyed by id, so an optimistic row and its realtime echo dedupe.
+ * On (re)connect and on foreground it re-seeds from the server to backfill any
+ * messages that landed while the socket was down (see useCatchUpRefresh).
  */
 export function useMessages(
   conversationId: string,
   initial: LiveMessage[],
 ): { messages: LiveMessage[]; status: RealtimeStatus } {
+  const router = useRouter();
   const [byId, setById] = useState<Map<string, LiveMessage>>(
     () => new Map(initial.map((m) => [m.id, m])),
   );
@@ -196,6 +275,11 @@ export function useMessages(
       });
     },
   );
+
+  // Only live INSERTs land here, so a message that arrived while the socket was
+  // down would never appear. router.refresh() re-runs the server fetch, which
+  // flows back through the seed effect above and merges by id.
+  useCatchUpRefresh(status, () => router.refresh());
 
   const messages = useMemo(
     () =>

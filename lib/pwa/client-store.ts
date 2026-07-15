@@ -43,7 +43,7 @@ export type QueueReason = 'offline' | 'retryable';
 type SendResult =
   | { status: 'sent'; response: unknown }
   | { status: 'queued'; mutation: PendingMutation; reason: QueueReason }
-  | { status: 'failed'; error: string; statusCode?: number };
+  | { status: 'failed'; error: string; statusCode?: number; code?: string };
 
 interface MediumPwaDb extends DBSchema {
   snapshots: {
@@ -197,12 +197,14 @@ export async function sendOrQueueMutation(input: {
         status: 'failed',
         error: response.error,
         statusCode: response.status,
+        code: response.code,
       };
     }
     return {
       status: 'failed',
       error: response.error,
       statusCode: response.status,
+      code: response.code,
     };
   } catch (error) {
     return {
@@ -273,7 +275,7 @@ async function postMutation(
   body: Record<string, unknown>,
 ): Promise<
   | { ok: true; body: unknown }
-  | { ok: false; status: number; error: string; final: boolean }
+  | { ok: false; status: number; error: string; final: boolean; code?: string }
 > {
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -285,11 +287,13 @@ async function postMutation(
   if (response.ok) return { ok: true, body: payload };
   const error =
     typeof payload.error === 'string' ? payload.error : 'Request failed.';
+  const code = typeof payload.code === 'string' ? payload.code : undefined;
   return {
     ok: false,
     status: response.status,
     error,
     final: response.status >= 400 && response.status < 500,
+    code,
   };
 }
 

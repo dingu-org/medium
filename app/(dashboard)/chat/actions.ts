@@ -224,12 +224,18 @@ async function markConversationReadImpl(
   await db
     .update(conversations)
     .set({
-      // Pass an ISO string (not the raw Date): a JS Date interpolated into a
-      // sql`` template has no column-type context, so postgres-js can't
-      // serialize it and throws before the query runs.
+      // Resolve the watermark entirely in SQL: messages.created_at (from now())
+      // carries microsecond precision but a JS Date only has milliseconds, so
+      // round-tripping the timestamp through JS lands last_read_at fractionally
+      // before the message and leaves that last message counted as unread forever.
       lastReadAt: sql`GREATEST(
         COALESCE(${conversations.lastReadAt}, '-infinity'::timestamptz),
-        ${throughMessage.createdAt.toISOString()}::timestamptz
+        (
+          SELECT m.created_at
+          FROM messages m
+          WHERE m.id = ${throughMessageId}
+            AND m.conversation_id = ${conversationId}
+        )
       )`,
     })
     .where(

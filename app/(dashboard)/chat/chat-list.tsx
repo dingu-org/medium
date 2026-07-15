@@ -60,7 +60,9 @@ export function ChatList({
 
   return (
     <div className="space-y-4">
-      <RealtimeRefresher table="conversations" filter={`pt_id=eq.${ptId}`} />
+      {/* conversations is subscribed app-wide in the dashboard layout; here we
+          only need messages, since AI replies insert message rows without
+          touching conversations. */}
       <RealtimeRefresher table="messages" filter={`pt_id=eq.${ptId}`} />
       <SegmentedControl
         ariaLabel="Gjendja e bisedave"

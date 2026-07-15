@@ -389,7 +389,7 @@ export async function getChatListSnapshot(
       SELECT content, role, created_at
       FROM messages
       WHERE messages.conversation_id = c.id
-      ORDER BY created_at DESC
+      ORDER BY created_at DESC, id DESC
       LIMIT 1
     ) m ON true
     WHERE c.pt_id = ${ptId}
@@ -409,7 +409,7 @@ export async function getChatListSnapshot(
       }
     ORDER BY
       CASE WHEN c.escalation_state <> 'idle' OR c.ai_active = false THEN 0 ELSE 1 END,
-      COALESCE(c.last_inbound_at, c.created_at) DESC
+      COALESCE(m.created_at, c.created_at) DESC
     LIMIT 50
   `);
 }

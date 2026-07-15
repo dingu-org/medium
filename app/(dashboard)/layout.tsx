@@ -8,6 +8,7 @@ import {
 } from '@/app/onboarding/constants';
 import { DashboardChrome } from '@/components/dashboard/dashboard-chrome';
 import { PwaProvider } from '@/components/pwa/pwa-provider';
+import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { WebVitalsReporter } from '@/components/web-vitals-reporter';
 import { Toaster } from '@/components/ui/sonner';
 import { db } from '@/lib/db';
@@ -59,6 +60,13 @@ export default async function DashboardLayout({
       unreadChats={unreadChats}
     >
       <PwaProvider />
+      {/* App-wide: keeps the bottom-nav unread chat badge fresh on screens
+          without their own conversations subscription (calendar, settings).
+          Every inbound patient message bumps conversations.last_inbound_at. */}
+      <RealtimeRefresher
+        table="conversations"
+        filter={`pt_id=eq.${user.id}`}
+      />
       <WebVitalsReporter />
       {children}
       <Toaster />

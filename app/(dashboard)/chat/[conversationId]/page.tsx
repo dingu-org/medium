@@ -20,6 +20,7 @@ export default async function ConversationPage({
 
   return (
     <ChatThread
+      key={snapshot.conversationId}
       conversationId={snapshot.conversationId}
       patientName={snapshot.patientName}
       patientPhone={snapshot.patientPhone}
