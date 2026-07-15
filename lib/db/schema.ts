@@ -310,6 +310,14 @@ export const messages = pgTable(
     // Serves the admin "today live cost" scan, which filters messages by a bare
     // created_at range across all tenants.
     index('messages_created_at_idx').on(t.createdAt),
+    // Serves the chat-list snapshot's per-conversation lateral lookups
+    // (getChatListSnapshot in lib/pwa/read-models.ts): last-message fetch,
+    // unread count, and search all filter by conversation_id ordered/bounded by
+    // created_at, with no prior index leading on conversation_id.
+    index('messages_conversation_created_at_idx').on(
+      t.conversationId,
+      t.createdAt,
+    ),
   ],
 );
 
