@@ -69,15 +69,12 @@ const pokClient = createPokClient({
   keySecret: requirePokEnv('POK_KEY_SECRET'),
 });
 
-// ONE documented minor-unit constant. UNCONFIRMED: the C5 staging spike could
-// not authenticate against POK staging (credentials rejected as "incorrect" —
-// see scripts/smoke-pok.ts), so the dashboard read-back that pins ALL's decimal
-// treatment never ran. Tolerant default per the plan: assume ALL uses 2 decimals
-// like most currencies. A real charge is NOT safe until this is confirmed.
-// TODO(spike): run `pnpm smoke:pok` with working staging creds and create an
-// order of amount 250000; if the POK dashboard shows 2,500 ALL keep 100, if it
-// shows 250,000 ALL flip this to 1 (ALL treated as zero-decimal).
-const ALL_MINOR_FACTOR = 100;
+// ONE documented minor-unit constant. CONFIRMED by the POK staging spike
+// (scripts/smoke-pok.ts, 2026-07-14): an order sent as amount `250000` renders on
+// POK's hosted payment page as "250,000.00 ALL" — i.e. POK treats the integer
+// amount as WHOLE ALL (not minor units / cents). So the factor is 1: send the
+// plans.ts whole-ALL price directly. (A factor of 100 would overcharge 100×.)
+const ALL_MINOR_FACTOR = 1;
 
 const CURRENCY = 'ALL';
 
@@ -88,36 +85,14 @@ function amountMinorFor(period: BillingPeriod): number {
   return price[period] * ALL_MINOR_FACTOR;
 }
 
-// POK's documented status enum is incomplete, so we classify through an explicit
-// allowlist and treat everything else as pending — we NEVER credit plan time on
-// an unrecognized status. Synonyms are folded in so a staging/prod wording
-// difference can't silently drop a real capture.
-const PAID_STATUSES = new Set([
-  'CAPTURED',
-  'COMPLETED',
-  'SUCCEEDED',
-  'SUCCESS',
-  'PAID',
-  'SETTLED',
-]);
-const FAILED_STATUSES = new Set([
-  'CANCELLED',
-  'CANCELED',
-  'EXPIRED',
-  'FAILED',
-  'DECLINED',
-  'REJECTED',
-  'VOIDED',
-]);
-
-function classifyPokStatus(status: string): 'paid' | 'pending' | 'failed' {
-  const s = status.trim().toUpperCase();
-  if (PAID_STATUSES.has(s)) return 'paid';
-  if (FAILED_STATUSES.has(s)) return 'failed';
-  // CREATED / PENDING / PROCESSING / AUTHORIZED / any unknown string → pending.
-  // TODO(spike): if a confirmed staging spike shows guest orders sit
-  // AUTHORIZED-not-CAPTURED, handle that status here by calling
-  // pokClient.captureOrder(id) then re-fetching, instead of returning pending.
+// POK exposes no string status — it uses boolean flags (spike-confirmed). We
+// credit ONLY on isCaptured (money actually taken; autoCapture:true makes a
+// successful guest payment land captured in one flow); a canceled/refunded order
+// is a failure; anything else (still awaiting payment) is pending. We never
+// credit plan time on an ambiguous state.
+function classifyPokStatus(order: PokOrder): 'paid' | 'pending' | 'failed' {
+  if (order.isCaptured) return 'paid';
+  if (order.isCanceled || order.isRefunded) return 'failed';
   return 'pending';
 }
 
@@ -125,9 +100,12 @@ function classifyPokStatus(status: string): 'paid' | 'pending' | 'failed' {
 function orderSnapshot(order: PokOrder): Record<string, unknown> {
   return {
     id: order.id,
-    status: order.status,
+    isCaptured: order.isCaptured ?? null,
+    isCompleted: order.isCompleted ?? null,
+    isCanceled: order.isCanceled ?? null,
+    isRefunded: order.isRefunded ?? null,
     amount: order.amount ?? null,
-    currency: order.currency ?? null,
+    currencyCode: order.currencyCode ?? null,
   };
 }
 
@@ -157,15 +135,21 @@ export function computeExtendedExpiry(
 export async function createCheckout(
   ptId: string,
   period: BillingPeriod,
-): Promise<{ pokOrderId: string; amountMinor: number }> {
+  returnUrl: string,
+): Promise<{ pokOrderId: string; confirmUrl?: string; amountMinor: number }> {
   const amountMinor = amountMinorFor(period);
-  // Only documented, non-PII fields are sent. autoCapture/webhookUrl/redirectUrl
-  // are omitted: the spike could not confirm POK accepts them, and an
-  // unaccepted field would 4xx the order. Wire them in once the spike confirms.
+  // POK captures on its own hosted page (autoCapture) and redirects the customer
+  // back to `returnUrl` (POK appends `?orderId=…`) on both success and failure;
+  // the /settings/billing page then re-fetches the order and settles. No webhook
+  // (POK has none) — the hourly reconcile cron is the safety net.
   const order = await pokClient.createOrder({
     amountMinor,
     currency: CURRENCY,
-    extra: { description: `Medium Solo (${period})` },
+    extra: {
+      description: `Medium Solo (${period})`,
+      redirectUrl: returnUrl,
+      failRedirectUrl: returnUrl,
+    },
   });
 
   await db.insert(billingOrders).values({
@@ -178,7 +162,7 @@ export async function createCheckout(
     status: 'created',
   });
 
-  return { pokOrderId: order.id, amountMinor };
+  return { pokOrderId: order.id, confirmUrl: order.confirmUrl, amountMinor };
 }
 
 /**
@@ -222,7 +206,7 @@ export async function applyOrderOutcome(
     throw error;
   }
 
-  const outcome = classifyPokStatus(order.status);
+  const outcome = classifyPokStatus(order);
 
   if (outcome === 'failed') {
     await db
@@ -231,7 +215,8 @@ export async function applyOrderOutcome(
       .where(eq(billingOrders.pokOrderId, pokOrderId));
     log.info('pok.order_failed', 'POK order settled as failed', {
       order_id: pokOrderId,
-      status: order.status,
+      canceled: order.isCanceled ?? null,
+      refunded: order.isRefunded ?? null,
     });
     return 'failed';
   }
@@ -307,7 +292,7 @@ async function settleOrder(
   await tryPublishOutboxEvent(result.eventId);
   log.info('pok.order_applied', 'POK order settled and plan extended', {
     order_id: order.id,
-    status: order.status,
+    captured: order.isCaptured ?? null,
   });
   return 'applied';
 }

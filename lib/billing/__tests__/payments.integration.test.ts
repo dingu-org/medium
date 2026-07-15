@@ -102,9 +102,9 @@ describe('applyOrderOutcome', () => {
     const pokOrderId = await seedCreatedOrder('monthly');
     mockGetOrder.mockResolvedValue({
       id: pokOrderId,
-      status: 'CAPTURED',
-      amount: 250000,
-      currency: 'ALL',
+      isCaptured: true,
+      amount: 2500,
+      currencyCode: 'ALL',
     });
 
     const first = await applyOrderOutcome(pokOrderId);
@@ -133,7 +133,7 @@ describe('applyOrderOutcome', () => {
 
   it('extends only once under two concurrent settle calls', async () => {
     const pokOrderId = await seedCreatedOrder('monthly');
-    mockGetOrder.mockResolvedValue({ id: pokOrderId, status: 'CAPTURED' });
+    mockGetOrder.mockResolvedValue({ id: pokOrderId, isCaptured: true });
 
     const [a, b] = await Promise.all([
       applyOrderOutcome(pokOrderId),
@@ -159,7 +159,7 @@ describe('applyOrderOutcome', () => {
 
   it('leaves the row created and does not credit on a pending status', async () => {
     const pokOrderId = await seedCreatedOrder('monthly');
-    mockGetOrder.mockResolvedValue({ id: pokOrderId, status: 'PENDING' });
+    mockGetOrder.mockResolvedValue({ id: pokOrderId, isCaptured: false });
 
     const result = await applyOrderOutcome(pokOrderId);
     expect(result).toBe('pending');
@@ -175,7 +175,7 @@ describe('applyOrderOutcome', () => {
 
   it('marks the row failed on a terminal failure status', async () => {
     const pokOrderId = await seedCreatedOrder('monthly');
-    mockGetOrder.mockResolvedValue({ id: pokOrderId, status: 'CANCELLED' });
+    mockGetOrder.mockResolvedValue({ id: pokOrderId, isCanceled: true });
 
     const result = await applyOrderOutcome(pokOrderId);
     expect(result).toBe('failed');

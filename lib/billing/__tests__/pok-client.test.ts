@@ -34,7 +34,7 @@ describe('createPokClient', () => {
   it('caches the login token across calls (one login hit)', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).endsWith('/auth/sdk/login')) return loginResponse();
-      return jsonResponse(200, { data: { id: 'ord1', status: 'CREATED' } });
+      return jsonResponse(200, { data: { sdkOrder: { id: 'ord1' } } });
     });
     function loginResponse() {
       return jsonResponse(200, loginBody('tok'));
@@ -58,7 +58,7 @@ describe('createPokClient', () => {
         // expiresIn 100s → ttl 100_000ms, skew 10_000ms → reuse window 90_000ms.
         return jsonResponse(200, loginBody('tok', 100));
       }
-      return jsonResponse(200, { data: { id: 'ord1', status: 'CREATED' } });
+      return jsonResponse(200, { data: { sdkOrder: { id: 'ord1' } } });
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -81,28 +81,30 @@ describe('createPokClient', () => {
       }
       orderCalls += 1;
       if (orderCalls === 1) return jsonResponse(401, { message: 'unauthorized' });
-      return jsonResponse(200, { data: { id: 'ord1', status: 'CAPTURED' } });
+      return jsonResponse(200, {
+        data: { sdkOrder: { id: 'ord1', isCaptured: true } },
+      });
     });
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createPokClient(CONFIG);
     const order = await client.getOrder('ord1');
 
-    expect(order.status).toBe('CAPTURED');
+    expect(order.isCaptured).toBe(true);
     expect(fetchMock.mock.calls.filter(isLoginCall)).toHaveLength(2);
     expect(orderCalls).toBe(2);
   });
 
-  it('sends the amount in minor units (2500 ALL × 100 = 250000)', async () => {
+  it('sends amount + currencyCode + autoCapture in the create-order body', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).endsWith('/auth/sdk/login')) return jsonResponse(200, loginBody('tok'));
-      return jsonResponse(200, { data: { id: 'neworder' } });
+      return jsonResponse(200, { data: { sdkOrder: { id: 'neworder' } } });
     });
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createPokClient(CONFIG);
     const created = await client.createOrder({
-      amountMinor: 2500 * 100,
+      amountMinor: 2500,
       currency: 'ALL',
       extra: { description: 'Medium Solo (monthly)' },
     });
@@ -114,11 +116,14 @@ describe('createPokClient', () => {
     expect(createCall).toBeDefined();
     const init = createCall![1];
     const body = JSON.parse(init.body as string);
+    // POK requires `currencyCode` (not `currency`) and `autoCapture`.
     expect(body).toMatchObject({
-      amount: 250000,
-      currency: 'ALL',
+      amount: 2500,
+      currencyCode: 'ALL',
+      autoCapture: true,
       description: 'Medium Solo (monthly)',
     });
+    expect(body.currency).toBeUndefined();
     // Bearer token attached.
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer tok');

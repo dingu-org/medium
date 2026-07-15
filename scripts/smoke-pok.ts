@@ -150,24 +150,34 @@ async function main() {
   });
   console.log('    created id:', created.id);
   const order = await client.getOrder(created.id);
-  console.log('    fresh order status string:', JSON.stringify(order.status));
+  // POK has no string status — boolean flags (isCaptured/isCanceled/...).
+  console.log(
+    '    fresh order flags:',
+    JSON.stringify({
+      isCaptured: order.isCaptured,
+      isCanceled: order.isCanceled,
+      isCompleted: order.isCompleted,
+    }),
+  );
   console.log('    getOrder(parsed order):', JSON.stringify(order, null, 2));
   const rawOrder = await rawGetOrder(apiBase, token, created.id);
   console.log('    getOrder(raw envelope):', JSON.stringify(rawOrder, null, 2));
 
-  console.log('\n[3b] MINOR-UNIT FACTOR — creating order of amount 250000');
+  console.log('\n[3b] MINOR-UNIT FACTOR (CONFIRMED = 1, 2026-07-14)');
   const factorOrder = await client.createOrder({
     amountMinor: 250_000,
     currency: 'ALL',
-    extra: { description: 'C5 spike factor probe (price 2500 ALL x100)' },
+    extra: { description: 'C5 spike factor probe' },
   });
   const factorRead = await client.getOrder(factorOrder.id);
   console.log('    id:', factorOrder.id);
   console.log('    amount read back:', factorRead.amount);
   console.log(
-    '    >>> Open the POK dashboard for this order. If it shows 2,500 ALL',
+    "    POK's hosted payment page renders amount 250000 as \"250,000.00 ALL\",",
   );
-  console.log('        => factor 100. If it shows 250,000 ALL => factor 1.');
+  console.log(
+    '    i.e. the amount is WHOLE ALL => ALL_MINOR_FACTOR = 1 (already set).',
+  );
 
   // 4. Summary block.
   console.log('\n--- SUMMARY (paste resolved values into payments.ts) ---');
@@ -180,7 +190,11 @@ async function main() {
         currencyField,
         currencyProbeStatus: currencyProbe.status,
         extraParamsStatus: extraProbe.status,
-        freshOrderStatus: order.status,
+        freshOrderFlags: {
+          isCaptured: order.isCaptured,
+          isCanceled: order.isCanceled,
+          isCompleted: order.isCompleted,
+        },
         factorProbeOrderId: factorOrder.id,
         factorProbeAmountReadBack: factorRead.amount,
         NOTE:

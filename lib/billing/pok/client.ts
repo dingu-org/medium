@@ -71,15 +71,16 @@ export type PokClientConfig = {
 
 export type CreateOrderArgs = {
   amountMinor: number;
+  /** Currency code (e.g. 'ALL'); sent to POK as the required `currencyCode`. */
   currency: string;
-  /** Spike-confirmed optional params (description, redirectUrl, ...) spread into
-   *  the request body. Only pass fields the smoke spike showed POK accepts. */
+  /** Spike-confirmed optional params (description, ...) spread into the request
+   *  body. Only pass fields the smoke spike showed POK accepts. */
   extra?: Record<string, unknown>;
 };
 
 export type PokClient = {
   login(): Promise<LoginResponse['data']>;
-  createOrder(args: CreateOrderArgs): Promise<{ id: string }>;
+  createOrder(args: CreateOrderArgs): Promise<{ id: string; confirmUrl?: string }>;
   getOrder(id: string): Promise<PokOrder>;
   captureOrder(id: string): Promise<void>;
 };
@@ -176,12 +177,17 @@ export function createPokClient(config: PokClientConfig): PokClient {
 
   async function createOrder(
     args: CreateOrderArgs,
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; confirmUrl?: string }> {
     const res = await authorizedRequest(`/merchants/${merchantId}/sdk-orders`, {
       method: 'POST',
       body: JSON.stringify({
         amount: args.amountMinor,
-        currency: args.currency,
+        // POK requires `currencyCode` (NOT `currency`) and a required
+        // `autoCapture` flag — `true` captures in a single flow, which is right
+        // for one-off prepaid and avoids a separate AUTHORIZED→capture step.
+        // Confirmed by the smoke-pok staging spike.
+        currencyCode: args.currency,
+        autoCapture: true,
         ...args.extra,
       }),
     });
@@ -192,7 +198,8 @@ export function createPokClient(config: PokClientConfig): PokClient {
         pokErrorCode: extractPokErrorCode(json),
       });
     }
-    return { id: createOrderResponseSchema.parse(json).data.id };
+    const sdkOrder = createOrderResponseSchema.parse(json).data.sdkOrder;
+    return { id: sdkOrder.id, confirmUrl: sdkOrder._self?.confirmUrl };
   }
 
   async function getOrder(id: string): Promise<PokOrder> {
@@ -210,7 +217,7 @@ export function createPokClient(config: PokClientConfig): PokClient {
         pokErrorCode: extractPokErrorCode(json),
       });
     }
-    return getOrderResponseSchema.parse(json).data;
+    return getOrderResponseSchema.parse(json).data.sdkOrder;
   }
 
   async function captureOrder(id: string): Promise<void> {

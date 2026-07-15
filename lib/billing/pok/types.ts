@@ -12,45 +12,62 @@ import { z } from 'zod';
 
 // POST /auth/sdk/login → { data: { accessToken, expiresIn, tokenType? } }.
 // `expiresIn` is documented in seconds; the client is tolerant of s/ms anyway.
+// POK staging returns it as a STRING ("3600"), so coerce — the client does
+// numeric comparisons on it.
 export const loginResponseSchema = z
   .object({
     data: z
       .object({
         accessToken: z.string().min(1),
-        expiresIn: z.number(),
+        expiresIn: z.coerce.number(),
         tokenType: z.string().optional(),
       })
       .passthrough(),
   })
   .passthrough();
 
-// POST /merchants/{merchantId}/sdk-orders → { data: { id } }.
+// POST /merchants/{merchantId}/sdk-orders → { data: { sdkOrder: { id, ... } } }.
+// (Spike-confirmed: the order id is nested under data.sdkOrder, not data.)
+// `_self.confirmUrl` is POK's hosted payment page — where we send the customer.
 export const createOrderResponseSchema = z
   .object({
     data: z
       .object({
-        id: z.string().min(1),
+        sdkOrder: z
+          .object({
+            id: z.string().min(1),
+            _self: z
+              .object({ confirmUrl: z.string().optional() })
+              .passthrough()
+              .optional(),
+          })
+          .passthrough(),
       })
       .passthrough(),
   })
   .passthrough();
 
-// A single order as returned by GET /sdk-orders/{id} (nested under `data`).
-// `status` is a bare string — the documented enum is incomplete, so payments.ts
-// classifies it through an explicit allowlist and treats anything unrecognized
-// as pending (never credits on an unknown status).
+// A single order as returned under data.sdkOrder (create + GET share the shape).
+// POK has NO string `status` field — it exposes BOOLEAN flags. payments.ts reads
+// isCaptured (money taken) as paid, isCanceled/isRefunded as failed, and treats
+// anything else as pending — never crediting on an ambiguous state.
 export const orderSchema = z
   .object({
     id: z.string().min(1),
-    status: z.string(),
-    amount: z.number().optional(),
-    currency: z.string().optional(),
+    isCaptured: z.boolean().optional(),
+    isCompleted: z.boolean().optional(),
+    isCanceled: z.boolean().optional(),
+    isRefunded: z.boolean().optional(),
+    canBeCaptured: z.boolean().optional(),
+    // POK stringifies numbers; coerce. Used only for the ledger snapshot.
+    amount: z.coerce.number().optional(),
+    currencyCode: z.string().optional(),
   })
   .passthrough();
 
 export const getOrderResponseSchema = z
   .object({
-    data: orderSchema,
+    data: z.object({ sdkOrder: orderSchema }).passthrough(),
   })
   .passthrough();
 
