@@ -1,23 +1,15 @@
 'use client';
 
 import { addDays, format } from 'date-fns';
-import { sq } from 'date-fns/locale';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import {
-  t,
-  formatDate,
-  formatDateLong,
-  formatWeekday,
-  formatWeekdayDate,
-} from '@/lib/i18n';
+import { t, formatDate, formatDateLong, formatWeekday } from '@/lib/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { ReminderBadge, StatusBadge } from '@/components/appointments/badges';
 import { AppointmentSheet } from '@/components/appointments/appointment-sheet';
 import type { AppointmentView } from '@/components/appointments/types';
 import { EmptyState } from '@/components/states';
-import { Calendar } from '@/components/ui/calendar';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { StatusPill } from '@/components/ui/status-pill';
 import {
@@ -70,17 +62,15 @@ export function CalendarClient({
   view,
   anchorKey,
   todayKey,
-  monthLabel,
   weekDays,
   appointments,
   activeServices,
 }: {
   ptId: string;
   timezone: string;
-  view: 'day' | 'week' | 'month';
+  view: 'day' | 'week';
   anchorKey: string;
   todayKey: string;
-  monthLabel: string;
   weekDays: WeekDay[];
   appointments: CalendarAppointment[];
   activeServices: ServiceRecord[];
@@ -88,7 +78,6 @@ export function CalendarClient({
   const router = useRouter();
   const [selected, setSelected] = useState<CalendarAppointment | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [selectedDay, setSelectedDay] = useState(anchorKey);
   const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>(
     [],
   );
@@ -121,11 +110,6 @@ export function CalendarClient({
     return map;
   }, [appointments]);
 
-  const apptDays = useMemo(
-    () => [...new Set(appointments.map((a) => a.dayKey))].map(dateFromKey),
-    [appointments],
-  );
-
   const pendingByAppointmentId = useMemo(() => {
     const map = new Map<string, PendingMutation[]>();
     for (const mutation of pendingMutations) {
@@ -138,7 +122,7 @@ export function CalendarClient({
     return map;
   }, [pendingMutations]);
 
-  function navigate(dateKey: string, nextView: 'day' | 'week' | 'month') {
+  function navigate(dateKey: string, nextView: 'day' | 'week') {
     router.push(`/calendar?date=${dateKey}&view=${nextView}`, {
       scroll: false,
     });
@@ -158,26 +142,17 @@ export function CalendarClient({
 
   const anchorDate = dateFromKey(anchorKey);
   const weekHasToday = weekDays.some((d) => d.isToday);
-  const weekRangeLabel =
-    weekDays.length === 7
-      ? `${format(dateFromKey(weekDays[0].key), 'd')}–${formatDate(dateFromKey(weekDays[6].key))}`
-      : monthLabel;
+  const weekRangeLabel = `${format(dateFromKey(weekDays[0].key), 'd')}–${formatDate(dateFromKey(weekDays[6].key))}`;
   const headerTitle =
-    view === 'month'
-      ? monthLabel
-      : view === 'week'
-        ? weekRangeLabel
-        : formatWeekday(anchorDate);
+    view === 'week' ? weekRangeLabel : formatWeekday(anchorDate);
   const headerSub =
-    view === 'month'
-      ? null
-      : view === 'week'
-        ? weekHasToday
-          ? t.calendar.currentWeek
-          : null
-        : formatDateLong(anchorDate);
+    view === 'week'
+      ? weekHasToday
+        ? t.calendar.currentWeek
+        : null
+      : formatDateLong(anchorDate);
 
-  const dayList = byDay.get(view === 'day' ? anchorKey : selectedDay) ?? [];
+  const dayList = byDay.get(anchorKey) ?? [];
 
   return (
     <div>
@@ -187,11 +162,11 @@ export function CalendarClient({
       <div className="relative flex min-h-11 items-center justify-between">
         <SegmentedControl
           ariaLabel={t.calendar.title}
-          value={view === 'month' ? 'month' : 'week'}
+          value={view === 'day' ? 'day' : 'week'}
           onValueChange={(nextView) => navigate(anchorKey, nextView)}
           options={[
             { value: 'week', label: t.calendar.views.week },
-            { value: 'month', label: t.calendar.views.month },
+            { value: 'day', label: t.calendar.views.day },
           ]}
           className="w-[124px]"
         />
@@ -214,58 +189,55 @@ export function CalendarClient({
         </button>
       </div>
 
-      {view !== 'month' && (
-        <div className="mt-3 mb-4 flex items-center">
-          <button
-            type="button"
-            aria-label={t.calendar.prevWeek}
-            onClick={() => shiftDays(-7)}
-            className="-ml-2 flex h-11 w-8 shrink-0 items-center justify-center"
-          >
-            <ChevronLeft className="text-ink-3/70 h-[18px] w-[18px]" aria-hidden />
-          </button>
-          <div className="grid flex-1 grid-cols-7">
-            {weekDays.map((day) => {
-              const date = dateFromKey(day.key);
-              const on =
-                view === 'day' ? day.key === anchorKey : day.isToday;
-              return (
-                <button
-                  key={day.key}
-                  type="button"
-                  onClick={() => navigate(day.key, 'day')}
-                  className="flex flex-col items-center gap-1.5"
+      <div className="mt-3 mb-4 flex items-center">
+        <button
+          type="button"
+          aria-label={t.calendar.prevWeek}
+          onClick={() => shiftDays(-7)}
+          className="-ml-2 flex h-11 w-8 shrink-0 items-center justify-center"
+        >
+          <ChevronLeft className="text-ink-3/70 h-[18px] w-[18px]" aria-hidden />
+        </button>
+        <div className="grid flex-1 grid-cols-7">
+          {weekDays.map((day) => {
+            const date = dateFromKey(day.key);
+            const on = view === 'day' ? day.key === anchorKey : day.isToday;
+            return (
+              <button
+                key={day.key}
+                type="button"
+                onClick={() => navigate(day.key, 'day')}
+                className="flex flex-col items-center gap-1.5"
+              >
+                <span
+                  className={cn(
+                    'text-[11px] font-semibold',
+                    on ? 'text-primary' : 'text-ink-3',
+                  )}
                 >
-                  <span
-                    className={cn(
-                      'text-[11px] font-semibold',
-                      on ? 'text-primary' : 'text-ink-3',
-                    )}
-                  >
-                    {stripDow(date)}
-                  </span>
-                  <span
-                    className={cn(
-                      'font-heading flex h-[34px] w-[34px] items-center justify-center rounded-full text-[15px] font-semibold tabular-nums',
-                      on ? 'bg-primary text-white' : 'text-foreground',
-                    )}
-                  >
-                    {date.getDate()}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            aria-label={t.calendar.nextWeek}
-            onClick={() => shiftDays(7)}
-            className="-mr-2 flex h-11 w-8 shrink-0 items-center justify-center"
-          >
-            <ChevronRight className="text-ink-3/70 h-[18px] w-[18px]" aria-hidden />
-          </button>
+                  {stripDow(date)}
+                </span>
+                <span
+                  className={cn(
+                    'font-heading flex h-[34px] w-[34px] items-center justify-center rounded-full text-[15px] font-semibold tabular-nums',
+                    on ? 'bg-primary text-white' : 'text-foreground',
+                  )}
+                >
+                  {date.getDate()}
+                </span>
+              </button>
+            );
+          })}
         </div>
-      )}
+        <button
+          type="button"
+          aria-label={t.calendar.nextWeek}
+          onClick={() => shiftDays(7)}
+          className="-mr-2 flex h-11 w-8 shrink-0 items-center justify-center"
+        >
+          <ChevronRight className="text-ink-3/70 h-[18px] w-[18px]" aria-hidden />
+        </button>
+      </div>
 
       {view === 'day' ? (
         <div>
@@ -301,7 +273,7 @@ export function CalendarClient({
             </>
           )}
         </div>
-      ) : view === 'week' ? (
+      ) : (
         <div className="space-y-[18px]">
           {appointments.length === 0 && (
             <EmptyState
@@ -347,45 +319,6 @@ export function CalendarClient({
                 </div>
               );
             })}
-        </div>
-      ) : (
-        <div className="mt-4 space-y-[18px]">
-          <div className="rounded-lg bg-card px-3 py-3.5 shadow-[var(--shadow-card)]">
-            <Calendar
-              mode="single"
-              month={dateFromKey(`${anchorKey.slice(0, 8)}01`)}
-              selected={dateFromKey(selectedDay)}
-              onSelect={(d) => d && setSelectedDay(format(d, 'yyyy-MM-dd'))}
-              onMonthChange={(m) => navigate(format(m, 'yyyy-MM-01'), 'month')}
-              weekStartsOn={1}
-              locale={sq}
-              modifiers={{ hasAppt: apptDays }}
-              modifiersClassNames={{
-                hasAppt:
-                  'relative after:absolute after:bottom-1 after:left-1/2 after:h-1 after:w-1 after:-translate-x-1/2 after:rounded-full after:bg-primary',
-              }}
-              className="mx-auto bg-transparent"
-            />
-          </div>
-          <div>
-            <p className="font-heading mb-2.5 text-sm font-semibold tracking-[-0.01em]">
-              {formatWeekdayDate(dateFromKey(selectedDay))}
-            </p>
-            {dayList.length === 0 ? (
-              <p className="text-ink-3 text-sm">{t.calendar.monthDayEmpty}</p>
-            ) : (
-              <ul className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
-                {dayList.map((appt) => (
-                  <AppointmentRow
-                    key={appt.id}
-                    appt={appt}
-                    pendingMutations={pendingByAppointmentId.get(appt.id) ?? []}
-                    onOpen={openAppt}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
         </div>
       )}
 

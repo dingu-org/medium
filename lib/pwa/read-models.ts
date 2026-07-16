@@ -1,12 +1,10 @@
 import { TZDate } from '@date-fns/tz';
 import {
   addDays,
-  endOfMonth,
   endOfDay,
   endOfWeek,
   format,
   startOfDay,
-  startOfMonth,
   startOfWeek,
 } from 'date-fns';
 import { and, asc, desc, eq, gte, inArray, lt, lte, or } from 'drizzle-orm';
@@ -33,7 +31,7 @@ import { resolveEffectivePlan } from '@/lib/billing/entitlements';
 import { getPlan, type PlanId } from '@/lib/billing/plans';
 import { privacyName } from '@/lib/format/name';
 import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
-import { formatMonthYear, formatWeekdayShort } from '@/lib/i18n';
+import { formatWeekdayShort } from '@/lib/i18n';
 import { getServices, type ServiceRecord } from '@/lib/services/queries';
 import {
   NOTIFICATION_PREF_KEYS,
@@ -74,10 +72,9 @@ export type CalendarAppointmentSnapshot = {
 export type CalendarSnapshot = {
   ptId: string;
   timezone: string;
-  view: 'day' | 'week' | 'month';
+  view: 'day' | 'week';
   anchorKey: string;
   todayKey: string;
-  monthLabel: string;
   weekDays: WeekDaySnapshot[];
   appointments: CalendarAppointmentSnapshot[];
   activeServices: ServiceRecord[];
@@ -217,8 +214,7 @@ export async function getCalendarSnapshot(
     .limit(1);
   const timezone = pt?.timezone ?? 'Europe/Berlin';
 
-  const view: 'day' | 'week' | 'month' =
-    input.view === 'month' || input.view === 'day' ? input.view : 'week';
+  const view: 'day' | 'week' = input.view === 'day' ? 'day' : 'week';
   const todayKey = format(new TZDate(new Date(), timezone), 'yyyy-MM-dd');
   const anchorKey =
     input.date && DATE_RE.test(input.date) ? input.date : todayKey;
@@ -228,15 +224,9 @@ export async function getCalendarSnapshot(
   const gridStart =
     view === 'day'
       ? startOfDay(anchor)
-      : view === 'week'
-        ? startOfWeek(anchor, { weekStartsOn: 1 })
-        : startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 });
+      : startOfWeek(anchor, { weekStartsOn: 1 });
   const gridEnd =
-    view === 'day'
-      ? endOfDay(anchor)
-      : view === 'week'
-        ? endOfWeek(anchor, { weekStartsOn: 1 })
-        : endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 });
+    view === 'day' ? endOfDay(anchor) : endOfWeek(anchor, { weekStartsOn: 1 });
 
   const [rows, activeServices] = await Promise.all([
     db
@@ -318,7 +308,6 @@ export async function getCalendarSnapshot(
     view,
     anchorKey,
     todayKey,
-    monthLabel: formatMonthYear(anchor),
     weekDays,
     appointments: items,
     activeServices,

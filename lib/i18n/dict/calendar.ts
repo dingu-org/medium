@@ -3,7 +3,7 @@ import { plural } from './common';
 /** Calendar screen + appointment status / reminder badge labels. */
 export const calendar = {
   title: 'Kalendari',
-  views: { day: 'Ditë', week: 'Javë', month: 'Muaj' },
+  views: { day: 'Ditë', week: 'Javë' },
   free: 'i lirë',
   today: 'sot',
   todayBtn: 'Sot',
@@ -17,7 +17,6 @@ export const calendar = {
     'E gjithë dita është e lirë. Shto një takim ose lëre Medium-in të rezervojë.',
   weekEmpty: 'Asnjë takim këtë javë.',
   weekEmptyDesc: 'Shpërndaj numrin tënd të WhatsApp për të marrë rezervime.',
-  monthDayEmpty: 'Asnjë takim këtë ditë.',
   prevWeek: 'Java e kaluar',
   nextWeek: 'Java tjetër',
   currentWeek: 'java aktuale',

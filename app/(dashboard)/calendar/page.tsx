@@ -32,7 +32,6 @@ export default async function CalendarPage({
       view={snapshot.view}
       anchorKey={snapshot.anchorKey}
       todayKey={snapshot.todayKey}
-      monthLabel={snapshot.monthLabel}
       weekDays={snapshot.weekDays}
       appointments={snapshot.appointments}
       activeServices={snapshot.activeServices}
