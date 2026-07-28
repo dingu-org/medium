@@ -1,8 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 
-// Mock the POK network client so getOrder returns a per-order status; the
-// age-based reconcile transitions are the real code under test.
+// Mock the POK network client so getOrder returns a per-order outcome; the
+// age-based reconcile transitions are the real code under test. POK has no
+// string status — it exposes boolean flags (isCaptured/isCanceled/isRefunded),
+// so the mock must speak that shape or classifyPokStatus reads every order as
+// pending.
 const { mockGetOrder, mockCreateOrder, mockCaptureOrder, mockLogin } = vi.hoisted(
   () => ({
     mockGetOrder: vi.fn(),
@@ -94,8 +97,8 @@ describe('reconcilePokOrdersCore', () => {
     const stale = await seedOrder(25 * HOUR, now); // >= 24h → expired
 
     mockGetOrder.mockImplementation(async (id: string) => {
-      if (id === paid) return { id, status: 'CAPTURED', amount: 250000 };
-      if (id === stillPending) return { id, status: 'PENDING' };
+      if (id === paid) return { id, isCaptured: true, amount: 250000 };
+      if (id === stillPending) return { id, isCaptured: false };
       throw new Error(`unexpected getOrder for ${id}`);
     });
 
