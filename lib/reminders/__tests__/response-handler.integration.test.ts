@@ -1,11 +1,4 @@
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { addHours, subHours } from 'date-fns';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
@@ -143,7 +136,7 @@ async function inbound(content: string): Promise<InboundMessage> {
 
 describe('handleReminderResponse', () => {
   it('confirms an appointment and records the response idempotently', async () => {
-    const inboundMessage = await inbound('CONFIRM');
+    const inboundMessage = await inbound('KONFIRMO');
 
     const first = await handleReminderResponse({
       inbound: inboundMessage,
@@ -177,7 +170,7 @@ describe('handleReminderResponse', () => {
   });
 
   it('cancels with patient metadata and avoids duplicate replies', async () => {
-    const inboundMessage = await inbound('CANCEL');
+    const inboundMessage = await inbound('ANULO');
 
     await handleReminderResponse({ inbound: inboundMessage, now });
     await handleReminderResponse({ inbound: inboundMessage, now });
@@ -218,6 +211,68 @@ describe('handleReminderResponse', () => {
     expect(job.responseType).toBe('opt_out');
   });
 
+  it('lets the patient opt back in after NDAL and tells them how', async () => {
+    const optOut = await inbound('NDAL');
+    const optOutResult = await handleReminderResponse({ inbound: optOut, now });
+
+    expect(optOutResult.kind).toBe('outbound');
+    if (optOutResult.kind !== 'outbound') return;
+    // Without this sentence the way back is unreachable: there is no PT-side
+    // toggle, by design.
+    expect(optOutResult.outbound.content).toContain('AKTIVIZO');
+
+    const [optedOut] = await db
+      .select()
+      .from(patients)
+      .where(eq(patients.id, patientId));
+    expect(optedOut.reminderOptedOutAt).not.toBeNull();
+
+    const optIn = await inbound('AKTIVIZO');
+    const optInResult = await handleReminderResponse({ inbound: optIn, now });
+
+    expect(optInResult.kind).toBe('outbound');
+    const [optedIn] = await db
+      .select()
+      .from(patients)
+      .where(eq(patients.id, patientId));
+    expect(optedIn.reminderOptedOutAt).toBeNull();
+
+    // The opt-in is about the patient, not about the reminder, so the job keeps
+    // the opt-out it recorded and stays out of the unanswered list.
+    const [job] = await db
+      .select()
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    expect(job.responseType).toBe('opt_out');
+  });
+
+  it('answers AKTIVIZO from a patient who never opted out without writing', async () => {
+    const inboundMessage = await inbound('AKTIVIZO');
+
+    const result = await handleReminderResponse({
+      inbound: inboundMessage,
+      now,
+    });
+
+    expect(result.kind).toBe('outbound');
+    if (result.kind !== 'outbound') return;
+    expect(result.outbound.content).toContain('NDAL');
+
+    const [patient] = await db
+      .select()
+      .from(patients)
+      .where(eq(patients.id, patientId));
+    expect(patient.reminderOptedOutAt).toBeNull();
+
+    // Replays reuse the stored reply rather than inserting a second one.
+    await handleReminderResponse({ inbound: inboundMessage, now });
+    const replies = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.replyToMessageId, inboundMessage.id));
+    expect(replies).toHaveLength(1);
+  });
+
   it('offers real available slots for a reschedule request', async () => {
     await db.insert(availabilityRules).values(
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
@@ -227,9 +282,12 @@ describe('handleReminderResponse', () => {
         endTime: '12:00:00',
       })),
     );
-    const inboundMessage = await inbound('RESCHEDULE');
+    const inboundMessage = await inbound('RICAKTO');
 
-    const result = await handleReminderResponse({ inbound: inboundMessage, now });
+    const result = await handleReminderResponse({
+      inbound: inboundMessage,
+      now,
+    });
 
     expect(result.kind).toBe('outbound');
     if (result.kind !== 'outbound') return;
@@ -248,9 +306,12 @@ describe('handleReminderResponse', () => {
       .update(conversations)
       .set({ aiActive: false })
       .where(eq(conversations.id, conversationId));
-    const inboundMessage = await inbound('yes');
+    const inboundMessage = await inbound('Po');
 
-    const result = await handleReminderResponse({ inbound: inboundMessage, now });
+    const result = await handleReminderResponse({
+      inbound: inboundMessage,
+      now,
+    });
 
     expect(result.kind).toBe('outbound');
     const [appointment] = await db
@@ -275,7 +336,10 @@ describe('handleReminderResponse', () => {
       .where(eq(reminderJobs.appointmentId, appointmentId));
     const inboundMessage = await inbound('Ok');
 
-    const result = await handleReminderResponse({ inbound: inboundMessage, now });
+    const result = await handleReminderResponse({
+      inbound: inboundMessage,
+      now,
+    });
 
     expect(result).toEqual({ kind: 'none' });
     const [appointment] = await db
@@ -292,7 +356,10 @@ describe('handleReminderResponse', () => {
       .where(eq(reminderJobs.appointmentId, appointmentId));
     const inboundMessage = await inbound('Ok');
 
-    const result = await handleReminderResponse({ inbound: inboundMessage, now });
+    const result = await handleReminderResponse({
+      inbound: inboundMessage,
+      now,
+    });
 
     expect(result).toEqual({ kind: 'none' });
   });
@@ -300,7 +367,10 @@ describe('handleReminderResponse', () => {
   it('falls back to reminder-aware AI for unclear replies', async () => {
     const inboundMessage = await inbound('maybe');
 
-    const result = await handleReminderResponse({ inbound: inboundMessage, now });
+    const result = await handleReminderResponse({
+      inbound: inboundMessage,
+      now,
+    });
 
     expect(result).toEqual({
       kind: 'fallback',

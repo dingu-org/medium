@@ -51,7 +51,7 @@ export const common = {
   },
 
   sync: {
-    online: 'Online',
+    online: 'Në linjë',
     offline: 'Jashtë linje',
   },
 
@@ -67,6 +67,6 @@ export const common = {
   },
 
   account: {
-    signOut: 'Dilni',
+    signOut: 'Dil',
   },
 } as const;

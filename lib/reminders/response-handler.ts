@@ -1,5 +1,16 @@
 import { addDays, subHours } from 'date-fns';
-import { and, asc, eq, gt, gte, inArray, isNull, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 import { db } from '@/lib/db';
 import {
@@ -218,6 +229,27 @@ async function setReminderOptOut(inbound: InboundMessage): Promise<void> {
     );
 }
 
+/**
+ * Undo of {@link setReminderOptOut}, and the only one that exists: consent to
+ * resume billed template messages has to come from the patient, so there is
+ * deliberately no PT-side toggle. Gated on `IS NOT NULL` so an AKTIVIZO from a
+ * patient who never opted out writes nothing; the boolean picks the reply.
+ */
+async function clearReminderOptOut(inbound: InboundMessage): Promise<boolean> {
+  const cleared = await db
+    .update(patients)
+    .set({ reminderOptedOutAt: null })
+    .where(
+      and(
+        eq(patients.id, inbound.patientId),
+        eq(patients.ptId, inbound.ptId),
+        isNotNull(patients.reminderOptedOutAt),
+      ),
+    )
+    .returning({ id: patients.id });
+  return cleared.length > 0;
+}
+
 async function handleConfirm(args: {
   inbound: InboundMessage;
   candidate: ReminderCandidate;
@@ -281,10 +313,25 @@ async function handleOptOut(args: {
       responseType: 'opt_out',
     });
   }
+  // The reply carries the way back on purpose: nothing else in the product tells
+  // a patient how to restore reminders, and no PT-side toggle exists, so without
+  // this sentence the opt-in path is unreachable.
   return persistReminderReply({
     inbound: args.inbound,
     content:
-      'U çregjistruat nga kujtesat automatike të takimeve. Mund të shkruani ende këtu për të rezervuar ose menaxhuar takimet.',
+      'U çregjistruat nga kujtesat automatike të takimeve. Nëse doni t’i riaktivizoni më vonë, na shkruani AKTIVIZO. Mund të shkruani ende këtu për të rezervuar ose menaxhuar takimet.',
+  });
+}
+
+async function handleOptIn(args: {
+  inbound: InboundMessage;
+}): Promise<OutboundMessage> {
+  const restored = await clearReminderOptOut(args.inbound);
+  return persistReminderReply({
+    inbound: args.inbound,
+    content: restored
+      ? 'Kujtesat automatike të takimeve u riaktivizuan. Do t’ju kujtojmë sërish takimet e ardhshme. Nëse doni t’i ndalni, na shkruani NDAL.'
+      : 'Kujtesat automatike të takimeve janë tashmë aktive për ju. Nëse doni t’i ndalni, na shkruani NDAL.',
   });
 }
 
@@ -386,6 +433,17 @@ async function handleReminderResponseUnlocked(args: {
         inbound: args.inbound,
         candidate: choice.kind === 'candidate' ? choice.candidate : undefined,
       }),
+    };
+  }
+
+  // Symmetric to opt-out: it is about the patient, not about any one reminder,
+  // so it resolves with no candidate. It is also not recorded on a reminder job
+  // — `reminder_jobs.response_type` has no opt-in value, and an AKTIVIZO is not
+  // an answer to the reminder, so the job stays unanswered for the PT.
+  if (intent === 'opt_in') {
+    return {
+      kind: 'outbound',
+      outbound: await handleOptIn({ inbound: args.inbound }),
     };
   }
 

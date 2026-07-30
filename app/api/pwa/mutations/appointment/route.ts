@@ -47,7 +47,7 @@ const manualBookSchema = z
     notes: z.string().trim().max(500).optional(),
   })
   .refine((v) => v.patientId || v.newPatient, {
-    message: 'Select or add a patient.',
+    message: 'Zgjidh ose shto një klient.',
   });
 
 const schema = z.discriminatedUnion('action', [
@@ -90,10 +90,12 @@ export async function POST(request: Request) {
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return jsonError(
-      parsed.error.issues[0]?.message ?? 'Kërkesa nuk është e vlefshme.',
-      400,
-    );
+    // zod's built-in issue text is English ("Invalid uuid") and this message is
+    // rendered to the PT in the failed-changes banner, so only our own Albanian
+    // `message` overrides may be surfaced; everything else falls back.
+    const issue = parsed.error.issues[0];
+    const custom = issue?.code === 'custom' ? issue.message : undefined;
+    return jsonError(custom ?? 'Kërkesa nuk është e vlefshme.', 400);
   }
   const input = parsed.data;
 
@@ -247,6 +249,8 @@ function messageFor(error: unknown): { message: string; status: number } {
       case 'not_found':
         return { message: 'Takimi nuk u gjet.', status: 404 };
       case 'invalid_input':
+        // Every invalid_input raised in this file carries Albanian, PT-facing
+        // copy ("Zgjidh një shërbim aktiv."), so it is safe to surface verbatim.
         return { message: error.message, status: 400 };
       default:
         return { message: 'Takimi nuk u përditësua.', status: 400 };

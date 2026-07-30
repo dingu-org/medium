@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
+import { LINK_EXPIRED, LINK_FAILED } from '@/lib/auth/link-errors';
 import { t } from '@/lib/i18n';
 import SignInPage from '../page';
 import { SignInForm } from '../form';
@@ -22,11 +23,21 @@ async function formProps(
 
 describe('SignInPage', () => {
   it('explains a failed email link and points at a fresh one', async () => {
-    // /auth/callback collapses every exchange failure into this param; the most
-    // common cause is opening the mail in a different browser (PKCE verifier).
-    const props = await formProps({ error: 'callback_failed' });
+    const props = await formProps({ error: LINK_FAILED });
     expect(props.callbackError).toBe(t.auth.signIn.linkFailed);
     expect(t.auth.signIn.linkFailedAction).toBeTruthy();
+  });
+
+  it('says so when the link merely expired, so the PT knows to ask again', async () => {
+    const props = await formProps({ error: LINK_EXPIRED });
+    expect(props.callbackError).not.toBe(t.auth.signIn.linkFailed);
+    expect(props.callbackError).toMatch(/skaduar/i);
+  });
+
+  it('falls back to the generic banner for an unrecognised error param', async () => {
+    // Older links still in inboxes point at the pre-rename codes.
+    const props = await formProps({ error: 'callback_failed' });
+    expect(props.callbackError).toBe(t.auth.signIn.linkFailed);
   });
 
   it('shows no banner without an error param', async () => {

@@ -1,0 +1,25 @@
+<!--
+  Rivendosje fjalëkalimi. Lidhja ndërtohet nga {{ .TokenHash }} dhe jo nga
+  {{ .ConfirmationURL }}: hash-i verifikohet në server te /auth/confirm, pa
+  pasur nevojë për një cookie në shfletuesin që e kërkoi email-in, kështu që
+  lidhja funksionon edhe kur hapet në telefon ose në një shfletues tjetër.
+-->
+<h2>Rivendos fjalëkalimin</h2>
+
+<p>Kërkove një fjalëkalim të ri për llogarinë tënde në Medium.</p>
+
+<p>
+  <a
+    href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password"
+    >Zgjidh fjalëkalim të ri</a
+  >
+</p>
+
+<p>
+  Lidhja vlen vetëm një herë dhe skadon pas pak kohe. Nëse skadon, kërko një
+  lidhje të re nga faqja e hyrjes.
+</p>
+
+<p>
+  Nëse nuk e ke kërkuar ti, thjesht shpërfille këtë email — asgjë nuk ndryshon.
+</p>

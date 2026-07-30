@@ -20,6 +20,8 @@ const STALE_PROCESSING_MS = 2 * 60 * 1000;
  */
 const MAX_RECLAIMS = 1;
 const ABANDONED_ERROR = 'Ndryshimi nuk përfundoi. Kontrollo dhe provo sërish.';
+/** Shown when a 'failed' row carries no stored reason of its own. */
+const GENERIC_ERROR = 'Ndryshimi dështoi. Provo sërish.';
 
 export type MutationStart =
   | { kind: 'new'; id: string }
@@ -135,7 +137,7 @@ function existingState(existing: StoredMutation | undefined): MutationStart {
     };
   }
   if (existing.status === 'failed') {
-    return { kind: 'failed', error: existing.error ?? 'Mutation failed.' };
+    return { kind: 'failed', error: existing.error ?? GENERIC_ERROR };
   }
   return { kind: 'processing' };
 }

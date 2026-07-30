@@ -1,3 +1,4 @@
+import { linkErrorMessage } from '@/lib/auth/link-errors';
 import { t } from '@/lib/i18n';
 import { SignInForm } from './form';
 
@@ -20,7 +21,7 @@ export default async function SignInPage({
       <SignInForm
         confirmHint={confirm === '1'}
         resetHint={reset === '1'}
-        callbackError={error ? t.auth.signIn.linkFailed : null}
+        callbackError={linkErrorMessage(error)}
       />
     </section>
   );

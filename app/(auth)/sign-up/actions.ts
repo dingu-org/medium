@@ -32,7 +32,10 @@ export async function signUp(
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+      // Token-hash landing route: the confirmation mail is often opened in a
+      // different browser than the one that signed up, where the PKCE verifier
+      // the callback needs does not exist.
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirm`,
     },
   });
 

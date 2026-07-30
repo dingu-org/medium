@@ -1,0 +1,20 @@
+<!--
+  Konfirmim i email-it në regjistrim. Si te recovery.html, lidhja ndërtohet nga
+  {{ .TokenHash }} që të mos varet nga shfletuesi ku u bë regjistrimi.
+-->
+<h2>Konfirmo email-in</h2>
+
+<p>Mirë se erdhe në Medium. Konfirmo email-in për të aktivizuar llogarinë.</p>
+
+<p>
+  <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email"
+    >Konfirmo email-in</a
+  >
+</p>
+
+<p>
+  Lidhja vlen vetëm një herë dhe skadon pas pak kohe. Nëse skadon, provo të
+  regjistrohesh sërish me të njëjtin email.
+</p>
+
+<p>Nëse nuk e ke kërkuar ti, thjesht shpërfille këtë email.</p>

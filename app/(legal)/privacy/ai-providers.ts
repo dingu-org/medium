@@ -1,7 +1,8 @@
 /**
  * The AI providers disclosed in the privacy policy (and, in prose, in
- * docs/gdpr/subprocessors.md). Rendered by the policy page so the disclosure
- * has one source, and asserted against the plan model config in
+ * docs/gdpr/subprocessors.md). Rendered by both language versions of the
+ * policy (`/privacy` and `/en/privacy`) so the disclosure has one source, and
+ * asserted against the plan model config in
  * `__tests__/ai-providers.test.ts` — a model change that introduces an
  * undisclosed upstream provider fails that test until this list and the DPA
  * annex are updated.

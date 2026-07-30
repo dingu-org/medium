@@ -1,6 +1,7 @@
 'use client';
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import { t } from '@/lib/i18n';
 
 export const PWA_QUEUE_CHANGED_EVENT = 'medium:pwa-queue-changed';
 export const PWA_MUTATION_SYNCED_EVENT = 'medium:pwa-mutation-synced';
@@ -53,7 +54,7 @@ let dbPromise: Promise<IDBPDatabase<MediumPwaDb>> | null = null;
 
 function browserDb(): Promise<IDBPDatabase<MediumPwaDb>> {
   if (typeof indexedDB === 'undefined') {
-    throw new Error('IndexedDB is not available in this browser.');
+    throw new Error(t.pwa.storageUnavailable);
   }
   if (!dbPromise) {
     dbPromise = openDB<MediumPwaDb>(DB_NAME, DB_VERSION, {
@@ -101,7 +102,7 @@ export async function enqueueMutation(input: {
   const db = await browserDb();
   const count = await db.count('pendingMutations');
   if (count >= MAX_QUEUE_ITEMS) {
-    throw new Error('Too many pending changes. Reconnect before adding more.');
+    throw new Error(t.pwa.queueFull);
   }
   const id = input.id ?? crypto.randomUUID();
   const existing = await db.get('pendingMutations', id);
@@ -189,13 +190,15 @@ export async function sendOrQueueMutation(input: {
       statusCode: response.status,
       code: response.code,
     };
-  } catch (error) {
+  } catch {
+    // A thrown fetch is always a transport failure, and its message is
+    // browser-generated English ("Failed to fetch") — the banner shows
+    // `lastError` verbatim, so use our own copy instead.
     return {
       status: 'queued',
       mutation: await enqueueMutation({
         ...input,
-        lastError:
-          error instanceof Error ? error.message : 'Network unavailable.',
+        lastError: t.pwa.networkUnavailable,
       }),
       reason: navigator.onLine ? 'retryable' : 'offline',
     };
@@ -240,12 +243,11 @@ export async function replayPendingMutations(): Promise<void> {
         lastError: response.error,
       });
       break;
-    } catch (error) {
+    } catch {
       await db.put('pendingMutations', {
         ...mutation,
         retryCount: mutation.retryCount + 1,
-        lastError:
-          error instanceof Error ? error.message : 'Network unavailable.',
+        lastError: t.pwa.networkUnavailable,
       });
       break;
     }
@@ -269,7 +271,7 @@ async function postMutation(
   const payload = await response.json().catch(() => ({}));
   if (response.ok) return { ok: true, body: payload };
   const error =
-    typeof payload.error === 'string' ? payload.error : 'Request failed.';
+    typeof payload.error === 'string' ? payload.error : t.pwa.requestFailed;
   const code = typeof payload.code === 'string' ? payload.code : undefined;
   return {
     ok: false,
