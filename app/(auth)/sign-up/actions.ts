@@ -28,7 +28,7 @@ export async function signUp(
   }
 
   const supabase = await createServerClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
@@ -44,6 +44,11 @@ export async function signUp(
       fieldErrors: null,
     };
   }
+
+  // With email confirmations disabled, signUp returns a live session that the
+  // server client has already written into the cookie jar — sending an already
+  // signed-in PT to a "confirm your email" screen dead-ends the first run.
+  if (data.session) redirect('/onboarding');
 
   redirect('/sign-in?confirm=1');
 }

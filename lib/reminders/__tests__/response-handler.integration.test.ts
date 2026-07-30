@@ -260,6 +260,43 @@ describe('handleReminderResponse', () => {
     expect(appointment.status).toBe('confirmed');
   });
 
+  it('ignores a stale reminder for an appointment that has already passed', async () => {
+    const pastStart = subHours(now, 21 * 24);
+    await db
+      .update(appointments)
+      .set({ startsAt: pastStart, endsAt: addHours(pastStart, 1) })
+      .where(eq(appointments.id, appointmentId));
+    await db
+      .update(reminderJobs)
+      .set({
+        scheduledFor: subHours(pastStart, 24),
+        sentAt: subHours(pastStart, 24),
+      })
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    const inboundMessage = await inbound('Ok');
+
+    const result = await handleReminderResponse({ inbound: inboundMessage, now });
+
+    expect(result).toEqual({ kind: 'none' });
+    const [appointment] = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.id, appointmentId));
+    expect(appointment.status).toBe('pending');
+  });
+
+  it('ignores a reminder sent long before the reply arrived', async () => {
+    await db
+      .update(reminderJobs)
+      .set({ sentAt: subHours(now, 72) })
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    const inboundMessage = await inbound('Ok');
+
+    const result = await handleReminderResponse({ inbound: inboundMessage, now });
+
+    expect(result).toEqual({ kind: 'none' });
+  });
+
   it('falls back to reminder-aware AI for unclear replies', async () => {
     const inboundMessage = await inbound('maybe');
 

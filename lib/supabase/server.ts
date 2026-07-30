@@ -1,16 +1,11 @@
 import { createServerClient as createSsrClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { supabaseAnonKey, supabaseUrl } from './env';
 
 export async function createServerClient() {
   const cookieStore = await cookies();
 
-  const url = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY are required');
-  }
-
-  return createSsrClient(url, anonKey, {
+  return createSsrClient(supabaseUrl(), supabaseAnonKey(), {
     cookies: {
       getAll() {
         return cookieStore.getAll();

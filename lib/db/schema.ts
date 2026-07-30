@@ -593,17 +593,24 @@ export const waMessageStatuses = pgTable(
 // `month_key` (e.g. '2026-07', PT timezone) serves the monthly usage count;
 // `first_message_id` is a bare uuid breadcrumb (no FK — the message may be
 // retention-erased while the billing fact must survive).
+// Same reason `patient_id` / `conversation_id` are nullable ON DELETE SET NULL
+// (0025): GDPR per-patient erasure and retention purges strip the personal-data
+// link but must NOT delete the metered day, or the month's count (the only store
+// of Free-plan usage) would drop retroactively. countConversationDays filters on
+// pt_id + month_key alone and joins nothing, so anonymised rows keep counting;
+// the unique index below still dedupes live patient-days (every insert supplies a
+// real patient_id) and simply stops constraining erased ones.
 export const conversationDays = pgTable(
   'conversation_days',
   {
     id: uuid('id').primaryKey().default(genUuid),
     ptId: ptIdRef(),
-    patientId: uuid('patient_id')
-      .notNull()
-      .references(() => patients.id, { onDelete: 'cascade' }),
-    conversationId: uuid('conversation_id')
-      .notNull()
-      .references(() => conversations.id, { onDelete: 'cascade' }),
+    patientId: uuid('patient_id').references(() => patients.id, {
+      onDelete: 'set null',
+    }),
+    conversationId: uuid('conversation_id').references(() => conversations.id, {
+      onDelete: 'set null',
+    }),
     localDay: date('local_day', { mode: 'string' }).notNull(),
     monthKey: text('month_key').notNull(),
     firstMessageId: uuid('first_message_id'),

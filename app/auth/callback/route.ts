@@ -2,18 +2,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@/lib/supabase/server';
 import { RECOVERY_COOKIE, RESET_PASSWORD_PATH } from '@/lib/auth/recovery';
-
-function safeNext(next: string | null): string {
-  if (!next || !next.startsWith('/') || next.startsWith('//')) {
-    return '/today';
-  }
-  return next;
-}
+import { safeNext } from '@/lib/auth/safe-next';
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const next = safeNext(url.searchParams.get('next'));
+  const next = safeNext(url.searchParams.get('next'), url.origin);
 
   if (!code) {
     return NextResponse.redirect(new URL('/sign-in?error=missing_code', url.origin));

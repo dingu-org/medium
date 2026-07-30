@@ -4,17 +4,14 @@ import { cookies } from 'next/headers';
 import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { isInternalPath } from '@/lib/auth/safe-next';
 import { db } from '@/lib/db';
 import { pts, services } from '@/lib/db/schema';
 import { createServerClient } from '@/lib/supabase/server';
 import { ONBOARDING_SKIP_COOKIE, onboardingCookieValue } from './constants';
 
 function internalPath(value: FormDataEntryValue | null): string | null {
-  return typeof value === 'string' &&
-    value.startsWith('/') &&
-    !value.startsWith('//')
-    ? value
-    : null;
+  return typeof value === 'string' && isInternalPath(value) ? value : null;
 }
 
 async function requireUserId(): Promise<string> {
@@ -55,11 +52,19 @@ export async function continueSetup(formData: FormData): Promise<void> {
   const separator = path.includes('?') ? '&' : '?';
 
   const store = await cookies();
-  store.set(ONBOARDING_SKIP_COOKIE, onboardingCookieValue('setup', userId), {
-    path: '/',
-    maxAge: 60 * 60,
-    sameSite: 'lax',
-  });
+  // Both markers share one cookie name, so writing the 1h "setup" detour over a
+  // fresh 30-day dismissal would bounce the PT back into the wizard an hour
+  // later. A dismissal already covers this trip — leave it alone.
+  const dismissed =
+    store.get(ONBOARDING_SKIP_COOKIE)?.value ===
+    onboardingCookieValue('dismissed', userId);
+  if (!dismissed) {
+    store.set(ONBOARDING_SKIP_COOKIE, onboardingCookieValue('setup', userId), {
+      path: '/',
+      maxAge: 60 * 60,
+      sameSite: 'lax',
+    });
+  }
 
   redirect(`${path}${separator}from=onboarding`);
 }

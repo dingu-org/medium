@@ -4,6 +4,8 @@ import { db } from '@/lib/db';
 import { whatsappConnections } from '@/lib/db/schema';
 import { getQualityRating } from '@/lib/channels/whatsapp/client';
 import { ConnectionRevokedError } from '@/lib/channels/whatsapp/errors';
+import { appendBackgroundEvent } from '@/lib/events/background';
+import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { inngest } from '../client';
 
 const WARNING_QUALITY = new Set(['YELLOW', 'RED']);
@@ -48,22 +50,40 @@ export async function pollConnectionQuality(args: {
     throw error;
   }
 
-  await db
-    .update(whatsappConnections)
-    .set({
-      qualityRating: health.qualityRating,
-      tier: health.tier,
-    })
-    .where(eq(whatsappConnections.id, args.connectionId));
+  const warning =
+    connection.qualityRating !== health.qualityRating &&
+    WARNING_QUALITY.has(health.qualityRating);
+
+  // The rating write and the PT-facing event share one transaction: the warning
+  // is derived from the transition, so once the new rating is stored the next
+  // poll sees no change and the signal is gone for good.
+  const eventId = await db.transaction(async (tx) => {
+    await tx
+      .update(whatsappConnections)
+      .set({
+        qualityRating: health.qualityRating,
+        tier: health.tier,
+      })
+      .where(eq(whatsappConnections.id, args.connectionId));
+    if (!warning) return null;
+    return appendBackgroundEvent(tx, {
+      type: 'wa.quality_warning',
+      data: {
+        ptId: connection.ptId,
+        connectionId: args.connectionId,
+        qualityRating: health.qualityRating,
+        tier: health.tier,
+      },
+    });
+  });
+  if (eventId) await tryPublishOutboxEvent(eventId);
 
   return {
     kind: 'updated',
     ptId: connection.ptId,
     qualityRating: health.qualityRating,
     tier: health.tier,
-    warning:
-      connection.qualityRating !== health.qualityRating &&
-      WARNING_QUALITY.has(health.qualityRating),
+    warning,
   };
 }
 
@@ -95,19 +115,7 @@ export async function claimTokenExpiryWarnings(
   const warnings: TokenExpiryWarning[] = [];
   for (const candidate of candidates) {
     if (!candidate.expiresAt) continue;
-    const [claimed] = await db
-      .update(whatsappConnections)
-      .set({ expiryWarningSentAt: now })
-      .where(
-        and(
-          eq(whatsappConnections.id, candidate.id),
-          isNull(whatsappConnections.expiryWarningSentAt),
-        ),
-      )
-      .returning({ id: whatsappConnections.id });
-    if (!claimed) continue;
-
-    warnings.push({
+    const warning: TokenExpiryWarning = {
       ptId: candidate.ptId,
       connectionId: candidate.id,
       expiresAt: candidate.expiresAt.toISOString(),
@@ -115,7 +123,32 @@ export async function claimTokenExpiryWarnings(
         0,
         differenceInCalendarDays(candidate.expiresAt, now),
       ),
+    };
+    // The claim stamp is one-shot — every later run skips a connection whose
+    // expiry_warning_sent_at is set — so the durable event must be appended in
+    // the same transaction, otherwise a failure here swallows the only
+    // pre-expiry heads-up the PT ever gets.
+    const eventId = await db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .update(whatsappConnections)
+        .set({ expiryWarningSentAt: now })
+        .where(
+          and(
+            eq(whatsappConnections.id, candidate.id),
+            isNull(whatsappConnections.expiryWarningSentAt),
+          ),
+        )
+        .returning({ id: whatsappConnections.id });
+      if (!claimed) return null;
+      return appendBackgroundEvent(tx, {
+        type: 'wa.connection.expiring',
+        data: warning,
+      });
     });
+    if (!eventId) continue;
+
+    await tryPublishOutboxEvent(eventId);
+    warnings.push(warning);
   }
   return warnings;
 }
@@ -139,18 +172,9 @@ export const pollQualityRating = inngest.createFunction(
       const result = await step.run(`poll-quality-${connection.id}`, () =>
         pollConnectionQuality({ connectionId: connection.id }),
       );
-      if (result.kind === 'updated' && result.warning) {
-        warnings++;
-        await step.sendEvent(`emit-quality-warning-${connection.id}`, {
-          name: 'wa.quality_warning',
-          data: {
-            ptId: result.ptId,
-            connectionId: connection.id,
-            qualityRating: result.qualityRating,
-            tier: result.tier,
-          },
-        });
-      }
+      // pollConnectionQuality already appended and published the event inside
+      // its own transaction; nothing left to emit here.
+      if (result.kind === 'updated' && result.warning) warnings++;
     }
     return { checked: connections.length, warnings };
   },
@@ -164,18 +188,11 @@ export const monitorWaTokenExpiry = inngest.createFunction(
   },
   { cron: '0 5 * * *' },
   async ({ step }) => {
+    // Claiming appends and publishes each warning transactionally, so the run
+    // only reports how many were claimed.
     const warnings = await step.run('claim-token-expiry-warnings', () =>
       claimTokenExpiryWarnings(),
     );
-    for (const warning of warnings) {
-      await step.sendEvent(
-        `emit-token-expiry-warning-${warning.connectionId}`,
-        {
-          name: 'wa.connection.expiring',
-          data: warning,
-        },
-      );
-    }
     return { warnings: warnings.length };
   },
 );

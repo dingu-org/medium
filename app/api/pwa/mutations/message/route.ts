@@ -15,6 +15,8 @@ import {
   pwaMutations,
   whatsappConnections,
 } from '@/lib/db/schema';
+import { appendBackgroundEvent } from '@/lib/events/background';
+import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { getPwaPtId } from '@/lib/pwa/auth';
 import {
   beginPwaMutation,
@@ -24,6 +26,10 @@ import {
 } from '@/lib/pwa/mutation-store';
 
 export const runtime = 'nodejs';
+// Keep an attempt shorter than the ledger's stale-processing window so a still
+// running send can never be reclaimed as abandoned and re-invoked concurrently
+// (mutation-store.ts) — a duplicate WhatsApp message for the patient.
+export const maxDuration = 60;
 
 const schema = z.object({
   clientMutationId: z.uuid(),
@@ -212,8 +218,25 @@ async function sendMessage(input: {
     }
   }
 
+  let committed: { localMessageId: string | null; eventId: string | null };
   try {
-    const localMessageId = await db.transaction(async (tx) => {
+    committed = await db.transaction(async (tx) => {
+      // Answering by hand IS a takeover (the composer never calls setTakeover),
+      // so read the source state under a row lock: only a real on -> off flip may
+      // emit `conversation.taken_over`, which is what arms the resume offer. A
+      // second reply on an already-inactive thread must not re-arm it.
+      const [before] = await tx
+        .select({ aiActive: conversations.aiActive })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, conversation.id),
+            eq(conversations.ptId, input.ptId),
+          ),
+        )
+        .for('update')
+        .limit(1);
+
       const [inserted] = await tx
         .insert(messages)
         .values({
@@ -237,6 +260,18 @@ async function sendMessage(input: {
             eq(conversations.ptId, input.ptId),
           ),
         );
+
+      const eventId = before?.aiActive
+        ? await appendBackgroundEvent(tx, {
+            type: 'conversation.taken_over',
+            data: {
+              ptId: input.ptId,
+              conversationId: conversation.id,
+              patientId: conversation.patientId,
+              takenOverAt: new Date().toISOString(),
+            },
+          })
+        : null;
 
       let localId: string | null;
       if (inserted) {
@@ -272,10 +307,8 @@ async function sendMessage(input: {
           ),
         );
 
-      return localId;
+      return { localMessageId: localId, eventId };
     });
-
-    return { ok: true, messageId: externalMessageId, localMessageId };
   } catch {
     // Delivered but persistence failed. Row stays 'sent' -> retry recovers.
     return {
@@ -286,6 +319,13 @@ async function sendMessage(input: {
       code: 'persist_pending',
     };
   }
+
+  if (committed.eventId) await tryPublishOutboxEvent(committed.eventId);
+  return {
+    ok: true,
+    messageId: externalMessageId,
+    localMessageId: committed.localMessageId,
+  };
 }
 
 function graphFailure(error: unknown): SendOutcome {

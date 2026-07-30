@@ -21,6 +21,9 @@ import {
 } from '@/lib/pwa/mutation-store';
 
 export const runtime = 'nodejs';
+// Keep an attempt shorter than the ledger's stale-processing window so a still
+// running attempt can never be reclaimed as abandoned (mutation-store.ts).
+export const maxDuration = 60;
 
 const clientMutationId = z.uuid();
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -161,7 +164,9 @@ async function runAppointmentMutation(
     return { ok: true, appointmentId: appointment.id };
   }
 
-  await db
+  // `.returning()` so a stale id (deleted client, another tenant) fails as
+  // 'not_found' instead of reporting a saved note the DB never took.
+  const updated = await db
     .update(appointments)
     .set({ notes: input.notes.trim() || null })
     .where(
@@ -169,7 +174,11 @@ async function runAppointmentMutation(
         eq(appointments.id, input.appointmentId),
         eq(appointments.ptId, ptId),
       ),
-    );
+    )
+    .returning({ id: appointments.id });
+  if (updated.length === 0) {
+    throw new AppointmentError('not_found', 'Takimi nuk u gjet.');
+  }
   return { ok: true, appointmentId: input.appointmentId };
 }
 

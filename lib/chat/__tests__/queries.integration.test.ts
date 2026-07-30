@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
 import { conversations, messages, patients } from '@/lib/db/schema';
@@ -42,9 +42,13 @@ describe('chat unread count', () => {
       content: 'Përshëndetje',
     });
     await expect(getUnreadChatCount(ptId)).resolves.toBe(1);
+    // `messages.created_at` defaults to the DATABASE clock, so stamping
+    // last_read_at from the Node clock compares two clocks: a sub-millisecond
+    // skew between them leaves the message looking newer than the read marker
+    // and the count flakes to 1. Read the marker from the same clock.
     await db
       .update(conversations)
-      .set({ lastReadAt: new Date() })
+      .set({ lastReadAt: sql`now()` })
       .where(
         and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
       );

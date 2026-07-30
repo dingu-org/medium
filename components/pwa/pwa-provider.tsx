@@ -20,6 +20,7 @@ import {
 import {
   getPushPermissionState,
   isPushSupported,
+  reconcilePushSubscription,
   subscribeToPush,
 } from '@/lib/pwa/push-client';
 import { t } from '@/lib/i18n';
@@ -29,11 +30,30 @@ const INSTALL_DISMISSED_KEY = 'medium:pwa-install-dismissed-at';
 const PUSH_DISMISSED_KEY = 'medium:pwa-push-dismissed-at';
 const DASHBOARD_VISITS_KEY = 'medium:pwa-dashboard-visits';
 const DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
+const REPLAY_BACKOFF_MS = [15_000, 30_000, 60_000];
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
+
+let replayInFlight: Promise<void> | null = null;
+
+/**
+ * Coalesce the replay triggers (mount, `online`, visibility, backoff timer,
+ * Background Sync relay) into one run at a time. Mutations are keyed by
+ * clientMutationId so overlapping runs would be safe, just wasteful.
+ */
+function triggerReplay(): Promise<void> {
+  if (!replayInFlight) {
+    replayInFlight = replayPendingMutations()
+      .catch(() => undefined)
+      .finally(() => {
+        replayInFlight = null;
+      });
+  }
+  return replayInFlight;
+}
 
 export function PwaProvider() {
   const router = useRouter();
@@ -54,12 +74,12 @@ export function PwaProvider() {
     setOnline(navigator.onLine);
     const onOnline = () => {
       setOnline(true);
-      replayPendingMutations().catch(() => undefined);
+      void triggerReplay();
     };
     const onOffline = () => setOnline(false);
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
-    if (navigator.onLine) replayPendingMutations().catch(() => undefined);
+    if (navigator.onLine) void triggerReplay();
     return () => {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
@@ -79,6 +99,45 @@ export function PwaProvider() {
     refreshCounts();
     const unsubscribe = subscribeToQueueChanges(refreshCounts);
     return unsubscribe;
+  }, []);
+
+  // A queue can get stuck with nothing driving it: a 5xx enqueues while the
+  // connection is fine (no 'online' event ever fires) and iOS has no Background
+  // Sync. Retry on foreground and on a bounded backoff until the queue drains —
+  // the effect restarts (and the backoff resets) whenever the count changes.
+  useEffect(() => {
+    if (counts.pending === 0) return;
+    const replayIfLive = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        void triggerReplay();
+      }
+    };
+
+    let step = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      const delay =
+        REPLAY_BACKOFF_MS[Math.min(step, REPLAY_BACKOFF_MS.length - 1)];
+      step += 1;
+      timer = setTimeout(() => {
+        replayIfLive();
+        schedule();
+      }, delay);
+    };
+    schedule();
+
+    document.addEventListener('visibilitychange', replayIfLive);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', replayIfLive);
+    };
+  }, [counts.pending]);
+
+  // The browser can rotate the push endpoint, and the server drops the row on a
+  // 404/410 dispatch — both leave push silently dead. Re-point it on app open,
+  // and when the worker reports a subscription change.
+  useEffect(() => {
+    reconcilePushSubscription().catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -179,8 +238,13 @@ export function PwaProvider() {
       window.location.reload();
     };
     const onMessage = (event: MessageEvent) => {
-      if (event.data?.type !== 'MEDIUM_PWA_REPLAY_MUTATIONS') return;
-      replayPendingMutations().catch(() => undefined);
+      if (event.data?.type === 'MEDIUM_PWA_REPLAY_MUTATIONS') {
+        void triggerReplay();
+        return;
+      }
+      if (event.data?.type === 'MEDIUM_PWA_RECONCILE_PUSH') {
+        reconcilePushSubscription().catch(() => undefined);
+      }
     };
     navigator.serviceWorker.addEventListener(
       'controllerchange',

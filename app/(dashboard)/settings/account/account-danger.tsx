@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { t } from '@/lib/i18n';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
+import { confirmMatches, confirmPhrase } from '@/lib/settings/confirm-phrase';
 import { cn } from '@/lib/utils';
 import { deleteAccount } from '../actions';
 
@@ -29,7 +30,10 @@ export function AccountDanger({ practiceName }: { practiceName: string }) {
   const [confirmText, setConfirmText] = useState('');
   const [deleting, startDelete] = useTransition();
   const online = useOnlineStatus();
-  const matches = confirmText.trim() === practiceName.trim();
+  // The practice name is unset until onboarding's profile step is completed, and
+  // that step is skippable — so never compare against it raw.
+  const phrase = confirmPhrase(practiceName);
+  const matches = confirmMatches(phrase, confirmText);
 
   function onOpenChange(next: boolean) {
     if (next && !online) {
@@ -91,9 +95,7 @@ export function AccountDanger({ practiceName }: { practiceName: string }) {
           <div className="space-y-[7px] px-[22px]">
             <p className="text-[12.5px] text-ink-2">
               {t.settings.deleteTypePromptPre}
-              <strong className="font-bold text-foreground">
-                {practiceName}
-              </strong>
+              <strong className="font-bold text-foreground">{phrase}</strong>
               {t.settings.deleteTypePromptPost}
             </p>
             <Input

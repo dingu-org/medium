@@ -169,6 +169,20 @@
       "when": 1784122067839,
       "tag": "0023_violet_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784205918442,
+      "tag": "0024_tenant_read_only_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784292318442,
+      "tag": "0025_conversation_days_survive_erasure",
+      "breakpoints": true
     }
   ]
 }

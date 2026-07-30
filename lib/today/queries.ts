@@ -1,5 +1,11 @@
 import { TZDate } from '@date-fns/tz';
-import { endOfDay, endOfISOWeek, startOfDay, startOfISOWeek } from 'date-fns';
+import {
+  differenceInCalendarDays,
+  endOfDay,
+  endOfISOWeek,
+  startOfDay,
+  startOfISOWeek,
+} from 'date-fns';
 import {
   and,
   asc,
@@ -26,6 +32,7 @@ import {
   reminderJobs,
 } from '@/lib/db/schema';
 import { privacyName } from '@/lib/format/name';
+import { formatDate, formatTime, formatWeekdayShort } from '@/lib/i18n';
 
 export type TodayAppointment = AppointmentView & {
   startLabel: string;
@@ -65,6 +72,20 @@ export type TodaySnapshot = {
   week: WeekStrip;
 };
 
+/**
+ * Start label for a Sot row. Reminders go out 24h ahead, so an unanswered
+ * reminder in "attention" normally belongs to a later day — a bare `10:00`
+ * under today's date header reads as today, so name the day as well. Rows in
+ * the timeline are always today (or already running), and keep the bare time.
+ */
+function startLabelFor(start: TZDate, zonedNow: TZDate): string {
+  const time = formatTime(start);
+  const days = differenceInCalendarDays(start, zonedNow);
+  if (days <= 0) return time;
+  if (days === 1) return `Nesër ${time}`;
+  return `${formatWeekdayShort(start)} ${formatDate(start)}, ${time}`;
+}
+
 function appointmentView(
   row: {
     id: string;
@@ -82,6 +103,7 @@ function appointmentView(
     reminderSkippedReason: string | null;
   },
   timezone: string,
+  zonedNow: TZDate,
 ): TodayAppointment {
   const start = new TZDate(row.startsAt, timezone);
   return {
@@ -102,12 +124,7 @@ function appointmentView(
           skippedReason: row.reminderSkippedReason,
         }
       : null,
-    startLabel: new Intl.DateTimeFormat('sq-AL', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(start),
+    startLabel: startLabelFor(start, zonedNow),
     durationMinutes: Math.round(
       (row.endsAt.getTime() - row.startsAt.getTime()) / 60_000,
     ),
@@ -270,7 +287,7 @@ export async function getTodaySnapshot(
   ]);
 
   const todayAppointments = appointmentRows.map((row) =>
-    appointmentView(row, timezone),
+    appointmentView(row, timezone, zonedNow),
   );
   const seenPatients = new Set<string>();
   const attention: TodayAttention[] = [];
@@ -293,7 +310,7 @@ export async function getTodaySnapshot(
       patientId: row.patientId,
       patientName: privacyName(row.patientName),
       conversationId: row.conversationId,
-      appointment: appointmentView(row, timezone),
+      appointment: appointmentView(row, timezone, zonedNow),
     });
   }
 

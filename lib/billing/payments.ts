@@ -36,6 +36,7 @@ export type ApplyOrderResult =
   | 'applied'
   | 'already_applied'
   | 'pending'
+  | 'not_found'
   | 'failed'
   | 'unknown';
 
@@ -62,12 +63,25 @@ export function pokApiBase(): string {
     : 'https://api-staging.pokpay.io';
 }
 
-const pokClient = createPokClient({
-  apiBase: pokApiBase(),
-  merchantId: requirePokEnv('POK_MERCHANT_ID'),
-  keyId: requirePokEnv('POK_KEY_ID'),
-  keySecret: requirePokEnv('POK_KEY_SECRET'),
-});
+let cachedPokClient: ReturnType<typeof createPokClient> | undefined;
+
+/**
+ * The POK client, built (and cached) on the first real payment call — NOT at
+ * module scope. This module is in the import graph of the Inngest function
+ * registry, so a module-scope throw for a missing POK_* var would fail the load
+ * of /api/inngest and take down every background job (AI replies, reminders,
+ * outbox, push) over a payments credential. Lazily, only checkout and settle
+ * fail.
+ */
+function pokClient(): ReturnType<typeof createPokClient> {
+  cachedPokClient ??= createPokClient({
+    apiBase: pokApiBase(),
+    merchantId: requirePokEnv('POK_MERCHANT_ID'),
+    keyId: requirePokEnv('POK_KEY_ID'),
+    keySecret: requirePokEnv('POK_KEY_SECRET'),
+  });
+  return cachedPokClient;
+}
 
 // ONE documented minor-unit constant. CONFIRMED by the POK staging spike
 // (scripts/smoke-pok.ts, 2026-07-14): an order sent as amount `250000` renders on
@@ -142,7 +156,7 @@ export async function createCheckout(
   // back to `returnUrl` (POK appends `?orderId=…`) on both success and failure;
   // the /settings/billing page then re-fetches the order and settles. No webhook
   // (POK has none) — the hourly reconcile cron is the safety net.
-  const order = await pokClient.createOrder({
+  const order = await pokClient().createOrder({
     amountMinor,
     currency: CURRENCY,
     extra: {
@@ -191,17 +205,21 @@ export async function applyOrderOutcome(
 
   // 2. Authoritative fetch. Network/5xx errors THROW (webhook still returns 200;
   // the cron retries). A 404 for an order we created is anomalous but transient —
-  // treat as pending (never credit), the reconcile cron re-polls / expires it.
+  // never credit, and report it distinctly from 'pending': 'pending' means POK
+  // told us the order is still awaiting payment, which is what licenses the
+  // reconcile cron to expire it at 24h. Expiring on a 404 would be terminal
+  // (this function short-circuits on 'expired'), losing a payment POK captures
+  // later once its API is consistent again.
   let order: PokOrder;
   try {
-    order = await pokClient.getOrder(pokOrderId);
+    order = await pokClient().getOrder(pokOrderId);
   } catch (error) {
     if (error instanceof PokNotFoundError) {
       log.warn('pok.order_not_found', 'POK getOrder returned 404 for a created order', {
         order_id: pokOrderId,
         pokErrorCode: error.pokErrorCode,
       });
-      return 'pending';
+      return 'not_found';
     }
     throw error;
   }

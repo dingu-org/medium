@@ -1,5 +1,5 @@
-import { addDays } from 'date-fns';
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { addDays, subHours } from 'date-fns';
+import { and, asc, eq, gt, gte, inArray, isNull, or, sql } from 'drizzle-orm';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 import { db } from '@/lib/db';
 import {
@@ -23,6 +23,17 @@ import {
 } from './parse-response';
 
 type ReminderResponseType = 'confirm' | 'cancel' | 'reschedule_requested';
+
+// A sent reminder only speaks for its own cycle. Nothing ages a reminder job
+// out (completed/no_show are PT-initiated), so without a recency bound a stale
+// unanswered job for a long-past appointment hijacks every later "Ok" in the
+// conversation. Mirrors the PT-facing unanswered list in lib/today/queries.ts.
+//
+// Not a tunable product rule: the `endsAt > occurredAt` bound below already
+// excludes everything a 24h lead time could produce, so this is defence in
+// depth for a future non-24h lead (computeReminderSchedule in
+// lib/inngest/functions/send-reminder.ts).
+const REMINDER_RESPONSE_WINDOW_HOURS = 48;
 
 type ReminderCandidate = {
   jobId: string;
@@ -146,6 +157,13 @@ async function loadReminderCandidates(
         eq(appointments.patientId, inbound.patientId),
         inArray(appointments.status, ['pending', 'confirmed']),
         eq(messages.conversationId, inbound.conversationId),
+        // Bound on the inbound's own timestamp, not wall clock, so Inngest
+        // retries of the same message resolve to the same candidate set.
+        gt(appointments.endsAt, inbound.occurredAt),
+        gte(
+          reminderJobs.sentAt,
+          subHours(inbound.occurredAt, REMINDER_RESPONSE_WINDOW_HOURS),
+        ),
       ),
     )
     .orderBy(asc(appointments.startsAt), asc(reminderJobs.id));

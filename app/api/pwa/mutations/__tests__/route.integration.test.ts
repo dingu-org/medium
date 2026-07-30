@@ -19,11 +19,14 @@ import { db } from '@/lib/db';
 import {
   appointments,
   conversations,
+  eventOutbox,
+  events,
   messages,
   patients,
   pwaMutations,
   whatsappConnections,
 } from '@/lib/db/schema';
+import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
 
 const { getUserMock, sendFreeFormMock } = vi.hoisted(() => ({
@@ -133,6 +136,9 @@ beforeEach(async () => {
   sendFreeFormMock.mockReset();
   getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
   sendFreeFormMock.mockResolvedValue({ messageId: 'wamid.pwa-test' });
+  // A manual reply takes the conversation over and publishes its outbox row
+  // immediately — keep that off the wire.
+  vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
 
   await db
     .delete(pwaMutations)
@@ -140,6 +146,7 @@ beforeEach(async () => {
   await db
     .delete(whatsappConnections)
     .where(inArray(whatsappConnections.ptId, [ptId, otherPtId]));
+  await db.delete(events).where(inArray(events.ptId, [ptId, otherPtId])); // cascades event_outbox
   await db.delete(patients).where(inArray(patients.ptId, [ptId, otherPtId]));
 });
 
@@ -298,6 +305,41 @@ describe('PWA message mutation API', () => {
       )
       .limit(1);
     expect(storedMutation).toEqual({ status: 'success', error: null });
+  });
+
+  it('reclaims a stale processing send once even when two replays overlap', async () => {
+    await seedConnection(ptId);
+    const { conversationId } = await seedConversation(ptId);
+    const clientMutationId = nextId();
+    await db.insert(pwaMutations).values({
+      ptId,
+      clientMutationId,
+      type: 'message.send',
+      status: 'processing',
+      updatedAt: new Date(Date.now() - 5 * 60 * 1000),
+    });
+    const body = {
+      clientMutationId,
+      conversationId,
+      body: 'Overlapping hello',
+    };
+
+    // Two tabs (or a tab plus the Background Sync relay) replay the same id at
+    // once: the reclaim must be a single guarded statement, or both read
+    // reclaims = 0 and the patient gets two copies of the message.
+    const [first, second] = await Promise.all([
+      postMessage(makePost('/api/pwa/mutations/message', body)),
+      postMessage(makePost('/api/pwa/mutations/message', body)),
+    ]);
+
+    expect(sendFreeFormMock).toHaveBeenCalledTimes(1);
+    expect([first.status, second.status]).toContain(200);
+
+    const stored = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.sourceEventId, clientMutationId));
+    expect(stored).toHaveLength(1);
   });
 
   it('recovers a stamped-but-unpersisted send on the same clientMutationId without re-sending', async () => {
@@ -555,6 +597,61 @@ describe('PWA message mutation API', () => {
       );
     expect(rows).toHaveLength(0);
   });
+
+  it('arms the resume offer once per assistant on -> off transition', async () => {
+    await seedConnection(ptId);
+    const { conversationId } = await seedConversation(ptId);
+
+    const first = await postMessage(
+      makePost('/api/pwa/mutations/message', {
+        clientMutationId: nextId(),
+        conversationId,
+        body: 'Po përgjigjem vetë.',
+      }),
+    );
+    expect(first.status).toBe(200);
+
+    const [conversation] = await db
+      .select({ aiActive: conversations.aiActive })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conversation.aiActive).toBe(false);
+
+    // Replying by hand is a takeover, so it must emit the event that schedules
+    // offer-resume — without it the assistant stays off for this patient forever.
+    const takenOver = await db
+      .select({ id: events.id, payload: events.payload })
+      .from(events)
+      .where(
+        and(eq(events.ptId, ptId), eq(events.type, 'conversation.taken_over')),
+      );
+    expect(takenOver).toHaveLength(1);
+    expect(takenOver[0].payload).toMatchObject({ conversationId });
+
+    const outbox = await db
+      .select({ eventType: eventOutbox.eventType })
+      .from(eventOutbox)
+      .where(eq(eventOutbox.eventId, takenOver[0].id));
+    expect(outbox).toEqual([{ eventType: 'conversation.taken_over' }]);
+
+    // A second reply on the already-inactive thread is not a new transition.
+    const second = await postMessage(
+      makePost('/api/pwa/mutations/message', {
+        clientMutationId: nextId(),
+        conversationId,
+        body: 'Edhe një gjë.',
+      }),
+    );
+    expect(second.status).toBe(200);
+
+    const afterSecond = await db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(eq(events.ptId, ptId), eq(events.type, 'conversation.taken_over')),
+      );
+    expect(afterSecond).toHaveLength(1);
+  });
 });
 
 describe('PWA appointment mutation API', () => {
@@ -630,5 +727,145 @@ describe('PWA appointment mutation API', () => {
         ),
       );
     expect(storedMutations).toEqual([{ status: 'success' }]);
+  });
+
+  it('persists treatment notes on the pt own appointment', async () => {
+    const appointmentId = await seedAppointment(ptId);
+
+    const res = await postAppointment(
+      makePost('/api/pwa/mutations/appointment', {
+        clientMutationId: nextId(),
+        action: 'notes',
+        appointmentId,
+        notes: '  Ushtrime për shpatullën  ',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const [stored] = await db
+      .select({ notes: appointments.notes })
+      .from(appointments)
+      .where(eq(appointments.id, appointmentId));
+    expect(stored.notes).toBe('Ushtrime për shpatullën');
+  });
+
+  it('reports notes on a vanished appointment as not found instead of a fake save', async () => {
+    const clientMutationId = nextId();
+
+    const res = await postAppointment(
+      makePost('/api/pwa/mutations/appointment', {
+        clientMutationId,
+        action: 'notes',
+        appointmentId: nextId(),
+        notes: 'Shënime për një takim të fshirë',
+      }),
+    );
+
+    expect(res.status).toBe(404);
+
+    // A 4xx must be recorded as failed so a replay dead-ends visibly rather than
+    // replaying a cached success for a write that never happened.
+    const [storedMutation] = await db
+      .select({ status: pwaMutations.status })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      );
+    expect(storedMutation).toEqual({ status: 'failed' });
+  });
+
+  it('does not write notes onto another tenant appointment', async () => {
+    const appointmentId = await seedAppointment(otherPtId);
+    await db
+      .update(appointments)
+      .set({ notes: 'Shënime të tjetrit' })
+      .where(eq(appointments.id, appointmentId));
+
+    const res = await postAppointment(
+      makePost('/api/pwa/mutations/appointment', {
+        clientMutationId: nextId(),
+        action: 'notes',
+        appointmentId,
+        notes: 'Shënime të mia',
+      }),
+    );
+
+    expect(res.status).toBe(404);
+    const [stored] = await db
+      .select({ notes: appointments.notes })
+      .from(appointments)
+      .where(eq(appointments.id, appointmentId));
+    expect(stored.notes).toBe('Shënime të tjetrit');
+  });
+
+  it('reclaims a stale processing mutation once, then refuses to run it again', async () => {
+    const appointmentId = await seedAppointment(ptId);
+    const clientMutationId = nextId();
+    await db.insert(pwaMutations).values({
+      ptId,
+      clientMutationId,
+      type: 'appointment.notes',
+      status: 'processing',
+      updatedAt: new Date(Date.now() - 5 * 60 * 1000),
+    });
+    const body = {
+      clientMutationId,
+      action: 'notes',
+      appointmentId,
+      notes: 'Rikuperuar',
+    };
+
+    const first = await postAppointment(
+      makePost('/api/pwa/mutations/appointment', body),
+    );
+    expect(first.status).toBe(200);
+
+    // Second abandoned attempt on the same id: back-date the reclaimed row so it
+    // looks stale again and assert the side-effect is not re-run.
+    await db
+      .update(pwaMutations)
+      .set({
+        status: 'processing',
+        result: { reclaims: 1 },
+        updatedAt: new Date(Date.now() - 5 * 60 * 1000),
+      })
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      );
+    await db
+      .update(appointments)
+      .set({ notes: null })
+      .where(eq(appointments.id, appointmentId));
+
+    const second = await postAppointment(
+      makePost('/api/pwa/mutations/appointment', body),
+    );
+
+    expect(second.status).toBe(409);
+    const [stored] = await db
+      .select({ notes: appointments.notes })
+      .from(appointments)
+      .where(eq(appointments.id, appointmentId));
+    expect(stored.notes).toBeNull();
+
+    const [storedMutation] = await db
+      .select({ status: pwaMutations.status, error: pwaMutations.error })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      );
+    expect(storedMutation.status).toBe('failed');
+    expect(storedMutation.error).toBe(
+      'Ndryshimi nuk përfundoi. Kontrollo dhe provo sërish.',
+    );
   });
 });

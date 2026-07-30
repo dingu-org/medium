@@ -1,6 +1,8 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { eventOutbox } from '@/lib/db/schema';
+import { appointmentEventSchemas } from '@/lib/events/appointments';
+import { backgroundEventSchemas } from '@/lib/events/background';
 import { inngest } from '@/lib/inngest/client';
 import { logger, serializeError } from '@/lib/log';
 
@@ -9,11 +11,34 @@ const MAX_BACKOFF_MINUTES = 60;
 
 type OutboxRow = {
   id: string;
+  ptId: string;
   eventId: string;
   eventType: string;
   payload: unknown;
   attempts: number;
 };
+
+// Inngest consumers treat the event name and payload as trusted input, so the
+// publisher is the trust boundary between the `event_outbox` table and the job
+// runner: only names we actually emit are forwarded, and the payload must carry
+// the outbox row's own pt_id (every schema in the two maps requires ptId, and
+// appendStoredEvent derives the row's pt_id from it). A row failing either check
+// can never be published, so it is stamped published so it drains instead of
+// being reclaimed and retried forever.
+const KNOWN_EVENT_TYPES = new Set<string>([
+  ...Object.keys(backgroundEventSchemas),
+  ...Object.keys(appointmentEventSchemas),
+]);
+
+function rejectionReason(row: OutboxRow): string | null {
+  if (!KNOWN_EVENT_TYPES.has(row.eventType)) return 'unknown_event_type';
+  const payload = row.payload;
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload))
+    return 'payload_not_object';
+  if ((payload as { ptId?: unknown }).ptId !== row.ptId)
+    return 'payload_pt_id_mismatch';
+  return null;
+}
 
 type SendEvent = typeof inngest.send;
 
@@ -57,6 +82,7 @@ async function claimOutboxRows(args: {
     WHERE outbox.id = candidates.id
     RETURNING
       outbox.id,
+      outbox.pt_id AS "ptId",
       outbox.event_id AS "eventId",
       outbox.event_type AS "eventType",
       outbox.payload,
@@ -68,6 +94,34 @@ async function publishClaimed(
   row: OutboxRow,
   sendEvent: SendEvent = inngest.send.bind(inngest),
 ): Promise<boolean> {
+  const rejected = rejectionReason(row);
+  if (rejected) {
+    await db
+      .update(eventOutbox)
+      .set({
+        publishedAt: new Date(),
+        lockedAt: null,
+        lastError: `rejected: ${rejected}`,
+      })
+      .where(
+        and(
+          eq(eventOutbox.id, row.id),
+          sql`${eventOutbox.publishedAt} IS NULL`,
+        ),
+      );
+
+    logger.warn(
+      'outbox.publish_rejected',
+      'Outbox event rejected unpublished',
+      {
+        event_id: row.eventId,
+        outbox_event_type: row.eventType,
+        reason: rejected,
+      },
+    );
+    return false;
+  }
+
   try {
     await sendEvent({
       id: row.eventId,

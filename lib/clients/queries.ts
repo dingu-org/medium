@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import type { AppointmentView } from '@/components/appointments/types';
+import { DEFAULT_COUNTRY_CODE } from '@/lib/clients/phone';
 import { db } from '@/lib/db';
 import {
   appointments,
@@ -8,6 +9,34 @@ import {
   pts,
   reminderJobs,
 } from '@/lib/db/schema';
+
+const DIRECTORY_LIMIT = 250;
+// The directory only needs recent history for the "last visit" line, so bound
+// the enrichment instead of dragging every appointment ever on each refresh.
+const DIRECTORY_HISTORY_MONTHS = 12;
+// `unaccent` is not installed, so fold the diacritics that actually show up in
+// WhatsApp profile names with translate(). Both strings must stay aligned.
+const ACCENTED_CHARS = 'ëçáàâäéèêíìîóòôöúùûüñ';
+const PLAIN_CHARS = 'ecaaaaeeeiiioooouuuun';
+// A length mismatch silently shifts every mapping past the extra character
+// (Postgres translate() just drops the surplus), so 'ú' would fold to 'o' and a
+// search for 'u' could never match it. Fail loudly at import instead.
+if (ACCENTED_CHARS.length !== PLAIN_CHARS.length) {
+  throw new Error('ACCENTED_CHARS and PLAIN_CHARS must stay aligned');
+}
+
+// A PT searching from a phone keyboard types 'ermira', not 'Ërmira'.
+function foldAccents(value: string): string {
+  return Array.from(value.toLowerCase(), (char) => {
+    const index = ACCENTED_CHARS.indexOf(char);
+    return index === -1 ? char : PLAIN_CHARS[index];
+  }).join('');
+}
+
+// '%' and '_' typed in the search box are literals, not wildcards.
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
 
 export type ClientDirectoryRow = {
   id: string;
@@ -24,6 +53,7 @@ export type ClientDirectorySnapshot = {
   timezone: string;
   query: string;
   total: number;
+  truncated: boolean;
   rows: ClientDirectoryRow[];
 };
 
@@ -54,6 +84,33 @@ export async function getClientDirectory(
     .from(pts)
     .where(eq(pts.id, ptId))
     .limit(1);
+
+  const digits = normalized.replace(/\D/g, '');
+  // Stored numbers are compact E.164, so match on digits only — '069 123 4567'
+  // is the same number as '+355691234567', trunk prefix included.
+  const phoneCandidates = digits
+    ? digits.startsWith('0')
+      ? [digits, `${DEFAULT_COUNTRY_CODE}${digits.slice(1)}`]
+      : [digits]
+    : [];
+  const filter = normalized
+    ? and(
+        eq(patients.ptId, ptId),
+        or(
+          sql`translate(lower(${patients.name}), ${ACCENTED_CHARS}, ${PLAIN_CHARS}) like ${`%${escapeLike(foldAccents(normalized))}%`}`,
+          ...phoneCandidates.map(
+            (candidate) =>
+              sql`regexp_replace(${patients.phone}, '[^0-9]', '', 'g') like ${`%${candidate}%`}`,
+          ),
+        ),
+      )
+    : eq(patients.ptId, ptId);
+
+  // Counted separately: `rows` is capped, so its length is not the total.
+  const [totals] = await db
+    .select({ value: count() })
+    .from(patients)
+    .where(filter);
   const patientRows = await db
     .select({
       id: patients.id,
@@ -70,20 +127,12 @@ export async function getClientDirectory(
         eq(conversations.channel, 'whatsapp'),
       ),
     )
-    .where(
-      normalized
-        ? and(
-            eq(patients.ptId, ptId),
-            or(
-              ilike(patients.name, `%${normalized}%`),
-              ilike(patients.phone, `%${normalized}%`),
-            ),
-          )
-        : eq(patients.ptId, ptId),
-    )
+    .where(filter)
     .orderBy(asc(patients.name))
-    .limit(250);
+    .limit(DIRECTORY_LIMIT);
 
+  const historyFrom = new Date();
+  historyFrom.setMonth(historyFrom.getMonth() - DIRECTORY_HISTORY_MONTHS);
   const ids = patientRows.map((patient) => patient.id);
   const appointmentRows = ids.length
     ? await db
@@ -98,6 +147,7 @@ export async function getClientDirectory(
           and(
             eq(appointments.ptId, ptId),
             inArray(appointments.patientId, ids),
+            gte(appointments.startsAt, historyFrom),
           ),
         )
         .orderBy(desc(appointments.startsAt))
@@ -149,7 +199,8 @@ export async function getClientDirectory(
     ptId,
     timezone: pt?.timezone ?? 'Europe/Tirane',
     query: normalized,
-    total: rows.length,
+    total: totals?.value ?? rows.length,
+    truncated: (totals?.value ?? rows.length) > rows.length,
     rows,
   };
 }

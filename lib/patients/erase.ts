@@ -12,6 +12,9 @@ import {
   eventPayloadFromAppointment,
 } from '@/lib/events/appointments';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
+import { recordErasureArchive } from '@/lib/gdpr/archive';
+import { logger, serializeError } from '@/lib/log';
+import { patientWhatsappContactsFilter } from './whatsapp-contacts';
 
 export type ErasePatientResult = { erased: boolean };
 
@@ -32,6 +35,13 @@ function canonicalHash(row: Record<string, unknown>): string {
  * then cascade-deletes the patient (conversations → messages, appointments →
  * reminder_jobs go via FK). Events are published only after the tx commits, and
  * the audit row is written in-tx so the proof and the delete share one boundary.
+ * The same proof is mirrored into erasure_archive after the commit because
+ * audit_log is cascade-deleted with the PT, and the compliance record has to
+ * outlive an account closure.
+ * NOT deleted: the `conversation_days` metering facts. Their patient/conversation
+ * references are ON DELETE SET NULL (migration 0025), so the billing days survive
+ * anonymised — otherwise erasing a patient would retroactively lower the month's
+ * metered usage (lib/billing/usage.ts counts these rows).
  * Idempotent: a missing patient is a no-op that writes and publishes nothing.
  */
 export async function erasePatient(input: {
@@ -40,14 +50,16 @@ export async function erasePatient(input: {
 }): Promise<ErasePatientResult> {
   const { patientId, ptId } = input;
 
-  const { erased, eventIds } = await db.transaction(async (tx) => {
+  const erasure = await db.transaction(async (tx) => {
     const [patient] = await tx
       .select()
       .from(patients)
       .where(and(eq(patients.id, patientId), eq(patients.ptId, ptId)))
       .limit(1)
       .for('update');
-    if (!patient) return { erased: false, eventIds: [] as string[] };
+    if (!patient) {
+      return { erased: false, eventIds: [] as string[], beforeStateHash: '' };
+    }
 
     const beforeStateHash = canonicalHash(patient);
 
@@ -83,16 +95,9 @@ export async function erasePatient(input: {
       eventIds.push(eventId);
     }
 
-    if (patient.waId) {
-      await tx
-        .delete(whatsappContacts)
-        .where(
-          and(
-            eq(whatsappContacts.ptId, ptId),
-            eq(whatsappContacts.waId, patient.waId),
-          ),
-        );
-    }
+    await tx
+      .delete(whatsappContacts)
+      .where(patientWhatsappContactsFilter(patient));
 
     await tx.insert(auditLog).values({
       ptId,
@@ -107,8 +112,29 @@ export async function erasePatient(input: {
       .delete(patients)
       .where(and(eq(patients.id, patientId), eq(patients.ptId, ptId)));
 
-    return { erased: true, eventIds };
+    return { erased: true, eventIds, beforeStateHash };
   });
+  const { erased, eventIds, beforeStateHash } = erasure;
+
+  if (erased) {
+    // Best-effort: the delete already committed, so a failed archive write must
+    // not turn a completed erasure into an error for the PT.
+    try {
+      await recordErasureArchive({
+        ptId,
+        scope: 'patient',
+        targetId: patientId,
+        beforeStateHash,
+        metadata: { erasedAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      logger.error(
+        'patient.erasure_archive_failed',
+        'Erasure archive write failed after commit',
+        { pt_id: ptId, patient_id: patientId, ...serializeError(error) },
+      );
+    }
+  }
 
   for (const id of eventIds) await tryPublishOutboxEvent(id);
   return { erased };

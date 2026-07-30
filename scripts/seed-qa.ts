@@ -28,6 +28,14 @@ if (!dbUrl.includes('127.0.0.1') && !dbUrl.includes('localhost')) {
   throw new Error(`Refusing to seed non-local DATABASE_URL: ${dbUrl}`);
 }
 
+// The auth-admin ops below (deleteUser/createUser) hit SUPABASE_URL, not
+// DATABASE_URL — both endpoints need the guard, or a remote auth store could be
+// wiped while the Postgres guard passes.
+const supabaseUrl = process.env.SUPABASE_URL ?? '';
+if (!supabaseUrl.includes('127.0.0.1') && !supabaseUrl.includes('localhost')) {
+  throw new Error(`Refusing to seed non-local SUPABASE_URL: ${supabaseUrl}`);
+}
+
 function at(daysFromToday: number, hour: number, minute = 0) {
   const d = new Date();
   d.setDate(d.getDate() + daysFromToday);

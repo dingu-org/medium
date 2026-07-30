@@ -27,6 +27,19 @@ function loadBrowserClient(): Promise<SupabaseClient> {
 
 export type RealtimeStatus = 'connecting' | 'connected' | 'error';
 
+// supabase-js dedupes channels by topic and hands back the existing one, and a
+// channel that already joined throws when a second `postgres_changes` binding is
+// added — so two hooks watching the same table+filter (the app-wide conversations
+// refresher plus a page-level one) must not collide. A timestamp is not enough:
+// both effects connect in the same millisecond. Count instead.
+let channelSeq = 0;
+
+/** Unique `postgres_changes` topic — one per channel, never reused. */
+export function nextRealtimeTopic(table: string, filter?: string): string {
+  channelSeq += 1;
+  return `rt-${table}-${filter ?? 'all'}-${channelSeq}`;
+}
+
 type ChangeHandler<T extends Record<string, unknown>> = (
   payload: RealtimePostgresChangesPayload<T>,
 ) => void;
@@ -61,7 +74,9 @@ export function useRealtimeChannel<T extends Record<string, unknown>>(
     const connect = (supabase: SupabaseClient) => {
       if (cancelled) return;
       setStatus('connecting');
-      channel = supabase.channel(`rt-${table}-${filter ?? 'all'}-${Date.now()}`);
+      // A fresh topic per channel: never the one a just-removed channel used
+      // (removal is an async leave), never one another hook holds.
+      channel = supabase.channel(nextRealtimeTopic(table, filter));
       channel
         .on(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,11 +100,18 @@ export function useRealtimeChannel<T extends Record<string, unknown>>(
         });
     };
 
-    loadBrowserClient().then((supabase) => {
-      if (cancelled) return;
-      client = supabase;
-      connect(supabase);
-    });
+    loadBrowserClient()
+      .then((supabase) => {
+        if (cancelled) return;
+        client = supabase;
+        connect(supabase);
+      })
+      // A failure here (chunk load, socket setup) would otherwise surface as an
+      // unhandled rejection and leave the hook stuck on 'connecting' — the
+      // catch-up refresh path keeps the screen usable.
+      .catch(() => {
+        if (!cancelled) setStatus('error');
+      });
 
     return () => {
       cancelled = true;
@@ -231,6 +253,37 @@ type RawMessage = {
 };
 
 /**
+ * Realtime leaves `timestamptz` uncast, so a live row's `created_at` arrives in
+ * Postgres text form ('2026-07-29 14:05:11.4+00') while server snapshots are ISO
+ * ('2026-07-29T14:05:11.400Z'). Space (0x20) sorts before 'T' (0x54), so mixing
+ * the two forms in a string sort throws every live row to the top of its day.
+ * Normalise on ingest to one format.
+ */
+export function normalizeTimestamp(value: string): string {
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? value : new Date(ms).toISOString();
+}
+
+function timeOf(value: string): number {
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+/**
+ * Chronological message order, compared as instants rather than strings so no
+ * timestamp representation can reorder the thread. The id tie-break keeps the
+ * ordering total, so the keyset cursor `getOlderChatMessages` expects (createdAt,
+ * id) stays consistent with what the thread renders.
+ */
+export function compareMessages(
+  a: { id: string; createdAt: string },
+  b: { id: string; createdAt: string },
+): number {
+  const delta = timeOf(a.createdAt) - timeOf(b.createdAt);
+  return delta !== 0 ? delta : a.id.localeCompare(b.id);
+}
+
+/**
  * Live message thread for one conversation. Seeds from server-fetched messages
  * and applies realtime INSERT/UPDATE so new patient/AI/PT messages appear
  * instantly. Keyed by id, so an optimistic row and its realtime echo dedupe.
@@ -301,7 +354,7 @@ export function useMessages(
           id: row.id,
           role: row.role,
           content: row.content,
-          createdAt: row.created_at,
+          createdAt: normalizeTimestamp(row.created_at),
           deliveryStatus: existing?.deliveryStatus ?? null,
         });
         return next;
@@ -315,8 +368,7 @@ export function useMessages(
   useCatchUpRefresh(status, () => router.refresh());
 
   const messages = useMemo(
-    () =>
-      [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    () => [...byId.values()].sort(compareMessages),
     [byId],
   );
 

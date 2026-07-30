@@ -33,6 +33,7 @@ import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
 import type { ClientDetailSnapshot } from '@/lib/clients/queries';
 import { erasePatient, exportPatient, updateClientNotes } from '../actions';
 import { formatDateLong, formatMonthYear, formatTime, t } from '@/lib/i18n';
+import { confirmMatches, confirmPhrase } from '@/lib/settings/confirm-phrase';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { cn } from '@/lib/utils';
 
@@ -44,6 +45,10 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
   const [exporting, startExport] = useTransition();
   const [erasing, startErase] = useTransition();
   const [confirmText, setConfirmText] = useState('');
+  // WhatsApp-derived patients are not created through the name-validating
+  // action, so the name can be blank — which would otherwise arm Erase on an
+  // empty input the moment the dialog opens.
+  const erasePhrase = confirmPhrase(client.name);
   const online = useOnlineStatus();
   const memberSince = formatMonthYear(
     new TZDate(new Date(client.createdAt), client.timezone),
@@ -116,7 +121,11 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
             {client.phone}
           </p>
           <div className="mt-[11px]">
-            {client.manual ? <ManualBadge /> : <ChannelChip state="connected" />}
+            {client.manual ? (
+              <ManualBadge />
+            ) : (
+              <ChannelChip state="connected" />
+            )}
           </div>
           <p className="text-ink-3 mt-2.5 text-[12.5px]">
             {client.manual
@@ -186,7 +195,12 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
             className="min-h-[60px] text-sm"
           />
           {notes !== (client.notes ?? '') && (
-            <Button size="sm" onClick={saveNotes} disabled={pending} className="mt-2">
+            <Button
+              size="sm"
+              onClick={saveNotes}
+              disabled={pending}
+              className="mt-2"
+            >
               <Save className="h-4 w-4" aria-hidden />
               Ruaj
             </Button>
@@ -213,7 +227,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
         {/* Danger zone (canvas parity with settings/account/account-danger.tsx): export + erase. */}
         <section className="mt-6">
           <SectionLabel>{t.clients.dangerZone}</SectionLabel>
-          <div className="border-line space-y-2 rounded-[12px] border bg-card p-3 shadow-[var(--shadow-card)]">
+          <div className="border-line bg-card space-y-2 rounded-[12px] border p-3 shadow-[var(--shadow-card)]">
             <Button
               variant="outline"
               className="w-full"
@@ -225,7 +239,11 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
 
             <Dialog onOpenChange={(open) => !open && setConfirmText('')}>
               <DialogTrigger asChild>
-                <Button variant="destructive" className="w-full" disabled={!online}>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  disabled={!online}
+                >
                   {t.clients.erase}
                 </Button>
               </DialogTrigger>
@@ -236,7 +254,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
                 </DialogHeader>
                 <div className="space-y-2">
                   <Label htmlFor="confirm-erase">
-                    {t.clients.eraseTypePrompt(client.name)}
+                    {t.clients.eraseTypePrompt(erasePhrase)}
                   </Label>
                   <Input
                     id="confirm-erase"
@@ -255,7 +273,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
                     disabled={
                       erasing ||
                       !online ||
-                      confirmText.trim() !== client.name.trim()
+                      !confirmMatches(erasePhrase, confirmText)
                     }
                   >
                     {erasing ? t.clients.erasing : t.clients.eraseConfirm}
@@ -340,7 +358,10 @@ function QuickAct({
     );
   }
   return (
-    <Link href={href} className={cn(classes, 'hover:bg-muted/50 transition-colors')}>
+    <Link
+      href={href}
+      className={cn(classes, 'hover:bg-muted/50 transition-colors')}
+    >
       {inner}
     </Link>
   );
@@ -367,12 +388,9 @@ function AppointmentList({
       {appointments.length === 0 ? (
         <p className="text-ink-3 px-1 text-sm">{empty}</p>
       ) : (
-        <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+        <div className="bg-card [&>*+*]:border-sep overflow-hidden rounded-lg shadow-[var(--shadow-card)] [&>*+*]:border-t">
           {appointments.map((appointment) => {
-            const zoned = new TZDate(
-              new Date(appointment.startsAt),
-              timezone,
-            );
+            const zoned = new TZDate(new Date(appointment.startsAt), timezone);
             return (
               <button
                 key={appointment.id}

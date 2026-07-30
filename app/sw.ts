@@ -111,16 +111,27 @@ const serwist = new Serwist({
 self.addEventListener('sync', (event: Event) => {
   const syncEvent = event as ExtendableEvent & { tag?: string };
   if (syncEvent.tag !== BACKGROUND_SYNC_TAG) return;
-  syncEvent.waitUntil(requestClientReplay());
+  syncEvent.waitUntil(postToClients('MEDIUM_PWA_REPLAY_MUTATIONS'));
 });
 
-async function requestClientReplay() {
+// The browser can refresh the push subscription on its own; without this the new
+// endpoint is never persisted and push dies silently. A worker cannot call a
+// server action, so hand the re-upload to an open client — PwaProvider's
+// mount-time reconcile covers the case where none is open (and iOS, which never
+// fires this event).
+self.addEventListener('pushsubscriptionchange', (event: Event) => {
+  (event as ExtendableEvent).waitUntil(
+    postToClients('MEDIUM_PWA_RECONCILE_PUSH'),
+  );
+});
+
+async function postToClients(type: string) {
   const clients = await self.clients.matchAll({
     type: 'window',
     includeUncontrolled: true,
   });
   for (const client of clients) {
-    client.postMessage({ type: 'MEDIUM_PWA_REPLAY_MUTATIONS' });
+    client.postMessage({ type });
   }
 }
 

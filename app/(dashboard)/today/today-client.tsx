@@ -15,30 +15,54 @@ import { AppointmentSheet } from '@/components/appointments/appointment-sheet';
 import { StatusBadge } from '@/components/appointments/badges';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { SectionLabel } from '@/components/ui/section-label';
+import { Textarea } from '@/components/ui/textarea';
 import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
 import type { TodayAppointment, TodaySnapshot } from '@/lib/today/queries';
 import { formatWeekdayDate, t } from '@/lib/i18n';
 
 export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
   const [selected, setSelected] = useState<TodayAppointment | null>(null);
+  // Cancelling is irreversible and WhatsApps the patient, so the card's "Anulo"
+  // only opens this confirmation — same gate (and reason field) as the sheet.
+  const [cancelTarget, setCancelTarget] = useState<TodayAppointment | null>(
+    null,
+  );
+  const [cancelReason, setCancelReason] = useState('');
   const [pending, startTransition] = useTransition();
   const quiet = snapshot.attention.length === 0 && !snapshot.next;
   const dateLabel = formatWeekdayDate(
     new TZDate(new Date(snapshot.now), snapshot.timezone),
   );
 
-  function cancel(appointmentId: string) {
+  function closeCancel() {
+    setCancelTarget(null);
+    setCancelReason('');
+  }
+
+  function cancel(appointmentId: string, reason: string) {
     startTransition(async () => {
       const result = await queueAppointmentMutation({
         action: 'cancel',
         appointmentId,
+        reason,
       });
       if (result.status === 'failed') toast.error(result.error);
-      else
+      else {
+        closeCancel();
         toast.success(
           result.status === 'queued' ? 'Anulimi u radhit.' : 'Takimi u anulua.',
         );
+      }
     });
   }
 
@@ -159,7 +183,7 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
                         <Button
                           variant="secondary"
                           className="h-11"
-                          onClick={() => cancel(item.appointment!.id)}
+                          onClick={() => setCancelTarget(item.appointment!)}
                           disabled={pending}
                         >
                           Anulo
@@ -205,7 +229,77 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
       />
+
+      <CancelAppointmentDialog
+        appointment={cancelTarget}
+        reason={cancelReason}
+        onReasonChange={setCancelReason}
+        onConfirm={() => cancelTarget && cancel(cancelTarget.id, cancelReason)}
+        onClose={closeCancel}
+        pending={pending}
+      />
     </div>
+  );
+}
+
+/**
+ * Confirmation step for the attention card's "Anulo" (stateless so the gate is
+ * unit-testable): patient + time to catch a mis-tap, plus the optional reason
+ * the appointment audit trail records.
+ */
+export function CancelAppointmentDialog({
+  appointment,
+  reason,
+  onReasonChange,
+  onConfirm,
+  onClose,
+  pending,
+}: {
+  appointment: TodayAppointment | null;
+  reason: string;
+  onReasonChange: (reason: string) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+  pending: boolean;
+}) {
+  return (
+    <Dialog
+      open={appointment !== null}
+      onOpenChange={(open) => !open && onClose()}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t.appointment.cancelTitle}</DialogTitle>
+          <DialogDescription>{t.appointment.cancelBody}</DialogDescription>
+        </DialogHeader>
+        {appointment && (
+          <p className="text-[14.5px] font-semibold tracking-[-0.005em]">
+            {appointment.patientName} · {appointment.startLabel}
+          </p>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="today-cancel-reason">
+            {t.appointment.cancelReasonLabel}
+          </Label>
+          <Textarea
+            id="today-cancel-reason"
+            value={reason}
+            onChange={(e) => onReasonChange(e.target.value)}
+            rows={2}
+            placeholder={t.appointment.cancelReasonPlaceholder}
+            className="resize-none"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={pending}>
+            {t.appointment.cancelBack}
+          </Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={pending}>
+            {t.appointment.cancelConfirm}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

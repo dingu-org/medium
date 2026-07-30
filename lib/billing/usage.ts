@@ -365,16 +365,31 @@ async function countDeliveredReminders(
 }
 
 /**
+ * How long a sent-but-unconfirmed reminder holds a quota slot. Meta's `delivered`
+ * status normally lands in seconds; a reminder to a recipient whose device never
+ * comes online gets no callback at all until Meta's ~30-day expiry, so without an
+ * age bound those rows would silently eat the month's cap (and the PT-facing
+ * meter, which shows `delivered` only, would still look like there was room).
+ */
+const IN_FLIGHT_WINDOW_MS = 60 * 60 * 1000;
+
+/**
  * Reminders whose template Meta accepted (`status='sent'`, `sent_at` set) but
- * whose delivery confirmation hasn't arrived yet, within `[start, end)`. The
- * gate counts these so a burst can't overshoot the cap while `delivered`
- * webhooks are in transit.
+ * whose delivery confirmation hasn't arrived yet, within `[start, end)` and sent
+ * in the last hour. The gate counts these so a burst can't overshoot the cap
+ * while `delivered` webhooks are in transit; anything older is no longer "in
+ * transit" and must not hold a slot for the rest of the month.
  */
 async function countInFlightReminders(
   ptId: string,
   start: Date,
   end: Date,
+  now: Date,
 ): Promise<number> {
+  // Never widen past the month clamp.
+  const sentSince = new Date(
+    Math.max(start.getTime(), now.getTime() - IN_FLIGHT_WINDOW_MS),
+  );
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(reminderJobs)
@@ -384,7 +399,7 @@ async function countInFlightReminders(
         eq(reminderJobs.status, 'sent'),
         isNull(reminderJobs.deliveredAt),
         isNotNull(reminderJobs.sentAt),
-        gte(reminderJobs.sentAt, start),
+        gte(reminderJobs.sentAt, sentSince),
         lt(reminderJobs.sentAt, end),
       ),
     );
@@ -394,7 +409,7 @@ async function countInFlightReminders(
 export type ReminderUsage = {
   /** Meta-confirmed deliveries this month (authoritative usage). */
   delivered: number;
-  /** Sent-but-unconfirmed this month (gate-only overshoot guard). */
+  /** Sent in the last hour, unconfirmed (gate-only overshoot guard). */
   inFlight: number;
   /** delivered + inFlight — the value the gate compares to the limit. */
   used: number;
@@ -405,8 +420,8 @@ export type ReminderUsage = {
 
 /**
  * Monthly reminder usage for the PT's grace-aware effective plan. `used` counts
- * delivered + in-flight (conservative, for the send-time gate); `delivered`
- * alone is the authoritative figure for reporting.
+ * delivered + recently-sent-unconfirmed (conservative, for the send-time gate);
+ * `delivered` alone is the authoritative figure for reporting.
  */
 export async function getReminderUsage(
   ptId: string,
@@ -438,7 +453,7 @@ export async function getReminderUsage(
   const { monthKey, start, end } = reminderMonthBounds(now, pt.timezone);
   const [delivered, inFlight] = await Promise.all([
     countDeliveredReminders(ptId, start, end),
-    countInFlightReminders(ptId, start, end),
+    countInFlightReminders(ptId, start, end, now),
   ]);
   const used = delivered + inFlight;
   return {

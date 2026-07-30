@@ -9,10 +9,10 @@ import {
   AppointmentError,
   bookAppointment,
   cancelAppointment,
-  getFreeSlots,
   rescheduleAppointment,
   transitionAppointment,
 } from '@/lib/appointments';
+import { getFreeSlotsInternal } from '@/lib/appointments/availability';
 import { db } from '@/lib/db';
 import { appointments, patients, pts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
@@ -153,16 +153,37 @@ export const updateAppointmentNotes = instrumentedAction(
 
 export type SlotsByDay = { date: string; label: string; slots: string[] };
 
-/** Free slots over the next 14 days for the reschedule / booking picker. */
-async function getUpcomingSlotsImpl(): Promise<{
+const upcomingSlotsSchema = z.object({
+  durationMinutes: z.number().int().min(5).max(480).optional(),
+  excludeAppointmentId: z.uuid().optional(),
+});
+
+/**
+ * Free slots over the next 14 days for the reschedule / booking picker. Pass
+ * the appointment's own length (and id) when rescheduling, so the offered grid
+ * matches the service being moved instead of the hourly default.
+ */
+async function getUpcomingSlotsImpl(options?: {
+  durationMinutes?: number;
+  excludeAppointmentId?: string;
+}): Promise<{
   days: SlotsByDay[];
   timezone: string;
 }> {
   const ptId = await requirePtId();
+  const parsed = upcomingSlotsSchema.safeParse(options ?? {});
   const start = new Date();
   const end = new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-  const { slots, timezone } = await getFreeSlots({ ptId, start, end });
+  const { slots, timezone } = await getFreeSlotsInternal({
+    ptId,
+    start,
+    end,
+    durationMinutes: parsed.success ? parsed.data.durationMinutes : undefined,
+    excludeAppointmentId: parsed.success
+      ? parsed.data.excludeAppointmentId
+      : undefined,
+  });
 
   const byDay = new Map<string, string[]>();
   const fmtDay = new Intl.DateTimeFormat('en', {

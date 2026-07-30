@@ -84,6 +84,36 @@ export const savePushSubscription = instrumentedAction(
   savePushSubscriptionImpl,
 );
 
+/**
+ * Whether this endpoint is stored for the *current* PT. The browser owning a
+ * subscription proves nothing server-side: the row may have been pruned after a
+ * 410, or the endpoint may still map to a PT who signed out on this device.
+ */
+async function isEndpointOwnedImpl(endpoint: string): Promise<boolean> {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const [row] = await db
+    .select({ id: pushSubscriptions.id })
+    .from(pushSubscriptions)
+    .where(
+      and(
+        eq(pushSubscriptions.ptId, user.id),
+        eq(pushSubscriptions.endpoint, endpoint),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+export const isEndpointOwned = instrumentedAction(
+  'push.isEndpointOwned',
+  isEndpointOwnedImpl,
+);
+
 /** Remove this browser's subscription (called on disable / unsubscribe). */
 async function removePushSubscriptionImpl(endpoint: string): Promise<void> {
   const supabase = await createServerClient();

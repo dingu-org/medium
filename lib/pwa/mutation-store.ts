@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { pwaMutations } from '@/lib/db/schema';
 
@@ -11,6 +11,15 @@ type StoredMutation = {
 };
 
 const STALE_PROCESSING_MS = 2 * 60 * 1000;
+/**
+ * How many times a 'processing' row may be reclaimed as abandoned. Reclaiming
+ * re-runs the side-effect, so exactly one retry is allowed: a second reclaim
+ * would mean two attempts already died mid-flight and re-sending a third time
+ * risks a duplicate WhatsApp message (the 'sent' stamp lands only after Graph
+ * returns). The count lives in `result`, which is unused while 'processing'.
+ */
+const MAX_RECLAIMS = 1;
+const ABANDONED_ERROR = 'Ndryshimi nuk përfundoi. Kontrollo dhe provo sërish.';
 
 export type MutationStart =
   | { kind: 'new'; id: string }
@@ -55,17 +64,41 @@ export async function beginPwaMutation(input: {
     .limit(1);
 
   if (isStaleProcessing(existing)) {
-    await db
+    if (readReclaims(existing.result) >= MAX_RECLAIMS) {
+      // Already retried once and died again: dead-end visibly rather than run
+      // the side-effect a third time.
+      await failPwaMutation({
+        ptId: input.ptId,
+        clientMutationId: input.clientMutationId,
+        error: ABANDONED_ERROR,
+      });
+      return { kind: 'failed', error: ABANDONED_ERROR };
+    }
+    // Claim the row in ONE guarded statement: two replays of the same id can
+    // overlap (two tabs, or a tab plus a Background Sync relay) and a
+    // read-then-write would let both win and run the side-effect twice. The
+    // staleness and reclaim-count guards are re-checked under the row lock, so
+    // exactly one caller gets a row back — the loser is told 'processing'.
+    const [reclaimed] = await db
       .update(pwaMutations)
-      .set({ updatedAt: new Date(), result: null, error: null })
+      .set({
+        updatedAt: new Date(),
+        result: sql`jsonb_build_object('reclaims', coalesce((${pwaMutations.result}->>'reclaims')::int, 0) + 1)`,
+        error: null,
+      })
       .where(
         and(
           eq(pwaMutations.ptId, input.ptId),
           eq(pwaMutations.clientMutationId, input.clientMutationId),
           eq(pwaMutations.status, 'processing'),
+          lt(pwaMutations.updatedAt, staleBefore()),
+          sql`coalesce((${pwaMutations.result}->>'reclaims')::int, 0) < ${MAX_RECLAIMS}`,
         ),
-      );
-    return { kind: 'new', id: existing.id };
+      )
+      .returning({ id: pwaMutations.id });
+
+    if (!reclaimed) return { kind: 'processing' };
+    return { kind: 'new', id: reclaimed.id };
   }
 
   return existingState(existing);
@@ -77,6 +110,14 @@ function readGraphMessageId(result: unknown): string | null {
     return typeof value === 'string' ? value : null;
   }
   return null;
+}
+
+function readReclaims(result: unknown): number {
+  if (result && typeof result === 'object' && 'reclaims' in result) {
+    const value = (result as { reclaims: unknown }).reclaims;
+    return typeof value === 'number' ? value : 0;
+  }
+  return 0;
 }
 
 function existingState(existing: StoredMutation | undefined): MutationStart {
@@ -99,10 +140,14 @@ function existingState(existing: StoredMutation | undefined): MutationStart {
   return { kind: 'processing' };
 }
 
+/** Rows touched before this instant count as abandoned. */
+function staleBefore(): Date {
+  return new Date(Date.now() - STALE_PROCESSING_MS);
+}
+
 function isStaleProcessing(existing: StoredMutation | undefined): existing is StoredMutation {
   return (
-    existing?.status === 'processing' &&
-    Date.now() - existing.updatedAt.getTime() > STALE_PROCESSING_MS
+    existing?.status === 'processing' && existing.updatedAt < staleBefore()
   );
 }
 

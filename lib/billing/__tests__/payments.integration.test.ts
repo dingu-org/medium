@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 
 // Mock the POK network client so getOrder returns a controllable status; the
 // settle logic (idempotency + extension) is the real code under test. Hoisted so
-// the mock is in place before payments.ts (which builds the client at module top).
+// the mock is in place before payments.ts resolves createPokClient.
 const { mockGetOrder, mockCreateOrder, mockCaptureOrder, mockLogin } = vi.hoisted(
   () => ({
     mockGetOrder: vi.fn(),

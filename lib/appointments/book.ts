@@ -8,7 +8,7 @@ import {
   eventPayloadFromAppointment,
 } from '@/lib/events/appointments';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
-import { getFreeSlotsInternal } from './availability';
+import { isSlotBookable } from './availability';
 import { AppointmentError } from './errors';
 import { withAppointmentLock } from './lock';
 import type { AppointmentRecord } from './types';
@@ -94,18 +94,12 @@ export async function bookAppointment(
 
     const endsAt = addMinutes(input.startsAt, durationMinutes);
     if (!input.allowOutsideAvailability) {
-      const availability = await getFreeSlotsInternal({
+      const bookable = await isSlotBookable({
         ptId: input.ptId,
-        start: input.startsAt,
-        end: endsAt,
-        durationMinutes,
-        serviceType: input.serviceType,
+        startsAt: input.startsAt,
+        endsAt,
       });
-      if (
-        !availability.slots.some(
-          (slot) => slot.startsAt === input.startsAt.toISOString(),
-        )
-      ) {
+      if (!bookable) {
         throw new AppointmentError(
           'unavailable',
           'The selected appointment time is no longer available.',

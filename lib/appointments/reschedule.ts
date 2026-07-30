@@ -5,7 +5,7 @@ import { getPostgresErrorCode } from '@/lib/db/postgres-errors';
 import { appointments } from '@/lib/db/schema';
 import { appendAppointmentEvent } from '@/lib/events/appointments';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
-import { getFreeSlotsInternal } from './availability';
+import { isSlotBookable } from './availability';
 import { AppointmentError } from './errors';
 import { withAppointmentLock } from './lock';
 import type { AppointmentRecord } from './types';
@@ -58,19 +58,13 @@ export async function rescheduleAppointment(input: {
       );
     }
     const newEndsAt = addMinutes(input.newStartsAt, durationMinutes);
-    const availability = await getFreeSlotsInternal({
+    const bookable = await isSlotBookable({
       ptId: input.ptId,
-      start: input.newStartsAt,
-      end: newEndsAt,
-      durationMinutes,
-      serviceType: existing.serviceType ?? undefined,
+      startsAt: input.newStartsAt,
+      endsAt: newEndsAt,
       excludeAppointmentId: existing.id,
     });
-    if (
-      !availability.slots.some(
-        (slot) => slot.startsAt === input.newStartsAt.toISOString(),
-      )
-    ) {
+    if (!bookable) {
       throw new AppointmentError(
         'unavailable',
         'The selected appointment time is no longer available.',

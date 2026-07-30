@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import {
   appointments,
@@ -76,6 +76,9 @@ export async function loadAppointmentJobContext(args: {
         ),
       )
       .limit(1),
+    // Nothing in the schema limits a PT to one active connection, so the pick
+    // must be deterministic: newest active row wins, matching every other
+    // consumer (lib/channels/whatsapp/client.ts, chat/actions.ts, pwa routes).
     db
       .select({ id: whatsappConnections.id })
       .from(whatsappConnections)
@@ -85,6 +88,7 @@ export async function loadAppointmentJobContext(args: {
           eq(whatsappConnections.status, 'active'),
         ),
       )
+      .orderBy(desc(whatsappConnections.createdAt))
       .limit(1),
   ]);
 

@@ -3,6 +3,7 @@
 import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { reminderQuotaAvailable } from '@/lib/billing/usage';
 import { sendTemplate } from '@/lib/channels/whatsapp/client';
 import { db } from '@/lib/db';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
@@ -13,6 +14,7 @@ import {
   messages,
   patients,
   pts,
+  reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
@@ -167,7 +169,16 @@ async function setConversationClosedImpl(
             aiPauseReason: null,
             escalationState: 'idle',
           }
-        : { closedAt: null, aiActive: true, escalationState: 'idle' },
+        : {
+            closedAt: null,
+            aiActive: true,
+            // Mirror every other resume path: a closed conversation can still
+            // pick up a WhatsApp-echo pause, and leaving it set means the UI
+            // reports the AI as on while the next inbound is silently skipped.
+            aiPausedUntil: null,
+            aiPauseReason: null,
+            escalationState: 'idle',
+          },
     )
     .where(
       and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
@@ -191,6 +202,7 @@ async function sendUpcomingReminderTemplateImpl(
       patientId: conversations.patientId,
       patientName: patients.name,
       waId: patients.waId,
+      reminderOptedOutAt: patients.reminderOptedOutAt,
       practiceName: pts.practiceName,
       timezone: pts.timezone,
     })
@@ -202,6 +214,12 @@ async function sendUpcomingReminderTemplateImpl(
     )
     .limit(1);
   if (!context?.waId) return { ok: false, error: 'Biseda nuk u gjet.' };
+  // The automated path skips an opted-out patient with `patient_opted_out`
+  // (send-reminder.ts loadReminderAttempt); the manual one-tap send has to
+  // honour the same NDAL/STOP, or it bills a template the patient refused.
+  if (context.reminderOptedOutAt) {
+    return { ok: false, error: 'Klienti ka çaktivizuar kujtesat.' };
+  }
   // Hoist out of `context` so the narrowing survives into the closure below.
   const waId = context.waId;
 
@@ -218,7 +236,7 @@ async function sendUpcomingReminderTemplateImpl(
       .orderBy(desc(whatsappConnections.createdAt))
       .limit(1),
     db
-      .select({ startsAt: appointments.startsAt })
+      .select({ id: appointments.id, startsAt: appointments.startsAt })
       .from(appointments)
       .where(
         and(
@@ -306,6 +324,14 @@ async function sendUpcomingReminderTemplateImpl(
       return { ok: true };
     }
 
+    // A manual template is billed by Meta and counts against the plan's monthly
+    // reminder cap exactly like the automated one (send-reminder.ts gates on the
+    // same helper) — without this the cap is circumventable one thread at a time.
+    const sentAt = new Date();
+    if (!(await reminderQuotaAvailable(ptId, sentAt))) {
+      return { ok: false, error: 'Kufiri i kujtesave u arrit për këtë muaj.' };
+    }
+
     let sent: { messageId: string | null };
     try {
       sent = await sendTemplate(
@@ -326,15 +352,67 @@ async function sendUpcomingReminderTemplateImpl(
     // written). Report a distinct "sent but not saved" state and log the wamid.
     try {
       await db.transaction(async (tx) => {
-        await tx.insert(messages).values({
-          ptId,
-          conversationId,
-          role: 'pt',
-          channel: 'whatsapp',
-          content: `Kujtesë për takimin më ${localTime}.`,
-          templateId: template.id,
-          externalId: sent.messageId,
-        });
+        const [created] = await tx
+          .insert(messages)
+          .values({
+            ptId,
+            conversationId,
+            role: 'pt',
+            channel: 'whatsapp',
+            content: `Kujtesë për takimin më ${localTime}.`,
+            templateId: template.id,
+            externalId: sent.messageId,
+          })
+          .returning({ id: messages.id });
+        // The reminder_jobs row is what makes the manual send visible to the rest
+        // of the system: the plan meter counts jobs only (usage.ts), and
+        // loadReminderCandidates joins jobs → messages, so without it the
+        // patient's KONFIRMO/ANULO reply matches nothing and is dropped.
+        await tx
+          .insert(reminderJobs)
+          .values({
+            ptId,
+            appointmentId: appointment.id,
+            scheduledFor: sentAt,
+            status: 'sent',
+            sentAt,
+            messageId: created.id,
+          })
+          .onConflictDoUpdate({
+            target: reminderJobs.appointmentId,
+            // One job per appointment, so this stamps the manual send onto a
+            // still-scheduled automated job. inngestRunId/scheduledFor are left
+            // untouched deliberately: clearing them makes the sleeping run trip
+            // loadReminderAttempt's stale_run guard, and that branch marks the
+            // job skipped — rewriting this 'sent' row, so the patient's
+            // KONFIRMO/ANULO in the final hours matches no candidate and the
+            // appointment badge claims no reminder was sent. The woken run
+            // cannot double-send either way: prepareReminderMessage reuses the
+            // messageId below and its wamid instead of paying for a second
+            // template (send-reminder.ts).
+            set: {
+              status: 'sent',
+              attempts: 0,
+              lastError: null,
+              skippedReason: null,
+              sentAt,
+              messageId: created.id,
+              // The patient's answer belongs to the cycle it answered, so it is
+              // cleared exactly like upsertReminderSchedule does, or this send
+              // inherits the previous cycle's reply and chooseCandidate filters
+              // the row out — the patient's next ANULO would cancel nothing.
+              // `delivered_at` is NOT cleared, for the same reason as there: it
+              // is a Meta-billed fact and the only source of monthly usage
+              // (lib/billing/usage.ts countDeliveredReminders), so wiping it
+              // would refund quota the PT already spent. The trade-off is that
+              // markReminderDelivered is first-write-wins, so a manual nudge on
+              // an appointment whose automated reminder was already delivered is
+              // not separately counted.
+              responseType: null,
+              respondedAt: null,
+              responseMessageId: null,
+            },
+          });
         await tx
           .update(conversations)
           // Match every other pause path: clear aiPausedUntil/aiPauseReason too,

@@ -4,7 +4,7 @@
  * usage math reuses the shipped primitives (getConversationUsage /
  * getReminderUsage / warnThreshold); all limits/prices come from plans.ts.
  */
-import { desc, eq, ne, and } from 'drizzle-orm';
+import { desc, eq, inArray, and, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { billingOrders, pts } from '@/lib/db/schema';
 import { resolveEffectivePlan } from './entitlements';
@@ -35,8 +35,9 @@ export type BillingReceipt = {
   id: string;
   createdAt: string;
   period: 'monthly' | 'yearly';
+  /** What was actually charged for THIS order (never the current list price). */
   amountAll: number;
-  status: 'paid' | 'failed' | 'expired';
+  status: 'paid' | 'failed';
 };
 
 export type BillingSnapshot = {
@@ -133,7 +134,7 @@ export async function getBillingSnapshot(
       : null;
   }
 
-  const [conversations, reminders, receiptRows] = await Promise.all([
+  const [conversations, reminders, receiptRows, paidPeriodRows] = await Promise.all([
     getConversationUsage(ptId, now),
     getReminderUsage(ptId, now),
     db
@@ -141,13 +142,32 @@ export async function getBillingSnapshot(
         id: billingOrders.id,
         createdAt: billingOrders.createdAt,
         period: billingOrders.period,
+        amountMinor: billingOrders.amountMinor,
         status: billingOrders.status,
       })
       .from(billingOrders)
-      // Settled outcomes only — an untouched 'created' order is not a receipt.
-      .where(and(eq(billingOrders.ptId, ptId), ne(billingOrders.status, 'created')))
+      // Real payment attempts only. A 'created' order was never settled, and an
+      // 'expired' one is a checkout the PT opened and abandoned — showing it as
+      // "Dështoi" next to a price reads as a charge that failed.
+      .where(
+        and(
+          eq(billingOrders.ptId, ptId),
+          inArray(billingOrders.status, ['paid', 'failed']),
+        ),
+      )
       .orderBy(desc(billingOrders.createdAt))
       .limit(50),
+    // Own query, not a scan of the capped receipt list: the most recent PAID
+    // order must drive the upgrade/renew slot even behind 50 newer failures.
+    db
+      .select({ period: billingOrders.period })
+      .from(billingOrders)
+      .where(and(eq(billingOrders.ptId, ptId), eq(billingOrders.status, 'paid')))
+      .orderBy(
+        sql`${billingOrders.paidAt} desc nulls last`,
+        desc(billingOrders.createdAt),
+      )
+      .limit(1),
   ]);
 
   const soloPrice = getPlan('solo').price;
@@ -171,13 +191,14 @@ export async function getBillingSnapshot(
     id: row.id,
     createdAt: row.createdAt.toISOString(),
     period: row.period,
-    // Whole-ALL price for the period (from plans.ts) — never the minor-unit
-    // amount, whose factor is still unconfirmed (POK spike blocked).
-    amountAll: soloPrice ? soloPrice[row.period] : 0,
+    // The amount stored ON THIS ORDER. `amount_minor` is already whole ALL
+    // (ALL_MINOR_FACTOR = 1, spike-confirmed in payments.ts), so a later price
+    // change never restates a historical receipt.
+    amountAll: row.amountMinor,
     status: row.status as BillingReceipt['status'],
   }));
 
-  const currentPeriod = receiptRows.find((r) => r.status === 'paid')?.period ?? null;
+  const currentPeriod = paidPeriodRows[0]?.period ?? null;
 
   return {
     timezone: pt?.timezone ?? 'Europe/Berlin',

@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { eq } from 'drizzle-orm';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
@@ -10,12 +11,14 @@ import {
   blockedPeriods,
   conversationDays,
   conversations,
+  costDaily,
   erasureArchive,
   eventOutbox,
   events,
   messageTemplates,
   messages,
   patients,
+  pts,
   pushSubscriptions,
   pwaMutations,
   reminderJobs,
@@ -150,6 +153,38 @@ const seedFactories: Record<
   }),
 };
 
+// A real single-column write per table. `.update({})` builds no SET clause, so
+// PostgREST issues no statement at all and the assertions would hold under any
+// policy — including a deny-all one. Every matrix table needs an entry (asserted
+// below) so a new table cannot silently skip the write checks.
+const UPDATE_COL: Record<string, Record<string, unknown>> = {
+  whatsapp_connections: { tier: 'rls-probe' },
+  whatsapp_contacts: { full_name: 'rls-probe' },
+  patients: { notes: 'rls-probe' },
+  services: { active: false },
+  conversations: { escalation_state: 'rls-probe' },
+  messages: { model: 'rls-probe' },
+  appointments: { notes: 'rls-probe' },
+  availability_rules: { weekday: 2 },
+  blocked_periods: { label: 'rls-probe' },
+  message_templates: { meta_id: 'rls-probe' },
+  reminder_jobs: { last_error: 'rls-probe' },
+  push_subscriptions: { user_agent: 'rls-probe' },
+  pwa_mutations: { error: 'rls-probe' },
+  events: { type: 'rls-probe' },
+  event_outbox: { last_error: 'rls-probe' },
+  audit_log: { action: 'rls-probe' },
+  cost_daily: { meta_cost_source: 'rls-probe' },
+  conversation_days: { month_key: '1970-01' },
+  erasure_archive: { before_state_hash: 'rls-probe' },
+  wa_message_statuses: { pricing_category: 'rls-probe' },
+  billing_orders: { currency: 'XXX' },
+};
+
+// Operator-only tables: their policy is USING (false), so even the owning tenant
+// reads nothing (0016 erasure_archive, 0021 wa_message_statuses).
+const DENY_ALL = new Set(['erasure_archive', 'wa_message_statuses']);
+
 const TENANT_ID_COL: Record<string, 'pt_id' | 'id'> = { pts: 'id' };
 
 let sql: ReturnType<typeof postgres>;
@@ -267,6 +302,10 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     externalId: `wamid-${Date.now()}-${Math.random()}`,
     lastStatus: 'sent',
   });
+  await db.insert(costDaily).values({
+    ptId,
+    day: new Date().toISOString().slice(0, 10),
+  });
   await db.insert(conversationDays).values({
     ptId,
     patientId: pat.id,
@@ -337,12 +376,35 @@ describe('RLS isolation registry covers every tenant-scoped table', () => {
     const registered = Object.keys(seedFactories).sort();
     expect(registered).toEqual(dbTables.sort());
   });
+
+  it('UPDATE_COL has a real column for every matrix table', () => {
+    expect(Object.keys(UPDATE_COL).sort()).toEqual(
+      Object.keys(seedFactories).sort(),
+    );
+  });
 });
 
 const matrixTables = Object.keys(seedFactories);
 
 describe.each(matrixTables)('RLS isolation: %s', (table) => {
   const tenantCol = TENANT_ID_COL[table] ?? 'pt_id';
+  const patch = UPDATE_COL[table];
+
+  // Positive canary: without it a deny-all policy (or a dropped policy) would
+  // pass every negative case below. Realtime postgres_changes needs exactly this
+  // read to keep delivering, so it must never regress.
+  it("SELECT as A returns A's own rows", async () => {
+    const { data, error } = await userClientA
+      .from(table)
+      .select('*')
+      .eq(tenantCol, ptIdA);
+    expect(error).toBeNull();
+    if (DENY_ALL.has(table)) {
+      expect(data).toEqual([]);
+    } else {
+      expect(data?.length ?? 0).toBeGreaterThanOrEqual(1);
+    }
+  });
 
   it('SELECT as A returns 0 rows for B', async () => {
     const { data, error } = await userClientA
@@ -353,34 +415,64 @@ describe.each(matrixTables)('RLS isolation: %s', (table) => {
     expect(data).toEqual([]);
   });
 
-  it('INSERT with B as tenant fails RLS', async () => {
-    const row = seedFactories[table]({ ...depsA, ptId: ptIdB });
-    const { error } = await userClientA.from(table).insert(row);
-    expect(error).not.toBeNull();
+  // Writes are revoked for anon/authenticated (0024) and no policy allows them,
+  // so PostgREST must reject every write — including the tenant's own rows. All
+  // app writes go through the owner connection in lib/db, never PostgREST.
+  it("INSERT is rejected for A's own tenant and for B", async () => {
+    const own = await userClientA
+      .from(table)
+      .insert(seedFactories[table](depsA));
+    expect(own.error).not.toBeNull();
+
+    const other = await userClientA
+      .from(table)
+      .insert(seedFactories[table]({ ...depsA, ptId: ptIdB }));
+    expect(other.error).not.toBeNull();
   });
 
-  it('UPDATE filtered by B affects 0 rows', async () => {
-    const { data, error } = await userClientA
+  it("UPDATE of a real column is rejected for A's own rows and for B", async () => {
+    const own = await userClientA
       .from(table)
-      .update({})
+      .update(patch)
+      .eq(tenantCol, ptIdA)
+      .select();
+    expect(own.error).not.toBeNull();
+
+    const other = await userClientA
+      .from(table)
+      .update(patch)
       .eq(tenantCol, ptIdB)
       .select();
-    expect(error).toBeNull();
-    expect(data).toEqual([]);
+    expect(other.error).not.toBeNull();
   });
 
-  it('DELETE filtered by B affects 0 rows', async () => {
-    const { data, error } = await userClientA
+  it("DELETE is rejected for A's own rows and for B", async () => {
+    const own = await userClientA
+      .from(table)
+      .delete()
+      .eq(tenantCol, ptIdA)
+      .select();
+    expect(own.error).not.toBeNull();
+
+    const other = await userClientA
       .from(table)
       .delete()
       .eq(tenantCol, ptIdB)
       .select();
-    expect(error).toBeNull();
-    expect(data).toEqual([]);
+    expect(other.error).not.toBeNull();
   });
 });
 
 describe('RLS isolation: pts', () => {
+  it("SELECT as A returns A's own pts row", async () => {
+    const { data, error } = await userClientA
+      .from('pts')
+      .select('*')
+      .eq('id', ptIdA);
+    expect(error).toBeNull();
+    expect(data?.length ?? 0).toBe(1);
+  });
+
   it("SELECT as A returns 0 rows for B's pts row", async () => {
     const { data, error } = await userClientA
       .from('pts')
@@ -390,13 +482,38 @@ describe('RLS isolation: pts', () => {
     expect(data).toEqual([]);
   });
 
-  it("UPDATE filtered by B's id affects 0 rows", async () => {
-    const { data, error } = await userClientA
+  it("UPDATE filtered by B's id is rejected", async () => {
+    const { error } = await userClientA
       .from('pts')
       .update({ practice_name: 'hijack' })
       .eq('id', ptIdB)
       .select();
-    expect(error).toBeNull();
-    expect(data).toEqual([]);
+    expect(error).not.toBeNull();
+  });
+
+  // The entitlement fields live on the tenant's own row, so a writable pts row
+  // is a free upgrade to the paid plan (lib/billing/entitlements.ts trusts them)
+  // and `retention_days` defeats the GDPR purge.
+  it('UPDATE of own plan/retention fields is rejected', async () => {
+    for (const patch of [
+      { plan: 'solo' },
+      { plan_lifetime: true },
+      { plan_expires_at: new Date(Date.now() + 86_400_000).toISOString() },
+      { retention_days: 99_999 },
+    ]) {
+      const { error } = await userClientA
+        .from('pts')
+        .update(patch)
+        .eq('id', ptIdA)
+        .select();
+      expect(error).not.toBeNull();
+    }
+
+    const [row] = await db
+      .select({ plan: pts.plan, planLifetime: pts.planLifetime })
+      .from(pts)
+      .where(eq(pts.id, ptIdA));
+    expect(row.plan).toBe('free');
+    expect(row.planLifetime).toBe(false);
   });
 });
