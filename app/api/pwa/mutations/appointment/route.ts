@@ -18,6 +18,7 @@ import {
   beginPwaMutation,
   completePwaMutation,
   failPwaMutation,
+  recordPwaMutationProgress,
 } from '@/lib/pwa/mutation-store';
 
 export const runtime = 'nodejs';
@@ -110,8 +111,12 @@ export async function POST(request: Request) {
     return jsonError('Ndryshimi është ende duke u përpunuar.', 503);
   }
 
+  // A stale-reclaimed 'new' carries whatever the crashed attempt already got
+  // done (bookManual below); a genuinely first attempt has nothing to resume.
+  const priorProgress = started.kind === 'new' ? started.priorProgress : null;
+
   try {
-    const result = await runAppointmentMutation(ptId, input);
+    const result = await runAppointmentMutation(ptId, input, priorProgress);
     await completePwaMutation({
       ptId,
       clientMutationId: input.clientMutationId,
@@ -134,9 +139,10 @@ export async function POST(request: Request) {
 async function runAppointmentMutation(
   ptId: string,
   input: AppointmentInput,
+  priorProgress: Record<string, unknown> | null,
 ): Promise<{ ok: true; appointmentId: string }> {
   if (input.action === 'manual_book') {
-    const appointment = await bookManual(ptId, input);
+    const appointment = await bookManual(ptId, input, priorProgress);
     return { ok: true, appointmentId: appointment.id };
   }
   if (input.action === 'cancel') {
@@ -184,9 +190,18 @@ async function runAppointmentMutation(
   return { ok: true, appointmentId: input.appointmentId };
 }
 
+/** Where bookManual stashes the patient it created, for a reclaimed retry. */
+function priorCreatedPatientId(
+  progress: Record<string, unknown> | null,
+): string | null {
+  const value = progress?.createdPatientId;
+  return typeof value === 'string' ? value : null;
+}
+
 async function bookManual(
   ptId: string,
   input: z.infer<typeof manualBookSchema>,
+  priorProgress: Record<string, unknown> | null,
 ) {
   const [pt] = await db
     .select({ timezone: pts.timezone })
@@ -202,16 +217,33 @@ async function bookManual(
 
   let patientId = input.patientId;
   if (!patientId && input.newPatient) {
-    const created = await createManualPatient({ ptId, ...input.newPatient });
-    if ('failure' in created) {
-      throw new AppointmentError(
-        'invalid_input',
-        created.failure === 'DUPLICATE_PHONE'
-          ? 'Një klient me këtë numër ekziston tashmë.'
-          : 'Numri i telefonit nuk është i vlefshëm.',
-      );
+    // createManualPatient and the booking below are two separate writes, not
+    // one transaction. If a prior attempt at this same clientMutationId
+    // created the patient and then died before booking committed, a plain
+    // retry would call createManualPatient again, get DUPLICATE_PHONE for the
+    // patient it just made, and dead-end permanently on a misleading "client
+    // already exists" error despite never having booked anything. Reuse the
+    // stashed id instead of re-creating.
+    const priorPatientId = priorCreatedPatientId(priorProgress);
+    if (priorPatientId) {
+      patientId = priorPatientId;
+    } else {
+      const created = await createManualPatient({ ptId, ...input.newPatient });
+      if ('failure' in created) {
+        throw new AppointmentError(
+          'invalid_input',
+          created.failure === 'DUPLICATE_PHONE'
+            ? 'Një klient me këtë numër ekziston tashmë.'
+            : 'Numri i telefonit nuk është i vlefshëm.',
+        );
+      }
+      patientId = created.id;
+      await recordPwaMutationProgress({
+        ptId,
+        clientMutationId: input.clientMutationId,
+        progress: { createdPatientId: created.id },
+      });
     }
-    patientId = created.id;
   }
   if (!patientId) {
     throw new AppointmentError('invalid_input', 'Zgjidh ose shto një klient.');

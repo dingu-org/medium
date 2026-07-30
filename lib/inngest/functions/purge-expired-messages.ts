@@ -8,6 +8,8 @@ export type PurgeResult = {
   ptId: string;
   retentionDays: number;
   deletedCount: number;
+  /** Domain-event rows dropped by the same window (see purgePtExpiredMessages). */
+  deletedEventCount: number;
 };
 
 export const AUDIT_LOG_RETENTION_DAYS = 730; // GDPR-minimum for healthcare-adjacent context — pending legal confirmation
@@ -56,10 +58,32 @@ export async function purgePtExpiredMessages(args: {
       RETURNING message.id
     `);
 
+    // `events` is a personal-data store too: appointment events carry the
+    // patient id and the schedule (and erasure itself appends them), so leaving
+    // the table out of retention kept an erased patient's appointments forever.
+    // Two carve-outs: a row the outbox has not published yet is still owed to a
+    // consumer (and event_outbox cascades from it), and `billing.*` rows ARE the
+    // once-per-month dedupe key for limit warnings — deleting one late in a long
+    // month would re-notify the PT for usage they were already told about.
+    const deletedEvents = await tx.execute<{ id: string }>(sql`
+      DELETE FROM events AS event
+      WHERE event.pt_id = ${args.ptId}
+        AND event.occurred_at < ${cutoff.toISOString()}::timestamptz
+        AND event.type NOT LIKE 'billing.%'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM event_outbox AS outbox
+          WHERE outbox.event_id = event.id
+            AND outbox.published_at IS NULL
+        )
+      RETURNING event.id
+    `);
+
     const result = {
       ptId: args.ptId,
       retentionDays: args.retentionDays,
       deletedCount: deleted.length,
+      deletedEventCount: deletedEvents.length,
     };
     await tx.insert(auditLog).values({
       ptId: args.ptId,
@@ -68,6 +92,7 @@ export async function purgePtExpiredMessages(args: {
       targetTable: 'messages',
       metadata: {
         deletedCount: result.deletedCount,
+        deletedEventCount: result.deletedEventCount,
         retentionDays: args.retentionDays,
         cutoff: cutoff.toISOString(),
       },

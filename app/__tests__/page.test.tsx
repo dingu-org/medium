@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import Home from '@/app/page';
 import { LandingPage } from '@/app/_landing/landing-page';
 
@@ -20,6 +20,10 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe('Home (/)', () => {
   it('redirects signed-in users to /today', async () => {
     authState.userId = '11111111-1111-4111-8111-111111111111';
@@ -37,11 +41,16 @@ describe('Home (/)', () => {
   // GoTrue drops a one-time auth token on `/` when an email link's redirect_to
   // is missing from the project allowlist; the token burns on click, so `/` has
   // to hand it to the route that can redeem it instead of rendering the landing.
-  it('forwards a stray PKCE code to the callback route', async () => {
+  // The fallback drops the original redirect_to and its `next`, so forwarding
+  // the bare code would sign the PT in on /today with the one-time code burned,
+  // no recovery marker and no in-app way to set a password.
+  it('forwards a stray PKCE code to the callback route as a recovery', async () => {
     authState.userId = null;
     await expect(
       Home({ searchParams: Promise.resolve({ code: 'abc 123' }) }),
-    ).rejects.toThrow('REDIRECT:/auth/callback?code=abc%20123');
+    ).rejects.toThrow(
+      'REDIRECT:/auth/callback?code=abc%20123&next=%2Freset-password',
+    );
   });
 
   it('forwards a stray token hash to the confirm route', async () => {
@@ -51,5 +60,15 @@ describe('Home (/)', () => {
         searchParams: Promise.resolve({ token_hash: 'h1', type: 'recovery' }),
       }),
     ).rejects.toThrow('REDIRECT:/auth/confirm?token_hash=h1&type=recovery');
+  });
+
+  // NEXT_PUBLIC_* are inlined at build time and have gone missing from a build
+  // before; the marketing page must survive that rather than 500.
+  it('serves the landing when Supabase config is missing', async () => {
+    authState.userId = '11111111-1111-4111-8111-111111111111';
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', '');
+
+    const element = await Home({ searchParams: Promise.resolve({}) });
+    expect(element.type).toBe(LandingPage);
   });
 });

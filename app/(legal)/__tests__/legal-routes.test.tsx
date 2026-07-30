@@ -2,10 +2,14 @@ import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import LegalLayout from '../layout';
-import PrivacyPage from '../privacy/page';
-import TermsPage from '../terms/page';
-import EnglishPrivacyPage from '../en/privacy/page';
-import EnglishTermsPage from '../en/terms/page';
+import PrivacyPage, { metadata as privacyMetadata } from '../privacy/page';
+import TermsPage, { metadata as termsMetadata } from '../terms/page';
+import EnglishPrivacyPage, {
+  metadata as enPrivacyMetadata,
+} from '../en/privacy/page';
+import EnglishTermsPage, {
+  metadata as enTermsMetadata,
+} from '../en/terms/page';
 
 vi.mock('next/link', () => ({
   default: ({
@@ -43,9 +47,37 @@ describe('legal chrome', () => {
     expect(markup).toContain('Kushtet');
     expect(markup).toContain('Ndihmë');
     expect(markup).toContain('Hyr');
-    // The document is `<html lang="sq">`; each page declares its own language.
-    expect(markup).not.toContain('lang=');
+    // The document is `<html lang="sq">`; each page declares its own language
+    // on its `<article>`. What the chrome must not do is force a language onto
+    // everything nested inside it, so this is scoped to the layout's own
+    // container elements instead of to the string `lang=` anywhere in the
+    // markup — a cross-language link legitimately carries one.
+    expect(markup).not.toMatch(
+      /<(?:div|main|header|footer|nav|section)\b[^>]*\blang=/,
+    );
   });
+});
+
+describe('legal route metadata', () => {
+  // Relative alternates only resolve because the root layout sets
+  // `metadataBase`; x-default points at the canonical Albanian document so a
+  // crawler with no language preference is not sent to the reading copy.
+  it.each([
+    ['privacy sq', privacyMetadata, '/privacy', '/privacy', '/en/privacy'],
+    ['privacy en', enPrivacyMetadata, '/en/privacy', '/privacy', '/en/privacy'],
+    ['terms sq', termsMetadata, '/terms', '/terms', '/en/terms'],
+    ['terms en', enTermsMetadata, '/en/terms', '/terms', '/en/terms'],
+  ] as const)(
+    'declares canonical and hreflang for %s',
+    (_name, metadata, canonical, sq, en) => {
+      expect(metadata.alternates?.canonical).toBe(canonical);
+      expect(metadata.alternates?.languages).toEqual({
+        sq,
+        en,
+        'x-default': sq,
+      });
+    },
+  );
 });
 
 describe('privacy policy', () => {

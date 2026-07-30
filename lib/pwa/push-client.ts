@@ -16,7 +16,10 @@ export type PushPermissionState =
  * permission stays 'granted' after we drop the subscription, so without this
  * marker the reconcile below would silently re-subscribe on the next app open
  * and the toggle would flip itself back on. Per-browser, which is the scope a
- * push subscription lives at anyway.
+ * push subscription lives at anyway — which is also why it must be cleared on
+ * sign-out (clearPushOptOut, called from clearPwaData): otherwise a PT who
+ * disabled push and later signs out leaves this marker for whoever signs in
+ * next on the same device, and reconcile silently withholds their push too.
  */
 const OPT_OUT_KEY = 'medium:push-opted-out';
 
@@ -35,6 +38,15 @@ function setPushOptedOut(value: boolean): void {
   } catch {
     // Storage can be unavailable (private mode); the toggle still works.
   }
+}
+
+/**
+ * Drop the local opt-out marker. Called from clearPwaData() on sign-out — see
+ * the OPT_OUT_KEY docstring for why leaving it behind would silently break
+ * push for the next PT on a shared device.
+ */
+export function clearPushOptOut(): void {
+  setPushOptedOut(false);
 }
 
 /** Whether this browser supports the Web Push stack we rely on. */
@@ -102,6 +114,15 @@ export async function subscribeToPush(): Promise<PushPermissionState> {
  * Permission is already granted here, so re-subscribing needs no PT action —
  * unless the PT turned push off on this device, which is standing intent that
  * outranks the origin-level permission.
+ *
+ * Runs on every mount and on every SW `pushsubscriptionchange` relay, not only
+ * on a deliberate click, so it must never claim a subscription for the current
+ * PT that it does not already own: a shared front-desk device where PT A's
+ * session merely expired (no explicit sign-out, so the browser-level
+ * subscription survives) would otherwise have PT B's very next app open
+ * silently reassign A's subscription to B, and A stops receiving push with no
+ * signal. When the live endpoint isn't ours, drop it and mint a fresh one
+ * instead of stealing it.
  * Safe to call on every app open; a no-op when the server already owns the row.
  */
 export async function reconcilePushSubscription(): Promise<void> {
@@ -111,7 +132,11 @@ export async function reconcilePushSubscription(): Promise<void> {
 
   const registration = await navigator.serviceWorker.ready;
   let subscription = await registration.pushManager.getSubscription();
-  if (subscription && (await isEndpointOwned(subscription.endpoint))) return;
+  if (subscription) {
+    if (await isEndpointOwned(subscription.endpoint)) return;
+    await subscription.unsubscribe();
+    subscription = null;
+  }
 
   if (!subscription) {
     const key = await getVapidPublicKey();

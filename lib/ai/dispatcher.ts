@@ -42,7 +42,6 @@ async function executeTool(
       start: new Date(input.start as string),
       end: new Date(input.end as string),
       durationMinutes: service?.durationMinutes ?? 60,
-      serviceType: service?.name,
     });
     return {
       ok: true,

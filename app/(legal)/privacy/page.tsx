@@ -8,7 +8,12 @@ export const metadata: Metadata = {
     'Si i trajton Medium të dhënat e llogarisë, të pacientëve, të WhatsApp-it dhe të takimeve.',
   alternates: {
     canonical: '/privacy',
-    languages: { sq: '/privacy', en: '/en/privacy' },
+    // The Albanian version is canonical, so it is also the x-default.
+    languages: {
+      sq: '/privacy',
+      en: '/en/privacy',
+      'x-default': '/privacy',
+    },
   },
 };
 

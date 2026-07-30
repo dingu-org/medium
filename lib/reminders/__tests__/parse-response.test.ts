@@ -84,6 +84,9 @@ describe('parseReminderResponse', () => {
     'Po pyesja sa kushton seanca?',
     'Po ju shkruaj për diçka tjetër',
     'Po dërgoj foton e recetës',
+    // Short enough for the other particles, still a statement rather than a yes.
+    'Po pyesja diçka',
+    'Po flas seriozisht',
   ])(
     'does not read the Albanian progressive particle in %s as a confirmation',
     (input) => {
@@ -116,12 +119,34 @@ describe('parseReminderResponse', () => {
     ['Jo, ricakto nesër', 'reschedule'],
     ['Jo, ndal kujtesat', 'opt_out'],
     ['Po, aktivizo kujtesat', 'opt_in'],
+    ['Ok, stop', 'opt_out'],
   ] as const)(
     'reads %s by its explicit command, not its first word',
     (input, intent) => {
       expect(parseReminderResponse(input)).toBe(intent);
     },
   );
+
+  // "Ok, anuloj" is "OK, I'm cancelling", not the confirmation a bare "Ok"
+  // would be. Confirming it books a slot nobody will use and tells the patient
+  // the appointment they just cancelled is on.
+  it.each([
+    'Ok anuloj',
+    'Po anuloj',
+    'po, anulo',
+    'Dakord anuloj',
+    'Ok, anuloj takimin',
+  ])(
+    'never downgrades the explicit cancel in %s to a confirmation',
+    (input) => {
+      expect(parseReminderResponse(input)).toBeNull();
+    },
+  );
+
+  // A command that agrees with the particle in front of it is still obeyed.
+  it('confirms when the particle and the command say the same thing', () => {
+    expect(parseReminderResponse('Po konfirmo')).toBe('confirm');
+  });
 
   it.each([
     ['RICAKTO', 'reschedule'],
@@ -137,6 +162,33 @@ describe('parseReminderResponse', () => {
     expect(parseReminderResponse('Ndal kujtesat ju lutem')).toBe('opt_out');
   });
 
+  // 'stop' is kept for the Meta convention — a message that IS "STOP" — not for
+  // the English noun a modifier turns it into.
+  it.each(['Full stop pls', 'non-stop'])(
+    'does not unsubscribe on the English phrase %s',
+    (input) => {
+      expect(parseReminderResponse(input)).toBeNull();
+    },
+  );
+
+  // Polite openers soften the request without changing it, so the command
+  // behind one still resolves.
+  it.each([
+    ['Ju lutem aktivizoni kujtesat', 'opt_in'],
+    ['Te lutem ndal kujtesat', 'opt_out'],
+    ['Ju lutem anulo takimin', 'cancel'],
+  ] as const)('reads past the polite opener in %s', (input, intent) => {
+    expect(parseReminderResponse(input)).toBe(intent);
+  });
+
+  // The tokenizer's character class carries no combining marks, so composing
+  // has to happen before the split or a decomposed "ë" breaks the word in two.
+  it('normalises decomposed Albanian vowels before tokenising', () => {
+    const decomposed = 'Të lutem ndal kujtesat'.normalize('NFD');
+    expect(decomposed).not.toBe('Të lutem ndal kujtesat');
+    expect(parseReminderResponse(decomposed)).toBe('opt_out');
+  });
+
   // The patient's own way back into reminders: NDAL is only reversible by the
   // patient, so AKTIVIZO has to resolve as reliably as NDAL does.
   it.each([
@@ -146,6 +198,18 @@ describe('parseReminderResponse', () => {
     ['aktivizo kujtesat', 'opt_in'],
     ['Aktivizo kujtesat e takimeve ju lutem', 'opt_in'],
   ] as const)('parses opt-in keyword %s', (input, intent) => {
+    expect(parseReminderResponse(input)).toBe(intent);
+  });
+
+  // The polite 2pl imperative is the register a patient writes a business in,
+  // and both switches have to answer to it — an unrecognised AKTIVIZO leaves
+  // the patient with no way back.
+  it.each([
+    ['Aktivizoni', 'opt_in'],
+    ['aktivizoni kujtesat', 'opt_in'],
+    ['Ndalo', 'opt_out'],
+    ['ndalni', 'opt_out'],
+  ] as const)('parses the polite imperative %s', (input, intent) => {
     expect(parseReminderResponse(input)).toBe(intent);
   });
 
@@ -159,8 +223,30 @@ describe('parseReminderResponse', () => {
   // A negated command means the opposite of itself. Out-of-position matching is
   // what makes "Jo, ndal kujtesat" work, and it is exactly what would otherwise
   // read "mos ndal kujtesat" ("do NOT stop the reminders") as an opt-out.
-  it.each(['mos aktivizo', 'mos ndal kujtesat', 'nuk ricakto', 'mos anulo'])(
-    'does not obey the negated command %s',
+  it.each([
+    'mos aktivizo',
+    'mos ndal kujtesat',
+    'nuk ricakto',
+    'mos anulo',
+    // A clitic pronoun between the negator and its verb is at least as
+    // idiomatic as the bare form.
+    'mos e ndal',
+    'mos i ndal',
+    'mos ma ndal',
+    'mos e aktivizo',
+    'mos e ndal kujtesat',
+    // The everyday contraction of "nuk"; the apostrophe splits off a bare "s".
+    "s'ndal",
+    's’ndal',
+  ])('does not obey the negated command %s', (input) => {
+    expect(parseReminderResponse(input)).toBeNull();
+  });
+
+  // A patient describing something they are stopping is not asking us to stop
+  // texting them: "Po e ndal" is "I'm stopping it", "do ta ndal" is "I'll stop
+  // it". Unsubscribing them there loses every future reminder silently.
+  it.each(['Po e ndal', 'do ta ndal'])(
+    'does not unsubscribe on the declarative %s',
     (input) => {
       expect(parseReminderResponse(input)).toBeNull();
     },

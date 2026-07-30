@@ -6,7 +6,12 @@ import {
   applyOrderOutcome,
   type ApplyOrderResult,
 } from '@/lib/billing/payments';
-import { getBillingSnapshot, resolveCheckoutSlot } from '@/lib/billing/read-model';
+import {
+  checkoutBannerTone,
+  getBillingSnapshot,
+  resolveCheckoutSlot,
+  type BillingReceipt,
+} from '@/lib/billing/read-model';
 import { db } from '@/lib/db';
 import { billingOrders } from '@/lib/db/schema';
 import { formatDate, formatLek, t } from '@/lib/i18n';
@@ -163,21 +168,21 @@ export default async function BillingSettingsPage({
 
 /** Post-redirect checkout outcome banner. Only 'applied' celebrates. */
 function CheckoutResultBanner({ result }: { result: ApplyOrderResult }) {
-  if (result === 'unknown') return null;
-  const paid = result === 'applied' || result === 'already_applied';
-  const pending = result === 'pending';
-  const message = paid
-    ? t.billing.checkoutApplied
-    : pending
-      ? t.billing.checkoutPending
-      : t.billing.checkoutFailed;
+  const tone = checkoutBannerTone(result);
+  if (!tone) return null;
+  const message =
+    tone === 'paid'
+      ? t.billing.checkoutApplied
+      : tone === 'pending'
+        ? t.billing.checkoutPending
+        : t.billing.checkoutFailed;
   return (
     <p
       className={cn(
         'rounded-lg px-4 py-3 text-[13.5px] font-medium',
-        paid
+        tone === 'paid'
           ? 'bg-[var(--success-50)] text-[var(--success-700)]'
-          : pending
+          : tone === 'pending'
             ? 'bg-[var(--warning-50)] text-[var(--warning-700)]'
             : 'bg-destructive/10 text-destructive',
       )}
@@ -187,11 +192,7 @@ function CheckoutResultBanner({ result }: { result: ApplyOrderResult }) {
   );
 }
 
-function ReceiptStatus({
-  status,
-}: {
-  status: 'paid' | 'failed' | 'expired';
-}) {
+function ReceiptStatus({ status }: { status: BillingReceipt['status'] }) {
   const paid = status === 'paid';
   return (
     <span

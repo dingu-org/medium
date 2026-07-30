@@ -113,21 +113,35 @@ describe('push subscription client', () => {
     expect(subscribe).not.toHaveBeenCalled();
   });
 
-  it('re-uploads a live endpoint the server no longer stores', async () => {
+  // W1 regression: a browser-level subscription the server doesn't attribute to
+  // the current PT must never be reassigned to them — on a shared device that
+  // silently steals another PT's still-live push subscription. Drop it and
+  // mint a fresh endpoint instead.
+  it('drops and replaces a live endpoint the server does not attribute to this pt', async () => {
     const subscription = makeSubscription('https://push.example.com/rotated');
-    const { subscribe } = installPushStubs({ subscription });
+    const { subscribe } = installPushStubs({
+      subscription,
+      freshEndpoint: 'https://push.example.com/fresh-for-this-pt',
+    });
     isEndpointOwnedMock.mockResolvedValue(false);
     const { reconcilePushSubscription } = await import('@/lib/pwa/push-client');
 
     await reconcilePushSubscription();
 
-    expect(subscribe).not.toHaveBeenCalled();
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    // Must save the freshly minted endpoint, never the one it just dropped —
+    // saving the old one would be exactly the cross-tenant reassignment bug.
     expect(savePushSubscriptionMock).toHaveBeenCalledWith(
       {
-        endpoint: 'https://push.example.com/rotated',
+        endpoint: 'https://push.example.com/fresh-for-this-pt',
         keys: { p256dh: 'p256dh-value', auth: 'auth-value' },
       },
       'test-agent',
+    );
+    expect(savePushSubscriptionMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: 'https://push.example.com/rotated' }),
+      expect.anything(),
     );
   });
 
@@ -215,5 +229,34 @@ describe('push subscription client', () => {
     expect(getSubscription).not.toHaveBeenCalled();
     expect(subscribe).not.toHaveBeenCalled();
     expect(savePushSubscriptionMock).not.toHaveBeenCalled();
+  });
+
+  // W2 regression: the opt-out marker is scoped to the browser, not the signed
+  // in PT. clearPwaData() (lib/pwa/client-store.ts) calls this on sign-out so a
+  // PT who disabled push and then signs out on a shared device doesn't leave a
+  // marker that silently withholds push from whoever signs in next.
+  it('clearPushOptOut lets reconcile resume after a stale opt-out', async () => {
+    const subscription = makeSubscription('https://push.example.com/abc');
+    const { subscribe, getSubscription } = installPushStubs({ subscription });
+    const {
+      reconcilePushSubscription,
+      unsubscribeFromPush,
+      clearPushOptOut,
+    } = await import('@/lib/pwa/push-client');
+
+    await unsubscribeFromPush({ optOut: true });
+    getSubscription.mockResolvedValue(null);
+    savePushSubscriptionMock.mockClear();
+
+    // Without clearing, the leftover marker keeps suppressing the next PT.
+    await reconcilePushSubscription();
+    expect(subscribe).not.toHaveBeenCalled();
+    expect(savePushSubscriptionMock).not.toHaveBeenCalled();
+
+    clearPushOptOut();
+    await reconcilePushSubscription();
+
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    expect(savePushSubscriptionMock).toHaveBeenCalledTimes(1);
   });
 });

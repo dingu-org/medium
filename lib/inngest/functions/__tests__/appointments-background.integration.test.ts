@@ -29,6 +29,7 @@ import {
   messages,
   patients,
   pts,
+  reminderDeliveries,
   reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
@@ -76,6 +77,9 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await db.delete(messageTemplates).where(eq(messageTemplates.ptId, ptId));
+  // Outlives its appointment by design (ON DELETE SET NULL), so the patient
+  // delete below leaves it behind — it needs its own cleanup.
+  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.ptId, ptId));
   await db
     .delete(whatsappConnections)
     .where(eq(whatsappConnections.ptId, ptId));
@@ -388,7 +392,12 @@ describe('reminder scheduling and guards', () => {
     expect(rows[0].scheduledFor).toEqual(nextSchedule);
   });
 
-  /** Cycle 1: the reminder was sent, Meta confirmed it, the patient answered. */
+  /**
+   * Cycle 1: the reminder was sent, Meta confirmed it, the patient answered.
+   * A confirmed delivery is two writes, as the statuses webhook makes them: the
+   * job's latest-cycle stamp and the `reminder_deliveries` row the month is
+   * counted from.
+   */
   async function seedDeliveredAndAnsweredCycle(
     deliveredAt: Date,
   ): Promise<void> {
@@ -413,6 +422,12 @@ describe('reminder scheduling and guards', () => {
         responseMessageId: reply.id,
       })
       .where(eq(reminderJobs.appointmentId, appointmentId));
+    await db.insert(reminderDeliveries).values({
+      ptId,
+      appointmentId,
+      externalId: `wamid.cycle1-${Date.now()}-${++sequence}`,
+      deliveredAt,
+    });
   }
 
   it('clears the previous cycle response but keeps its delivery when a reschedule re-arms the row', async () => {
@@ -452,6 +467,35 @@ describe('reminder scheduling and guards', () => {
     const usage = await getReminderUsage(ptId, deliveredAt);
     expect(usage.delivered).toBe(1);
     expect(usage.used).toBe(1);
+
+    // Cycle 2 goes out: a second, separately-billed template on the SAME row.
+    // `delivered_at` still holds cycle 1's delivery and nothing ever clears it,
+    // so a quota read keyed on `delivered_at IS NULL` saw the new send in
+    // neither direction — it was invisible until Meta's bill arrived.
+    const [secondMessage] = await db
+      .insert(messages)
+      .values({
+        ptId,
+        conversationId,
+        role: 'ai',
+        channel: 'whatsapp',
+        content: 'Kujtesë (cikli 2)',
+        model: 'deterministic-reminder',
+        provider: 'internal',
+      })
+      .returning({ id: messages.id });
+    await db
+      .update(reminderJobs)
+      .set({
+        status: 'sent',
+        sentAt: deliveredAt,
+        messageId: secondMessage.id,
+      })
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+
+    const secondCycle = await getReminderUsage(ptId, deliveredAt);
+    expect(secondCycle.inFlight).toBe(1);
+    expect(secondCycle.used).toBe(2);
   });
 
   it('records a run failure as a durable reminder.failed the bell can read', async () => {

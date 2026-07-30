@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import {
   generateText,
   stepCountIs,
@@ -18,7 +18,13 @@ import { selectModelForPlan } from '@/lib/ai/models';
 import { effectiveAssistantIdentity } from '@/lib/billing/entitlements';
 import type { PlanId } from '@/lib/billing/plans';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
-import { conversations, messages, patients, pts } from '@/lib/db/schema';
+import {
+  appointments,
+  conversations,
+  messages,
+  patients,
+  pts,
+} from '@/lib/db/schema';
 import { createLogger, logger, serializeError } from '@/lib/log';
 import { dispatchPushForEvent } from '@/lib/notifications/push-dispatch';
 import { getServiceClient, withAuditLog } from '@/lib/tenancy';
@@ -492,6 +498,27 @@ function logAssistantPausedSkip(
 // not be confirmed.
 type FailedTurnCopy = 'booking_unconfirmed' | 'technical_failure';
 
+// The failure path runs in a fresh invocation with no memory of what the dead
+// turn managed to do, so the only available mutation signal is state: an
+// appointment this patient gained at or after the inbound message arrived.
+// Reschedules and cancellations leave no such trace, but the copy this selects
+// is booking-specific anyway.
+async function bookedSinceInbound(context: PersistedContext): Promise<boolean> {
+  const svc = getServiceClient(context.inbound.ptId);
+  const [row] = await svc.db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.ptId, context.inbound.ptId),
+        eq(appointments.patientId, context.inbound.patientId),
+        gte(appointments.createdAt, context.inbound.occurredAt),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
 function failedTurnHandoffResponse(
   copy: FailedTurnCopy,
   practiceName: string,
@@ -751,17 +778,52 @@ export async function handoffFailedTurn(args: {
     const existing = await findExistingReply(context.inbound);
     if (existing) return existing;
 
+    // A safety-classified message reaches this path when the escalation dispatch
+    // itself throws: every retry fails the same way and the turn is handed off
+    // here. Reclassify so an urgent message keeps its "contact emergency
+    // services" line instead of the generic technical copy.
+    const safetyReason = detectSafetyEscalation(
+      context.inbound.content,
+      context.escalationKeyword,
+    );
+    if (safetyReason) {
+      try {
+        await escalateForSafety(context, safetyReason);
+      } catch (error) {
+        // The escalation is what failed in the first place. Retries are already
+        // exhausted, so the patient's reply outranks a second attempt at it.
+        logger.error(
+          'conversation.failure_handoff_escalation_failed',
+          'Safety escalation failed again on the failed-turn handoff path',
+          {
+            pt_id: context.inbound.ptId,
+            conversation_id: context.inbound.conversationId,
+            message_id: context.inbound.id,
+            reason: safetyReason,
+            ...serializeError(error),
+          },
+        );
+      }
+      return persistSafetyReply(context, safetyReason);
+    }
+
     // Reached from onFailure after every attempt was exhausted, for any cause
     // (provider outage, timeout, empty read-only response) — so the neutral
-    // technical wording, not the booking-specific one.
-    return runFailedTurnHandoff(context, 'technical_failure', {
-      model: 'deterministic-failure-handoff',
-      provider: 'internal',
-      tokensIn: 0,
-      tokensOut: 0,
-      cachedTokens: 0,
-      costMicrousd: 0,
-    });
+    // technical wording unless the dead turn left a booking behind.
+    return runFailedTurnHandoff(
+      context,
+      (await bookedSinceInbound(context))
+        ? 'booking_unconfirmed'
+        : 'technical_failure',
+      {
+        model: 'deterministic-failure-handoff',
+        provider: 'internal',
+        tokensIn: 0,
+        tokensOut: 0,
+        cachedTokens: 0,
+        costMicrousd: 0,
+      },
+    );
   });
 }
 

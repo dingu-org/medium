@@ -272,6 +272,34 @@ describe('isSlotBookable', () => {
     ).resolves.toBe(false);
   });
 
+  // Europe/Tirane skips 02:00 → 03:00 on the last Sunday of March. A rule whose
+  // edge lands in that gap is still a working day: dropping it would close the
+  // practice from 03:00 to 10:00 on the one Sunday a year the clock jumps.
+  it('keeps a rule that starts inside the spring-forward gap', async () => {
+    await db.insert(availabilityRules).values({
+      ptId,
+      weekday: 0,
+      startTime: '02:00:00',
+      endTime: '10:00:00',
+    });
+
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-03-29T07:00:00.000Z'), // 09:00 CEST
+        endsAt: new Date('2026-03-29T08:00:00.000Z'), // 10:00 CEST
+      }),
+    ).resolves.toBe(true);
+    // The gap itself still has no bookable instant before the clock jumps.
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-03-29T00:30:00.000Z'), // 01:30 CET
+        endsAt: new Date('2026-03-29T01:30:00.000Z'), // 03:30 CEST
+      }),
+    ).resolves.toBe(false);
+  });
+
   it('rejects overlaps with blocked periods and keeps its own appointment out of the way', async () => {
     await workingMonday();
     await db.insert(blockedPeriods).values({

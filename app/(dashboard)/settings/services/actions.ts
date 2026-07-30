@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { getPostgresErrorCode } from '@/lib/db/postgres-errors';
 import { appointments, services } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
+import { sanitizePromptField } from '@/lib/ai/prompt';
 import { getPlan } from '@/lib/billing/plans';
 import { loadEffectivePlan } from '@/lib/billing/read-model';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
@@ -49,7 +50,12 @@ const planLimitResult: ServiceMutationResult = {
 };
 
 const serviceSchema = z.object({
-  name: z.string().trim().min(1).max(80),
+  // Service names are listed in the system prompt as context bullets, so a line
+  // break in one would render as a bullet of its own (lib/ai/prompt.ts).
+  name: z.preprocess(
+    (v) => (typeof v === 'string' ? sanitizePromptField(v) : v),
+    z.string().min(1).max(80),
+  ),
   durationMinutes: z.number().int().min(5).max(480),
   // Aligned with the DB CHECK (price_lek > 0); max keeps int4 overflow a
   // clean INVALID instead of a Postgres 22003.

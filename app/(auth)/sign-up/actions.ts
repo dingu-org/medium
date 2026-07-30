@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
+import { CONFIRM_SIGNUP_PATH, emailRedirectUrl } from '@/lib/auth/email-links';
 import { createServerClient } from '@/lib/supabase/server';
 import { t } from '@/lib/i18n';
 
@@ -35,7 +36,7 @@ export async function signUp(
       // Token-hash landing route: the confirmation mail is often opened in a
       // different browser than the one that signed up, where the PKCE verifier
       // the callback needs does not exist.
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirm`,
+      emailRedirectTo: emailRedirectUrl(CONFIRM_SIGNUP_PATH),
     },
   });
 

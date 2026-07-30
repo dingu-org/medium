@@ -1,9 +1,8 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { RECOVERY_COOKIE } from '@/lib/auth/recovery';
+import { clearRecoveryCookie, hasRecoveryMarker } from '@/lib/auth/recovery';
 import { t } from '@/lib/i18n';
 import { createServerClient } from '@/lib/supabase/server';
 
@@ -33,17 +32,21 @@ export async function resetPassword(
   if (!parsed.success) {
     return { error: null, fieldErrors: parsed.error.flatten().fieldErrors };
   }
-  // Require the recovery marker set by the auth callback — updateUser() would
-  // otherwise let any active session change the password with no re-auth.
-  const store = await cookies();
-  if (!store.get(RECOVERY_COOKIE)) {
+  // Require the recovery marker set by the auth routes — updateUser() would
+  // otherwise let any active session change the password with no re-auth. The
+  // marker has to match the signed-in user, not merely exist: on a shared device
+  // it can outlive the session it was minted for.
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !(await hasRecoveryMarker(user.id))) {
     return { error: t.auth.errors.callbackFailed, fieldErrors: null };
   }
-  const supabase = await createServerClient();
   const { error } = await supabase.auth.updateUser({
     password: parsed.data.password,
   });
   if (error) return { error: t.auth.errors.callbackFailed, fieldErrors: null };
-  store.delete(RECOVERY_COOKIE);
+  await clearRecoveryCookie();
   redirect('/sign-in?reset=1');
 }

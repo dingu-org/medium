@@ -66,15 +66,18 @@ text fields beyond what their own regulatory context permits.
 ## Subprocessors
 
 See `docs/gdpr/subprocessors.md` for the current list and their processing
-locations. The PT is deemed to have authorised the listed subprocessors as of
-the DPA's effective date; material additions will be communicated in advance.
+locations. That list is the annex to this agreement and names, in particular,
+the upstream AI providers reached through OpenRouter — Anthropic (primary
+inference) and OpenAI (fallback). The PT is deemed to have authorised the
+listed subprocessors as of the DPA's effective date; material additions will be
+communicated in advance.
 
 ## International transfers
 
 Where a subprocessor processes data outside the EEA (see the OpenRouter /
-upstream AI note in `subprocessors.md`), Medium relies on that subprocessor's
-Standard Contractual Clauses or equivalent safeguard, and discloses this in
-the product's privacy policy.
+upstream AI note in `subprocessors.md`, which covers both Anthropic and
+OpenAI), Medium relies on that subprocessor's Standard Contractual Clauses or
+equivalent safeguard, and discloses this in the product's privacy policy.
 
 ## Audit rights
 

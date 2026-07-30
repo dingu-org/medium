@@ -21,8 +21,12 @@ const KEYWORDS: Record<ReminderResponseIntent, Set<string>> = {
   confirm: new Set(['konfirmo', 'konfirmoj', 'dakord', 'po', 'ok', 'okay']),
   cancel: new Set(['anulo', 'anuloj', 'jo']),
   reschedule: new Set(['ricakto', 'ricaktoj']),
-  opt_out: new Set(['ndal', 'stop']),
-  opt_in: new Set(['aktivizo', 'aktivizoj']),
+  // Both switches also carry the polite 2pl imperative ("ndalni", "aktivizoni"),
+  // which is the register a patient writes to a business in. NDAL is reversible
+  // only by the patient, so an AKTIVIZO the parser does not know is a dead end:
+  // the two sets have to be equally forgiving.
+  opt_out: new Set(['ndal', 'ndalo', 'ndalni', 'ndaloni', 'stop']),
+  opt_in: new Set(['aktivizo', 'aktivizoj', 'aktivizoni', 'aktivizoje']),
 };
 
 /**
@@ -43,11 +47,37 @@ const AMBIGUOUS_KEYWORDS = new Set(['po', 'jo', 'ok', 'okay', 'dakord']);
 /** Longest message an {@link AMBIGUOUS_KEYWORDS} token may still speak for. */
 const MAX_AMBIGUOUS_MESSAGE_WORDS = 3;
 
+/**
+ * Tighter bound for 'po', which is the only particle with a second grammatical
+ * life: as the progressive marker it heads an ordinary statement ("Po pyesja
+ * diçka", "Po flas seriozisht"). One trailing word still reads as the answer
+ * ("Po, vij"); two make a verb phrase likelier than a bare "yes".
+ */
+const MAX_PROGRESSIVE_PARTICLE_WORDS = 2;
+
 /** Message tokens, normalised for keyword lookup. */
 function words(input: string): string[] {
-  return (input.match(/[\p{L}\p{N}]+/gu) ?? []).map((word) =>
-    word.normalize('NFC').toLocaleLowerCase('en-US'),
+  // Compose before tokenising: the character class carries no \p{M}, so a
+  // decomposed "ë" would otherwise lose its diaeresis and split in two.
+  return (input.normalize('NFC').match(/[\p{L}\p{N}]+/gu) ?? []).map((word) =>
+    word.toLocaleLowerCase('en-US'),
   );
+}
+
+/**
+ * "Ju lutem" / "të lutem" softens a request without changing it, so the command
+ * behind it is still the message: "Ju lutem aktivizoni kujtesat" has to resolve
+ * exactly like "Aktivizoni kujtesat".
+ */
+const POLITENESS_SUBJECTS = new Set(['ju', 'të', 'te']);
+const POLITENESS_VERBS = new Set(['lutem', 'lutemi']);
+
+function stripPoliteness(tokens: string[]): string[] {
+  return tokens.length > 2 &&
+    POLITENESS_SUBJECTS.has(tokens[0]) &&
+    POLITENESS_VERBS.has(tokens[1])
+    ? tokens.slice(2)
+    : tokens;
 }
 
 /**
@@ -80,37 +110,60 @@ function explicitIntent(token: string): ReminderResponseIntent | null {
 }
 
 /**
- * Albanian negators. A command that is negated means the opposite of itself —
- * "mos ndal kujtesat" ("do NOT stop the reminders") is a request to keep them —
- * so a keyword directly behind one of these must not be obeyed.
+ * Only these three may be recognised away from the front of a short reply, so
+ * "Jo, ricakto nesër" moves the appointment instead of cancelling it. Cancel
+ * and confirm are excluded on purpose: both change a booking, and a trailing
+ * one is as likely to be talked about as meant. Opt-out and opt-in only ever
+ * change who gets a reminder, and each is the other's undo.
  */
-const NEGATORS = new Set(['mos', 'nuk', 'ska', 'spo']);
+const OUT_OF_POSITION_INTENTS: ReadonlySet<ReminderResponseIntent> = new Set([
+  'opt_out',
+  'opt_in',
+  'reschedule',
+]);
+
+/**
+ * Out-of-position matching exists for the "answer + command" shape, so only a
+ * run of answer particles may sit in front of the command. Anything else there
+ * changes what the verb means and must not be obeyed:
+ *   • a negator — "mos e ndal", "nuk ricakto", and the contracted "s'ndal",
+ *     whose apostrophe (U+0027 or U+2019) splits off a bare "s";
+ *   • a future or progressive marker — "do ta ndal" / "Po e ndal" is "I'm
+ *     stopping it", a patient describing something, not an instruction;
+ *   • an English modifier — "full stop", "non-stop".
+ */
+function followsAnswerParticlesOnly(tokens: string[], index: number): boolean {
+  return tokens.slice(0, index).every((token) => AMBIGUOUS_KEYWORDS.has(token));
+}
 
 export function parseReminderResponse(
   input: string,
 ): ReminderResponseIntent | null {
-  const tokens = words(input);
+  const tokens = stripPoliteness(words(input));
   if (tokens.length === 0) return null;
 
   if (tokens.length <= MAX_AMBIGUOUS_MESSAGE_WORDS) {
-    // Only these three may be recognised away from the front of a short reply,
-    // so "Jo, ricakto nesër" moves the appointment instead of cancelling it.
-    // Cancel and confirm are excluded on purpose: a trailing keyword is as
-    // likely to be negated ("mos anulo" = "don't cancel") as meant, and both
-    // change state. Opt-out and opt-in only ever change who gets a reminder,
-    // and each is the other's undo.
-    for (const intent of ['opt_out', 'opt_in', 'reschedule'] as const) {
-      if (
-        tokens.some(
-          (token, index) =>
-            explicitIntent(token) === intent &&
-            !(index > 0 && NEGATORS.has(tokens[index - 1])),
-        )
-      ) {
-        return intent;
-      }
+    const commands = tokens.flatMap((token, index) => {
+      const intent = explicitIntent(token);
+      return intent ? [{ intent, index }] : [];
+    });
+    const obeyed = commands.filter(
+      (command) =>
+        command.index === 0 ||
+        (OUT_OF_POSITION_INTENTS.has(command.intent) &&
+          followsAnswerParticlesOnly(tokens, command.index)),
+    );
+    for (const intent of INTENT_PRECEDENCE) {
+      if (obeyed.some((command) => command.intent === intent)) return intent;
     }
+
     const leading = intentOf(tokens[0]);
+    // A command the scan refused to obey must never be downgraded to the
+    // particle in front of it: "Ok, anuloj" ("OK, I'm cancelling") is not the
+    // confirmation a bare "Ok" would be, and confirming it strands a patient
+    // who believes they cancelled. Only a command that says the same thing as
+    // the particle is harmless ("Po, konfirmo").
+    if (commands.some((command) => command.intent !== leading)) return null;
     if (!leading) return null;
     // Cancelling destroys the booking, so a particle only cancels when the
     // message IS that particle: "Jo" cancels, but "Jo, ndryshoj orën" ("no, I'll
@@ -118,6 +171,9 @@ export function parseReminderResponse(
     // so the AI turn reads it instead. Confirming is not destructive, so a short
     // "Po, vij" / "Ok faleminderit" still resolves deterministically.
     if (leading === 'cancel' && tokens.length > 1) return null;
+    if (tokens[0] === 'po' && tokens.length > MAX_PROGRESSIVE_PARTICLE_WORDS) {
+      return null;
+    }
     return leading;
   }
 

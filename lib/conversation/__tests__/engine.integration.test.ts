@@ -607,6 +607,66 @@ describe('runTurnCore', () => {
     });
   });
 
+  // A safety-classified message only reaches the failure handoff when the
+  // escalation dispatch itself threw, and the generic technical copy would drop
+  // the "contact emergency services" line for an urgent one.
+  it('keeps the emergency wording when a safety message reaches the failure handoff', async () => {
+    await db
+      .update(messages)
+      .set({ content: 'Kam dhimbje në gjoks' })
+      .where(eq(messages.id, inbound.id));
+
+    const result = await handoffFailedTurn({ inboundMessage: inbound });
+
+    expect(result.content).toContain('shërbimet vendore të urgjencës');
+    expect(result.content).not.toContain('problem teknik');
+
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conversation.aiActive).toBe(false);
+    expect(conversation.escalationState).toBe('requested');
+
+    const [stored] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, result.id));
+    expect(stored).toMatchObject({ model: 'deterministic-safety' });
+  });
+
+  it('uses the booking wording when the dead turn left a booking behind', async () => {
+    await db.insert(appointments).values({
+      ptId,
+      patientId,
+      startsAt: new Date('2026-06-15T07:00:00.000Z'),
+      endsAt: new Date('2026-06-15T07:45:00.000Z'),
+      serviceType: 'Vlerësim i parë',
+      createdAt: new Date('2026-06-10T08:03:00.000Z'),
+    });
+
+    const result = await handoffFailedTurn({ inboundMessage: inbound });
+
+    expect(result.content).toContain('rezervimit');
+    expect(result.content).not.toContain('problem teknik');
+  });
+
+  it('keeps the neutral wording for a booking that predates the failed message', async () => {
+    await db.insert(appointments).values({
+      ptId,
+      patientId,
+      startsAt: new Date('2026-06-15T07:00:00.000Z'),
+      endsAt: new Date('2026-06-15T07:45:00.000Z'),
+      serviceType: 'Vlerësim i parë',
+      createdAt: new Date('2026-06-10T08:01:00.000Z'),
+    });
+
+    const result = await handoffFailedTurn({ inboundMessage: inbound });
+
+    expect(result.content).toContain('Kam një problem teknik');
+    expect(result.content).not.toContain('rezervimit');
+  });
+
   it('bypasses the model for a safety escalation and disables AI', async () => {
     await db
       .update(messages)

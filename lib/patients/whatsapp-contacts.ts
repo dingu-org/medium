@@ -15,13 +15,7 @@ export function patientWhatsappContactsFilter(patient: {
   phone: string;
   waId: string | null;
 }): SQL {
-  const digits = [
-    ...new Set(
-      [patient.phone, patient.waId ?? '']
-        .map((value) => value.replace(/\D/g, ''))
-        .filter((value) => value.length > 0),
-    ),
-  ];
+  const digits = patientPhoneDigits(patient);
 
   const matchers: SQL[] = digits.map(
     (d) =>
@@ -32,4 +26,41 @@ export function patientWhatsappContactsFilter(patient: {
   if (!matchers.length) return sql`false`;
 
   return and(eq(whatsappContacts.ptId, patient.ptId), or(...matchers))!;
+}
+
+/** Bare digits of every number that identifies this patient (deduped). */
+function patientPhoneDigits(patient: {
+  phone: string;
+  waId: string | null;
+}): string[] {
+  return [
+    ...new Set(
+      [patient.phone, patient.waId ?? '']
+        .map((value) => value.replace(/\D/g, ''))
+        .filter((value) => value.length > 0),
+    ),
+  ];
+}
+
+/**
+ * Whether a synced address-book row resolves to this patient — the JS mirror of
+ * `patientWhatsappContactsFilter`, matching on the same normalized digits and
+ * the same exact wa_id.
+ *
+ * `patients` has no unique constraint on (pt_id, phone), so two patients of one
+ * PT can legitimately share a number (a couple, a parent and child, a carer) and
+ * both resolve to the SAME contact row — whose `full_name` is simply whoever
+ * WhatsApp says owns the number. Callers use this to tell an exclusively-owned
+ * contact from a shared one; a shared one is third-party data and must not be
+ * disclosed inside either patient's DSAR.
+ */
+export function contactMatchesPatient(
+  contact: { phone: string; waId: string | null },
+  patient: { phone: string; waId: string | null },
+): boolean {
+  const contactDigits = contact.phone.replace(/\D/g, '');
+  if (contactDigits && patientPhoneDigits(patient).includes(contactDigits)) {
+    return true;
+  }
+  return Boolean(patient.waId) && contact.waId === patient.waId;
 }

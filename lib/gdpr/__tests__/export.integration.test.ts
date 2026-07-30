@@ -9,14 +9,17 @@ import {
   blockedPeriods,
   conversationDays,
   conversations,
+  costDaily,
   events,
   messageTemplates,
   messages,
   patients,
   pts,
   pushSubscriptions,
+  pwaMutations,
   reminderJobs,
   services,
+  waMessageStatuses,
   whatsappConnections,
   whatsappContacts,
 } from '@/lib/db/schema';
@@ -54,6 +57,10 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  // Survives the patient delete below by design (ON DELETE SET NULL, 0025), so
+  // without its own cleanup every earlier test's metered day is still there and
+  // the PT-wide export sees all of them.
+  await db.delete(conversationDays).where(eq(conversationDays.ptId, ptId));
   await db.delete(patients).where(eq(patients.ptId, ptId));
   await db.delete(services).where(eq(services.ptId, ptId));
   await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
@@ -65,6 +72,9 @@ beforeEach(async () => {
   await db.delete(whatsappContacts).where(eq(whatsappContacts.ptId, ptId));
   await db.delete(billingOrders).where(eq(billingOrders.ptId, ptId));
   await db.delete(pushSubscriptions).where(eq(pushSubscriptions.ptId, ptId));
+  await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptId));
+  await db.delete(costDaily).where(eq(costDaily.ptId, ptId));
+  await db.delete(pwaMutations).where(eq(pwaMutations.ptId, ptId));
 
   const [patient] = await db
     .insert(patients)
@@ -123,6 +133,19 @@ beforeEach(async () => {
     plan: 'solo',
     period: 'monthly',
     amountMinor: 250_000,
+  });
+  await db.insert(waMessageStatuses).values({
+    ptId,
+    externalId: `wamid.export-${Date.now()}`,
+    lastStatus: 'delivered',
+    deliveredAt: new Date(),
+    billable: true,
+  });
+  await db.insert(costDaily).values({ ptId, day: '2026-07-15' });
+  await db.insert(pwaMutations).values({
+    ptId,
+    clientMutationId: `cm-${Date.now()}`,
+    type: 'appointment.book',
   });
   await db.insert(pushSubscriptions).values({
     ptId,
@@ -254,6 +277,21 @@ describe('buildPatientExport', () => {
     expect(exp.conversation_days[0].patientId).toBe(patientId);
   });
 
+  it('withholds a contact row two patients of the PT share', async () => {
+    // Nothing stops a PT from registering a couple, or a child and their carer,
+    // on one number: both patients resolve to the SAME synced contact row, whose
+    // full_name is whoever WhatsApp says owns the number. That row is not this
+    // subject's data alone, so it must not appear in their DSAR.
+    await db
+      .insert(patients)
+      .values({ ptId, name: 'Household Member', phone: '+355 444 00111' });
+
+    const exp = (await buildPatientExport({ ptId, patientId }))!;
+    expect(exp.whatsapp_contacts).toHaveLength(0);
+    // Everything genuinely theirs is still disclosed.
+    expect(exp.conversation_days).toHaveLength(1);
+  });
+
   it('includes audit rows targeting the patient\'s messages and appointments', async () => {
     // Real access events are logged against the touched row, not the patient id:
     // AI reads target the message id, AI tools target the appointment id.
@@ -355,6 +393,27 @@ describe('buildPtExport', () => {
     expect(exp.pt.assistantPaused).toBe(true);
     expect(exp.services[0].priceLek).toBe(5000);
     expect(exp.whatsapp_connection!.displayPhoneNumber).toBe('+355 69 123 4567');
+  });
+
+  it('discloses at least what a single patient of the PT can ask for', async () => {
+    // A tenant DSAR that returns less than one of its patients' DSARs is not a
+    // subject access response; these tables were simply missing from it.
+    const exp = await buildPtExport(ptId);
+
+    expect(exp.reminder_jobs).toHaveLength(1);
+    expect(exp.reminder_jobs[0].responseType).toBe('confirm');
+    expect(exp.conversation_days).toHaveLength(1);
+    expect(exp.conversation_days[0].monthKey).toBe('2026-07');
+    expect(exp.whatsapp_contacts).toHaveLength(1);
+    expect(exp.whatsapp_contacts[0].phone).toBe('35544400111');
+
+    // Operational per-tenant tables that were invisible to the subject too.
+    expect(exp.wa_message_statuses).toHaveLength(1);
+    expect(exp.wa_message_statuses[0].lastStatus).toBe('delivered');
+    expect(exp.cost_daily).toHaveLength(1);
+    expect(exp.cost_daily[0].day).toBe('2026-07-15');
+    expect(exp.pwa_mutations).toHaveLength(1);
+    expect(exp.pwa_mutations[0].type).toBe('appointment.book');
   });
 
   it('produces a JSON-round-trippable object (no Dates or Buffers leak)', async () => {

@@ -412,9 +412,10 @@ export const reminderJobs = pgTable(
     skippedReason: text('skipped_reason'),
     sentAt: tsTz('sent_at'),
     // Set only when Meta confirms delivery via the `statuses` webhook (Phase 16
-    // C3). This — never send/queue — is what a reminder is counted on for the
-    // monthly plan quota. First-write-wins; the partial index below serves the
-    // per-month delivered count.
+    // C3). Latest-cycle convenience for the appointment badge only: a reschedule
+    // re-arms this row onto a new template, so one scalar cannot represent two
+    // separately-billed deliveries. The metered fact is a `reminder_deliveries`
+    // row per wamid — that, not this column, is what the plan quota counts.
     deliveredAt: tsTz('delivered_at'),
     messageId: uuid('message_id').references(() => messages.id, {
       onDelete: 'set null',
@@ -434,11 +435,44 @@ export const reminderJobs = pgTable(
     uniqueIndex('reminder_jobs_response_message_id_uq')
       .on(t.responseMessageId)
       .where(sql`response_message_id IS NOT NULL`),
-    // Serves the monthly "delivered reminders" count that drives the plan quota
-    // gate (Phase 16 C3); partial so it only indexes confirmed deliveries.
+    // Serves the appointment badge's per-cycle delivery lookup; partial so it
+    // only indexes confirmed deliveries.
     index('reminder_jobs_pt_delivered_idx')
       .on(t.ptId, t.deliveredAt)
       .where(sql`delivered_at IS NOT NULL`),
+  ],
+);
+
+// Reminder billing fact table: one row per Meta-confirmed template delivery,
+// keyed on the wamid. This is what the monthly plan quota counts
+// (lib/billing/usage.ts countDeliveredReminders). It is a table of its own
+// because `reminder_jobs` is unique per appointment and its `delivered_at` is a
+// single scalar: a reschedule re-arms that row onto a second, separately-billed
+// template, and both cycles collapsed into one counted delivery.
+// Patient-free by construction, and `appointment_id` is ON DELETE SET NULL, so
+// GDPR erasure and retention purges strip the link without deleting the billed
+// fact — the contract `conversation_days` got in 0025, for the same reason:
+// erasing a chatty patient must never refund quota already spent with Meta.
+// `external_id` is the one patient-linked field (a wamid embeds the recipient's
+// number), so erasePatient rewrites it to `erased:<row id>`, which keeps the row
+// unique without keeping the identifier.
+export const reminderDeliveries = pgTable(
+  'reminder_deliveries',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    ptId: ptIdRef(),
+    appointmentId: uuid('appointment_id').references(() => appointments.id, {
+      onDelete: 'set null',
+    }),
+    externalId: text('external_id').notNull(),
+    deliveredAt: tsTz('delivered_at').notNull(),
+    createdAt: tsTz('created_at').notNull().default(now),
+  },
+  (t) => [
+    // Idempotency for a redelivered `delivered` webhook: one billed template,
+    // one counted row, however many times Meta reports it.
+    uniqueIndex('reminder_deliveries_external_id_uq').on(t.externalId),
+    index('reminder_deliveries_pt_delivered_idx').on(t.ptId, t.deliveredAt),
   ],
 );
 
@@ -600,6 +634,15 @@ export const waMessageStatuses = pgTable(
 // pt_id + month_key alone and joins nothing, so anonymised rows keep counting;
 // the unique index below still dedupes live patient-days (every insert supplies a
 // real patient_id) and simply stops constraining erased ones.
+// ACCEPTED CONSEQUENCE of that last point: NULLs are distinct, so if a PT erases
+// a patient and the same person messages again on the SAME local day, the
+// webhook creates a new patient row and inserts a SECOND fact for one real
+// patient-day. There is no fix that keeps the erasure promise — deduping across
+// the erasure would need a patient-derived key on the surviving row, and a hash
+// of the number is re-derivable by this controller, so it would be
+// pseudonymisation, not erasure. The error is bounded (one extra day per
+// erasure, and only for a same-day re-contact) and always runs against the PT,
+// never in their favour.
 export const conversationDays = pgTable(
   'conversation_days',
   {

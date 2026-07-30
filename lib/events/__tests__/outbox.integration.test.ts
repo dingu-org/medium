@@ -12,7 +12,11 @@ import {
 } from 'vitest';
 import { db } from '@/lib/db';
 import { eventOutbox, events } from '@/lib/db/schema';
-import { publishOutboxEvent } from '@/lib/events/outbox';
+import {
+  MAX_PUBLISH_ATTEMPTS,
+  publishDueOutboxEvents,
+  publishOutboxEvent,
+} from '@/lib/events/outbox';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
 
@@ -166,5 +170,51 @@ describe('publishOutboxEvent', () => {
       claimed: false,
     });
     expect(inngest.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('publishDueOutboxEvents', () => {
+  it('counts a refused forgery apart from a transport failure', async () => {
+    // Both used to land in `failed`, so a healthy run that drained one forged
+    // row was indistinguishable from Inngest being unreachable.
+    await seedOutboxRow({ eventType: 'pts.plan_granted', payload: { ptId } });
+    await seedOutboxRow({
+      eventType: 'message.received',
+      payload: { ptId, conversationId: randomUUID(), messageId: randomUUID() },
+    });
+    vi.mocked(inngest.send).mockRejectedValueOnce(new Error('inngest down'));
+
+    await expect(publishDueOutboxEvents()).resolves.toEqual({
+      claimed: 2,
+      published: 0,
+      failed: 1,
+      rejected: 1,
+      deadLettered: 0,
+    });
+  });
+
+  it('dead-letters a row that has exhausted its publish attempts', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { outboxId } = await seedOutboxRow({
+      eventType: 'message.received',
+      payload: { ptId, conversationId: randomUUID(), messageId: randomUUID() },
+    });
+    await db
+      .update(eventOutbox)
+      .set({ attempts: MAX_PUBLISH_ATTEMPTS })
+      .where(eq(eventOutbox.id, outboxId));
+    vi.mocked(inngest.send).mockRejectedValue(new Error('poison'));
+
+    await expect(publishDueOutboxEvents()).resolves.toMatchObject({
+      claimed: 1,
+      published: 0,
+      failed: 0,
+      deadLettered: 1,
+    });
+
+    // Drained, not retried forever: the row stops being claimed every minute.
+    const row = await outboxRow(outboxId);
+    expect(row.publishedAt).not.toBeNull();
+    expect(row.lastError).toContain('dead_letter: poison');
   });
 });

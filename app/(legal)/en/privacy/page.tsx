@@ -8,7 +8,11 @@ export const metadata: Metadata = {
     'How Medium handles account, patient, WhatsApp, and scheduling data.',
   alternates: {
     canonical: '/en/privacy',
-    languages: { sq: '/privacy', en: '/en/privacy' },
+    languages: {
+      sq: '/privacy',
+      en: '/en/privacy',
+      'x-default': '/privacy',
+    },
   },
 };
 

@@ -1,13 +1,18 @@
 <!--
   Konfirmim i email-it në regjistrim. Si te recovery.html, lidhja ndërtohet nga
   {{ .TokenHash }} që të mos varet nga shfletuesi ku u bë regjistrimi.
+
+  `type=signup` dhe jo `type=email`: GoTrue e pranon të njëjtin token edhe si
+  `email`, dhe një token rikuperimi kalon po ashtu si `email` — pra `type=email`
+  do të lejonte shndërrimin e një lidhjeje rikuperimi në një sesion që anashkalon
+  portën e /reset-password. Shih app/auth/confirm/route.ts.
 -->
 <h2>Konfirmo email-in</h2>
 
 <p>Mirë se erdhe në Medium. Konfirmo email-in për të aktivizuar llogarinë.</p>
 
 <p>
-  <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email"
+  <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup"
     >Konfirmo email-in</a
   >
 </p>

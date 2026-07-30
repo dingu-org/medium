@@ -340,6 +340,11 @@ export const handleInboundMessage = inngest.createFunction(
     id: 'handle-inbound-message',
     retries: 2,
     idempotency: 'event.data.messageId',
+    // One run per conversation at a time, so two rapid messages cannot answer
+    // over each other. It bounds parallelism only — Inngest does not promise the
+    // queued runs execute in arrival order, so anything order-sensitive has to
+    // settle it from the messages themselves (`optStateSuperseded` in
+    // lib/reminders/response-handler.ts does exactly that for NDAL/AKTIVIZO).
     concurrency: {
       limit: 1,
       key: 'event.data.conversationId',
