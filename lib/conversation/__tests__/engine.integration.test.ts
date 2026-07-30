@@ -95,6 +95,36 @@ function mutationThenEmptyModel() {
   });
 }
 
+function escalateThenEmptyModel() {
+  const results: MockGenerateResult[] = [
+    {
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'escalate-1',
+          toolName: 'escalate_to_human',
+          input: JSON.stringify({ reason: 'Patient needs the therapist.' }),
+        },
+      ],
+      finishReason: { unified: 'tool-calls', raw: undefined },
+      usage,
+      warnings: [],
+    },
+    {
+      content: [{ type: 'text', text: '' }],
+      finishReason: { unified: 'stop', raw: undefined },
+      usage,
+      warnings: [],
+    },
+  ];
+  let index = 0;
+  return new MockLanguageModelV3({
+    provider: 'openrouter',
+    modelId: 'mock-model',
+    doGenerate: async () => results[index++] ?? results.at(-1)!,
+  });
+}
+
 function bookingResponseModel(options?: {
   waitFor?: Promise<void>;
   onStart?: () => void;
@@ -479,14 +509,90 @@ describe('runTurnCore', () => {
     expect(conversation.escalationState).toBe('requested');
   });
 
+  it('still replies when the model already escalated in the same turn', async () => {
+    const result = await runTurnCore({
+      inboundMessage: inbound,
+      model: escalateThenEmptyModel(),
+      modelId: 'requested/model',
+    });
+
+    expect(result.content).toContain('Këtë bisedë ia kalova Movement Clinic');
+
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conversation.aiActive).toBe(false);
+    expect(conversation.escalationState).toBe('requested');
+
+    // The repeat escalation must not re-emit the PT notification.
+    const eventRows = await db
+      .select({ type: events.type })
+      .from(events)
+      .where(eq(events.ptId, ptId));
+    expect(eventRows).toEqual([{ type: 'conversation.escalated' }]);
+  });
+
+  it('replies to a safety escalation on an already human-owned conversation', async () => {
+    await db
+      .update(messages)
+      .set({ content: 'HELP' })
+      .where(eq(messages.id, inbound.id));
+    await db
+      .update(conversations)
+      .set({ aiActive: false, escalationState: 'requested' })
+      .where(eq(conversations.id, conversationId));
+    const model = new MockLanguageModelV3({
+      doGenerate: vi.fn(() => {
+        throw new Error('model should not run');
+      }),
+    });
+
+    const result = await runTurnCore({
+      inboundMessage: inbound,
+      model,
+      modelId: 'requested/model',
+      allowInactive: true,
+    });
+
+    expect(result.content).toContain('Këtë bisedë ia kalova Movement Clinic');
+    expect(model.doGenerateCalls).toHaveLength(0);
+    // The no-op escalate emits no conversation.escalated, so the manual-reply
+    // nudge is the PT's only signal that an urgent message landed on the thread
+    // they own — the dispatch records itself as `push.dispatched`.
+    const eventRows = await db
+      .select({ type: events.type, payload: events.payload })
+      .from(events)
+      .where(eq(events.ptId, ptId));
+    expect(eventRows).toMatchObject([
+      {
+        type: 'push.dispatched',
+        payload: { sourceEvent: 'conversation.needs_reply' },
+      },
+    ]);
+  });
+
+  it('hands off with neutral wording on an already human-owned conversation', async () => {
+    await db
+      .update(conversations)
+      .set({ aiActive: false, escalationState: 'requested' })
+      .where(eq(conversations.id, conversationId));
+
+    const result = await handoffFailedTurn({ inboundMessage: inbound });
+
+    expect(result.content).toContain('Kam një problem teknik');
+    expect(result.content).not.toContain('rezervimit');
+  });
+
   it('creates one idempotent final-failure handoff for Phase 5', async () => {
     const first = await handoffFailedTurn({ inboundMessage: inbound });
     const second = await handoffFailedTurn({ inboundMessage: inbound });
 
     expect(second).toEqual(first);
-    expect(first.content).toContain(
-      'Nuk munda ta konfirmoj me siguri rezultatin e fundit të rezervimit',
-    );
+    // Any exhausted inbound failure lands here, including turns with no
+    // booking in flight — so no booking-specific wording.
+    expect(first.content).toContain('Kam një problem teknik');
+    expect(first.content).not.toContain('rezervimit');
     const [stored] = await db
       .select()
       .from(messages)

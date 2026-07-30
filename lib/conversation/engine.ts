@@ -20,6 +20,7 @@ import type { PlanId } from '@/lib/billing/plans';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 import { conversations, messages, patients, pts } from '@/lib/db/schema';
 import { createLogger, logger, serializeError } from '@/lib/log';
+import { dispatchPushForEvent } from '@/lib/notifications/push-dispatch';
 import { getServiceClient, withAuditLog } from '@/lib/tenancy';
 import { ConversationEngineError } from './errors';
 import {
@@ -356,10 +357,66 @@ async function persistReply(args: {
   throw new Error('AI reply insert conflicted but no existing reply was found');
 }
 
-async function escalateForSafety(
+async function conversationIsHumanOwned(
   context: PersistedContext,
-  reason: SafetyEscalationReason,
-): Promise<void> {
+): Promise<boolean> {
+  const svc = getServiceClient(context.inbound.ptId);
+  const [row] = await svc.db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.id, context.inbound.conversationId),
+        eq(conversations.ptId, context.inbound.ptId),
+        eq(conversations.patientId, context.inbound.patientId),
+        eq(conversations.aiActive, false),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+// Escalating a thread the PT already owns changes no state, so
+// escalateConversationToHuman emits no `conversation.escalated` event and no
+// push — and the inbound handler skips its own manual-reply nudge for the
+// reminder fallback that is the only path here (handle-inbound-message.ts). Push
+// the nudge from here so a deterministic safety trigger always reaches the PT.
+// Push-only and tagged per conversation, so retries and bursts collapse on the
+// device; a failed push must never cost the patient their reply.
+async function notifyManualReply(context: PersistedContext): Promise<void> {
+  try {
+    await dispatchPushForEvent({
+      name: 'conversation.needs_reply',
+      data: {
+        ptId: context.inbound.ptId,
+        conversationId: context.inbound.conversationId,
+        patientId: context.inbound.patientId,
+      },
+    });
+  } catch (error) {
+    logger.warn(
+      'conversation.manual_reply_nudge_failed',
+      'Failed to push the manual-reply nudge for an already-escalated thread',
+      {
+        pt_id: context.inbound.ptId,
+        conversation_id: context.inbound.conversationId,
+        message_id: context.inbound.id,
+        ...serializeError(error),
+      },
+    );
+  }
+}
+
+// escalate_to_human guards its UPDATE on aiActive, so the dispatcher reports
+// `not_found` both for a missing conversation and for one that is already
+// human-owned (the model escalated earlier in the same turn, or the PT took
+// over). Only the first is a failure: when the thread is already escalated the
+// patient must still get their reply instead of the turn throwing.
+async function escalateToHuman(
+  context: PersistedContext,
+  reason: string,
+  failure: string,
+): Promise<'escalated' | 'already_human'> {
   const result = await dispatchTool(
     'escalate_to_human',
     { reason },
@@ -369,9 +426,31 @@ async function escalateForSafety(
       conversationId: context.inbound.conversationId,
     },
   );
-  if (!result.ok) {
-    throw new Error(`Deterministic escalation failed: ${result.error.code}`);
+  if (result.ok) return 'escalated';
+  if (
+    result.error.code === 'not_found' &&
+    (await conversationIsHumanOwned(context))
+  ) {
+    return 'already_human';
   }
+  throw new Error(`${failure}: ${result.error.code}`);
+}
+
+async function escalateForSafety(
+  context: PersistedContext,
+  reason: SafetyEscalationReason,
+): Promise<void> {
+  const outcome = await escalateToHuman(
+    context,
+    reason,
+    'Deterministic escalation failed',
+  );
+  // Nothing changed state, so nothing notified the PT — an urgent message on a
+  // thread they already own would otherwise reach no one. Scoped to the safety
+  // path on purpose: the failed-turn handoff usually lands on 'already_human'
+  // right after its own turn escalated (and pushed), so nudging there too would
+  // double-notify.
+  if (outcome === 'already_human') await notifyManualReply(context);
 }
 
 async function persistSafetyReply(
@@ -407,32 +486,38 @@ function logAssistantPausedSkip(
   );
 }
 
-function failedTurnHandoffResponse(practiceName: string): string {
+// 'booking_unconfirmed' is only truthful when the turn actually attempted a
+// mutation; a turn that never got off the ground (provider outage, empty
+// response) must not tell a patient with no booking that their booking could
+// not be confirmed.
+type FailedTurnCopy = 'booking_unconfirmed' | 'technical_failure';
+
+function failedTurnHandoffResponse(
+  copy: FailedTurnCopy,
+  practiceName: string,
+): string {
+  if (copy === 'technical_failure') {
+    return `Kam një problem teknik dhe nuk mund t'ju përgjigjem tani. Këtë bisedë ia kalova ${practiceName}; do t'ju përgjigjen sapo të jenë të lirë.`;
+  }
   return `Nuk munda ta konfirmoj me siguri rezultatin e fundit të rezervimit. Këtë bisedë ia kalova ${practiceName} që ta verifikojnë dhe t'ju përgjigjen.`;
 }
 
 async function runFailedTurnHandoff(
   context: PersistedContext,
+  copy: FailedTurnCopy,
   metadata: ModelTurnMetadata & { model: string },
 ): Promise<OutboundMessage> {
-  const result = await dispatchTool(
-    'escalate_to_human',
-    { reason: 'The automated scheduling turn ended without a final response.' },
-    {
-      ptId: context.inbound.ptId,
-      patientId: context.inbound.patientId,
-      conversationId: context.inbound.conversationId,
-    },
+  await escalateToHuman(
+    context,
+    'The automated scheduling turn ended without a final response.',
+    'Failed-turn escalation failed',
   );
-  if (!result.ok) {
-    throw new Error(`Failed-turn escalation failed: ${result.error.code}`);
-  }
 
   const practiceName =
     context.practiceName?.trim() || 'the physical therapy practice';
   return persistReply({
     inbound: context.inbound,
-    content: failedTurnHandoffResponse(practiceName),
+    content: failedTurnHandoffResponse(copy, practiceName),
     model: metadata.model,
     provider: metadata.provider,
     tokensIn: metadata.tokensIn,
@@ -544,7 +629,7 @@ async function runTurnCoreUnlocked(args: {
   });
 
   if (result.outcome === 'handoff_required') {
-    return runFailedTurnHandoff(context, {
+    return runFailedTurnHandoff(context, 'booking_unconfirmed', {
       ...result,
       model: args.modelId,
     });
@@ -666,7 +751,10 @@ export async function handoffFailedTurn(args: {
     const existing = await findExistingReply(context.inbound);
     if (existing) return existing;
 
-    return runFailedTurnHandoff(context, {
+    // Reached from onFailure after every attempt was exhausted, for any cause
+    // (provider outage, timeout, empty read-only response) — so the neutral
+    // technical wording, not the booking-specific one.
+    return runFailedTurnHandoff(context, 'technical_failure', {
       model: 'deterministic-failure-handoff',
       provider: 'internal',
       tokensIn: 0,

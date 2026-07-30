@@ -223,6 +223,44 @@ describe('appointment mutations', () => {
     });
   });
 
+  it('books and reschedules a 45-minute service on the hourly picker grid', async () => {
+    // The pickers offer an hourly grid; a 45-minute service is not a member of
+    // it, but every one of those times is genuinely free.
+    const booked = await bookAppointment({
+      ptId,
+      patientId,
+      startsAt: mondayAt(11),
+      serviceType: 'Vlerësim i parë',
+      durationMinutes: 45,
+    });
+    expect(booked.endsAt).toEqual(
+      new Date(mondayAt(11).getTime() + 45 * 60_000),
+    );
+
+    const moved = await rescheduleAppointment({
+      ptId,
+      patientId,
+      appointmentId: booked.id,
+      newStartsAt: tuesdayAt(13),
+    });
+    expect(moved.startsAt).toEqual(tuesdayAt(13));
+    expect(moved.endsAt).toEqual(
+      new Date(tuesdayAt(13).getTime() + 45 * 60_000),
+    );
+  });
+
+  it('still refuses a booking that runs past the end of the working day', async () => {
+    await expect(
+      bookAppointment({
+        ptId,
+        patientId,
+        startsAt: mondayAt(16, 30),
+        serviceType: 'Vlerësim i parë',
+        durationMinutes: 45,
+      }),
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
   it('cancels with actor and reason metadata', async () => {
     const booked = await bookAppointment({
       ptId,

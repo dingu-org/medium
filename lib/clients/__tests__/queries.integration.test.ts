@@ -2,12 +2,14 @@ import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createManualPatient } from '@/lib/clients/mutations';
 import { db } from '@/lib/db';
-import { pts } from '@/lib/db/schema';
+import { appointments, patients, pts } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getClientDetail, getClientDirectory } from '../queries';
 
 let ptIdA = '';
 let ptIdB = '';
+let ptIdC = '';
+let ptIdD = '';
 
 async function user(label: string) {
   const { data, error } = await createServiceClient().auth.admin.createUser({
@@ -20,7 +22,12 @@ async function user(label: string) {
 }
 
 beforeAll(async () => {
-  [ptIdA, ptIdB] = await Promise.all([user('a'), user('b')]);
+  [ptIdA, ptIdB, ptIdC, ptIdD] = await Promise.all([
+    user('a'),
+    user('b'),
+    user('c'),
+    user('d'),
+  ]);
   await db
     .update(pts)
     .set({ timezone: 'Europe/Tirane' })
@@ -28,8 +35,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (ptIdA) await createServiceClient().auth.admin.deleteUser(ptIdA);
-  if (ptIdB) await createServiceClient().auth.admin.deleteUser(ptIdB);
+  for (const ptId of [ptIdA, ptIdB, ptIdC, ptIdD]) {
+    if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  }
 });
 
 describe('client directory', () => {
@@ -64,5 +72,95 @@ describe('client directory', () => {
     });
     const id = 'id' in first ? first.id : '';
     await expect(getClientDetail(ptIdB, id)).resolves.toBeNull();
+  });
+
+  it('treats a locally-written number as the same client as its E.164 form', async () => {
+    await expect(
+      createManualPatient({
+        ptId: ptIdA,
+        name: 'Ana Local',
+        phone: '069 234 5678',
+      }),
+    ).resolves.toMatchObject({ id: expect.any(String) });
+    await expect(
+      createManualPatient({
+        ptId: ptIdA,
+        name: 'Ana Again',
+        phone: '+355 69 234 5678',
+      }),
+    ).resolves.toEqual({ failure: 'DUPLICATE_PHONE' });
+
+    const directory = await getClientDirectory(ptIdA, 'ana local');
+    expect(directory.rows[0]).toMatchObject({ phone: '+355692345678' });
+  });
+
+  it('finds diacritic names typed without accents and phones typed with separators', async () => {
+    await db.insert(patients).values([
+      { ptId: ptIdC, name: 'Ërmira Çela', phone: '+355691234567' },
+      { ptId: ptIdC, name: 'Blerta Hoxha', phone: '+355681111222' },
+    ]);
+
+    for (const query of ['ermira', 'cela', 'ËRM', '69 123 4567', '069 123']) {
+      const directory = await getClientDirectory(ptIdC, query);
+      expect(
+        directory.rows.map((row) => row.name),
+        `query ${query}`,
+      ).toEqual(['Ërmira Çela']);
+    }
+
+    // '%' is a literal in the search box, not a wildcard that lists everyone.
+    const wildcard = await getClientDirectory(ptIdC, '%');
+    expect(wildcard.rows).toHaveLength(0);
+    expect(wildcard.total).toBe(0);
+  });
+
+  it('reports the true total when capped and bounds the appointment history', async () => {
+    await db.insert(patients).values(
+      Array.from({ length: 250 }, (_, index) => ({
+        ptId: ptIdD,
+        name: `Klient ${String(index).padStart(3, '0')}`,
+        phone: `+3556900${String(index).padStart(4, '0')}`,
+      })),
+    );
+    const [last] = await db
+      .insert(patients)
+      .values({ ptId: ptIdD, name: 'Zana Vata', phone: '+355699999999' })
+      .returning({ id: patients.id });
+
+    const stale = new Date();
+    stale.setMonth(stale.getMonth() - 18);
+    const soon = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await db.insert(appointments).values([
+      {
+        ptId: ptIdD,
+        patientId: last.id,
+        startsAt: stale,
+        endsAt: new Date(stale.getTime() + 60 * 60 * 1000),
+        status: 'completed',
+      },
+      {
+        ptId: ptIdD,
+        patientId: last.id,
+        startsAt: soon,
+        endsAt: new Date(soon.getTime() + 60 * 60 * 1000),
+        status: 'confirmed',
+      },
+    ]);
+
+    const directory = await getClientDirectory(ptIdD);
+    expect(directory.rows).toHaveLength(250);
+    expect(directory.total).toBe(251);
+    expect(directory.truncated).toBe(true);
+    expect(directory.rows.map((row) => row.id)).not.toContain(last.id);
+
+    // Past the cap but still reachable by search — with only recent history.
+    const found = await getClientDirectory(ptIdD, 'zana');
+    expect(found.truncated).toBe(false);
+    expect(found.total).toBe(1);
+    expect(found.rows[0]).toMatchObject({
+      name: 'Zana Vata',
+      nextAppointment: { startsAt: soon.toISOString() },
+      lastAppointment: null,
+    });
   });
 });

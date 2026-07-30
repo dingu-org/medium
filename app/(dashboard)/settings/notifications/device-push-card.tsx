@@ -57,7 +57,7 @@ export function DevicePushCard() {
           if (result === 'denied') toast.error(t.settings.pushBlockedToast);
         }
       } else {
-        await unsubscribeFromPush();
+        await unsubscribeFromPush({ optOut: true });
         toast.success(t.settings.pushDisabledToast);
       }
     } catch {

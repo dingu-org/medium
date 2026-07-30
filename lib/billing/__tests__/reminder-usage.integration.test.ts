@@ -26,6 +26,8 @@ const FREE_REMINDERS = getPlan('free').remindersPerMonth;
 const NOW = new Date('2026-07-15T12:00:00Z');
 const IN_MONTH = new Date('2026-07-10T10:00:00Z');
 const PRIOR_MONTH = new Date('2026-06-20T10:00:00Z');
+// Sent-but-unconfirmed only holds a quota slot for an hour after the send.
+const JUST_SENT = new Date(NOW.getTime() - 5 * 60_000);
 
 let ptId = '';
 let patientId = '';
@@ -109,8 +111,8 @@ describe('getReminderUsage', () => {
   it('counts delivered + in-flight this month and excludes prior months', async () => {
     await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
     await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
-    // in-flight: sent, not yet delivered.
-    await seedReminderJob({ status: 'sent', deliveredAt: null, sentAt: IN_MONTH });
+    // in-flight: just sent, delivery confirmation still in transit.
+    await seedReminderJob({ status: 'sent', deliveredAt: null, sentAt: JUST_SENT });
     // delivered last month — excluded from the current-month count.
     await seedReminderJob({
       status: 'sent',
@@ -126,6 +128,26 @@ describe('getReminderUsage', () => {
     expect(usage.remaining).toBe(FREE_REMINDERS - 3);
     expect(usage.monthKey).toBe('2026-07');
   });
+
+  it('stops counting a never-confirmed send once it is older than an hour', async () => {
+    // Recipient's device never came online: Meta accepted the template and sent
+    // no further status. It must not hold a quota slot for the rest of the month.
+    await seedReminderJob({
+      status: 'sent',
+      deliveredAt: null,
+      sentAt: new Date(NOW.getTime() - 3 * 86_400_000),
+    });
+    await seedReminderJob({
+      status: 'sent',
+      deliveredAt: null,
+      sentAt: new Date(NOW.getTime() - 90 * 60_000),
+    });
+
+    const usage = await getReminderUsage(ptId, NOW);
+    expect(usage.inFlight).toBe(0);
+    expect(usage.used).toBe(0);
+    expect(usage.remaining).toBe(FREE_REMINDERS);
+  });
 });
 
 describe('reminderQuotaAvailable (send-time gate)', () => {
@@ -138,6 +160,26 @@ describe('reminderQuotaAvailable (send-time gate)', () => {
 
   it('allows a send while under the limit', async () => {
     await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
+    expect(await reminderQuotaAvailable(ptId, NOW)).toBe(true);
+  });
+
+  it('still blocks at the limit when the last slot is a fresh in-flight send', async () => {
+    for (let i = 0; i < FREE_REMINDERS - 1; i += 1) {
+      await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
+    }
+    await seedReminderJob({ status: 'sent', deliveredAt: null, sentAt: JUST_SENT });
+    expect(await reminderQuotaAvailable(ptId, NOW)).toBe(false);
+  });
+
+  it('does not let a stale unconfirmed send consume the last slot', async () => {
+    for (let i = 0; i < FREE_REMINDERS - 1; i += 1) {
+      await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
+    }
+    await seedReminderJob({
+      status: 'sent',
+      deliveredAt: null,
+      sentAt: new Date(NOW.getTime() - 3 * 86_400_000),
+    });
     expect(await reminderQuotaAvailable(ptId, NOW)).toBe(true);
   });
 });

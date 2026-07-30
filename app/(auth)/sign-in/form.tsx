@@ -35,9 +35,15 @@ export function SignInForm({
         </div>
       )}
       {callbackError && (
-        <p className="border-destructive/30 text-destructive rounded-md border bg-[var(--danger-50)] p-3 text-sm">
-          {callbackError}
-        </p>
+        <div className="border-destructive/30 text-destructive rounded-md border bg-[var(--danger-50)] p-3 text-sm">
+          <p>{callbackError}</p>
+          <Link
+            href="/forgot-password"
+            className="mt-1 inline-block font-medium underline"
+          >
+            {t.auth.signIn.linkFailedAction}
+          </Link>
+        </div>
       )}
 
       <form action={action} className="space-y-4" noValidate>

@@ -4,22 +4,31 @@ import {
   appointments,
   auditLog,
   availabilityRules,
+  billingOrders,
   blockedPeriods,
+  conversationDays,
   conversations,
   events,
   messageTemplates,
   messages,
   patients,
   pts,
+  pushSubscriptions,
+  reminderJobs,
   services,
   whatsappConnections,
+  whatsappContacts,
 } from '@/lib/db/schema';
+import { patientWhatsappContactsFilter } from '@/lib/patients/whatsapp-contacts';
 
 export type PatientExport = {
   patient: Record<string, unknown>;
   conversations: Record<string, unknown>[];
   messages: Record<string, unknown>[];
   appointments: Record<string, unknown>[];
+  reminder_jobs: Record<string, unknown>[];
+  conversation_days: Record<string, unknown>[];
+  whatsapp_contacts: Record<string, unknown>[];
   audit_log_entries_for_patient: Record<string, unknown>[];
 };
 
@@ -35,6 +44,9 @@ export type PtExport = {
   whatsapp_connection: Record<string, unknown> | null;
   message_templates: Record<string, unknown>[];
   events: Record<string, unknown>[];
+  billing_orders: Record<string, unknown>[];
+  push_subscriptions: Record<string, unknown>[];
+  audit_log: Record<string, unknown>[];
 };
 
 /** Map top-level Date columns to ISO strings so the row is JSON-serializable. */
@@ -83,6 +95,36 @@ export async function buildPatientExport(input: {
     .where(
       and(eq(appointments.ptId, ptId), eq(appointments.patientId, patientId)),
     );
+
+  const reminderRows = appointmentRows.length
+    ? await db
+        .select()
+        .from(reminderJobs)
+        .where(
+          inArray(
+            reminderJobs.appointmentId,
+            appointmentRows.map((a) => a.id),
+          ),
+        )
+    : [];
+
+  const conversationDayRows = await db
+    .select()
+    .from(conversationDays)
+    .where(
+      and(
+        eq(conversationDays.ptId, ptId),
+        eq(conversationDays.patientId, patientId),
+      ),
+    );
+
+  // The erasure path deletes these rows as part of the same patient's right to
+  // erasure (lib/patients/erase.ts), so access has to disclose them — same
+  // matcher on both sides keeps the subject boundary symmetric.
+  const contactRows = await db
+    .select()
+    .from(whatsappContacts)
+    .where(patientWhatsappContactsFilter(patient));
 
   // Access to a patient's data is audited against whichever row the operation
   // touched, so targetId is not always the patient id: AI conversation reads and
@@ -133,6 +175,9 @@ export async function buildPatientExport(input: {
     conversations: convRows.map(serializeRow),
     messages: messageRows.map(serializeRow),
     appointments: appointmentRows.map(serializeRow),
+    reminder_jobs: reminderRows.map(serializeRow),
+    conversation_days: conversationDayRows.map(serializeRow),
+    whatsapp_contacts: contactRows.map(serializeRow),
     audit_log_entries_for_patient: auditRows.map(serializeRow),
   };
 }
@@ -175,6 +220,27 @@ export async function buildPtExport(ptId: string): Promise<PtExport> {
     .select()
     .from(events)
     .where(eq(events.ptId, ptId));
+  const orderRows = await db
+    .select()
+    .from(billingOrders)
+    .where(eq(billingOrders.ptId, ptId));
+  const auditRows = await db
+    .select()
+    .from(auditLog)
+    .where(eq(auditLog.ptId, ptId))
+    .orderBy(auditLog.occurredAt);
+  // endpoint + keys are the push credentials for the PT's own browser — the
+  // subject already knows their devices, and the values must never leave the
+  // database, so disclose only the metadata and redact both like the WA token.
+  const pushRows = await db
+    .select({
+      id: pushSubscriptions.id,
+      ptId: pushSubscriptions.ptId,
+      userAgent: pushSubscriptions.userAgent,
+      createdAt: pushSubscriptions.createdAt,
+    })
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.ptId, ptId));
 
   // Explicitly omit access_token_encrypted — the bytea must never enter this
   // module; the redacted marker is attached below instead.
@@ -221,5 +287,12 @@ export async function buildPtExport(ptId: string): Promise<PtExport> {
       : null,
     message_templates: templateRows.map(serializeRow),
     events: eventRows.map(serializeRow),
+    billing_orders: orderRows.map(serializeRow),
+    push_subscriptions: pushRows.map((row) => ({
+      ...serializeRow(row),
+      endpoint: 'REDACTED',
+      keys: 'REDACTED',
+    })),
+    audit_log: auditRows.map(serializeRow),
   };
 }

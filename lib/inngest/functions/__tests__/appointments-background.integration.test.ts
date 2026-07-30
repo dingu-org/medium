@@ -9,12 +9,22 @@ import {
   it,
   vi,
 } from 'vitest';
+
+// The outbox->Inngest publish is best-effort and covered by the outbox suite;
+// stubbing it keeps these tests free of network retries while still exercising
+// the durable `events`/`event_outbox` rows appendBackgroundEvent writes.
+vi.mock('@/lib/events/outbox', () => ({
+  tryPublishOutboxEvent: vi.fn(async () => {}),
+}));
+
 import { addHours, addMinutes, subHours } from 'date-fns';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import {
   appointments,
   conversations,
+  eventOutbox,
+  events,
   messageTemplates,
   messages,
   patients,
@@ -23,6 +33,7 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
+import { getReminderUsage } from '@/lib/billing/usage';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
   ENGLISH_REMINDER_TEMPLATE,
@@ -31,13 +42,17 @@ import {
   REMINDER_TEMPLATE,
 } from '../bootstrap-wa-connection';
 import {
+  hasDeliveredActorReply,
   persistAppointmentConfirmation,
   prepareAppointmentConfirmation,
+  recordConfirmationFailure,
   sendAppointmentConfirmation,
 } from '../appointment-events';
 import {
   computeReminderSchedule,
   loadReminderAttempt,
+  recordReminderFailure,
+  recordShortNoticeSkip,
   upsertReminderSchedule,
 } from '../send-reminder';
 
@@ -174,6 +189,158 @@ describe('appointment event confirmation', () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].externalId).toBe('wamid.EVENT');
   });
+
+  it('surfaces a confirmation whose sends all failed instead of leaving it silent', async () => {
+    await db.delete(events).where(eq(events.ptId, ptId));
+    const sourceEventId = randomUUID();
+    const prepared = await prepareAppointmentConfirmation({
+      sourceEventId,
+      kind: 'appointment.cancelled',
+      ptId,
+      appointmentId,
+      startsAt,
+    });
+    expect(prepared.kind).toBe('ready');
+
+    // Every Graph attempt 5xx'd, so the row still carries a NULL externalId and
+    // nothing else would ever tell the PT the patient was not reached.
+    await expect(
+      recordConfirmationFailure({ ptId, sourceEventId }),
+    ).resolves.toEqual({ recorded: true });
+
+    const [failure] = await db
+      .select()
+      .from(events)
+      .where(
+        and(eq(events.ptId, ptId), eq(events.type, 'conversation.failed')),
+      );
+    expect(failure.payload).toMatchObject({ ptId, conversationId });
+    const outbox = await db
+      .select({ eventType: eventOutbox.eventType })
+      .from(eventOutbox)
+      .where(eq(eventOutbox.eventId, failure.id));
+    expect(outbox).toEqual([{ eventType: 'conversation.failed' }]);
+  });
+
+  it('stays quiet when the confirmation did reach the patient', async () => {
+    await db.delete(events).where(eq(events.ptId, ptId));
+    const sourceEventId = randomUUID();
+    const prepared = await prepareAppointmentConfirmation({
+      sourceEventId,
+      kind: 'appointment.booked',
+      ptId,
+      appointmentId,
+      startsAt,
+    });
+    expect(prepared.kind).toBe('ready');
+    if (prepared.kind !== 'ready') return;
+    await persistAppointmentConfirmation({
+      messageId: prepared.messageId,
+      externalId: 'wamid.DELIVERED',
+    });
+
+    await expect(
+      recordConfirmationFailure({ ptId, sourceEventId }),
+    ).resolves.toEqual({
+      recorded: false,
+      reason: 'no_undelivered_confirmation',
+    });
+    const failures = await db
+      .select()
+      .from(events)
+      .where(
+        and(eq(events.ptId, ptId), eq(events.type, 'conversation.failed')),
+      );
+    expect(failures).toHaveLength(0);
+  });
+});
+
+describe('suppressed cancellation backstop', () => {
+  async function insertAiReply(args: {
+    content: string;
+    model: string;
+    externalId: string | null;
+    createdAt: Date;
+  }): Promise<void> {
+    await db.insert(messages).values({
+      ptId,
+      conversationId,
+      role: 'ai',
+      channel: 'whatsapp',
+      content: args.content,
+      model: args.model,
+      provider: 'internal',
+      externalId: args.externalId,
+      tokensIn: 0,
+      tokensOut: 0,
+      cachedTokens: 0,
+      aiCostMicrousd: 0,
+      createdAt: args.createdAt,
+    });
+  }
+
+  it('reports no delivered reply when the cancelling turn sent nothing', async () => {
+    // The AI committed the cancellation in its tool call and then died: the
+    // deterministic confirmation is the only thing left that can tell the patient.
+    await expect(
+      hasDeliveredActorReply({
+        ptId,
+        appointmentId,
+        since: subHours(new Date(), 1),
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it('reports the reply the cancelling turn did deliver', async () => {
+    const since = subHours(new Date(), 1);
+    await insertAiReply({
+      content: 'Takimi juaj u anulua.',
+      model: 'openai/gpt-4o-mini',
+      externalId: `wamid.AI.${randomUUID()}`,
+      createdAt: new Date(),
+    });
+
+    await expect(
+      hasDeliveredActorReply({ ptId, appointmentId, since }),
+    ).resolves.toBe(true);
+  });
+
+  it('does not count the generic failure handoff as having told the patient', async () => {
+    // recoverFailedInbound's text only says the practice will get back to them —
+    // it never states the appointment was cancelled, so the confirmation must
+    // still go out.
+    const since = subHours(new Date(), 1);
+    await insertAiReply({
+      content: 'Faleminderit. Praktika do t’ju kthehet së shpejti.',
+      model: 'deterministic-failure-handoff',
+      externalId: `wamid.HANDOFF.${randomUUID()}`,
+      createdAt: new Date(),
+    });
+
+    await expect(
+      hasDeliveredActorReply({ ptId, appointmentId, since }),
+    ).resolves.toBe(false);
+  });
+
+  it('ignores an older reply and one WhatsApp never accepted', async () => {
+    const since = new Date();
+    await insertAiReply({
+      content: 'Përshëndetje, si mund të ndihmoj?',
+      model: 'openai/gpt-4o-mini',
+      externalId: `wamid.OLD.${randomUUID()}`,
+      createdAt: subHours(since, 2),
+    });
+    await insertAiReply({
+      content: 'Takimi juaj u anulua.',
+      model: 'openai/gpt-4o-mini',
+      externalId: null,
+      createdAt: addMinutes(since, 1),
+    });
+
+    await expect(
+      hasDeliveredActorReply({ ptId, appointmentId, since }),
+    ).resolves.toBe(false);
+  });
 });
 
 describe('reminder scheduling and guards', () => {
@@ -219,6 +386,144 @@ describe('reminder scheduling and guards', () => {
       status: 'scheduled',
     });
     expect(rows[0].scheduledFor).toEqual(nextSchedule);
+  });
+
+  /** Cycle 1: the reminder was sent, Meta confirmed it, the patient answered. */
+  async function seedDeliveredAndAnsweredCycle(
+    deliveredAt: Date,
+  ): Promise<void> {
+    const [reply] = await db
+      .insert(messages)
+      .values({
+        ptId,
+        conversationId,
+        role: 'patient',
+        channel: 'whatsapp',
+        content: 'KONFIRMO',
+      })
+      .returning({ id: messages.id });
+    await db
+      .update(reminderJobs)
+      .set({
+        status: 'sent',
+        sentAt: deliveredAt,
+        deliveredAt,
+        responseType: 'confirm',
+        respondedAt: deliveredAt,
+        responseMessageId: reply.id,
+      })
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+  }
+
+  it('clears the previous cycle response but keeps its delivery when a reschedule re-arms the row', async () => {
+    await upsertReminderSchedule({
+      ptId,
+      appointmentId,
+      scheduledFor: subHours(startsAt, 24),
+      runId: 'run-first-cycle',
+    });
+    const deliveredAt = new Date();
+    await seedDeliveredAndAnsweredCycle(deliveredAt);
+
+    await upsertReminderSchedule({
+      ptId,
+      appointmentId,
+      scheduledFor: addHours(subHours(startsAt, 24), 2),
+      runId: 'run-second-cycle',
+    });
+
+    const [rearmed] = await db
+      .select()
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    // The answer belonged to cycle 1, so it goes; the delivery Meta billed does
+    // not — clearing it would refund the month's quota on every reschedule.
+    expect(rearmed).toMatchObject({
+      status: 'scheduled',
+      inngestRunId: 'run-second-cycle',
+      sentAt: null,
+      messageId: null,
+      responseType: null,
+      respondedAt: null,
+      responseMessageId: null,
+    });
+    expect(rearmed.deliveredAt).toEqual(deliveredAt);
+
+    const usage = await getReminderUsage(ptId, deliveredAt);
+    expect(usage.delivered).toBe(1);
+    expect(usage.used).toBe(1);
+  });
+
+  it('records a run failure as a durable reminder.failed the bell can read', async () => {
+    await db.delete(events).where(eq(events.ptId, ptId));
+    await recordReminderFailure({
+      ptId,
+      appointmentId,
+      scheduledFor: subHours(startsAt, 24),
+      runId: 'run-exhausted',
+      error: 'Error: Graph 500',
+    });
+
+    const [failure] = await db
+      .select()
+      .from(events)
+      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+    expect(failure.payload).toMatchObject({
+      ptId,
+      appointmentId,
+      reason: 'Error: Graph 500',
+    });
+    const outbox = await db
+      .select({ eventType: eventOutbox.eventType })
+      .from(eventOutbox)
+      .where(eq(eventOutbox.eventId, failure.id));
+    expect(outbox).toEqual([{ eventType: 'reminder.failed' }]);
+
+    const [job] = await db
+      .select({
+        status: reminderJobs.status,
+        lastError: reminderJobs.lastError,
+      })
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    expect(job).toEqual({ status: 'failed', lastError: 'Error: Graph 500' });
+  });
+
+  it('keeps the delivery and the answer when a short-notice move parks the row', async () => {
+    await upsertReminderSchedule({
+      ptId,
+      appointmentId,
+      scheduledFor: subHours(startsAt, 24),
+      runId: 'run-first-cycle',
+    });
+    const deliveredAt = new Date();
+    await seedDeliveredAndAnsweredCycle(deliveredAt);
+
+    // No replacement reminder follows a short-notice skip, so nothing would ever
+    // re-stamp a cleared delivery: the month's usage must not move.
+    await recordShortNoticeSkip({
+      ptId,
+      appointmentId,
+      startsAt: addMinutes(deliveredAt, 30),
+      runId: 'run-short-notice',
+      reason: 'short_notice',
+    });
+
+    const [parked] = await db
+      .select()
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    expect(parked).toMatchObject({
+      status: 'skipped',
+      skippedReason: 'short_notice',
+      inngestRunId: 'run-short-notice',
+      responseType: 'confirm',
+    });
+    expect(parked.deliveredAt).toEqual(deliveredAt);
+    expect(parked.respondedAt).toEqual(deliveredAt);
+
+    const usage = await getReminderUsage(ptId, deliveredAt);
+    expect(usage.delivered).toBe(1);
   });
 
   it('requeues for an unapproved template, becomes ready after approval, and rejects stale runs', async () => {
@@ -356,6 +661,53 @@ describe('reminder scheduling and guards', () => {
     if (primaryReady.kind === 'ready') {
       expect(primaryReady.template.name).toBe(REMINDER_TEMPLATE.name);
     }
+  });
+
+  it('reads a TIER_1K messaging limit as 1000, not 1', async () => {
+    const scheduledFor = subHours(startsAt, 24);
+    await upsertReminderSchedule({
+      ptId,
+      appointmentId,
+      scheduledFor,
+      runId: 'run-tier-1k',
+    });
+    await db
+      .update(whatsappConnections)
+      .set({ tier: 'TIER_1K' })
+      .where(eq(whatsappConnections.id, connectionId));
+    const [template] = await db
+      .insert(messageTemplates)
+      .values({
+        ptId,
+        name: REMINDER_TEMPLATE.name,
+        language: REMINDER_TEMPLATE.language,
+        status: 'approved',
+        body: REMINDER_TEMPLATE.body,
+      })
+      .returning({ id: messageTemplates.id });
+    // Two template sends already inside the rolling 24h window: well under
+    // 1,000 × 0.95, but over the digit-scraped limit of 1.
+    await db.insert(messages).values(
+      [1, 2].map((index) => ({
+        ptId,
+        conversationId,
+        externalId: `wamid.TIER.${Date.now()}.${sequence}.${index}`,
+        role: 'ai' as const,
+        channel: 'whatsapp' as const,
+        content: 'Kujtesë',
+        templateId: template.id,
+        model: 'deterministic-reminder',
+        provider: 'internal',
+      })),
+    );
+
+    const state = await loadReminderAttempt({
+      ptId,
+      appointmentId,
+      runId: 'run-tier-1k',
+      scheduledFor,
+    });
+    expect(state.kind).toBe('ready');
   });
 
   it('skips reminders for opted-out patients and inactive connections', async () => {

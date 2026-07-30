@@ -18,4 +18,13 @@ describe('PWA service worker source', () => {
       expect(source).toContain(excluded);
     }
   });
+
+  // A browser-initiated endpoint rotation is invisible to the app otherwise: the
+  // server prunes the row on the next 404/410 and push dies silently.
+  it('relays push subscription changes to open clients', () => {
+    const source = readFileSync(path.join(process.cwd(), 'app', 'sw.ts'), 'utf8');
+
+    expect(source).toContain("addEventListener('pushsubscriptionchange'");
+    expect(source).toContain('MEDIUM_PWA_RECONCILE_PUSH');
+  });
 });

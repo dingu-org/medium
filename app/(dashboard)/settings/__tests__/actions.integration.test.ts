@@ -11,6 +11,7 @@ import {
   vi,
 } from 'vitest';
 import { db } from '@/lib/db';
+import { encryptToken } from '@/lib/db/crypto';
 import { auditLog, whatsappConnections } from '@/lib/db/schema';
 import { deleteAccount, disconnectWhatsApp, exportPt } from '../actions';
 
@@ -118,30 +119,102 @@ afterEach(() => {
 });
 
 describe('disconnectWhatsApp', () => {
-  it('flips the latest active connection to revoked', async () => {
+  async function seedConnection(): Promise<string> {
     const [inserted] = await db
       .insert(whatsappConnections)
       .values({
         ptId,
-        phoneNumberId: `pn-disconnect-${Date.now()}`,
+        phoneNumberId: `pn-disconnect-${Date.now()}-${Math.random()}`,
         wabaId: 'WABA_DISCONNECT',
+        accessTokenEncrypted: await encryptToken('DISCONNECT_TOKEN'),
         status: 'active',
       })
       .returning({ id: whatsappConnections.id });
+    return inserted.id;
+  }
+
+  function readConnection(id: string) {
+    return db
+      .select({
+        status: whatsappConnections.status,
+        accessTokenEncrypted: whatsappConnections.accessTokenEncrypted,
+      })
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.id, id));
+  }
+
+  it('detaches the WABA while still active, then revokes the row and drops the token', async () => {
+    const connectionId = await seedConnection();
+    let statusAtDetach: string | null = null;
+    detachMock.mockImplementationOnce(async (args) => {
+      expect(args).toEqual({ ptId });
+      const [row] = await readConnection(connectionId);
+      statusAtDetach = row.status;
+      return { detached: true };
+    });
 
     try {
       await disconnectWhatsApp();
 
-      const [row] = await db
-        .select({ status: whatsappConnections.status })
-        .from(whatsappConnections)
-        .where(eq(whatsappConnections.id, inserted.id));
+      expect(detachMock).toHaveBeenCalledTimes(1);
+      expect(statusAtDetach).toBe('active');
+
+      const [row] = await readConnection(connectionId);
       expect(row.status).toBe('revoked');
+      expect(row.accessTokenEncrypted).toBeNull();
     } finally {
       await db
         .delete(whatsappConnections)
-        .where(eq(whatsappConnections.id, inserted.id));
+        .where(eq(whatsappConnections.id, connectionId));
     }
+  });
+
+  it('still revokes the connection when the Meta-side detach throws, keeping the token for a retry', async () => {
+    const connectionId = await seedConnection();
+    detachMock.mockImplementationOnce(async () => {
+      throw new Error('meta detach unavailable');
+    });
+
+    try {
+      await disconnectWhatsApp();
+
+      const [row] = await readConnection(connectionId);
+      expect(row.status).toBe('revoked');
+      // Meta is still subscribed to this WABA, and the token is the only
+      // credential that can unsubscribe it — dropping it here would leave the
+      // PT's patient messages arriving on our webhook with no way out.
+      expect(row.accessTokenEncrypted).not.toBeNull();
+    } finally {
+      await db
+        .delete(whatsappConnections)
+        .where(eq(whatsappConnections.id, connectionId));
+    }
+  });
+
+  it('keeps the token when the detach reports detached:false', async () => {
+    const connectionId = await seedConnection();
+    detachMock.mockImplementationOnce(async () => ({ detached: false }));
+
+    try {
+      await disconnectWhatsApp();
+
+      const [row] = await readConnection(connectionId);
+      expect(row.status).toBe('revoked');
+      expect(row.accessTokenEncrypted).not.toBeNull();
+    } finally {
+      await db
+        .delete(whatsappConnections)
+        .where(eq(whatsappConnections.id, connectionId));
+    }
+  });
+
+  it('is a no-op when the PT never connected WhatsApp', async () => {
+    await db
+      .delete(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+
+    await disconnectWhatsApp();
+    expect(detachMock).not.toHaveBeenCalled();
   });
 });
 

@@ -45,6 +45,13 @@ type InternalGetFreeSlotsInput = GetFreeSlotsInput & {
   excludeAppointmentId?: string;
 };
 
+type IsSlotBookableInput = {
+  ptId: string;
+  startsAt: Date;
+  endsAt: Date;
+  excludeAppointmentId?: string;
+};
+
 function assertValidTimezone(timezone: string): void {
   try {
     new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
@@ -295,4 +302,68 @@ export async function getFreeSlotsInternal(
   }
 
   return { slots, timezone: snapshot.timezone };
+}
+
+/**
+ * Whether an exact interval can be booked: it must sit wholly inside one
+ * working-hours rule and overlap no blocked period or active appointment.
+ *
+ * The grids returned by `getFreeSlots` are stepped by a single duration, so
+ * asking whether a requested time is a member of one of them rejects perfectly
+ * free times whenever the offered step and the booked service differ (a 45-min
+ * service against an hourly picker). Validate the interval itself instead.
+ */
+export async function isSlotBookable(
+  input: IsSlotBookableInput,
+): Promise<boolean> {
+  const durationMinutes = Math.round(
+    (input.endsAt.getTime() - input.startsAt.getTime()) / 60_000,
+  );
+  assertValidRange(input.startsAt, input.endsAt, durationMinutes);
+
+  const snapshot = await loadSnapshot({
+    ptId: input.ptId,
+    start: input.startsAt,
+    end: input.endsAt,
+    excludeAppointmentId: input.excludeAppointmentId,
+  });
+  assertValidTimezone(snapshot.timezone);
+
+  if (
+    snapshot.blocked.some((period) =>
+      overlaps(input.startsAt, input.endsAt, period),
+    ) ||
+    snapshot.appointments.some((period) =>
+      overlaps(input.startsAt, input.endsAt, period),
+    )
+  ) {
+    return false;
+  }
+
+  // A rule ending at 24:00 covers instants that fall on the next local day, so
+  // check the slot's own day and the one before it.
+  const slotDay = startOfDay(new TZDate(input.startsAt, snapshot.timezone));
+  for (const day of [addDays(slotDay, -1), slotDay]) {
+    for (const rule of snapshot.rules) {
+      if (rule.weekday !== day.getDay()) continue;
+      const ruleStart = localDateTime(
+        day,
+        timeToSeconds(rule.startTime),
+        snapshot.timezone,
+      );
+      const ruleEnd = localDateTime(
+        day,
+        timeToSeconds(rule.endTime),
+        snapshot.timezone,
+      );
+      if (!ruleStart || !ruleEnd) continue;
+      if (
+        ruleStart.getTime() <= input.startsAt.getTime() &&
+        input.endsAt.getTime() <= ruleEnd.getTime()
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }

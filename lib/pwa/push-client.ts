@@ -1,5 +1,6 @@
 import {
   getVapidPublicKey,
+  isEndpointOwned,
   removePushSubscription,
   savePushSubscription,
 } from '@/app/(dashboard)/settings/push-actions';
@@ -9,6 +10,32 @@ export type PushPermissionState =
   | 'default'
   | 'granted'
   | 'denied';
+
+/**
+ * Remembers that the PT switched push OFF on this device. Notification
+ * permission stays 'granted' after we drop the subscription, so without this
+ * marker the reconcile below would silently re-subscribe on the next app open
+ * and the toggle would flip itself back on. Per-browser, which is the scope a
+ * push subscription lives at anyway.
+ */
+const OPT_OUT_KEY = 'medium:push-opted-out';
+
+function isPushOptedOut(): boolean {
+  try {
+    return localStorage.getItem(OPT_OUT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setPushOptedOut(value: boolean): void {
+  try {
+    if (value) localStorage.setItem(OPT_OUT_KEY, '1');
+    else localStorage.removeItem(OPT_OUT_KEY);
+  } catch {
+    // Storage can be unavailable (private mode); the toggle still works.
+  }
+}
 
 /** Whether this browser supports the Web Push stack we rely on. */
 export function isPushSupported(): boolean {
@@ -63,11 +90,49 @@ export async function subscribeToPush(): Promise<PushPermissionState> {
   }
 
   await savePushSubscription(subscription.toJSON(), navigator.userAgent);
+  setPushOptedOut(false);
   return 'granted';
 }
 
-export async function unsubscribeFromPush(): Promise<void> {
+/**
+ * Make the server's view of this browser match reality. Push dies silently
+ * otherwise: the browser can rotate the endpoint on its own, and the server
+ * prunes a row the moment a dispatch returns 404/410 — after which nothing ever
+ * re-uploads the new subscription and Settings still reports push as on.
+ * Permission is already granted here, so re-subscribing needs no PT action —
+ * unless the PT turned push off on this device, which is standing intent that
+ * outranks the origin-level permission.
+ * Safe to call on every app open; a no-op when the server already owns the row.
+ */
+export async function reconcilePushSubscription(): Promise<void> {
   if (!isPushSupported()) return;
+  if (Notification.permission !== 'granted') return;
+  if (isPushOptedOut()) return;
+
+  const registration = await navigator.serviceWorker.ready;
+  let subscription = await registration.pushManager.getSubscription();
+  if (subscription && (await isEndpointOwned(subscription.endpoint))) return;
+
+  if (!subscription) {
+    const key = await getVapidPublicKey();
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(key),
+    });
+  }
+  await savePushSubscription(subscription.toJSON(), navigator.userAgent);
+}
+
+/**
+ * Tear down this browser's subscription. Pass `optOut` when the PT asked for
+ * push to stay off (the Settings toggle) rather than when we are just cleaning
+ * up the device (sign-out) — only the former must survive the next app open.
+ */
+export async function unsubscribeFromPush(
+  options: { optOut?: boolean } = {},
+): Promise<void> {
+  if (!isPushSupported()) return;
+  if (options.optOut) setPushOptedOut(true);
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
   if (!subscription) return;

@@ -4,13 +4,20 @@ import { db } from '@/lib/db';
 import {
   appointments,
   auditLog,
+  conversationDays,
   conversations,
+  erasureArchive,
   events,
   messages,
   patients,
+  pts,
   reminderJobs,
   whatsappContacts,
 } from '@/lib/db/schema';
+import {
+  conversationDayKeys,
+  getConversationUsage,
+} from '@/lib/billing/usage';
 import { createServiceClient } from '@/lib/supabase/service';
 import { erasePatient } from '../erase';
 
@@ -24,6 +31,7 @@ const WA_ID = '447700900555';
 let ptId = '';
 let otherPtId = '';
 let patientId = '';
+let conversationId = '';
 let confirmedApptId = '';
 let completedApptId = '';
 
@@ -45,6 +53,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const sb = createServiceClient();
+  if (ptId) await db.delete(erasureArchive).where(eq(erasureArchive.ptId, ptId));
   if (ptId) await sb.auth.admin.deleteUser(ptId);
   if (otherPtId) await sb.auth.admin.deleteUser(otherPtId);
 });
@@ -52,6 +61,11 @@ afterAll(async () => {
 beforeEach(async () => {
   tryPublish.mockClear();
   await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
+  // erasure_archive has no FK to pts, so it survives every other cleanup.
+  await db.delete(erasureArchive).where(eq(erasureArchive.ptId, ptId));
+  // conversation_days outlives the patient by design (SET NULL), so it needs its
+  // own cleanup — deleting patients no longer takes it with them.
+  await db.delete(conversationDays).where(eq(conversationDays.ptId, ptId));
   await db.delete(patients).where(eq(patients.ptId, ptId));
   await db.delete(whatsappContacts).where(eq(whatsappContacts.ptId, ptId));
   await db.delete(events).where(eq(events.ptId, ptId));
@@ -66,6 +80,7 @@ beforeEach(async () => {
     .insert(conversations)
     .values({ ptId, patientId, channel: 'whatsapp', lastInboundAt: new Date() })
     .returning({ id: conversations.id });
+  conversationId = conv.id;
 
   await db.insert(messages).values({
     ptId,
@@ -135,6 +150,103 @@ describe('erasePatient', () => {
         .where(eq(whatsappContacts.waId, WA_ID)),
     ]);
     for (const rows of remaining) expect(rows).toHaveLength(0);
+  });
+
+  it('deletes the synced contact of a manually added patient (wa_id NULL)', async () => {
+    const [manual] = await db
+      .insert(patients)
+      .values({ ptId, name: 'Ana Hoxha', phone: '+355 69 123 4567' })
+      .returning({ id: patients.id });
+    await db
+      .insert(whatsappContacts)
+      .values({ ptId, phone: '355691234567', fullName: 'Ana Hoxha' });
+
+    const result = await erasePatient({ patientId: manual.id, ptId });
+    expect(result).toEqual({ erased: true });
+
+    // Only the other patient's contact (matched on wa_id) is left standing.
+    const remaining = await db
+      .select({ phone: whatsappContacts.phone })
+      .from(whatsappContacts)
+      .where(eq(whatsappContacts.ptId, ptId));
+    expect(remaining.map((r) => r.phone)).toEqual([WA_ID]);
+  });
+
+  it('keeps the metered conversation day counting after erasure', async () => {
+    const [pt] = await db
+      .select({ timezone: pts.timezone })
+      .from(pts)
+      .where(eq(pts.id, ptId))
+      .limit(1);
+    const now = new Date();
+    const { localDay, monthKey } = conversationDayKeys(now, pt.timezone);
+    await db.insert(conversationDays).values({
+      ptId,
+      patientId,
+      conversationId,
+      localDay,
+      monthKey,
+      firstMessageId: crypto.randomUUID(),
+    });
+
+    const before = await getConversationUsage(ptId, now);
+    expect(before.used).toBe(1);
+
+    expect(await erasePatient({ patientId, ptId })).toEqual({ erased: true });
+
+    // Personal data is gone (patient row + its conversation)...
+    expect(
+      await db.select().from(patients).where(eq(patients.id, patientId)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId)),
+    ).toHaveLength(0);
+
+    // ...but the billing fact survives, anonymised by ON DELETE SET NULL.
+    const days = await db
+      .select()
+      .from(conversationDays)
+      .where(eq(conversationDays.ptId, ptId));
+    expect(days).toHaveLength(1);
+    expect(days[0].patientId).toBeNull();
+    expect(days[0].conversationId).toBeNull();
+    expect(days[0].localDay).toBe(localDay);
+    expect(days[0].monthKey).toBe(monthKey);
+
+    // ...and still counts, so erasing clients can't win back free-plan quota.
+    const after = await getConversationUsage(ptId, now);
+    expect(after.used).toBe(before.used);
+    expect(after.monthKey).toBe(monthKey);
+  });
+
+  it('archives a durable per-patient erasure proof outside audit_log', async () => {
+    await erasePatient({ patientId, ptId });
+
+    const rows = await db
+      .select()
+      .from(erasureArchive)
+      .where(eq(erasureArchive.ptId, ptId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].scope).toBe('patient');
+    expect(rows[0].targetId).toBe(patientId);
+    expect(rows[0].beforeStateHash).toMatch(/^[0-9a-f]{64}$/);
+
+    const metadata = rows[0].metadata as Record<string, unknown>;
+    expect(typeof metadata.erasedAt).toBe('string');
+    const serialized = JSON.stringify(metadata);
+    expect(serialized).not.toContain('Erased One');
+    expect(serialized).not.toContain(WA_ID);
+
+    // The missing-patient no-op archives nothing.
+    await erasePatient({ patientId, ptId });
+    const after = await db
+      .select()
+      .from(erasureArchive)
+      .where(eq(erasureArchive.ptId, ptId));
+    expect(after).toHaveLength(1);
   });
 
   it('emits appointment.cancelled only for the active appointment', async () => {

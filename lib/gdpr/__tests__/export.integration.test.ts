@@ -5,15 +5,20 @@ import {
   appointments,
   auditLog,
   availabilityRules,
+  billingOrders,
   blockedPeriods,
+  conversationDays,
   conversations,
   events,
   messageTemplates,
   messages,
   patients,
   pts,
+  pushSubscriptions,
+  reminderJobs,
   services,
   whatsappConnections,
+  whatsappContacts,
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -57,6 +62,9 @@ beforeEach(async () => {
   await db.delete(events).where(eq(events.ptId, ptId));
   await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
   await db.delete(whatsappConnections).where(eq(whatsappConnections.ptId, ptId));
+  await db.delete(whatsappContacts).where(eq(whatsappContacts.ptId, ptId));
+  await db.delete(billingOrders).where(eq(billingOrders.ptId, ptId));
+  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.ptId, ptId));
 
   const [patient] = await db
     .insert(patients)
@@ -77,12 +85,50 @@ beforeEach(async () => {
     channel: 'whatsapp',
     content: 'export me',
   });
-  await db.insert(appointments).values({
+  const [appt] = await db
+    .insert(appointments)
+    .values({
+      ptId,
+      patientId,
+      startsAt: new Date(Date.now() + 86_400_000),
+      endsAt: new Date(Date.now() + 90_000_000),
+      serviceType: 'checkup',
+    })
+    .returning({ id: appointments.id });
+  await db.insert(reminderJobs).values({
+    ptId,
+    appointmentId: appt.id,
+    scheduledFor: new Date(Date.now() + 43_200_000),
+    status: 'sent',
+    sentAt: new Date(),
+    responseType: 'confirm',
+  });
+  await db.insert(conversationDays).values({
     ptId,
     patientId,
-    startsAt: new Date(Date.now() + 86_400_000),
-    endsAt: new Date(Date.now() + 90_000_000),
-    serviceType: 'checkup',
+    conversationId,
+    localDay: '2026-07-15',
+    monthKey: '2026-07',
+  });
+  // The coexistence sync stores the phone digits-only; the patient row keeps the
+  // formatted E.164, so the export has to match on normalized digits.
+  await db.insert(whatsappContacts).values({
+    ptId,
+    phone: '35544400111',
+    fullName: 'Exp Patient',
+  });
+  await db.insert(billingOrders).values({
+    ptId,
+    pokOrderId: `pok-${Date.now()}`,
+    plan: 'solo',
+    period: 'monthly',
+    amountMinor: 250_000,
+  });
+  await db.insert(pushSubscriptions).values({
+    ptId,
+    endpoint: `https://push.example.com/${Date.now()}`,
+    keys: { p256dh: 'PUSH_P256DH_SECRET', auth: 'PUSH_AUTH_SECRET' },
+    userAgent: 'Chrome/QA',
   });
   await db
     .insert(services)
@@ -164,6 +210,50 @@ describe('buildPatientExport', () => {
     expect(typeof exp.appointments[0].startsAt).toBe('string');
   });
 
+  it('discloses the data erasure treats as the patient\'s own', async () => {
+    const exp = (await buildPatientExport({ ptId, patientId }))!;
+
+    // Matched on normalized phone digits even though patients.wa_id ('w1')
+    // never matches the synced contact row.
+    expect(exp.whatsapp_contacts).toHaveLength(1);
+    expect(exp.whatsapp_contacts[0].fullName).toBe('Exp Patient');
+
+    expect(exp.reminder_jobs).toHaveLength(1);
+    expect(exp.reminder_jobs[0].responseType).toBe('confirm');
+    expect(typeof exp.reminder_jobs[0].sentAt).toBe('string');
+
+    expect(exp.conversation_days).toHaveLength(1);
+    expect(exp.conversation_days[0].monthKey).toBe('2026-07');
+  });
+
+  it('scopes the added tables to the patient and their tenant', async () => {
+    // A second patient of the same PT owns their own contact/day rows.
+    const [other] = await db
+      .insert(patients)
+      .values({ ptId, name: 'Other Patient', phone: '+35544400222' })
+      .returning({ id: patients.id });
+    const [otherConv] = await db
+      .insert(conversations)
+      .values({ ptId, patientId: other.id, channel: 'whatsapp' })
+      .returning({ id: conversations.id });
+    await db
+      .insert(whatsappContacts)
+      .values({ ptId, phone: '35544400222', fullName: 'Other Patient' });
+    await db.insert(conversationDays).values({
+      ptId,
+      patientId: other.id,
+      conversationId: otherConv.id,
+      localDay: '2026-07-16',
+      monthKey: '2026-07',
+    });
+
+    const exp = (await buildPatientExport({ ptId, patientId }))!;
+    expect(exp.whatsapp_contacts).toHaveLength(1);
+    expect(exp.whatsapp_contacts[0].phone).toBe('35544400111');
+    expect(exp.conversation_days).toHaveLength(1);
+    expect(exp.conversation_days[0].patientId).toBe(patientId);
+  });
+
   it('includes audit rows targeting the patient\'s messages and appointments', async () => {
     // Real access events are logged against the touched row, not the patient id:
     // AI reads target the message id, AI tools target the appointment id.
@@ -240,6 +330,18 @@ describe('buildPtExport', () => {
     expect(exp.blocked_periods).toHaveLength(1);
     expect(exp.message_templates).toHaveLength(1);
     expect(exp.events).toHaveLength(1);
+    expect(exp.billing_orders).toHaveLength(1);
+    expect(exp.billing_orders[0].amountMinor).toBe(250_000);
+    // Both audit rows of the tenant, not just the patient-scoped one.
+    expect(exp.audit_log).toHaveLength(2);
+
+    // Push credentials are metadata-only: the endpoint URL and the keys are
+    // capabilities, never disclosed.
+    expect(exp.push_subscriptions).toHaveLength(1);
+    expect(exp.push_subscriptions[0].userAgent).toBe('Chrome/QA');
+    expect(exp.push_subscriptions[0].endpoint).toBe('REDACTED');
+    expect(exp.push_subscriptions[0].keys).toBe('REDACTED');
+    expect(JSON.stringify(exp)).not.toContain('PUSH_P256DH_SECRET');
 
     expect(exp.whatsapp_connection).not.toBeNull();
     expect(exp.whatsapp_connection!.accessTokenEncrypted).toBe('REDACTED');

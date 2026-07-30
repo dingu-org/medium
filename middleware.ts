@@ -1,14 +1,15 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { supabaseAnonKey, supabaseUrl } from '@/lib/supabase/env';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return response;
-
-  const supabase = createServerClient(url, anonKey, {
+  // Middleware is the only writable cookie context on a plain page render
+  // (lib/supabase/server.ts has to swallow setAll in Server Components), so
+  // missing config here would silently stop refreshing sessions until the
+  // rotated refresh token gets replayed and revoked. Fail loudly instead.
+  const supabase = createServerClient(supabaseUrl(), supabaseAnonKey(), {
     cookies: {
       getAll() {
         return request.cookies.getAll();

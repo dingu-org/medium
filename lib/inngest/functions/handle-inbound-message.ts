@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { APICallError } from 'ai';
 import { NonRetriableError, type GetStepTools } from 'inngest';
 import { db } from '@/lib/db';
@@ -20,6 +20,8 @@ import type {
   OutboundMessage,
   ReminderTurnContext,
 } from '@/lib/conversation/types';
+import { appendBackgroundEvent } from '@/lib/events/background';
+import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { createLogger } from '@/lib/log';
 import { dispatchPushForEvent } from '@/lib/notifications/push-dispatch';
 import {
@@ -130,6 +132,9 @@ export async function loadInboundJobContext(args: {
     }
   }
 
+  // Nothing in the schema limits a PT to one active connection, so the pick
+  // must be deterministic: newest active row wins, matching every other
+  // consumer (lib/channels/whatsapp/client.ts, chat/actions.ts, pwa routes).
   const [connection] = await db
     .select({ id: whatsappConnections.id })
     .from(whatsappConnections)
@@ -139,6 +144,7 @@ export async function loadInboundJobContext(args: {
         eq(whatsappConnections.status, 'active'),
       ),
     )
+    .orderBy(desc(whatsappConnections.createdAt))
     .limit(1);
 
   return {
@@ -258,20 +264,47 @@ export async function persistInboundReplyDelivery(args: {
     .where(and(eq(messages.id, args.outboundId), isNull(messages.externalId)));
 }
 
+/**
+ * The bell feed reads `conversation.failed` out of the `events` table, so the
+ * exhausted turn has to be appended there (a bare `step.sendEvent` has no
+ * subscriber and leaves no row). Publishing the outbox row afterwards keeps the
+ * Inngest emission for any future consumer.
+ */
+export async function recordConversationFailure(args: {
+  ptId: string;
+  conversationId: string;
+  messageId: string;
+  traceId?: string;
+}): Promise<void> {
+  const eventId = await db.transaction((tx) =>
+    appendBackgroundEvent(tx, {
+      type: 'conversation.failed',
+      data: {
+        ptId: args.ptId,
+        conversationId: args.conversationId,
+        messageId: args.messageId,
+        traceId: args.traceId,
+      },
+    }),
+  );
+  await tryPublishOutboxEvent(eventId);
+}
+
 async function recoverFailedInbound(args: {
   messageId: string;
   ptId: string;
   conversationId: string;
+  traceId?: string;
   step: GetStepTools<typeof inngest>;
 }) {
-  await args.step.sendEvent('emit-conversation-failed', {
-    name: 'conversation.failed',
-    data: {
+  await args.step.run('record-conversation-failed', () =>
+    recordConversationFailure({
       ptId: args.ptId,
       conversationId: args.conversationId,
       messageId: args.messageId,
-    },
-  });
+      traceId: args.traceId,
+    }),
+  );
 
   const context = await args.step.run('load-failed-context', () =>
     loadInboundJobContext(args),
@@ -317,6 +350,7 @@ export const handleInboundMessage = inngest.createFunction(
         messageId: original.messageId,
         ptId: original.ptId,
         conversationId: original.conversationId,
+        traceId: original.traceId,
         step,
       });
     },

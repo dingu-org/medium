@@ -8,6 +8,14 @@ import {
   it,
   vi,
 } from 'vitest';
+
+// The outbox->Inngest publish is best-effort and covered by the outbox suite;
+// stubbing it keeps these tests free of network retries while still exercising
+// the durable `events`/`event_outbox` rows appendBackgroundEvent writes.
+vi.mock('@/lib/events/outbox', () => ({
+  tryPublishOutboxEvent: vi.fn(async () => {}),
+}));
+
 import { APICallError } from 'ai';
 import { addHours, subHours } from 'date-fns';
 import { and, eq } from 'drizzle-orm';
@@ -16,6 +24,8 @@ import { db } from '@/lib/db';
 import {
   appointments,
   conversations,
+  eventOutbox,
+  events,
   messages,
   patients,
   pts,
@@ -24,6 +34,7 @@ import {
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
 import { ConversationEngineError } from '@/lib/conversation/errors';
+import { getNotificationData } from '@/lib/notifications/query';
 import {
   handleReminderResponse,
   type ReminderHandlingResult,
@@ -32,6 +43,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import {
   loadInboundJobContext,
   persistInboundReplyDelivery,
+  recordConversationFailure,
   runInboundTurn,
   runReminderFallbackTurn,
   sendInboundReply,
@@ -142,6 +154,39 @@ describe('handleInboundMessage cores', () => {
         content: 'Can I book tomorrow?',
       },
     });
+  });
+
+  // No DB invariant limits a PT to one active connection (only phone_number_id
+  // is unique), so the loader must not leave the choice to the planner: with two
+  // active rows the newest must win, the same rule every other consumer applies.
+  it('picks the newest active connection when a PT has two', async () => {
+    // Push the row seeded in beforeEach into the past; it stays physically first
+    // in the heap, so an unordered scan would return it.
+    await db
+      .update(whatsappConnections)
+      .set({ createdAt: subHours(new Date(), 48) })
+      .where(eq(whatsappConnections.id, connectionId));
+
+    const [newer] = await db
+      .insert(whatsappConnections)
+      .values({
+        ptId,
+        phoneNumberId: `PNI_INBOUND_NEWER_${Date.now()}_${++sequence}`,
+        wabaId: 'WABA_INBOUND',
+        accessTokenEncrypted: await encryptToken('INBOUND_TOKEN_NEWER'),
+        status: 'active',
+        createdAt: new Date(),
+      })
+      .returning({ id: whatsappConnections.id });
+
+    const context = await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    });
+
+    expect(context?.connectionId).toBe(newer.id);
+    expect(context?.connectionId).not.toBe(connectionId);
   });
 
   it('keeps AI inactive while a Business app echo pause is current', async () => {
@@ -499,5 +544,48 @@ describe('handleInboundMessage cores', () => {
       // Phase 16 C1: the resolved effective plan is threaded into the turn.
       plan: 'free',
     });
+  });
+
+  it('records an exhausted turn durably so the bell can surface it', async () => {
+    await db.delete(events).where(eq(events.ptId, ptId));
+
+    await recordConversationFailure({
+      ptId,
+      conversationId,
+      messageId: inboundMessageId,
+    });
+
+    const stored = await db
+      .select()
+      .from(events)
+      .where(
+        and(eq(events.ptId, ptId), eq(events.type, 'conversation.failed')),
+      );
+    expect(stored).toHaveLength(1);
+    expect(stored[0].payload).toMatchObject({
+      ptId,
+      conversationId,
+      messageId: inboundMessageId,
+    });
+
+    // The Inngest publish still happens, via the outbox row rather than a bare
+    // step.sendEvent that left no trace behind.
+    const outbox = await db
+      .select()
+      .from(eventOutbox)
+      .where(eq(eventOutbox.eventId, stored[0].id));
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0].eventType).toBe('conversation.failed');
+
+    // The bell reads `events` filtered by NOTIFICATION_TYPES, so the
+    // conversation.failed formatter branch is now reachable at all.
+    const bell = await getNotificationData(ptId);
+    expect(bell.items).toEqual([
+      expect.objectContaining({
+        type: 'conversation.failed',
+        title: expect.stringContaining('kërkon vëmendjen tënde'),
+        href: '/chat',
+      }),
+    ]);
   });
 });

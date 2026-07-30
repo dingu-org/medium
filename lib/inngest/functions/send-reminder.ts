@@ -12,6 +12,8 @@ import {
   emitReminderLimitReachedOnce,
   reminderQuotaAvailable,
 } from '@/lib/billing/usage';
+import { appendBackgroundEvent } from '@/lib/events/background';
+import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { inngest } from '../client';
 import {
   REMINDER_TEMPLATE_PRIORITY,
@@ -74,6 +76,51 @@ export async function upsertReminderSchedule(args: {
         skippedReason: null,
         sentAt: null,
         messageId: null,
+        // The row is unique per appointment, so a reschedule re-arms the SAME
+        // row. The patient's answer belongs to the cycle it answered, so it is
+        // cleared or the new send inherits the old cycle's reply (Today's
+        // unanswered list, deterministic replies). `delivered_at` is NOT cleared:
+        // it is a Meta-billed fact and the only source of monthly reminder usage
+        // (lib/billing/usage.ts countDeliveredReminders), so wiping it would let
+        // a reschedule refund quota the PT already spent.
+        responseType: null,
+        respondedAt: null,
+        responseMessageId: null,
+      },
+    });
+}
+
+/**
+ * An appointment moved inside the minimum-notice window: the row is parked as
+ * skipped and no replacement reminder will ever be sent. So unlike a re-arm this
+ * path touches only the scheduling columns — the previous cycle's delivery
+ * (`delivered_at`, Meta-billed, drives monthly usage) and the patient's answer
+ * to it are facts that already happened and must survive.
+ */
+export async function recordShortNoticeSkip(args: {
+  ptId: string;
+  appointmentId: string;
+  startsAt: Date;
+  runId: string;
+  reason: string;
+}): Promise<void> {
+  await db
+    .insert(reminderJobs)
+    .values({
+      ptId: args.ptId,
+      appointmentId: args.appointmentId,
+      scheduledFor: args.startsAt,
+      inngestRunId: args.runId,
+      status: 'skipped',
+      skippedReason: args.reason,
+    })
+    .onConflictDoUpdate({
+      target: reminderJobs.appointmentId,
+      set: {
+        scheduledFor: args.startsAt,
+        inngestRunId: args.runId,
+        status: 'skipped',
+        skippedReason: args.reason,
       },
     });
 }
@@ -102,11 +149,22 @@ async function markReminder(args: {
     .where(eq(reminderJobs.appointmentId, args.appointmentId));
 }
 
-function tierLimit(tier: string | null): number | null {
-  if (!tier || tier.toUpperCase().includes('UNLIMITED')) return null;
-  const matches = tier.match(/\d+/g);
-  if (!matches) return null;
-  const limit = Number(matches.join(''));
+/**
+ * Meta's `messaging_limit_tier` is stored verbatim from Graph
+ * (poll-whatsapp-health), i.e. TIER_50 / TIER_250 / TIER_1K / TIER_10K /
+ * TIER_100K / TIER_UNLIMITED. The K/M suffix carries the magnitude, so it must
+ * be multiplied out — scraping digits alone reads TIER_1K as a limit of 1 and
+ * throttles the PT to one template per 24h. Unrecognised strings are treated as
+ * uncapped so a future tier never silently blocks reminders.
+ */
+export function tierLimit(tier: string | null): number | null {
+  if (!tier) return null;
+  const normalized = tier.trim().toUpperCase();
+  if (normalized.includes('UNLIMITED')) return null;
+  const match = normalized.match(/^TIER_(\d+)(K|M)?$/);
+  if (!match) return null;
+  const magnitude = match[2] === 'M' ? 1_000_000 : match[2] === 'K' ? 1_000 : 1;
+  const limit = Number(match[1]) * magnitude;
   return Number.isFinite(limit) && limit > 0 ? limit : null;
 }
 
@@ -329,32 +387,77 @@ async function persistReminderDelivery(args: {
   });
 }
 
-async function recordReminderFailure(args: {
+/**
+ * A reminder the PT will never see delivered. The failed row and the PT-facing
+ * `reminder.failed` share one transaction so the bell/push signal is durable
+ * (outbox) rather than a fire-and-forget Inngest send — same shape as the other
+ * NOTIFICATION_TYPES emitters (appointment-events, poll-whatsapp-health).
+ */
+export async function recordReminderFailure(args: {
   ptId: string;
   appointmentId: string;
   scheduledFor: Date;
   runId: string;
   error: string;
 }): Promise<void> {
-  await db
-    .insert(reminderJobs)
-    .values({
-      ptId: args.ptId,
-      appointmentId: args.appointmentId,
-      scheduledFor: args.scheduledFor,
-      inngestRunId: args.runId,
-      status: 'failed',
-      attempts: MAX_TEMPLATE_ATTEMPTS,
-      lastError: args.error,
-    })
-    .onConflictDoUpdate({
-      target: reminderJobs.appointmentId,
-      set: {
+  const eventId = await db.transaction(async (tx) => {
+    await tx
+      .insert(reminderJobs)
+      .values({
+        ptId: args.ptId,
+        appointmentId: args.appointmentId,
+        scheduledFor: args.scheduledFor,
+        inngestRunId: args.runId,
         status: 'failed',
         attempts: MAX_TEMPLATE_ATTEMPTS,
         lastError: args.error,
+      })
+      .onConflictDoUpdate({
+        target: reminderJobs.appointmentId,
+        set: {
+          status: 'failed',
+          attempts: MAX_TEMPLATE_ATTEMPTS,
+          lastError: args.error,
+        },
+      });
+    return appendBackgroundEvent(tx, {
+      type: 'reminder.failed',
+      data: {
+        ptId: args.ptId,
+        appointmentId: args.appointmentId,
+        reason: args.error,
       },
     });
+  });
+  await tryPublishOutboxEvent(eventId);
+}
+
+/** Same durable signal for the in-run give-up after MAX_TEMPLATE_ATTEMPTS. */
+async function recordReminderAttemptFailure(args: {
+  ptId: string;
+  appointmentId: string;
+  attempts: number;
+  reason: string;
+}): Promise<void> {
+  const eventId = await db.transaction(async (tx) => {
+    await tx
+      .update(reminderJobs)
+      .set({
+        status: 'failed',
+        attempts: args.attempts,
+        lastError: args.reason,
+      })
+      .where(eq(reminderJobs.appointmentId, args.appointmentId));
+    return appendBackgroundEvent(tx, {
+      type: 'reminder.failed',
+      data: {
+        ptId: args.ptId,
+        appointmentId: args.appointmentId,
+        reason: args.reason,
+      },
+    });
+  });
+  await tryPublishOutboxEvent(eventId);
 }
 
 export const sendReminder = inngest.createFunction(
@@ -401,10 +504,6 @@ export const sendReminder = inngest.createFunction(
           error: reason,
         }),
       );
-      await step.sendEvent('emit-reminder-run-failed', {
-        name: 'reminder.failed',
-        data: { ptId, appointmentId, reason },
-      });
       return { failed: reason };
     },
   },
@@ -433,27 +532,15 @@ export const sendReminder = inngest.createFunction(
       new Date(event.ts ?? Date.now()),
     );
     if (schedule.kind === 'skipped') {
-      await step.run('record-short-notice-skip', async () => {
-        await db
-          .insert(reminderJobs)
-          .values({
-            ptId,
-            appointmentId,
-            scheduledFor: startsAt,
-            inngestRunId: runId,
-            status: 'skipped',
-            skippedReason: schedule.reason,
-          })
-          .onConflictDoUpdate({
-            target: reminderJobs.appointmentId,
-            set: {
-              scheduledFor: startsAt,
-              inngestRunId: runId,
-              status: 'skipped',
-              skippedReason: schedule.reason,
-            },
-          });
-      });
+      await step.run('record-short-notice-skip', () =>
+        recordShortNoticeSkip({
+          ptId,
+          appointmentId,
+          startsAt,
+          runId,
+          reason: schedule.reason,
+        }),
+      );
       await step.sendEvent('emit-short-notice-reminder-skipped', {
         name: 'reminder.skipped',
         data: { ptId, appointmentId, reason: schedule.reason },
@@ -510,21 +597,13 @@ export const sendReminder = inngest.createFunction(
       if (state.kind === 'retry') {
         if (attempt === MAX_TEMPLATE_ATTEMPTS) {
           await step.run('record-reminder-failure', () =>
-            markReminder({
-              appointmentId,
-              status: 'failed',
-              attempts: attempt,
-              lastError: state.reason,
-            }),
-          );
-          await step.sendEvent('emit-reminder-failed', {
-            name: 'reminder.failed',
-            data: {
+            recordReminderAttemptFailure({
               ptId,
               appointmentId,
+              attempts: attempt,
               reason: state.reason,
-            },
-          });
+            }),
+          );
           return { failed: state.reason };
         }
         await step.run(`record-reminder-requeue-${attempt}`, () =>

@@ -20,7 +20,7 @@ export default async function SignInPage({
       <SignInForm
         confirmHint={confirm === '1'}
         resetHint={reset === '1'}
-        callbackError={error ? t.auth.errors.callbackFailed : null}
+        callbackError={error ? t.auth.signIn.linkFailed : null}
       />
     </section>
   );

@@ -8,12 +8,16 @@ import { whatsappConnections } from '@/lib/db/schema';
 import { detachWabaSubscription } from '@/lib/channels/whatsapp/client';
 import { recordErasureArchive } from '@/lib/gdpr/archive';
 import { buildPtExport, type PtExport } from '@/lib/gdpr/export';
+import { logger } from '@/lib/log';
 import { withAuditLog } from '@/lib/tenancy';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 
-/** Mark the active WhatsApp connection revoked so the PT can reconnect later. */
+/**
+ * Detach Medium from the PT's WABA at Meta and mark their connection revoked
+ * (they can reconnect later, which mints a new token).
+ */
 async function disconnectWhatsAppImpl(): Promise<void> {
   const supabase = await createServerClient();
   const {
@@ -22,22 +26,50 @@ async function disconnectWhatsAppImpl(): Promise<void> {
   if (!user) redirect('/sign-in');
 
   const [latest] = await db
-    .select({ id: whatsappConnections.id })
+    .select({ id: whatsappConnections.id, status: whatsappConnections.status })
     .from(whatsappConnections)
     .where(eq(whatsappConnections.ptId, user.id))
     .orderBy(desc(whatsappConnections.createdAt))
     .limit(1);
 
   if (latest) {
+    // Detach Medium's app from the WABA first — while the row is still active,
+    // which is what detachWabaSubscription requires — so Meta stops POSTing the
+    // PT's patient messages to our webhook once they have disconnected.
+    let detached = false;
+    try {
+      ({ detached } = await detachWabaSubscription({ ptId: user.id }));
+    } catch {
+      // Best-effort: a Meta-side detach failure must never block the disconnect.
+    }
+
+    // The token is dropped with the status flip: nothing may decrypt a Graph
+    // token that outlived the PT's disconnect. Reconnecting writes a fresh one.
+    // It survives only while Meta still has us subscribed, because it is the
+    // sole credential that can finish the detach — dropping it there would
+    // leave Medium receiving this WABA's patient messages with no way out.
     await db
       .update(whatsappConnections)
-      .set({ status: 'revoked' })
+      .set({
+        status: 'revoked',
+        ...(detached ? { accessTokenEncrypted: null } : {}),
+      })
       .where(
         and(
           eq(whatsappConnections.id, latest.id),
           eq(whatsappConnections.ptId, user.id),
         ),
       );
+
+    if (!detached && latest.status === 'active') {
+      // Meta may still POST this WABA's patient messages to our webhook, so the
+      // failure needs to be visible — the client-side detach only console.warns.
+      logger.warn(
+        'settings.waba_detach_failed',
+        'WhatsApp disconnected locally but Meta still has the app subscribed',
+        { ptId: user.id, connectionId: latest.id },
+      );
+    }
   }
 
   revalidatePath('/settings');

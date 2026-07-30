@@ -9,7 +9,7 @@ import {
   pts,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
-import { getFreeSlots } from '../availability';
+import { getFreeSlots, isSlotBookable } from '../availability';
 
 let ptId = '';
 let patientId = '';
@@ -201,5 +201,117 @@ describe('getFreeSlots', () => {
         endsAt: '2026-07-06T22:00:00.000Z',
       },
     ]);
+  });
+});
+
+// Monday 2026-07-06, Tirane is UTC+2 in July.
+const workingMonday = () =>
+  db.insert(availabilityRules).values({
+    ptId,
+    weekday: 1,
+    startTime: '09:00:00',
+    endTime: '17:00:00',
+  });
+
+describe('isSlotBookable', () => {
+  it('accepts a 45-minute slot that no hourly offer grid contains', async () => {
+    await workingMonday();
+
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-07-06T09:00:00.000Z'), // 11:00
+        endsAt: new Date('2026-07-06T09:45:00.000Z'),
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it('accepts a slot ending exactly when the working rule ends', async () => {
+    await workingMonday();
+
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-07-06T14:15:00.000Z'), // 16:15
+        endsAt: new Date('2026-07-06T15:00:00.000Z'), // 17:00
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it('rejects a slot that runs past the end of the working rule', async () => {
+    await workingMonday();
+
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-07-06T14:30:00.000Z'), // 16:30
+        endsAt: new Date('2026-07-06T15:15:00.000Z'), // 17:15
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it('rejects a slot spanning two adjacent rules and days without rules', async () => {
+    await db.insert(availabilityRules).values([
+      { ptId, weekday: 1, startTime: '09:00:00', endTime: '12:00:00' },
+      { ptId, weekday: 1, startTime: '12:00:00', endTime: '17:00:00' },
+    ]);
+
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-07-06T09:45:00.000Z'), // 11:45
+        endsAt: new Date('2026-07-06T10:30:00.000Z'), // 12:30
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-07-05T09:00:00.000Z'), // Sunday
+        endsAt: new Date('2026-07-05T09:45:00.000Z'),
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it('rejects overlaps with blocked periods and keeps its own appointment out of the way', async () => {
+    await workingMonday();
+    await db.insert(blockedPeriods).values({
+      ptId,
+      startsAt: new Date('2026-07-06T09:30:00.000Z'),
+      endsAt: new Date('2026-07-06T10:00:00.000Z'),
+      label: 'Admin',
+    });
+    const [appointment] = await db
+      .insert(appointments)
+      .values({
+        ptId,
+        patientId,
+        startsAt: new Date('2026-07-06T11:00:00.000Z'),
+        endsAt: new Date('2026-07-06T12:00:00.000Z'),
+        status: 'confirmed',
+      })
+      .returning({ id: appointments.id });
+
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-07-06T09:00:00.000Z'),
+        endsAt: new Date('2026-07-06T09:45:00.000Z'),
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-07-06T11:15:00.000Z'),
+        endsAt: new Date('2026-07-06T12:00:00.000Z'),
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      isSlotBookable({
+        ptId,
+        startsAt: new Date('2026-07-06T11:15:00.000Z'),
+        endsAt: new Date('2026-07-06T12:00:00.000Z'),
+        excludeAppointmentId: appointment.id,
+      }),
+    ).resolves.toBe(true);
   });
 });

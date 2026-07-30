@@ -12,19 +12,23 @@ let seq = 0;
 
 async function seedOrder(args: {
   period: 'monthly' | 'yearly';
-  status: 'created' | 'paid' | 'failed';
+  status: 'created' | 'paid' | 'failed' | 'expired';
   ageDays: number;
+  /** Whole ALL actually charged (ALL_MINOR_FACTOR = 1). */
+  amountMinor?: number;
 }) {
   seq += 1;
+  const createdAt = new Date(NOW.getTime() - args.ageDays * DAY);
   await db.insert(billingOrders).values({
     ptId,
     pokOrderId: `pok-rm-${Date.now()}-${seq}`,
     plan: 'solo',
     period: args.period,
-    amountMinor: args.period === 'yearly' ? 2_500_000 : 250_000,
+    amountMinor: args.amountMinor ?? (args.period === 'yearly' ? 25_000 : 2_500),
     currency: 'ALL',
     status: args.status,
-    createdAt: new Date(NOW.getTime() - args.ageDays * DAY),
+    createdAt,
+    paidAt: args.status === 'paid' ? createdAt : null,
   });
 }
 
@@ -123,23 +127,57 @@ describe('getBillingSnapshot', () => {
     expect(snap.currentPeriod).toBeNull();
   });
 
-  it('lists settled receipts newest-first with whole-ALL amounts, excluding created orders', async () => {
-    await seedOrder({ period: 'monthly', status: 'paid', ageDays: 40 });
-    await seedOrder({ period: 'yearly', status: 'failed', ageDays: 10 });
+  it('lists paid/failed receipts newest-first with the amount actually charged', async () => {
+    // Deliberately NOT today's list price (2500 / 25000) — a receipt must echo
+    // what the PT paid, not what Solo costs now.
+    await seedOrder({
+      period: 'monthly',
+      status: 'paid',
+      ageDays: 40,
+      amountMinor: 2_000,
+    });
+    await seedOrder({
+      period: 'yearly',
+      status: 'failed',
+      ageDays: 10,
+      amountMinor: 20_000,
+    });
     await seedOrder({ period: 'monthly', status: 'created', ageDays: 1 });
+    // Abandoned checkout the cron expired — never a payment attempt.
+    await seedOrder({ period: 'yearly', status: 'expired', ageDays: 2 });
 
     const snap = await getBillingSnapshot(ptId, NOW);
-    expect(snap.receipts).toHaveLength(2); // the 'created' order is not a receipt
+    expect(snap.receipts).toHaveLength(2);
     // Newest first: the failed yearly precedes the paid monthly.
     expect(snap.receipts[0]).toMatchObject({
       period: 'yearly',
       status: 'failed',
-      amountAll: 25000,
+      amountAll: 20_000,
     });
     expect(snap.receipts[1]).toMatchObject({
       period: 'monthly',
       status: 'paid',
-      amountAll: 2500,
+      amountAll: 2_000,
     });
+    // Historical amounts are independent of the live plan price.
+    expect(snap.price).toEqual({ monthly: 2500, yearly: 25000 });
+  });
+
+  it('resolves currentPeriod from the paid order even behind a full page of failures', async () => {
+    await db
+      .update(pts)
+      .set({ plan: 'solo', planExpiresAt: new Date(NOW.getTime() + 200 * DAY) })
+      .where(eq(pts.id, ptId));
+    await seedOrder({ period: 'yearly', status: 'paid', ageDays: 100 });
+    for (let i = 0; i < 51; i += 1) {
+      await seedOrder({ period: 'monthly', status: 'failed', ageDays: 50 - i / 100 });
+    }
+
+    const snap = await getBillingSnapshot(ptId, NOW);
+    // The paid order fell out of the 50-row receipt window …
+    expect(snap.receipts).toHaveLength(50);
+    expect(snap.receipts.every((r) => r.status === 'failed')).toBe(true);
+    // … but currentPeriod (and therefore the renew/upsell slot) still holds.
+    expect(snap.currentPeriod).toBe('yearly');
   });
 });

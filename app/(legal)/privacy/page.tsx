@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { disclosedAiProviderNames } from './ai-providers';
 
 export const metadata = {
   title: 'Privacy policy · Medium',
@@ -6,7 +7,7 @@ export const metadata = {
     'How Medium handles account, patient, WhatsApp, and scheduling data.',
 };
 
-const updatedAt = 'July 14, 2026';
+const updatedAt = 'July 30, 2026';
 
 export default function PrivacyPolicyPage() {
   return (
@@ -96,11 +97,12 @@ export default function PrivacyPolicyPage() {
 
       <PolicySection title="AI processing">
         <p>
-          Production AI requests are routed through OpenRouter to OpenAI for
-          scheduling-related responses. The app sends only the conversation and
-          scheduling context needed to answer the patient. The AI is instructed
-          not to diagnose, provide medical advice, handle emergencies, or
-          discuss legal, billing, or insurance matters.
+          Production AI requests are routed through OpenRouter to{' '}
+          {disclosedAiProviderNames()} for scheduling-related responses, and any
+          of them may serve a given request. The app sends only the conversation
+          and scheduling context needed to answer the patient. The AI is
+          instructed not to diagnose, provide medical advice, handle
+          emergencies, or discuss legal, billing, or insurance matters.
         </p>
         <p>
           Production requests use privacy controls that request zero data
@@ -135,7 +137,10 @@ export default function PrivacyPolicyPage() {
             Meta and WhatsApp for message delivery and WhatsApp Business account
             integration.
           </li>
-          <li>OpenRouter and OpenAI for production AI inference.</li>
+          <li>
+            OpenRouter, with {disclosedAiProviderNames()} as the upstream model
+            providers, for production AI inference.
+          </li>
           <li>
             POK (pokpay.io), operated by Nebula, as the payment processor for
             card payments.

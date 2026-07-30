@@ -16,15 +16,19 @@ import {
   messageTemplates,
   messages,
   patients,
+  reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
+import { getReminderUsage } from '@/lib/billing/usage';
 import { getUnreadChatCount } from '@/lib/chat/queries';
 import { getChatListSnapshot } from '@/lib/pwa/read-models';
 import { REMINDER_TEMPLATE } from '@/lib/inngest/functions/bootstrap-wa-connection';
+import { loadReminderAttempt } from '@/lib/inngest/functions/send-reminder';
 import {
   markConversationRead,
   sendUpcomingReminderTemplate,
+  setConversationClosed,
 } from '../actions';
 
 const authState = vi.hoisted(() => ({ userId: '' as string | null }));
@@ -235,8 +239,69 @@ describe('instrumentedAction wrapper (via markConversationRead)', () => {
   });
 });
 
+describe('setConversationClosed', () => {
+  it('clears an echo pause when reopening, so the AI is really back on', async () => {
+    // A closed thread can still pick up a WhatsApp-echo pause (the webhook's echo
+    // branch never looks at closed_at), and a pause left behind on reopen makes
+    // handle-inbound-message skip the AI turn with the UI reporting it as active.
+    await db
+      .update(conversations)
+      .set({
+        closedAt: new Date(),
+        aiActive: false,
+        aiPausedUntil: new Date(Date.now() + 2 * 60 * 60 * 1000),
+        aiPauseReason: 'whatsapp_business_app_echo',
+      })
+      .where(eq(conversations.id, conversationId));
+
+    const result = await setConversationClosed(conversationId, false);
+    expect(result).toEqual({ ok: true });
+
+    const [conv] = await db
+      .select({
+        closedAt: conversations.closedAt,
+        aiActive: conversations.aiActive,
+        aiPausedUntil: conversations.aiPausedUntil,
+        aiPauseReason: conversations.aiPauseReason,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conv.closedAt).toBeNull();
+    expect(conv.aiActive).toBe(true);
+    expect(conv.aiPausedUntil).toBeNull();
+    expect(conv.aiPauseReason).toBeNull();
+  });
+
+  it('clears the pause when closing too', async () => {
+    await db
+      .update(conversations)
+      .set({
+        aiPausedUntil: new Date(Date.now() + 2 * 60 * 60 * 1000),
+        aiPauseReason: 'whatsapp_business_app_echo',
+      })
+      .where(eq(conversations.id, conversationId));
+
+    await setConversationClosed(conversationId, true);
+
+    const [conv] = await db
+      .select({
+        closedAt: conversations.closedAt,
+        aiActive: conversations.aiActive,
+        aiPausedUntil: conversations.aiPausedUntil,
+        aiPauseReason: conversations.aiPauseReason,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conv.closedAt).not.toBeNull();
+    expect(conv.aiActive).toBe(false);
+    expect(conv.aiPausedUntil).toBeNull();
+    expect(conv.aiPauseReason).toBeNull();
+  });
+});
+
 describe('sendUpcomingReminderTemplate', () => {
   let templateId = '';
+  let appointmentId = '';
 
   beforeEach(async () => {
     errorSpy.mockClear();
@@ -257,13 +322,17 @@ describe('sendUpcomingReminderTemplate', () => {
       wabaId: `WABA_${Date.now()}`,
       status: 'active',
     });
-    await db.insert(appointments).values({
-      ptId,
-      patientId,
-      startsAt: new Date('2026-08-01T09:00:00.000Z'),
-      endsAt: new Date('2026-08-01T10:00:00.000Z'),
-      status: 'confirmed',
-    });
+    const [appointment] = await db
+      .insert(appointments)
+      .values({
+        ptId,
+        patientId,
+        startsAt: new Date('2026-08-01T09:00:00.000Z'),
+        endsAt: new Date('2026-08-01T10:00:00.000Z'),
+        status: 'confirmed',
+      })
+      .returning({ id: appointments.id });
+    appointmentId = appointment.id;
     const [template] = await db
       .insert(messageTemplates)
       .values({
@@ -276,6 +345,31 @@ describe('sendUpcomingReminderTemplate', () => {
       .returning({ id: messageTemplates.id });
     templateId = template.id;
   });
+
+  /** Delivered reminder jobs in the current month, one per throwaway appointment. */
+  async function seedDeliveredReminders(count: number): Promise<void> {
+    const now = new Date();
+    for (let index = 0; index < count; index++) {
+      const [past] = await db
+        .insert(appointments)
+        .values({
+          ptId,
+          patientId,
+          startsAt: new Date(`2026-01-0${(index % 9) + 1}T09:00:00.000Z`),
+          endsAt: new Date(`2026-01-0${(index % 9) + 1}T10:00:00.000Z`),
+          status: 'completed',
+        })
+        .returning({ id: appointments.id });
+      await db.insert(reminderJobs).values({
+        ptId,
+        appointmentId: past.id,
+        scheduledFor: now,
+        status: 'sent',
+        sentAt: now,
+        deliveredAt: now,
+      });
+    }
+  }
 
   it('persists the reminder and pauses the AI on a successful send', async () => {
     const result = await sendUpcomingReminderTemplate(conversationId);
@@ -333,5 +427,165 @@ describe('sendUpcomingReminderTemplate', () => {
     const [eventName, , attrs] = errorSpy.mock.calls[0];
     expect(eventName).toBe('chat.reminder_persist_failed');
     expect(attrs).toMatchObject({ externalId: 'wamid.tpl' });
+  });
+
+  it('records a sent reminder_jobs row so the send is metered and the reply correlates', async () => {
+    await sendUpcomingReminderTemplate(conversationId);
+
+    const [message] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.templateId, templateId),
+        ),
+      );
+    const [job] = await db
+      .select()
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    expect(job.status).toBe('sent');
+    expect(job.sentAt).not.toBeNull();
+    expect(job.messageId).toBe(message.id);
+    expect(job.deliveredAt).toBeNull();
+
+    // In-flight counts against the plan cap, so the meter now sees the manual send.
+    await expect(getReminderUsage(ptId)).resolves.toMatchObject({
+      inFlight: 1,
+      used: 1,
+      limit: 10,
+    });
+  });
+
+  it('refuses the manual send to a patient who opted out of reminders', async () => {
+    await db
+      .update(patients)
+      .set({ reminderOptedOutAt: new Date() })
+      .where(eq(patients.id, patientId));
+
+    await expect(sendUpcomingReminderTemplate(conversationId)).resolves.toEqual(
+      { ok: false, error: 'Klienti ka çaktivizuar kujtesat.' },
+    );
+    expect(sendTemplateMock).not.toHaveBeenCalled();
+    const jobs = await db
+      .select()
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    expect(jobs).toHaveLength(0);
+  });
+
+  it('stamps the manual send onto a still-scheduled automated job without making the pending run stale', async () => {
+    const scheduledFor = new Date('2026-07-31T09:00:00.000Z');
+    await db.insert(reminderJobs).values({
+      ptId,
+      appointmentId,
+      scheduledFor,
+      inngestRunId: 'run-1',
+      status: 'scheduled',
+    });
+
+    const result = await sendUpcomingReminderTemplate(conversationId);
+    expect(result).toEqual({ ok: true });
+
+    const jobs = await db
+      .select()
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].status).toBe('sent');
+    expect(jobs[0].messageId).not.toBeNull();
+    // The pending run must stay armed and matching. Clearing it made
+    // loadReminderAttempt answer `stale_run`, and that branch rewrites this row
+    // to status 'skipped' when the run wakes — after which the patient's
+    // KONFIRMO/ANULO matches no candidate and the badge claims nothing was sent.
+    expect(jobs[0].inngestRunId).toBe('run-1');
+    expect(jobs[0].scheduledFor.getTime()).toBe(scheduledFor.getTime());
+    await expect(
+      loadReminderAttempt({
+        ptId,
+        appointmentId,
+        runId: 'run-1',
+        scheduledFor,
+      }),
+    ).resolves.not.toEqual({ kind: 'skipped', reason: 'stale_run' });
+  });
+
+  it('clears the previous cycle answer on a second manual nudge', async () => {
+    await sendUpcomingReminderTemplate(conversationId);
+    const [first] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.templateId, templateId),
+        ),
+      );
+
+    // The patient answered the first reminder and Meta confirmed its delivery.
+    const respondedAt = new Date();
+    await db
+      .update(reminderJobs)
+      .set({
+        deliveredAt: respondedAt,
+        responseType: 'confirm',
+        respondedAt,
+        responseMessageId: newerId,
+      })
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    // Age the first template past the 60s double-tap dedupe so the second
+    // nudge is a genuine second send rather than a no-op.
+    await db
+      .update(messages)
+      .set({ createdAt: new Date(Date.now() - 120_000) })
+      .where(eq(messages.id, first.id));
+    sendTemplateMock.mockResolvedValue({ messageId: 'wamid.tpl2' });
+
+    const result = await sendUpcomingReminderTemplate(conversationId);
+    expect(result).toEqual({ ok: true });
+
+    const [job] = await db
+      .select()
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    expect(job.status).toBe('sent');
+    // The answer belongs to the cycle it answered: with a stale 'confirm' on the
+    // row chooseCandidate filters it out, so the patient's ANULO after this
+    // second reminder would cancel nothing.
+    expect(job.responseType).toBeNull();
+    expect(job.respondedAt).toBeNull();
+    expect(job.responseMessageId).toBeNull();
+    // delivered_at survives: it is a Meta-billed fact and the only source of
+    // monthly usage, so clearing it would refund quota the PT already spent.
+    expect(job.deliveredAt).toEqual(respondedAt);
+    await expect(getReminderUsage(ptId)).resolves.toMatchObject({ used: 1 });
+  });
+
+  it('refuses the send once the monthly reminder quota is exhausted', async () => {
+    await seedDeliveredReminders(10);
+
+    const result = await sendUpcomingReminderTemplate(conversationId);
+    expect(result).toEqual({
+      ok: false,
+      error: 'Kufiri i kujtesave u arrit për këtë muaj.',
+    });
+    // No paid template, no message, no job row.
+    expect(sendTemplateMock).not.toHaveBeenCalled();
+    const stored = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.templateId, templateId),
+        ),
+      );
+    expect(stored).toHaveLength(0);
+    const jobs = await db
+      .select({ id: reminderJobs.id })
+      .from(reminderJobs)
+      .where(eq(reminderJobs.appointmentId, appointmentId));
+    expect(jobs).toHaveLength(0);
   });
 });

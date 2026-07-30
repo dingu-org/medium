@@ -44,16 +44,22 @@ function sign(body: string): string {
 type PayloadOpts = {
   phoneNumberId?: string;
   messageId?: string;
-  messageType?: 'text' | 'image';
+  /** Meta's open-ended inbound `type` (text, image, reaction, system, …). */
+  messageType?: string;
+  /** Epoch-seconds string, as Meta sends it. */
+  timestamp?: string;
   text?: string;
 };
+
+/** Epoch seconds, for an inbound that Meta is delivering right now. */
+const nowSeconds = () => String(Math.floor(Date.now() / 1000));
 
 function buildPayload(opts: PayloadOpts = {}) {
   const type = opts.messageType ?? 'text';
   const msg: Record<string, unknown> = {
     from: WA_ID,
     id: opts.messageId ?? nextExternalId(),
-    timestamp: '1700000000',
+    timestamp: opts.timestamp ?? '1700000000',
     type,
   };
   if (type === 'text') {
@@ -170,6 +176,46 @@ function buildAppStatePayload() {
   };
 }
 
+/** A contact-sync change with arbitrary contacts, optionally followed by a
+ *  `messages` change in the same entry (batch-isolation coverage). */
+function buildContactSyncPayload(
+  contacts: {
+    phone_number: string;
+    wa_id?: string;
+    full_name?: string;
+    first_name?: string;
+  }[],
+  opts: { withMessageId?: string } = {},
+) {
+  const changes: unknown[] = [
+    {
+      field: 'smb_app_state_sync',
+      value: {
+        messaging_product: 'whatsapp',
+        metadata: {
+          display_phone_number: '15551234567',
+          phone_number_id: PHONE_NUMBER_ID,
+        },
+        state_sync: contacts.map((contact) => ({
+          type: 'contact',
+          action: 'add',
+          contact,
+          metadata: { timestamp: '1700000000' },
+        })),
+      },
+    },
+  ];
+  if (opts.withMessageId) {
+    changes.push(
+      buildPayload({ messageId: opts.withMessageId }).entry[0].changes[0],
+    );
+  }
+  return {
+    object: 'whatsapp_business_account',
+    entry: [{ id: 'WABA_ID', changes }],
+  };
+}
+
 function buildEchoPayload(messageId = nextExternalId()) {
   return {
     object: 'whatsapp_business_account',
@@ -203,7 +249,10 @@ function buildEchoPayload(messageId = nextExternalId()) {
   };
 }
 
-function buildAccountUpdatePayload() {
+function buildAccountUpdatePayload(
+  event = 'PARTNER_REMOVED',
+  phoneNumber = '15551234567',
+) {
   return {
     object: 'whatsapp_business_account',
     entry: [
@@ -213,8 +262,8 @@ function buildAccountUpdatePayload() {
           {
             field: 'account_update',
             value: {
-              phone_number: '15551234567',
-              event: 'PARTNER_REMOVED',
+              phone_number: phoneNumber,
+              event,
             },
           },
         ],
@@ -288,6 +337,7 @@ beforeAll(async () => {
   await db.insert(whatsappConnections).values({
     ptId,
     phoneNumberId: PHONE_NUMBER_ID,
+    displayPhoneNumber: '15551234567',
     wabaId: 'WABA_ID',
     status: 'active',
   });
@@ -527,7 +577,7 @@ describe('POST /api/webhooks/whatsapp — unknown phone_number_id', () => {
 });
 
 describe('POST /api/webhooks/whatsapp — non-text message type', () => {
-  it('skips non-text messages, returns 200, emits nothing', async () => {
+  it('does not persist the body but still stamps the 24h service window', async () => {
     const sendSpy = vi
       .spyOn(inngest, 'send')
       .mockResolvedValue({ ids: [] } as never);
@@ -540,7 +590,103 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
       .where(eq(messages.ptId, ptId));
     expect(rows).toHaveLength(0);
     expect(sendSpy).not.toHaveBeenCalled();
+
+    const ps = await db
+      .select()
+      .from(patients)
+      .where(and(eq(patients.ptId, ptId), eq(patients.waId, WA_ID)));
+    expect(ps).toHaveLength(1);
+
+    const cs = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    expect(cs).toHaveLength(1);
+    expect(cs[0].lastInboundAt).toBeInstanceOf(Date);
+    expect(Date.now() - cs[0].lastInboundAt!.getTime()).toBeLessThan(60_000);
   });
+
+  it('reopens a closed conversation on a media inbound', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    await POST(makePost(buildPayload({ messageId: nextExternalId() })));
+    const [conversation] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    await db
+      .update(conversations)
+      .set({ closedAt: new Date(Date.now() - 60_000), aiActive: false })
+      .where(eq(conversations.id, conversation.id));
+
+    await POST(
+      makePost(buildPayload({ messageType: 'image', timestamp: nowSeconds() })),
+    );
+
+    const [reopened] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversation.id));
+    expect(reopened.closedAt).toBeNull();
+    expect(reopened.aiActive).toBe(true);
+  });
+
+  it('does not reopen a closed conversation when Meta redelivers a media batch', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const payload = buildPayload({ messageType: 'image' });
+    await POST(makePost(payload));
+    const [conversation] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    // The PT closes the conversation after the media arrived; Meta then
+    // redelivers the whole batch (an unpersisted inbound has no external_id
+    // dedupe of its own).
+    await db
+      .update(conversations)
+      .set({
+        closedAt: new Date(),
+        aiActive: false,
+        escalationState: 'requested',
+      })
+      .where(eq(conversations.id, conversation.id));
+
+    await POST(makePost(payload));
+
+    const [afterRetry] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversation.id));
+    expect(afterRetry.closedAt).not.toBeNull();
+    expect(afterRetry.aiActive).toBe(false);
+    expect(afterRetry.escalationState).toBe('requested');
+  });
+
+  it.each(['reaction', 'system', 'request_welcome', 'unsupported'])(
+    'ignores a %s inbound: no client row, no conversation, no window bump',
+    async (messageType) => {
+      const sendSpy = vi
+        .spyOn(inngest, 'send')
+        .mockResolvedValue({ ids: [] } as never);
+
+      const res = await POST(
+        makePost(buildPayload({ messageType, timestamp: nowSeconds() })),
+      );
+      expect(res.status).toBe(200);
+
+      const ps = await db
+        .select()
+        .from(patients)
+        .where(eq(patients.ptId, ptId));
+      expect(ps).toHaveLength(0);
+
+      const cs = await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.ptId, ptId));
+      expect(cs).toHaveLength(0);
+      expect(sendSpy).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('POST /api/webhooks/whatsapp — conversation bump', () => {
@@ -634,7 +780,119 @@ describe('POST /api/webhooks/whatsapp — smb_app_state_sync', () => {
       .where(eq(conversations.ptId, ptId));
     expect(cs).toHaveLength(0);
   });
+
+  it('dedupes two address-book entries sharing a wa_id and still runs the rest of the batch', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const messageId = nextExternalId();
+
+    const res = await POST(
+      makePost(
+        buildContactSyncPayload(
+          [
+            {
+              phone_number: '069 123 4567',
+              wa_id: WA_ID,
+              full_name: 'Jane Old',
+            },
+            {
+              phone_number: '+355 69 123 4567',
+              wa_id: WA_ID,
+              full_name: 'Jane New',
+            },
+          ],
+          { withMessageId: messageId },
+        ),
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    const contacts = await db
+      .select()
+      .from(whatsappContacts)
+      .where(eq(whatsappContacts.ptId, ptId));
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]).toMatchObject({
+      waId: WA_ID,
+      phone: '+355 69 123 4567',
+      fullName: 'Jane New',
+    });
+
+    // The `messages` change after the colliding contact must still be applied.
+    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    expect(ms).toHaveLength(1);
+    expect(ms[0].externalId).toBe(messageId);
+  });
+
+  it('acks a contact that collides on the other unique index', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const messageId = nextExternalId();
+
+    const res = await POST(
+      makePost(
+        buildContactSyncPayload(
+          [
+            { phone_number: WA_ID, wa_id: WA_ID, full_name: 'Jane First' },
+            {
+              phone_number: WA_ID,
+              wa_id: '355690000001',
+              full_name: 'Jane Clash',
+            },
+          ],
+          { withMessageId: messageId },
+        ),
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    const contacts = await db
+      .select()
+      .from(whatsappContacts)
+      .where(eq(whatsappContacts.ptId, ptId));
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]).toMatchObject({ waId: WA_ID, fullName: 'Jane First' });
+
+    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    expect(ms).toHaveLength(1);
+  });
+
+  it('keeps upserting on phone when Meta sends no wa_id', async () => {
+    const res = await POST(
+      makePost(
+        buildContactSyncPayload([
+          { phone_number: WA_ID, full_name: 'Jane One' },
+          { phone_number: WA_ID, full_name: 'Jane Two' },
+        ]),
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    const contacts = await db
+      .select()
+      .from(whatsappContacts)
+      .where(eq(whatsappContacts.ptId, ptId));
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]).toMatchObject({ waId: WA_ID, fullName: 'Jane Two' });
+  });
 });
+
+/** Create the patient + conversation for WA_ID via one inbound text message. */
+async function seedConversationForWaId(): Promise<string> {
+  await POST(makePost(buildPayload({ messageId: nextExternalId() })));
+  const [conversation] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(eq(conversations.ptId, ptId));
+  return conversation.id;
+}
+
+function pauseEvents() {
+  return db
+    .select({ id: events.id })
+    .from(events)
+    .where(
+      and(eq(events.ptId, ptId), eq(events.type, 'conversation.ai_paused')),
+    );
+}
 
 describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
   it('mirrors a Business app reply as a PT message and pauses AI for two hours', async () => {
@@ -709,15 +967,123 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
     expect(ms).toHaveLength(1);
     expect(sendSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('does not advance the pause or re-emit for a redelivered echo', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const payload = buildEchoPayload(nextExternalId());
+
+    await POST(makePost(payload));
+    const [first] = await db
+      .select({ aiPausedUntil: conversations.aiPausedUntil })
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    expect(first.aiPausedUntil).toBeInstanceOf(Date);
+
+    await new Promise((r) => setTimeout(r, 15));
+    await POST(makePost(payload));
+
+    const [second] = await db
+      .select({ aiPausedUntil: conversations.aiPausedUntil })
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    expect(second.aiPausedUntil!.getTime()).toBe(
+      first.aiPausedUntil!.getTime(),
+    );
+    expect(await pauseEvents()).toHaveLength(1);
+  });
+
+  it('leaves an indefinite manual takeover hold untouched', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const conversationId = await seedConversationForWaId();
+    // Manual takeover: AI off with no pause reason (no scheduled resume).
+    await db
+      .update(conversations)
+      .set({ aiActive: false, aiPausedUntil: null, aiPauseReason: null })
+      .where(eq(conversations.id, conversationId));
+
+    const res = await POST(makePost(buildEchoPayload()));
+    expect(res.status).toBe(200);
+
+    const [after] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(after.aiActive).toBe(false);
+    expect(after.aiPausedUntil).toBeNull();
+    expect(after.aiPauseReason).toBeNull();
+    expect(await pauseEvents()).toHaveLength(0);
+
+    // The echo itself is still mirrored into the thread.
+    const ms = await db
+      .select({ role: messages.role })
+      .from(messages)
+      .where(and(eq(messages.ptId, ptId), eq(messages.role, 'pt')));
+    expect(ms).toHaveLength(1);
+  });
+
+  it('keeps an open escalation instead of clearing it to idle', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const conversationId = await seedConversationForWaId();
+    await db
+      .update(conversations)
+      .set({
+        aiActive: false,
+        aiPausedUntil: null,
+        aiPauseReason: null,
+        escalationState: 'requested',
+      })
+      .where(eq(conversations.id, conversationId));
+
+    const res = await POST(makePost(buildEchoPayload()));
+    expect(res.status).toBe(200);
+
+    const [after] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(after.escalationState).toBe('requested');
+    expect(after.aiPauseReason).toBeNull();
+    expect(await pauseEvents()).toHaveLength(0);
+  });
+
+  it('extends a still-current echo pause for a second, different echo', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    await POST(makePost(buildEchoPayload(nextExternalId())));
+    const [first] = await db
+      .select({ aiPausedUntil: conversations.aiPausedUntil })
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+
+    await new Promise((r) => setTimeout(r, 15));
+    await POST(makePost(buildEchoPayload(nextExternalId())));
+
+    const [second] = await db
+      .select({
+        aiPausedUntil: conversations.aiPausedUntil,
+        aiPauseReason: conversations.aiPauseReason,
+      })
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    expect(second.aiPausedUntil!.getTime()).toBeGreaterThan(
+      first.aiPausedUntil!.getTime(),
+    );
+    expect(second.aiPauseReason).toBe('whatsapp_business_app_echo');
+    expect(await pauseEvents()).toHaveLength(2);
+  });
 });
 
 describe('POST /api/webhooks/whatsapp — account_update', () => {
-  it('revokes the connection on PARTNER_REMOVED', async () => {
+  it.each([
+    ['PARTNER_REMOVED', 'partner_removed'],
+    ['DISABLED_UPDATE', 'account_disconnected'],
+    ['ACCOUNT_VIOLATION', 'account_disconnected'],
+    ['ACCOUNT_DELETED', 'account_disconnected'],
+  ])('revokes the connection on %s', async (event, reason) => {
     const sendSpy = vi
       .spyOn(inngest, 'send')
       .mockResolvedValue({ ids: [] } as never);
 
-    const res = await POST(makePost(buildAccountUpdatePayload()));
+    const res = await POST(makePost(buildAccountUpdatePayload(event)));
     expect(res.status).toBe(200);
 
     const [connection] = await db
@@ -731,10 +1097,78 @@ describe('POST /api/webhooks/whatsapp — account_update', () => {
         data: expect.objectContaining({
           ptId,
           connectionId: connection.id,
-          reason: 'partner_removed',
+          reason,
         }),
       }),
     );
+  });
+
+  // ACCOUNT_RESTRICTION also covers soft restrictions (lowered messaging tier,
+  // "cannot add a phone number") that leave sending working, so it must not take
+  // a healthy number offline.
+  it.each(['PHONE_NUMBER_ADDED', 'ACCOUNT_RESTRICTION'])(
+    'acks %s without revoking the connection',
+    async (event) => {
+      const sendSpy = vi
+        .spyOn(inngest, 'send')
+        .mockResolvedValue({ ids: [] } as never);
+
+      const res = await POST(makePost(buildAccountUpdatePayload(event)));
+      expect(res.status).toBe(200);
+
+      const [connection] = await db
+        .select()
+        .from(whatsappConnections)
+        .where(eq(whatsappConnections.ptId, ptId));
+      expect(connection.status).toBe('active');
+      expect(sendSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('revokes on PHONE_NUMBER_REMOVED when the payload names this number', async () => {
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
+
+    // Meta formats the number for display; the match is on digits.
+    const res = await POST(
+      makePost(
+        buildAccountUpdatePayload('PHONE_NUMBER_REMOVED', '+1 555-123-4567'),
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    const [connection] = await db
+      .select()
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+    expect(connection.status).toBe('revoked');
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'wa.connection.revoked',
+        data: expect.objectContaining({ reason: 'account_disconnected' }),
+      }),
+    );
+  });
+
+  it('leaves the connection active when PHONE_NUMBER_REMOVED names another number on the WABA', async () => {
+    const sendSpy = vi
+      .spyOn(inngest, 'send')
+      .mockResolvedValue({ ids: [] } as never);
+
+    const res = await POST(
+      makePost(
+        buildAccountUpdatePayload('PHONE_NUMBER_REMOVED', '15559990000'),
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    const [connection] = await db
+      .select()
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+    expect(connection.status).toBe('active');
+    expect(sendSpy).not.toHaveBeenCalled();
   });
 });
 

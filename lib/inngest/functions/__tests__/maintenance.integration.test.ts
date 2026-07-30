@@ -176,19 +176,23 @@ describe('conversation inactivity', () => {
       checkResumeOffer({ ptId, conversationId, patientId }),
     ).resolves.toEqual({ offer: true });
 
+    // A PT reply inside the idle window defers the offer rather than dropping
+    // it: the caller re-arms at `retryAt` (the reply + the 1h idle window).
+    const ptReplyAt = subMinutes(new Date(), 10);
     await db.insert(messages).values({
       ptId,
       conversationId,
       role: 'pt',
       channel: 'whatsapp',
       content: 'I am handling this',
-      createdAt: subMinutes(new Date(), 10),
+      createdAt: ptReplyAt,
     });
     await expect(
       checkResumeOffer({ ptId, conversationId, patientId }),
     ).resolves.toEqual({
       offer: false,
       reason: 'recent_pt_activity',
+      retryAt: addHours(ptReplyAt, 1).toISOString(),
     });
 
     await db
