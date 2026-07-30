@@ -59,6 +59,25 @@ describe('signUp', () => {
     });
   });
 
+  it('points the confirmation mail at the token-hash route', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.com');
+    signUpMock.mockResolvedValue({
+      data: { user: { id: 'pt-a' }, session: null },
+      error: null,
+    });
+
+    await expect(signUp(initial, credentials())).rejects.toThrow('REDIRECT:');
+
+    expect(signUpMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          emailRedirectTo: 'https://app.example.com/auth/confirm',
+        }),
+      }),
+    );
+    vi.unstubAllEnvs();
+  });
+
   it('rejects a short password without calling Supabase', async () => {
     const state = await signUp(initial, credentials('pt@biznesi.al', 'short'));
     expect(state.fieldErrors?.password?.[0]).toBe(t.auth.errors.passwordMin);

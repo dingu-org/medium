@@ -15,12 +15,13 @@ export const auth = {
     footerAction: 'Regjistrohu',
     wrong: 'Email ose fjalëkalim i pasaktë.',
     confirmHint: 'Konfirmo email-in për të aktivizuar llogarinë, pastaj hyr.',
-    // Shown when an emailed link fails at /auth/callback. The most common cause
-    // is opening the mail in another browser than the one that requested it —
-    // the PKCE verifier lives in that browser's cookies — so the banner always
-    // offers a fresh link.
-    linkFailed:
-      'Lidhja nuk funksionoi — ose ka skaduar, ose u hap në një shfletues tjetër nga ai që e kërkoi.',
+    // Shown when an emailed link fails. Email links verify server-side, so they
+    // now work in any browser or device — the old "open it where you asked for
+    // it" advice would send the PT down a dead end. Both banners offer a fresh
+    // link instead of naming a cause we cannot be sure of.
+    linkFailed: 'Lidhja nuk funksionoi. Kërko një lidhje të re për të vazhduar.',
+    linkExpired:
+      'Kjo lidhje ka skaduar ose është përdorur tashmë. Kërko një lidhje të re për të vazhduar.',
     linkFailedAction: 'Kërko një lidhje të re',
   },
 

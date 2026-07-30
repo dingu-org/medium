@@ -29,7 +29,10 @@ export async function requestPasswordReset(
 
   const supabase = await createServerClient();
   await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/reset-password`,
+    // /auth/confirm verifies a token hash, which — unlike the PKCE code the
+    // callback exchanges — carries no per-browser state, so the mail can be
+    // opened anywhere. It forwards a legacy `code` link to /auth/callback.
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirm?next=/reset-password`,
   });
 
   // Always render success — don't leak whether the email exists.

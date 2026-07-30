@@ -35,10 +35,17 @@ export const pwa = {
   pendingChangeFailed: 'Një ndryshim në pritje kërkon vëmendje.',
 
   // Install banner dismiss
-  dismissInstall: 'Hid kërkesën e instalimit',
+  dismissInstall: 'Mbyll kërkesën e instalimit',
 
   // Push permission onboarding banner
   pushPrompt: 'Aktivizo njoftimet për rezervime, anulime dhe kërkesa të reja.',
   pushEnable: 'Aktivizo',
-  dismissPush: 'Hid kërkesën e njoftimeve',
+  dismissPush: 'Mbyll kërkesën e njoftimeve',
+
+  // Queue / transport errors surfaced as toasts or in the failed-changes banner
+  queueFull:
+    'Shumë ndryshime në pritje. Lidhu me internetin para se të shtosh të tjera.',
+  storageUnavailable: 'Ky shfletues nuk i ruan dot ndryshimet jashtë linje.',
+  networkUnavailable: "S'u lidh dot me serverin.",
+  requestFailed: 'Kërkesa dështoi.',
 } as const;

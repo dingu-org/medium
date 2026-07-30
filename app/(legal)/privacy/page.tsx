@@ -1,216 +1,232 @@
-import type { ReactNode } from 'react';
+import type { Metadata } from 'next';
 import { disclosedAiProviderNames } from './ai-providers';
+import { LanguageSwitch, LegalSection } from '../legal-section';
 
-export const metadata = {
-  title: 'Privacy policy · Medium',
+export const metadata: Metadata = {
+  title: 'Politika e privatësisë · Medium',
   description:
-    'How Medium handles account, patient, WhatsApp, and scheduling data.',
+    'Si i trajton Medium të dhënat e llogarisë, të pacientëve, të WhatsApp-it dhe të takimeve.',
+  alternates: {
+    canonical: '/privacy',
+    languages: { sq: '/privacy', en: '/en/privacy' },
+  },
 };
 
-const updatedAt = 'July 30, 2026';
+const updatedAt = '30 korrik 2026';
 
+/** Canonical (Albanian) privacy policy. `/en/privacy` is the English reading
+ * copy kept for Meta App Review — same sections, same order, so the two can be
+ * diffed; edit both together. */
 export default function PrivacyPolicyPage() {
   return (
-    <article className="space-y-10">
+    <article lang="sq" className="space-y-10">
       <header className="space-y-3">
         <p className="text-muted-foreground text-sm">
-          Last updated: {updatedAt}
+          Përditësuar së fundi: {updatedAt}
         </p>
         <h1 className="font-heading text-3xl font-medium tracking-normal">
-          Privacy policy
+          Politika e privatësisë
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Medium helps physical therapists manage patient conversations and
-          appointments over WhatsApp. This policy explains what data we process,
-          why we process it, and how privacy requests are handled.
+          Medium i ndihmon fizioterapistët të menaxhojnë bisedat me pacientët
+          dhe takimet përmes WhatsApp-it. Kjo politikë shpjegon cilat të dhëna
+          përpunojmë, pse i përpunojmë dhe si trajtohen kërkesat për privatësi.
         </p>
+        <LanguageSwitch href="/en/privacy" lang="en" label="English version" />
       </header>
 
-      <PolicySection title="Roles">
+      <LegalSection title="Rolet">
         <p>
-          Each physical therapist or practice using Medium is the controller for
-          their patient data. Medium acts as a processor and handles that data
-          under instructions from the practice.
+          Çdo fizioterapist ose praktikë që përdor Medium është kontrolluesi i
+          të dhënave të pacientëve të vet. Medium vepron si përpunues dhe i
+          trajton ato të dhëna sipas udhëzimeve të praktikës.
         </p>
         <p>
-          For account data about the practice owner, Medium acts as controller
-          so we can provide, secure, and support the service.
+          Për të dhënat e llogarisë së pronarit të praktikës, Medium vepron si
+          kontrollues, që të mund ta ofrojë, ta sigurojë dhe ta mbështesë
+          shërbimin.
         </p>
-      </PolicySection>
+      </LegalSection>
 
-      <PolicySection title="Data we process">
+      <LegalSection title="Të dhënat që përpunojmë">
         <ul>
           <li>
-            Account data, such as email address, practice name, timezone, and
-            product settings.
+            Të dhëna të llogarisë, si adresa e email-it, emri i praktikës, zona
+            kohore dhe cilësimet e produktit.
           </li>
           <li>
-            WhatsApp connection data, such as phone number identifiers, WhatsApp
-            Business account identifiers, encrypted access tokens, quality
-            status, and template status.
+            Të dhëna të lidhjes me WhatsApp, si identifikuesit e numrit të
+            telefonit, identifikuesit e llogarisë WhatsApp Business, tokenat e
+            enkriptuar të aksesit, statusi i cilësisë dhe statusi i shablloneve.
           </li>
           <li>
-            Patient and appointment data, such as names, phone numbers,
-            conversations, messages, appointment times, appointment status,
-            notes, and reminder responses.
+            Të dhëna të pacientëve dhe të takimeve, si emrat, numrat e
+            telefonit, bisedat, mesazhet, orët e takimeve, statusi i takimeve,
+            shënimet dhe përgjigjet ndaj kujtesave.
           </li>
           <li>
-            PWA and device data, such as push subscription endpoints, service
-            worker state, and locally cached dashboard data used for offline
-            access.
+            Të dhëna të PWA-së dhe të pajisjes, si adresat e abonimit për
+            njoftime, gjendja e service worker-it dhe të dhënat e panelit të
+            ruajtura lokalisht për akses jashtë linje.
           </li>
           <li>
-            Billing and subscription data, such as the selected plan, billing
-            period, expiry and renewal dates, payment status, POK order
-            identifiers, amounts, and receipts. Medium does not store card
-            numbers, CVV codes, or other cardholder data — those are handled
-            directly by POK.
+            Të dhëna të faturimit dhe të abonimit, si plani i zgjedhur, periudha
+            e faturimit, datat e skadimit dhe të rinovimit, statusi i pagesës,
+            identifikuesit e porosive POK, shumat dhe faturat. Medium nuk ruan
+            numra kartash, kode CVV apo të dhëna të tjera të mbajtësit të kartës
+            — ato trajtohen drejtpërdrejt nga POK.
           </li>
           <li>
-            Operational data, such as audit logs, security logs, idempotency
-            records, delivery status, and aggregate product metrics.
+            Të dhëna operacionale, si regjistrat e auditimit, regjistrat e
+            sigurisë, të dhënat e idempotencës, statusi i dërgesave dhe metrikat
+            e përgjithshme të produktit.
           </li>
         </ul>
-      </PolicySection>
+      </LegalSection>
 
-      <PolicySection title="How we use data">
+      <LegalSection title="Si i përdorim të dhënat">
         <ul>
-          <li>To authenticate users and keep tenant data separated.</li>
-          <li>To receive, send, and display WhatsApp conversations.</li>
           <li>
-            To book, reschedule, cancel, remind, and confirm appointments.
+            Për të vërtetuar përdoruesit dhe për t&apos;i mbajtur të ndara të
+            dhënat e çdo praktike.
           </li>
           <li>
-            To let the practice review chats, take over conversations, and
-            manage availability.
+            Për të marrë, për të dërguar dhe për të shfaqur bisedat në WhatsApp.
           </li>
           <li>
-            To run AI-assisted scheduling and route conversations to a human
-            when needed.
+            Për të rezervuar, për të ricaktuar, për të anuluar, për të kujtuar
+            dhe për të konfirmuar takimet.
           </li>
           <li>
-            To secure the service, detect failures, prevent duplicate
-            processing, and maintain audit logs.
+            Për t&apos;i mundësuar praktikës të shohë bisedat, të marrë përsipër
+            bisedën dhe të menaxhojë oraret.
+          </li>
+          <li>
+            Për të kryer caktimin e takimeve me ndihmën e inteligjencës
+            artificiale dhe për t&apos;ia kaluar bisedën një njeriu kur duhet.
+          </li>
+          <li>
+            Për të siguruar shërbimin, për të zbuluar defektet, për të
+            parandaluar përpunimin e dyfishtë dhe për të mbajtur regjistrat e
+            auditimit.
           </li>
         </ul>
-      </PolicySection>
+      </LegalSection>
 
-      <PolicySection title="AI processing">
+      <LegalSection title="Përpunimi me inteligjencë artificiale">
         <p>
-          Production AI requests are routed through OpenRouter to{' '}
-          {disclosedAiProviderNames()} for scheduling-related responses, and any
-          of them may serve a given request. The app sends only the conversation
-          and scheduling context needed to answer the patient. The AI is
-          instructed not to diagnose, provide medical advice, handle
-          emergencies, or discuss legal, billing, or insurance matters.
+          Kërkesat e inteligjencës artificiale në prodhim kalojnë përmes
+          OpenRouter te {disclosedAiProviderNames()} për përgjigjet që lidhen me
+          caktimin e takimeve, dhe secili prej tyre mund t&apos;i shërbejë një
+          kërkese të dhënë. Aplikacioni dërgon vetëm bisedën dhe kontekstin e
+          takimeve që nevojiten për t&apos;i përgjigjur pacientit. Inteligjenca
+          artificiale është e udhëzuar të mos diagnostikojë, të mos japë
+          këshilla mjekësore, të mos trajtojë urgjencat dhe të mos diskutojë
+          çështje ligjore, faturimi apo sigurimesh.
         </p>
         <p>
-          Production requests use privacy controls that request zero data
-          retention and deny provider data collection where supported.
-          OpenRouter may retain request metadata, and AI processing may involve
-          infrastructure outside the European Economic Area.
+          Kërkesat në prodhim përdorin kontrolle privatësie që kërkojnë
+          mosruajtje të të dhënave dhe ndalojnë mbledhjen e të dhënave nga
+          ofruesit atje ku kjo mbështetet. OpenRouter mund të ruajë metadata të
+          kërkesave, dhe përpunimi me inteligjencë artificiale mund të përfshijë
+          infrastrukturë jashtë Zonës Ekonomike Evropiane.
         </p>
-      </PolicySection>
+      </LegalSection>
 
-      <PolicySection title="Payments">
+      <LegalSection title="Pagesat">
         <p>
-          POK (pokpay.io) processes card payments for paid plans. Card details
-          are entered with POK and are never received or stored by Medium.
-          Medium stores only the order reference, amount, currency, status, and
-          period returned by POK — the information needed to activate or renew
-          the plan and to show receipts.
+          POK (pokpay.io) përpunon pagesat me kartë për planet me pagesë. Të
+          dhënat e kartës futen te POK dhe nuk merren e nuk ruhen kurrë nga
+          Medium. Medium ruan vetëm referencën e porosisë, shumën, monedhën,
+          statusin dhe periudhën e kthyer nga POK — informacionin e nevojshëm
+          për të aktivizuar ose për të rinovuar planin dhe për të shfaqur
+          faturat.
         </p>
-      </PolicySection>
+      </LegalSection>
 
-      <PolicySection title="Subprocessors">
+      <LegalSection title="Nënpërpunuesit">
         <p>
-          Medium relies on a small set of service providers to operate the
-          product:
+          Medium mbështetet te një grup i vogël ofruesish shërbimi për ta
+          mbajtur produktin në punë:
         </p>
         <ul>
-          <li>Supabase for Postgres, authentication, and realtime data.</li>
-          <li>Vercel for hosting the Next.js app and server functions.</li>
           <li>
-            Inngest for background jobs, retries, and scheduled reminders.
+            Supabase për Postgres, për vërtetimin e identitetit dhe për të
+            dhënat në kohë reale.
           </li>
           <li>
-            Meta and WhatsApp for message delivery and WhatsApp Business account
-            integration.
+            Vercel për strehimin e aplikacionit Next.js dhe të funksioneve në
+            server.
           </li>
           <li>
-            OpenRouter, with {disclosedAiProviderNames()} as the upstream model
-            providers, for production AI inference.
+            Inngest për punët në sfond, për ripërpjekjet dhe për kujtesat e
+            planifikuara.
           </li>
           <li>
-            POK (pokpay.io), operated by Nebula, as the payment processor for
-            card payments.
+            Meta dhe WhatsApp për dërgimin e mesazheve dhe për integrimin me
+            llogarinë WhatsApp Business.
+          </li>
+          <li>
+            OpenRouter, me {disclosedAiProviderNames()} si ofruesit e modeleve
+            në rrjedhën e sipërme, për inferencën e inteligjencës artificiale në
+            prodhim.
+          </li>
+          <li>
+            POK (pokpay.io), i operuar nga Nebula, si përpunuesi i pagesave me
+            kartë.
           </li>
         </ul>
-        <p>We do not sell personal data.</p>
-      </PolicySection>
+        <p>Ne nuk i shesim të dhënat personale.</p>
+      </LegalSection>
 
-      <PolicySection title="Retention">
+      <LegalSection title="Ruajtja e të dhënave">
         <p>
-          Message retention is controlled per practice. The default retention
-          period is 90 days, and older messages are purged by a scheduled job.
-          Appointment, patient, account, and audit data are kept while needed to
-          provide the service, meet legal obligations, resolve disputes, and
-          maintain security. Aggregate anonymized metrics may be kept
-          indefinitely.
+          Ruajtja e mesazheve kontrollohet nga secila praktikë. Periudha e
+          parazgjedhur e ruajtjes është 90 ditë, dhe mesazhet më të vjetra
+          fshihen nga një punë e planifikuar. Të dhënat e takimeve, të
+          pacientëve, të llogarisë dhe të auditimit ruhen për aq kohë sa
+          nevojiten për të ofruar shërbimin, për të përmbushur detyrimet
+          ligjore, për të zgjidhur mosmarrëveshjet dhe për të ruajtur sigurinë.
+          Metrikat e përgjithshme dhe të anonimizuara mund të ruhen pa afat.
         </p>
-      </PolicySection>
+      </LegalSection>
 
-      <PolicySection title="Security">
+      <LegalSection title="Siguria">
         <p>
-          Medium uses tenant-scoped database rules, TLS in transit, encrypted
-          WhatsApp access tokens, audit logging for patient-data access, and
-          least-privilege application paths. Primary app data is hosted in
-          EU-region infrastructure where available.
+          Medium përdor rregulla të bazës së të dhënave të kufizuara për çdo
+          praktikë, TLS gjatë transmetimit, tokena të enkriptuar aksesi për
+          WhatsApp, regjistrim auditimi për aksesin te të dhënat e pacientëve
+          dhe rrugë aplikacioni me privilegjet më të vogla të nevojshme. Të
+          dhënat kryesore të aplikacionit strehohen në infrastrukturë në rajonin
+          e BE-së atje ku kjo është e mundur.
         </p>
-      </PolicySection>
+      </LegalSection>
 
-      <PolicySection title="Your choices and rights">
+      <LegalSection title="Zgjedhjet dhe të drejtat tuaja">
         <p>
-          Practices can update account and retention settings in the dashboard.
-          Patients should first contact their practice for access, correction,
-          deletion, or objection requests because the practice controls the
-          patient relationship.
+          Praktikat mund t&apos;i përditësojnë cilësimet e llogarisë dhe të
+          ruajtjes në panel. Pacientët duhet të kontaktojnë fillimisht praktikën
+          e tyre për kërkesa aksesi, korrigjimi, fshirjeje ose kundërshtimi,
+          sepse praktika e kontrollon marrëdhënien me pacientin.
         </p>
         <p>
-          Privacy requests can also be sent to klaididingu@gmail.com. During
-          early access, export and deletion requests may be handled manually
-          while product workflows are completed.
+          Kërkesat për privatësi mund të dërgohen edhe te klaididingu@gmail.com.
+          Gjatë aksesit të hershëm, kërkesat për eksport dhe fshirje mund të
+          trajtohen manualisht derisa të përfundojnë rrjedhat përkatëse në
+          produkt.
         </p>
-      </PolicySection>
+      </LegalSection>
 
-      <PolicySection title="Cookies and local storage">
+      <LegalSection title="Cookies dhe ruajtja lokale">
         <p>
-          Medium uses authentication cookies, service worker storage, IndexedDB,
-          and browser storage needed to keep users signed in, support offline
-          dashboard access, queue offline changes, and remember PWA state. The
-          current MVP does not use third-party marketing analytics cookies on
-          public pages before consent.
+          Medium përdor cookie vërtetimi, ruajtje nga service worker-i,
+          IndexedDB dhe ruajtje në shfletues, të nevojshme për t&apos;i mbajtur
+          përdoruesit të identifikuar, për të mbështetur aksesin jashtë linje te
+          paneli, për të vendosur në radhë ndryshimet jashtë linje dhe për të
+          kujtuar gjendjen e PWA-së. MVP-ja aktuale nuk përdor cookie analitike
+          apo marketingu të palëve të treta në faqet publike përpara pëlqimit.
         </p>
-      </PolicySection>
+      </LegalSection>
     </article>
-  );
-}
-
-function PolicySection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-3">
-      <h2 className="font-heading text-xl font-medium tracking-normal">
-        {title}
-      </h2>
-      <div className="text-muted-foreground space-y-3 text-sm leading-7 [&_li]:ml-5 [&_li]:list-disc">
-        {children}
-      </div>
-    </section>
   );
 }

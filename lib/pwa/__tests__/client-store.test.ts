@@ -11,6 +11,7 @@ import {
   IDBTransaction,
 } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { t } from '@/lib/i18n';
 
 function installBrowserStubs({ online = true } = {}) {
   const eventTarget = new EventTarget();
@@ -116,7 +117,7 @@ describe('PWA client mutation queue', () => {
         type: 'message.send',
         body: { clientMutationId: 'too-many' },
       }),
-    ).rejects.toThrow('Too many pending changes');
+    ).rejects.toThrow(t.pwa.queueFull);
   });
 
   it('replays pending mutations oldest-first and removes successes', async () => {
@@ -258,6 +259,8 @@ describe('PWA client mutation queue', () => {
     ]);
   });
 
+  // The browser's own "Failed to fetch" is English and lands verbatim in the
+  // failed-changes banner, so the queue stores our Albanian copy instead.
   it('queues thrown online requests as retryable instead of offline', async () => {
     installBrowserStubs({ online: true });
     vi.stubGlobal(
@@ -282,7 +285,7 @@ describe('PWA client mutation queue', () => {
       {
         id: 'message-retryable',
         status: 'pending',
-        lastError: 'Failed to fetch',
+        lastError: t.pwa.networkUnavailable,
       },
     ]);
   });

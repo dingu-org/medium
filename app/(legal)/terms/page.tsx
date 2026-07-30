@@ -1,231 +1,232 @@
-import type { ReactNode } from 'react';
+import type { Metadata } from 'next';
+import { LanguageSwitch, LegalSection } from '../legal-section';
 
-export const metadata = {
-  title: 'Terms of service · Medium',
+export const metadata: Metadata = {
+  title: 'Kushtet e shërbimit · Medium',
   description:
-    'Terms for using Medium, the WhatsApp scheduling assistant for practices.',
+    'Kushtet për përdorimin e Medium, asistentit të takimeve në WhatsApp për praktikat.',
+  alternates: {
+    canonical: '/terms',
+    languages: { sq: '/terms', en: '/en/terms' },
+  },
 };
 
-const updatedAt = 'July 14, 2026';
+const updatedAt = '14 korrik 2026';
 
+/** Canonical (Albanian) terms of service. `/en/terms` is the English reading
+ * copy kept for Meta App Review — same sections, same order, so the two can be
+ * diffed; edit both together. */
 export default function TermsPage() {
   return (
-    <article className="space-y-10">
+    <article lang="sq" className="space-y-10">
       <header className="space-y-3">
         <p className="text-muted-foreground text-sm">
-          Last updated: {updatedAt}
+          Përditësuar së fundi: {updatedAt}
         </p>
         <h1 className="font-heading text-3xl font-medium tracking-normal">
-          Terms of service
+          Kushtet e shërbimit
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          These terms govern access to Medium, a scheduling assistant that helps
-          practices manage WhatsApp conversations, appointments, reminders, and
-          related dashboard workflows.
+          Këto kushte rregullojnë aksesin te Medium, një asistent takimesh që i
+          ndihmon praktikat të menaxhojnë bisedat në WhatsApp, takimet, kujtesat
+          dhe rrjedhat përkatëse të punës në panel.
         </p>
+        <LanguageSwitch href="/en/terms" lang="en" label="English version" />
       </header>
 
-      <TermsSection title="Who may use Medium">
+      <LegalSection title="Kush mund ta përdorë Medium">
         <p>
-          Medium is for practices and business users, not for consumer or
-          patient self-service use. You must be allowed to act for the practice
-          you register and to connect the WhatsApp Business account you use with
-          Medium.
+          Medium është për praktikat dhe përdoruesit e biznesit, jo për përdorim
+          vetëshërbimi nga konsumatorët apo pacientët. Ju duhet të keni të
+          drejtën të veproni në emër të praktikës që regjistroni dhe të lidhni
+          llogarinë WhatsApp Business që përdorni me Medium.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Your responsibilities">
+      <LegalSection title="Përgjegjësitë tuaja">
         <ul>
           <li>
-            Provide accurate account, practice, availability, and WhatsApp
-            connection details.
+            Të jepni të dhëna të sakta për llogarinë, praktikën, oraret dhe
+            lidhjen me WhatsApp.
           </li>
           <li>
-            Keep your login credentials secure and notify us of unauthorized
-            access.
+            Të mbani të sigurta kredencialet e hyrjes dhe të na njoftoni për
+            akses të paautorizuar.
           </li>
           <li>
-            Obtain any patient permissions needed to communicate over WhatsApp.
+            Të merrni çdo leje të nevojshme nga pacientët për të komunikuar
+            përmes WhatsApp-it.
           </li>
           <li>
-            Review appointments, conversations, reminders, and escalations for
-            your practice.
+            Të shqyrtoni takimet, bisedat, kujtesat dhe kalimet te njeriu për
+            praktikën tuaj.
           </li>
           <li>
-            Comply with applicable privacy, healthcare, consumer, and messaging
-            laws.
+            Të respektoni ligjet e zbatueshme për privatësinë, kujdesin
+            shëndetësor, konsumatorët dhe mesazhet.
           </li>
         </ul>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="WhatsApp and third-party services">
+      <LegalSection title="WhatsApp dhe shërbimet e palëve të treta">
         <p>
-          Medium depends on Meta WhatsApp Business APIs, Supabase, Vercel,
-          Inngest, OpenRouter, OpenAI, and other infrastructure providers. Your
-          use of WhatsApp is also subject to Meta WhatsApp Business terms and
-          policies.
+          Medium varet nga API-të e Meta WhatsApp Business, Supabase, Vercel,
+          Inngest, OpenRouter, OpenAI dhe nga ofrues të tjerë infrastrukture.
+          Përdorimi juaj i WhatsApp-it i nënshtrohet gjithashtu kushteve dhe
+          politikave të Meta WhatsApp Business.
         </p>
         <p>
-          We are not responsible for outages, review delays, account
-          restrictions, template rejections, API changes, or pricing changes
-          from third-party providers.
+          Ne nuk jemi përgjegjës për ndërprerjet, vonesat në shqyrtim, kufizimet
+          e llogarive, refuzimet e shablloneve, ndryshimet e API-ve apo
+          ndryshimet e çmimeve nga ofruesit e palëve të treta.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="AI and clinical limits">
+      <LegalSection title="Inteligjenca artificiale dhe kufijtë klinikë">
         <p>
-          The Medium AI is designed for scheduling workflows only. It must not
-          be used for diagnosis, medical advice, emergency triage, legal advice,
-          billing disputes, or insurance decisions.
+          Inteligjenca artificiale e Medium është ndërtuar vetëm për rrjedhat e
+          caktimit të takimeve. Ajo nuk duhet përdorur për diagnozë, për
+          këshilla mjekësore, për triazh urgjencash, për këshilla ligjore, për
+          mosmarrëveshje faturimi apo për vendime sigurimesh.
         </p>
         <p>
-          You remain responsible for supervising the assistant, keeping a human
-          escalation path available, and correcting any incorrect or incomplete
-          appointment information.
+          Ju mbeteni përgjegjës për mbikëqyrjen e asistentit, për të mbajtur të
+          hapur një rrugë kalimi te njeriu dhe për të korrigjuar çdo informacion
+          të pasaktë ose të paplotë për takimet.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Patient data">
+      <LegalSection title="Të dhënat e pacientëve">
         <p>
-          For patient data, the practice is the controller and Medium is the
-          processor. You instruct Medium to process patient data only as needed
-          to provide the scheduling assistant, dashboard, reminders, support,
-          security, retention, and audit-log functions.
+          Për të dhënat e pacientëve, praktika është kontrolluesi dhe Medium
+          është përpunuesi. Ju e udhëzoni Medium t&apos;i përpunojë të dhënat e
+          pacientëve vetëm aq sa nevojitet për të ofruar asistentin e takimeve,
+          panelin, kujtesat, mbështetjen, sigurinë, ruajtjen e të dhënave dhe
+          funksionet e regjistrit të auditimit.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Service changes and availability">
+      <LegalSection title="Ndryshimet dhe disponueshmëria e shërbimit">
         <p>
-          Medium is an early-stage service. Features may change, be paused, or
-          be removed as the product improves or as third-party platform
-          requirements change. We aim to keep the service reliable, but we do
-          not guarantee uninterrupted availability.
+          Medium është një shërbim në fazë të hershme. Funksionet mund të
+          ndryshojnë, të pezullohen ose të hiqen ndërsa produkti përmirësohet
+          ose ndërsa ndryshojnë kërkesat e platformave të palëve të treta.
+          Synojmë ta mbajmë shërbimin të besueshëm, por nuk garantojmë
+          disponueshmëri të pandërprerë.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Acceptable use">
+      <LegalSection title="Përdorimi i pranueshëm">
         <ul>
           <li>
-            Do not use Medium for spam, deceptive messaging, harassment, or
-            unlawful content.
+            Mos e përdorni Medium për mesazhe të padëshiruara (spam), për
+            mesazhe mashtruese, për ngacmim ose për përmbajtje të paligjshme.
           </li>
           <li>
-            Do not attempt to bypass tenant isolation, rate limits,
-            authentication, or security controls.
+            Mos u përpiqni të anashkaloni izolimin mes praktikave, kufijtë e
+            shpeshtësisë, vërtetimin e identitetit ose kontrollet e sigurisë.
           </li>
           <li>
-            Do not upload malware or interfere with the operation of the
-            service.
+            Mos ngarkoni programe keqdashëse dhe mos ndërhyni në funksionimin e
+            shërbimit.
           </li>
           <li>
-            Do not use Medium to make emergency, diagnostic, legal, billing, or
-            insurance decisions.
+            Mos e përdorni Medium për vendime urgjence, diagnostikuese, ligjore,
+            faturimi apo sigurimesh.
           </li>
         </ul>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Plans and fees">
+      <LegalSection title="Planet dhe tarifat">
         <p>
-          Medium offers a free plan and a paid Solo plan. The Solo plan costs
-          2,500 ALL per month or 25,000 ALL per year (two months free),
-          VAT-inclusive. The current prices, billing periods, and plan limits
-          are shown in the app and may change with notice. You are responsible
-          for any additional taxes or third-party charges that apply to your use
-          unless a written agreement says otherwise.
+          Medium ofron një plan falas dhe një plan me pagesë Solo. Plani Solo
+          kushton 2.500 ALL në muaj ose 25.000 ALL në vit (dy muaj falas), me
+          TVSH-në të përfshirë. Çmimet aktuale, periudhat e faturimit dhe
+          kufijtë e planeve shfaqen në aplikacion dhe mund të ndryshojnë me
+          njoftim. Ju jeni përgjegjës për çdo taksë shtesë ose tarifë të palëve
+          të treta që zbatohet për përdorimin tuaj, përveç rasteve kur një
+          marrëveshje me shkrim përcakton ndryshe.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Prepaid periods and renewals">
+      <LegalSection title="Periudhat e parapaguara dhe rinovimet">
         <p>
-          Paid plans are prepaid for a fixed period of one month or twelve
-          months. This version has no automatic recurring subscription and does
-          not charge a saved payment method on its own — to continue after a
-          period ends, you pay again for a new period. A purchased plan runs
-          until the end of the period you paid for.
+          Planet me pagesë parapaguhen për një periudhë fikse prej një muaji ose
+          dymbëdhjetë muajsh. Ky version nuk ka abonim automatik të përsëritur
+          dhe nuk tarifon vetë një metodë pagese të ruajtur — për të vazhduar
+          pasi mbaron një periudhë, paguani sërish për një periudhë të re. Një
+          plan i blerë vlen deri në fund të periudhës që keni paguar.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Cancellation and refunds">
+      <LegalSection title="Anulimi dhe rimbursimet">
         <p>
-          You may stop using a paid plan at any time. Stopping does not refund
-          the current period; the plan remains active until the end of the
-          period you already paid for. This version does not offer refunds.
+          Ju mund ta ndaloni përdorimin e një plani me pagesë në çdo kohë.
+          Ndalimi nuk e rimburson periudhën aktuale; plani mbetet aktiv deri në
+          fund të periudhës që keni paguar tashmë. Ky version nuk ofron
+          rimbursime.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Expiry, grace, and downgrade">
+      <LegalSection title="Skadimi, toleranca dhe kalimi në planin falas">
         <p>
-          When a paid period ends without renewal, a 3-day grace period keeps
-          Solo benefits active. After the grace period, the account is
-          automatically downgraded to the free plan.
+          Kur një periudhë me pagesë përfundon pa rinovim, një periudhë
+          tolerance prej 3 ditësh i mban aktive përfitimet e planit Solo. Pas
+          periudhës së tolerancës, llogaria kalon automatikisht në planin falas.
         </p>
         <p>
-          A downgrade deletes no data. If the account has more active services
-          than the free plan allows, services beyond that limit are deactivated;
-          the oldest active service remains and can be swapped for another.
-          Message retention is clamped to the free plan maximum after a further
-          30-day grace period following the downgrade.
+          Kalimi në planin falas nuk fshin asnjë të dhënë. Nëse llogaria ka më
+          shumë shërbime aktive nga sa lejon plani falas, shërbimet përtej atij
+          kufiri çaktivizohen; shërbimi aktiv më i vjetër mbetet dhe mund të
+          zëvendësohet me një tjetër. Ruajtja e mesazheve kufizohet në
+          maksimumin e planit falas pas një periudhe tjetër tolerance prej 30
+          ditësh nga kalimi.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Plan limits">
+      <LegalSection title="Kufijtë e planit">
         <p>
-          Each plan includes a monthly limit on the number of conversations and
-          the number of reminders. When usage reaches 100% of a limit, the
-          assistant stops sending automated replies, sends a single handoff
-          message telling the patient that someone will follow up, and flags the
-          conversation for review. The practice&apos;s own inbox and manual
-          replies are never blocked by these limits.
+          Çdo plan përfshin një kufi mujor për numrin e bisedave dhe për numrin
+          e kujtesave. Kur përdorimi arrin 100% të një kufiri, asistenti ndalon
+          dërgimin e përgjigjeve automatike, dërgon një mesazh të vetëm kalimi
+          që i thotë pacientit se dikush do ta kontaktojë dhe e shënon bisedën
+          për shqyrtim. Kutia hyrëse e vetë praktikës dhe përgjigjet manuale nuk
+          bllokohen kurrë nga këta kufij.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Payments">
+      <LegalSection title="Pagesat">
         <p>
-          Card payments are processed by POK (pokpay.io). Card details are
-          entered with POK and never pass through or are stored by Medium.
+          Pagesat me kartë përpunohen nga POK (pokpay.io). Të dhënat e kartës
+          futen te POK dhe nuk kalojnë e nuk ruhen kurrë nga Medium.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Suspension and termination">
+      <LegalSection title="Pezullimi dhe ndërprerja">
         <p>
-          You may stop using Medium at any time. We may suspend or terminate
-          access if you breach these terms, create security or legal risk,
-          violate WhatsApp policies, or use the product in a way that could harm
-          patients, practices, Medium, or third-party platforms.
+          Ju mund ta ndaloni përdorimin e Medium në çdo kohë. Ne mund ta
+          pezullojmë ose ta ndërpresim aksesin nëse shkelni këto kushte, nëse
+          krijoni rrezik sigurie ose ligjor, nëse shkelni politikat e
+          WhatsApp-it ose nëse e përdorni produktin në një mënyrë që mund të
+          dëmtojë pacientët, praktikat, Medium ose platformat e palëve të treta.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Disclaimers and liability">
+      <LegalSection title="Përjashtimet e garancive dhe përgjegjësia">
         <p>
-          Medium is provided as available and without warranties to the fullest
-          extent permitted by law. We are not liable for indirect, incidental,
-          special, consequential, exemplary, or lost profit damages. Nothing in
-          these terms limits liability that cannot legally be limited.
+          Medium ofrohet ashtu siç është i disponueshëm dhe pa garanci, në masën
+          më të plotë të lejuar nga ligji. Ne nuk jemi përgjegjës për dëme
+          indirekte, aksidentale, të veçanta, pasuese, shembullore ose për
+          humbje fitimi. Asgjë në këto kushte nuk e kufizon përgjegjësinë që nuk
+          mund të kufizohet ligjërisht.
         </p>
-      </TermsSection>
+      </LegalSection>
 
-      <TermsSection title="Contact">
-        <p>Questions about these terms can be sent to klaididingu@gmail.com.</p>
-      </TermsSection>
+      <LegalSection title="Kontakt">
+        <p>
+          Pyetjet për këto kushte mund të dërgohen te klaididingu@gmail.com.
+        </p>
+      </LegalSection>
     </article>
-  );
-}
-
-function TermsSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-3">
-      <h2 className="font-heading text-xl font-medium tracking-normal">
-        {title}
-      </h2>
-      <div className="text-muted-foreground space-y-3 text-sm leading-7 [&_li]:ml-5 [&_li]:list-disc">
-        {children}
-      </div>
-    </section>
   );
 }
