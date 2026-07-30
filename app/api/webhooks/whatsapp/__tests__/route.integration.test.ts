@@ -17,6 +17,7 @@ import {
   events,
   messages,
   patients,
+  reminderDeliveries,
   reminderJobs,
   waMessageStatuses,
   whatsappConnections,
@@ -350,6 +351,9 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  // Survives its appointment by design (ON DELETE SET NULL), so deleting the
+  // patients below does not take it with them.
+  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.ptId, ptId));
   await db.delete(patients).where(eq(patients.ptId, ptId));
   await db.delete(whatsappContacts).where(eq(whatsappContacts.ptId, ptId));
   await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptId));
@@ -581,7 +585,10 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
     const sendSpy = vi
       .spyOn(inngest, 'send')
       .mockResolvedValue({ ids: [] } as never);
-    const res = await POST(makePost(buildPayload({ messageType: 'image' })));
+    const timestamp = nowSeconds();
+    const res = await POST(
+      makePost(buildPayload({ messageType: 'image', timestamp })),
+    );
     expect(res.status).toBe(200);
 
     const rows = await db
@@ -602,8 +609,28 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
       .from(conversations)
       .where(eq(conversations.ptId, ptId));
     expect(cs).toHaveLength(1);
-    expect(cs[0].lastInboundAt).toBeInstanceOf(Date);
-    expect(Date.now() - cs[0].lastInboundAt!.getTime()).toBeLessThan(60_000);
+    // The window belongs to the inbound, not to the moment Meta happened to
+    // deliver it to us.
+    expect(cs[0].lastInboundAt?.getTime()).toBe(Number(timestamp) * 1000);
+  });
+
+  it('does not extend the 24h window from a redelivered old media inbound', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const fresh = nowSeconds();
+    await POST(makePost(buildPayload({ messageType: 'image', timestamp: fresh })));
+
+    // Meta redelivers a batch containing an image the patient sent two days ago
+    // (an unpersisted inbound has no external_id dedupe of its own). Bumping to
+    // now() re-opened a service window that has in fact expired, so the PT's
+    // free-form reply would be rejected by Meta or billed as a new conversation.
+    const stale = String(Math.floor(Date.now() / 1000) - 2 * 86_400);
+    await POST(makePost(buildPayload({ messageType: 'image', timestamp: stale })));
+
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.ptId, ptId));
+    expect(conversation.lastInboundAt?.getTime()).toBe(Number(fresh) * 1000);
   });
 
   it('reopens a closed conversation on a media inbound', async () => {
@@ -1220,7 +1247,12 @@ async function seedReminderForWamid(opts: {
   jobStatus?: 'sent' | 'scheduled';
   deliveredAt?: Date | null;
   responseType?: 'confirm' | null;
-}): Promise<{ appointmentId: string; reminderJobId: string }> {
+}): Promise<{
+  appointmentId: string;
+  reminderJobId: string;
+  messageId: string;
+  conversationId: string;
+}> {
   const suffix = `${Date.now()}-${++externalIdCounter}`;
   const [patient] = await db
     .insert(patients)
@@ -1252,6 +1284,23 @@ async function seedReminderForWamid(opts: {
       templateId: crypto.randomUUID(),
     })
     .returning({ id: messages.id });
+  // A delivered reminder always has the per-wamid delivery facts behind it —
+  // those rows, not the job's scalar, are what the webhook guards read and what
+  // the plan quota counts.
+  if (opts.deliveredAt) {
+    await db.insert(waMessageStatuses).values({
+      ptId,
+      externalId: opts.wamid,
+      lastStatus: 'delivered',
+      deliveredAt: opts.deliveredAt,
+    });
+    await db.insert(reminderDeliveries).values({
+      ptId,
+      appointmentId: appointment.id,
+      externalId: opts.wamid,
+      deliveredAt: opts.deliveredAt,
+    });
+  }
   const [job] = await db
     .insert(reminderJobs)
     .values({
@@ -1265,7 +1314,12 @@ async function seedReminderForWamid(opts: {
       responseType: opts.responseType ?? null,
     })
     .returning({ id: reminderJobs.id });
-  return { appointmentId: appointment.id, reminderJobId: job.id };
+  return {
+    appointmentId: appointment.id,
+    reminderJobId: job.id,
+    messageId: message.id,
+    conversationId: conversation.id,
+  };
 }
 
 describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
@@ -1361,6 +1415,119 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
       .from(reminderJobs)
       .where(eq(reminderJobs.id, reminderJobId));
     expect(second.deliveredAt!.getTime()).toBe(firstStamp);
+
+    // ...and the metered fact the quota counts stays at one row for the one
+    // template Meta billed, however many times it reports the delivery.
+    const deliveries = await db
+      .select()
+      .from(reminderDeliveries)
+      .where(eq(reminderDeliveries.externalId, wamid));
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0].deliveredAt.getTime()).toBe(firstStamp);
+  });
+
+  /**
+   * A reschedule re-arms the same reminder_jobs row (it is unique per
+   * appointment) onto a NEW message, while `delivered_at` still holds the first
+   * cycle's delivery and nothing ever clears it.
+   */
+  async function rearmOntoSecondCycle(reminderJobId: string, conversationId: string) {
+    const wamid = nextExternalId();
+    const [message] = await db
+      .insert(messages)
+      .values({
+        ptId,
+        conversationId,
+        externalId: wamid,
+        role: 'ai',
+        channel: 'whatsapp',
+        content: 'Kujtesë (cikli 2)',
+        templateId: crypto.randomUUID(),
+      })
+      .returning({ id: messages.id });
+    await db
+      .update(reminderJobs)
+      .set({
+        status: 'sent',
+        sentAt: new Date(),
+        messageId: message.id,
+        responseType: null,
+        respondedAt: null,
+        responseMessageId: null,
+      })
+      .where(eq(reminderJobs.id, reminderJobId));
+    return wamid;
+  }
+
+  it('stamps the delivery of a second cycle over the previous one', async () => {
+    const firstWamid = nextExternalId();
+    const firstDelivery = new Date('2023-11-14T22:13:20.000Z');
+    const { reminderJobId, conversationId } = await seedReminderForWamid({
+      wamid: firstWamid,
+      deliveredAt: firstDelivery,
+    });
+    const secondWamid = await rearmOntoSecondCycle(reminderJobId, conversationId);
+
+    await POST(
+      makePost(
+        buildStatusesPayload([
+          { id: secondWamid, status: 'delivered', timestamp: '1800000000' },
+        ]),
+      ),
+    );
+
+    // Meta billed this second template separately; a `delivered_at IS NULL`
+    // guard swallowed it and the cycle stayed invisible to the plan quota.
+    const [job] = await db
+      .select({ deliveredAt: reminderJobs.deliveredAt })
+      .from(reminderJobs)
+      .where(eq(reminderJobs.id, reminderJobId));
+    expect(job.deliveredAt?.getTime()).toBe(1_800_000_000_000);
+
+    // The job scalar can only hold the later cycle, so the count comes from a
+    // row per delivered wamid — both billed templates, one appointment.
+    const deliveries = await db
+      .select({ externalId: reminderDeliveries.externalId })
+      .from(reminderDeliveries)
+      .where(eq(reminderDeliveries.ptId, ptId));
+    expect(deliveries.map((d) => d.externalId).sort()).toEqual(
+      [firstWamid, secondWamid].sort(),
+    );
+  });
+
+  it('flags a second cycle that failed even though the first was delivered', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const firstWamid = nextExternalId();
+    const { appointmentId, reminderJobId, conversationId } =
+      await seedReminderForWamid({
+        wamid: firstWamid,
+        deliveredAt: new Date('2023-11-14T22:13:20.000Z'),
+      });
+    const secondWamid = await rearmOntoSecondCycle(reminderJobId, conversationId);
+
+    await POST(
+      makePost(
+        buildStatusesPayload([
+          {
+            id: secondWamid,
+            status: 'failed',
+            errors: [{ code: 131049, title: 'Message undeliverable' }],
+          },
+        ]),
+      ),
+    );
+
+    const [job] = await db
+      .select({ status: reminderJobs.status })
+      .from(reminderJobs)
+      .where(eq(reminderJobs.id, reminderJobId));
+    expect(job.status).toBe('failed');
+    const failEvents = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+    expect(failEvents).toHaveLength(1);
+    expect(failEvents[0].payload).toMatchObject({ appointmentId });
   });
 
   it('marks the reminder failed and emits reminder.failed on a failed status', async () => {

@@ -67,7 +67,18 @@ export type PokClientConfig = {
   merchantId: string;
   keyId: string;
   keySecret: string;
+  /** Per-request deadline; see POK_REQUEST_TIMEOUT_MS. */
+  requestTimeoutMs?: number;
 };
+
+/**
+ * Node's fetch has no default timeout worth the name (~300s per request), and
+ * the reconcile cron polls up to SCAN_LIMIT orders sequentially every hour: one
+ * degraded POK response would push a single run past its own window, and the
+ * cron's `concurrency: 1` then silently drops the next hour's run. Every POK
+ * call is therefore bounded.
+ */
+const POK_REQUEST_TIMEOUT_MS = 10_000;
 
 export type CreateOrderArgs = {
   amountMinor: number;
@@ -107,6 +118,20 @@ function extractPokErrorCode(json: unknown): string | undefined {
 export function createPokClient(config: PokClientConfig): PokClient {
   const apiBase = config.apiBase.replace(/\/+$/, '');
   const { merchantId, keyId, keySecret } = config;
+  const timeoutMs = config.requestTimeoutMs ?? POK_REQUEST_TIMEOUT_MS;
+
+  /** fetch with the per-request deadline; a timeout surfaces as a PokError. */
+  async function pokFetch(url: string, init: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (error) {
+      const name = error instanceof Error ? error.name : '';
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        throw new PokError(`POK request timed out after ${timeoutMs}ms`);
+      }
+      throw error;
+    }
+  }
 
   // Private per-instance state. `expiresAtMs` is already skew-adjusted so the
   // reuse check is a plain `now < expiresAtMs`. `loginInFlight` collapses
@@ -115,7 +140,7 @@ export function createPokClient(config: PokClientConfig): PokClient {
   let loginInFlight: Promise<LoginResponse['data']> | null = null;
 
   async function performLogin(): Promise<LoginResponse['data']> {
-    const res = await fetch(`${apiBase}/auth/sdk/login`, {
+    const res = await pokFetch(`${apiBase}/auth/sdk/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keyId, keySecret }),
@@ -154,7 +179,7 @@ export function createPokClient(config: PokClientConfig): PokClient {
     retried = false,
   ): Promise<Response> {
     const token = await ensureToken();
-    const res = await fetch(`${apiBase}${path}`, {
+    const res = await pokFetch(`${apiBase}${path}`, {
       ...init,
       headers: {
         'Content-Type': 'application/json',

@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import {
   appointments,
   auditLog,
+  conversationDays,
   patients,
+  reminderDeliveries,
   whatsappContacts,
 } from '@/lib/db/schema';
 import {
@@ -38,10 +40,13 @@ function canonicalHash(row: Record<string, unknown>): string {
  * The same proof is mirrored into erasure_archive after the commit because
  * audit_log is cascade-deleted with the PT, and the compliance record has to
  * outlive an account closure.
- * NOT deleted: the `conversation_days` metering facts. Their patient/conversation
- * references are ON DELETE SET NULL (migration 0025), so the billing days survive
- * anonymised — otherwise erasing a patient would retroactively lower the month's
- * metered usage (lib/billing/usage.ts counts these rows).
+ * NOT deleted: the metering facts, `conversation_days` (0025) and
+ * `reminder_deliveries` (0026). Their patient/appointment references are ON
+ * DELETE SET NULL, so the billed days and deliveries survive anonymised —
+ * otherwise erasing a patient would retroactively lower the month's metered
+ * usage (lib/billing/usage.ts counts these rows) and hand back free quota that
+ * was already spent. Anything on those rows that still points at the patient is
+ * scrubbed in-tx below, because SET NULL only reaches declared foreign keys.
  * Idempotent: a missing patient is a no-op that writes and publishes nothing.
  */
 export async function erasePatient(input: {
@@ -63,7 +68,7 @@ export async function erasePatient(input: {
 
     const beforeStateHash = canonicalHash(patient);
 
-    const activeAppointments = await tx
+    const patientAppointments = await tx
       .select({
         id: appointments.id,
         ptId: appointments.ptId,
@@ -71,15 +76,15 @@ export async function erasePatient(input: {
         startsAt: appointments.startsAt,
         endsAt: appointments.endsAt,
         serviceType: appointments.serviceType,
+        status: appointments.status,
       })
       .from(appointments)
       .where(
-        and(
-          eq(appointments.ptId, ptId),
-          eq(appointments.patientId, patientId),
-          inArray(appointments.status, ['pending', 'confirmed']),
-        ),
+        and(eq(appointments.ptId, ptId), eq(appointments.patientId, patientId)),
       );
+    const activeAppointments = patientAppointments.filter(
+      (appt) => appt.status === 'pending' || appt.status === 'confirmed',
+    );
 
     const eventIds: string[] = [];
     for (const appt of activeAppointments) {
@@ -98,6 +103,37 @@ export async function erasePatient(input: {
     await tx
       .delete(whatsappContacts)
       .where(patientWhatsappContactsFilter(patient));
+
+    // Scrub the surviving metering rows. `first_message_id` is a bare uuid with
+    // no FK, so nothing nulls it for us, and it would leave a message id for a
+    // deleted message on a row that also carries pt_id + local_day — a residual
+    // identifier the moment that id shows up in a log or an earlier export.
+    await tx
+      .update(conversationDays)
+      .set({ firstMessageId: null })
+      .where(
+        and(
+          eq(conversationDays.ptId, ptId),
+          eq(conversationDays.patientId, patientId),
+        ),
+      );
+
+    // A wamid embeds the recipient's phone number, so the delivery row cannot
+    // keep it. Rewriting to `erased:<row id>` destroys the identifier while
+    // preserving the NOT NULL unique key the row is counted through; the
+    // appointment link itself goes to NULL via the FK when the cascade lands.
+    const appointmentIds = patientAppointments.map((appt) => appt.id);
+    if (appointmentIds.length > 0) {
+      await tx
+        .update(reminderDeliveries)
+        .set({ externalId: sql`'erased:' || ${reminderDeliveries.id}::text` })
+        .where(
+          and(
+            eq(reminderDeliveries.ptId, ptId),
+            inArray(reminderDeliveries.appointmentId, appointmentIds),
+          ),
+        );
+    }
 
     await tx.insert(auditLog).values({
       ptId,

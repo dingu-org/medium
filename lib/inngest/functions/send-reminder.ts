@@ -125,8 +125,16 @@ export async function recordShortNoticeSkip(args: {
     });
 }
 
+/**
+ * Write this run's outcome onto the job row. Guarded on `inngest_run_id`, like
+ * the read in `loadReminderAttempt`: the row is unique per appointment, so a
+ * stale run waking after a reschedule re-armed it would otherwise park the NEW
+ * cycle as `skipped/stale_run` and tell the PT a reminder that is about to go
+ * out was dropped. Returns whether the row still belongs to this run.
+ */
 async function markReminder(args: {
   appointmentId: string;
+  runId: string;
   status:
     | 'scheduled'
     | 'requeued'
@@ -137,8 +145,8 @@ async function markReminder(args: {
   attempts?: number;
   lastError?: string | null;
   skippedReason?: string | null;
-}): Promise<void> {
-  await db
+}): Promise<boolean> {
+  const updated = await db
     .update(reminderJobs)
     .set({
       status: args.status,
@@ -146,7 +154,14 @@ async function markReminder(args: {
       lastError: args.lastError,
       skippedReason: args.skippedReason,
     })
-    .where(eq(reminderJobs.appointmentId, args.appointmentId));
+    .where(
+      and(
+        eq(reminderJobs.appointmentId, args.appointmentId),
+        eq(reminderJobs.inngestRunId, args.runId),
+      ),
+    )
+    .returning({ id: reminderJobs.id });
+  return updated.length > 0;
 }
 
 /**
@@ -365,6 +380,46 @@ async function prepareReminderMessage(args: {
   });
 }
 
+/**
+ * Send the reminder template unless this message already carries a wamid. The
+ * check RE-READS `messages.external_id` instead of trusting the memoized
+ * prepare-reminder-message step: two runs for the same appointment (a booking
+ * plus a reschedule) both resolve the same message row, and the second one's
+ * memoized snapshot still says `external_id: null` long after the first one
+ * sent. Re-sending means two identical templates to the patient, two Meta
+ * charges, and only the last wamid on the row — so the first delivery's status
+ * callbacks resolve to no reminder job at all.
+ */
+export async function sendReminderTemplateOnce(args: {
+  messageId: string;
+  connectionId: string;
+  recipient: string;
+  templateName: string;
+  language: string;
+  variables: string[];
+}): Promise<string> {
+  const [current] = await db
+    .select({ externalId: messages.externalId })
+    .from(messages)
+    .where(eq(messages.id, args.messageId))
+    .limit(1);
+  if (current?.externalId) return current.externalId;
+
+  const result = await sendTemplate(
+    args.connectionId,
+    args.recipient,
+    args.templateName,
+    args.language,
+    args.variables,
+  );
+  if (!result.messageId) {
+    throw new Error(
+      'WhatsApp accepted the reminder without returning a message ID',
+    );
+  }
+  return result.messageId;
+}
+
 async function persistReminderDelivery(args: {
   appointmentId: string;
   messageId: string;
@@ -401,7 +456,7 @@ export async function recordReminderFailure(args: {
   error: string;
 }): Promise<void> {
   const eventId = await db.transaction(async (tx) => {
-    await tx
+    const written = await tx
       .insert(reminderJobs)
       .values({
         ptId: args.ptId,
@@ -419,7 +474,13 @@ export async function recordReminderFailure(args: {
           attempts: MAX_TEMPLATE_ATTEMPTS,
           lastError: args.error,
         },
-      });
+        // A failure belongs to the run that had the row. Without this a stale
+        // run's onFailure would fail the freshly re-armed cycle and push a
+        // PT-facing `reminder.failed` for a reminder still on its way.
+        setWhere: eq(reminderJobs.inngestRunId, args.runId),
+      })
+      .returning({ id: reminderJobs.id });
+    if (written.length === 0) return null;
     return appendBackgroundEvent(tx, {
       type: 'reminder.failed',
       data: {
@@ -429,25 +490,33 @@ export async function recordReminderFailure(args: {
       },
     });
   });
-  await tryPublishOutboxEvent(eventId);
+  if (eventId) await tryPublishOutboxEvent(eventId);
 }
 
 /** Same durable signal for the in-run give-up after MAX_TEMPLATE_ATTEMPTS. */
 async function recordReminderAttemptFailure(args: {
   ptId: string;
   appointmentId: string;
+  runId: string;
   attempts: number;
   reason: string;
 }): Promise<void> {
   const eventId = await db.transaction(async (tx) => {
-    await tx
+    const written = await tx
       .update(reminderJobs)
       .set({
         status: 'failed',
         attempts: args.attempts,
         lastError: args.reason,
       })
-      .where(eq(reminderJobs.appointmentId, args.appointmentId));
+      .where(
+        and(
+          eq(reminderJobs.appointmentId, args.appointmentId),
+          eq(reminderJobs.inngestRunId, args.runId),
+        ),
+      )
+      .returning({ id: reminderJobs.id });
+    if (written.length === 0) return null;
     return appendBackgroundEvent(tx, {
       type: 'reminder.failed',
       data: {
@@ -457,7 +526,7 @@ async function recordReminderAttemptFailure(args: {
       },
     });
   });
-  await tryPublishOutboxEvent(eventId);
+  if (eventId) await tryPublishOutboxEvent(eventId);
 }
 
 export const sendReminder = inngest.createFunction(
@@ -569,9 +638,10 @@ export const sendReminder = inngest.createFunction(
       );
 
       if (state.kind === 'skipped') {
-        await step.run(`record-reminder-skip-${attempt}`, () =>
+        const marked = await step.run(`record-reminder-skip-${attempt}`, () =>
           markReminder({
             appointmentId,
+            runId,
             status:
               state.reason === 'appointment_cancelled'
                 ? 'cancelled'
@@ -580,6 +650,9 @@ export const sendReminder = inngest.createFunction(
             skippedReason: state.reason,
           }),
         );
+        // Another run owns the row now (a reschedule re-armed it): its cycle is
+        // the live one, so this run leaves quietly rather than announcing a skip.
+        if (!marked) return { skipped: state.reason };
         await step.sendEvent(`emit-reminder-skipped-${attempt}`, {
           name: 'reminder.skipped',
           data: { ptId, appointmentId, reason: state.reason },
@@ -600,6 +673,7 @@ export const sendReminder = inngest.createFunction(
             recordReminderAttemptFailure({
               ptId,
               appointmentId,
+              runId,
               attempts: attempt,
               reason: state.reason,
             }),
@@ -609,6 +683,7 @@ export const sendReminder = inngest.createFunction(
         await step.run(`record-reminder-requeue-${attempt}`, () =>
           markReminder({
             appointmentId,
+            runId,
             status: 'requeued',
             attempts: attempt,
             lastError: state.reason,
@@ -636,27 +711,21 @@ export const sendReminder = inngest.createFunction(
           content,
         }),
       );
-      const externalId = await step.run('send-reminder-template', async () => {
-        if (message.externalId) return message.externalId;
-        const result = await sendTemplate(
-          state.context.connectionId!,
-          state.context.recipient!,
-          state.template.name,
-          state.template.language,
-          templateVariables({
+      const externalId = await step.run('send-reminder-template', () =>
+        sendReminderTemplateOnce({
+          messageId: message.id,
+          connectionId: state.context.connectionId!,
+          recipient: state.context.recipient!,
+          templateName: state.template.name,
+          language: state.template.language,
+          variables: templateVariables({
             template: state.template,
             patientName: state.context.patientName,
             practiceName: state.context.practiceName,
             localTime,
           }),
-        );
-        if (!result.messageId) {
-          throw new Error(
-            'WhatsApp accepted the reminder without returning a message ID',
-          );
-        }
-        return result.messageId;
-      });
+        }),
+      );
       await step.run('persist-reminder-delivery', () =>
         persistReminderDelivery({
           appointmentId,

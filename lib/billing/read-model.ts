@@ -7,6 +7,7 @@
 import { desc, eq, inArray, and, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { billingOrders, pts } from '@/lib/db/schema';
+import type { ApplyOrderResult } from './payments';
 import { resolveEffectivePlan } from './entitlements';
 import {
   EXPIRY_GRACE_DAYS,
@@ -217,6 +218,33 @@ export async function getBillingSnapshot(
     currentPeriod,
     price: soloPrice ? { monthly: soloPrice.monthly, yearly: soloPrice.yearly } : null,
   };
+}
+
+/** Banner tone for a post-redirect settle result; null renders nothing. */
+export type CheckoutBannerTone = 'paid' | 'pending' | 'failed';
+
+/**
+ * Pure + unit-tested. `not_found` reads as PENDING, never as failure: POK's
+ * read-after-write lag 404s an order for the first seconds after checkout, which
+ * is exactly when POK redirects the customer back here — telling a PT who has
+ * just paid that their payment failed is the worst possible reading of "POK told
+ * us nothing yet". The hourly reconcile settles it either way.
+ */
+export function checkoutBannerTone(
+  result: ApplyOrderResult,
+): CheckoutBannerTone | null {
+  switch (result) {
+    case 'unknown':
+      return null;
+    case 'applied':
+    case 'already_applied':
+      return 'paid';
+    case 'pending':
+    case 'not_found':
+      return 'pending';
+    case 'failed':
+      return 'failed';
+  }
 }
 
 export type CheckoutSlotKind = 'none' | 'upgrade' | 'switch' | 'reassure' | 'renew';

@@ -2,6 +2,7 @@ import { addDays, subHours } from 'date-fns';
 import {
   and,
   asc,
+  desc,
   eq,
   gt,
   gte,
@@ -12,7 +13,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
-import { db } from '@/lib/db';
+import { db, type DB, type DBTransaction } from '@/lib/db';
 import {
   appointments,
   messages,
@@ -23,15 +24,13 @@ import {
 import { getFreeSlotsInternal } from '@/lib/appointments/availability';
 import { cancelAppointment } from '@/lib/appointments/cancel';
 import { transitionAppointment } from '@/lib/appointments/state';
+import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import type {
   InboundMessage,
   OutboundMessage,
   ReminderTurnContext,
 } from '@/lib/conversation/types';
-import {
-  parseReminderResponse,
-  type ReminderResponseIntent,
-} from './parse-response';
+import { parseReminderResponse } from './parse-response';
 
 type ReminderResponseType = 'confirm' | 'cancel' | 'reschedule_requested';
 
@@ -51,7 +50,6 @@ type ReminderCandidate = {
   appointmentId: string;
   startsAt: Date;
   endsAt: Date;
-  serviceType: string | null;
   responseType:
     | 'confirm'
     | 'cancel'
@@ -68,22 +66,14 @@ export type ReminderHandlingResult =
   | { kind: 'outbound'; outbound: OutboundMessage }
   | { kind: 'fallback'; reminder: ReminderTurnContext };
 
-function formatAppointmentTime(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('sq-AL', {
-    timeZone: timezone,
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
-}
+/** Reads and writes that a caller may need to run inside its own transaction. */
+type Executor = DB | DBTransaction;
 
 async function findExistingReply(
   inbound: InboundMessage,
+  executor: Executor = db,
 ): Promise<OutboundMessage | null> {
-  const [existing] = await db
+  const [existing] = await executor
     .select({
       id: messages.id,
       conversationId: messages.conversationId,
@@ -109,8 +99,10 @@ async function findExistingReply(
 async function persistReminderReply(args: {
   inbound: InboundMessage;
   content: string;
+  executor?: Executor;
 }): Promise<OutboundMessage> {
-  const [inserted] = await db
+  const executor = args.executor ?? db;
+  const [inserted] = await executor
     .insert(messages)
     .values({
       ptId: args.inbound.ptId,
@@ -136,7 +128,7 @@ async function persistReminderReply(args: {
     });
 
   if (inserted?.replyToMessageId) return inserted as OutboundMessage;
-  const existing = await findExistingReply(args.inbound);
+  const existing = await findExistingReply(args.inbound, executor);
   if (existing) return existing;
   throw new Error('Reminder reply insert conflicted without an existing reply');
 }
@@ -150,7 +142,6 @@ async function loadReminderCandidates(
       appointmentId: appointments.id,
       startsAt: appointments.startsAt,
       endsAt: appointments.endsAt,
-      serviceType: appointments.serviceType,
       responseType: reminderJobs.responseType,
       responseMessageId: reminderJobs.responseMessageId,
       timezone: pts.timezone,
@@ -166,7 +157,13 @@ async function loadReminderCandidates(
         eq(reminderJobs.status, 'sent'),
         eq(appointments.ptId, inbound.ptId),
         eq(appointments.patientId, inbound.patientId),
-        inArray(appointments.status, ['pending', 'confirmed']),
+        // Still actionable, or already acted on by this very message: a retry
+        // that lost its reply has to resolve to the same candidate, and a
+        // cancellation this message applied has left `cancelled` behind.
+        or(
+          inArray(appointments.status, ['pending', 'confirmed']),
+          eq(reminderJobs.responseMessageId, inbound.id),
+        ),
         eq(messages.conversationId, inbound.conversationId),
         // Bound on the inbound's own timestamp, not wall clock, so Inngest
         // retries of the same message resolve to the same candidate set.
@@ -218,6 +215,51 @@ function reminderTurnContext(
   };
 }
 
+/**
+ * How far ahead of this message to look for a newer opt-state instruction. A
+ * conversation that ran on for this many messages has moved past the switch the
+ * patient flipped, and the bound keeps the lookahead a constant-cost query.
+ */
+const OPT_STATE_LOOKAHEAD_MESSAGES = 20;
+
+/**
+ * Whether a newer patient message already asks for the opposite opt state.
+ *
+ * Inngest's per-conversation concurrency bounds parallelism but promises no
+ * FIFO, so a rapid "NDAL" → "AKTIVIZO" pair can run in either order and the
+ * older message would decide. The webhook commits every inbound before it
+ * enqueues the job (app/api/webhooks/whatsapp/route.ts), so the messages carry
+ * the true order: skipping the write when a newer instruction contradicts it
+ * makes both runs converge on the newest message's state whichever way round
+ * they execute. The newer message's own run still applies it.
+ */
+async function optStateSuperseded(args: {
+  inbound: InboundMessage;
+  intent: 'opt_out' | 'opt_in';
+}): Promise<boolean> {
+  const later = await db
+    .select({ content: messages.content })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.ptId, args.inbound.ptId),
+        eq(messages.conversationId, args.inbound.conversationId),
+        eq(messages.role, 'patient'),
+        gt(messages.createdAt, args.inbound.occurredAt),
+      ),
+    )
+    .orderBy(desc(messages.createdAt))
+    .limit(OPT_STATE_LOOKAHEAD_MESSAGES);
+
+  for (const message of later) {
+    const intent = parseReminderResponse(message.content);
+    if (intent === 'opt_out' || intent === 'opt_in') {
+      return intent !== args.intent;
+    }
+  }
+  return false;
+}
+
 async function setReminderOptOut(inbound: InboundMessage): Promise<void> {
   await db
     .update(patients)
@@ -235,8 +277,11 @@ async function setReminderOptOut(inbound: InboundMessage): Promise<void> {
  * deliberately no PT-side toggle. Gated on `IS NOT NULL` so an AKTIVIZO from a
  * patient who never opted out writes nothing; the boolean picks the reply.
  */
-async function clearReminderOptOut(inbound: InboundMessage): Promise<boolean> {
-  const cleared = await db
+async function clearReminderOptOut(
+  inbound: InboundMessage,
+  executor: Executor = db,
+): Promise<boolean> {
+  const cleared = await executor
     .update(patients)
     .set({ reminderOptedOutAt: null })
     .where(
@@ -305,7 +350,11 @@ async function handleOptOut(args: {
   inbound: InboundMessage;
   candidate?: ReminderCandidate;
 }): Promise<OutboundMessage> {
-  await setReminderOptOut(args.inbound);
+  if (
+    !(await optStateSuperseded({ inbound: args.inbound, intent: 'opt_out' }))
+  ) {
+    await setReminderOptOut(args.inbound);
+  }
   if (args.candidate) {
     await recordReminderResponse({
       candidate: args.candidate,
@@ -326,12 +375,24 @@ async function handleOptOut(args: {
 async function handleOptIn(args: {
   inbound: InboundMessage;
 }): Promise<OutboundMessage> {
-  const restored = await clearReminderOptOut(args.inbound);
-  return persistReminderReply({
+  const superseded = await optStateSuperseded({
     inbound: args.inbound,
-    content: restored
-      ? 'Kujtesat automatike të takimeve u riaktivizuan. Do t’ju kujtojmë sërish takimet e ardhshme. Nëse doni t’i ndalni, na shkruani NDAL.'
-      : 'Kujtesat automatike të takimeve janë tashmë aktive për ju. Nëse doni t’i ndalni, na shkruani NDAL.',
+    intent: 'opt_in',
+  });
+  // One unit of work: a commit that cleared the opt-out but lost its reply
+  // would leave the retry with nothing to restore, so the patient who just came
+  // back would be told reminders were already on.
+  return db.transaction(async (tx) => {
+    const restored = superseded
+      ? false
+      : await clearReminderOptOut(args.inbound, tx);
+    return persistReminderReply({
+      inbound: args.inbound,
+      executor: tx,
+      content: restored
+        ? 'Kujtesat automatike të takimeve u riaktivizuan. Do t’ju kujtojmë sërish takimet e ardhshme. Nëse doni t’i ndalni, na shkruani NDAL.'
+        : 'Kujtesat automatike të takimeve janë tashmë aktive për ju. Nëse doni t’i ndalni, na shkruani NDAL.',
+    });
   });
 }
 
@@ -353,7 +414,6 @@ async function handleReschedule(args: {
       (args.candidate.endsAt.getTime() - args.candidate.startsAt.getTime()) /
         60_000,
     ),
-    serviceType: args.candidate.serviceType ?? undefined,
     excludeAppointmentId: args.candidate.appointmentId,
   });
   const currentStart = args.candidate.startsAt.toISOString();
@@ -379,14 +439,19 @@ async function handleReschedule(args: {
 }
 
 function chooseCandidate(args: {
-  intent: ReminderResponseIntent | null;
+  inboundId: string;
   candidates: ReminderCandidate[];
 }):
   | { kind: 'candidate'; candidate: ReminderCandidate }
   | { kind: 'fallback'; reminder: ReminderTurnContext }
   | { kind: 'none' } {
   const unresponded = args.candidates.filter(
-    (candidate) => !candidate.responseMessageId && !candidate.responseType,
+    (candidate) =>
+      (!candidate.responseMessageId && !candidate.responseType) ||
+      // Answered by this same message: the transition committed and the reply
+      // did not, so a retry must land on the candidate it already handled
+      // instead of falling through to `none` and never answering the patient.
+      candidate.responseMessageId === args.inboundId,
   );
   const rescheduleFollowups = args.candidates.filter(
     (candidate) => candidate.responseType === 'reschedule_requested',
@@ -394,17 +459,7 @@ function chooseCandidate(args: {
   const pool = unresponded.length > 0 ? unresponded : rescheduleFollowups;
 
   if (pool.length === 1) {
-    const reason =
-      pool[0].responseType === 'reschedule_requested'
-        ? 'reschedule_followup'
-        : 'unclear_reply';
-    return {
-      kind: 'candidate',
-      candidate: pool[0],
-      ...(args.intent
-        ? {}
-        : { reminder: reminderTurnContext(reason, pool[0]) }),
-    };
+    return { kind: 'candidate', candidate: pool[0] };
   }
   if (pool.length > 1) {
     return {
@@ -426,7 +481,7 @@ async function handleReminderResponseUnlocked(args: {
   const candidates = await loadReminderCandidates(args.inbound);
 
   if (intent === 'opt_out') {
-    const choice = chooseCandidate({ intent, candidates });
+    const choice = chooseCandidate({ inboundId: args.inbound.id, candidates });
     return {
       kind: 'outbound',
       outbound: await handleOptOut({
@@ -447,7 +502,7 @@ async function handleReminderResponseUnlocked(args: {
     };
   }
 
-  const choice = chooseCandidate({ intent, candidates });
+  const choice = chooseCandidate({ inboundId: args.inbound.id, candidates });
   if (choice.kind === 'fallback') return choice;
   if (choice.kind === 'none') return { kind: 'none' };
 

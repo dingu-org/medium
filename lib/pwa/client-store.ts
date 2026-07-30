@@ -2,6 +2,7 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { t } from '@/lib/i18n';
+import { clearPushOptOut } from '@/lib/pwa/push-client';
 
 export const PWA_QUEUE_CHANGED_EVENT = 'medium:pwa-queue-changed';
 export const PWA_MUTATION_SYNCED_EVENT = 'medium:pwa-mutation-synced';
@@ -290,6 +291,10 @@ export function subscribeToQueueChanges(listener: () => void): () => void {
 export async function clearPwaData(): Promise<void> {
   const db = await browserDb();
   await Promise.all([db.clear('pendingMutations'), clearCaches()]);
+  // The push opt-out marker is scoped to the browser, not the signed-out PT
+  // (see its docstring in push-client.ts) — drop it here or it silently
+  // withholds push from whichever PT signs in next on this device.
+  clearPushOptOut();
   emit(PWA_QUEUE_CHANGED_EVENT);
 }
 

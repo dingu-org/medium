@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  checkoutBannerTone,
   resolveCheckoutSlot,
   type BillingSnapshot,
 } from '@/lib/billing/read-model';
@@ -105,5 +106,26 @@ describe('resolveCheckoutSlot', () => {
       periods: ['monthly', 'yearly'],
       defaultPeriod: 'yearly',
     });
+  });
+});
+
+describe('checkoutBannerTone', () => {
+  it('celebrates only a settled payment', () => {
+    expect(checkoutBannerTone('applied')).toBe('paid');
+    expect(checkoutBannerTone('already_applied')).toBe('paid');
+  });
+
+  it('treats a POK 404 as pending, not as a failed payment', () => {
+    // POK's read-after-write lag 404s the order for the first seconds after
+    // checkout — exactly when POK redirects the customer back to this page. A
+    // red "payment failed" for a PT who has just paid is the worst reading of
+    // "POK has not caught up yet"; the reconcile cron settles it either way.
+    expect(checkoutBannerTone('not_found')).toBe('pending');
+    expect(checkoutBannerTone('pending')).toBe('pending');
+  });
+
+  it('shows failure only for a POK-confirmed failure, and nothing for unknown', () => {
+    expect(checkoutBannerTone('failed')).toBe('failed');
+    expect(checkoutBannerTone('unknown')).toBeNull();
   });
 });

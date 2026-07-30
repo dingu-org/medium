@@ -75,7 +75,10 @@ export const settings = {
   exportFailed: 'Eksporti dështoi. Provo sërish.',
 
   // Assistant identity fields (assistant screen)
-  aiGreetingPlaceholder: 'Ej! Faleminderit që na shkruat…',
+  // PTs copy the placeholder verbatim, so it has to model the formal 'Ju' the
+  // assistant is required to use with patients.
+  aiGreetingPlaceholder:
+    'Përshëndetje! Faleminderit që na shkruat. Si mund t’ju ndihmojmë?',
   aiEscalationHint: 'Kur pacienti dërgon këtë fjalë, AI ia kalon bisedën ty.',
 
   // Account & data screen (Phase 15 · task 12)

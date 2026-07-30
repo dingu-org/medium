@@ -1,10 +1,12 @@
 -- WHY: every tenant policy (0002 and the per-phase blocks in 0007/0011/0012/
 -- 0013/0016/0017/0020) was created `FOR ALL TO authenticated` with a symmetric
--- WITH CHECK, and Supabase's default privileges hand anon/authenticated
--- INSERT/UPDATE/DELETE on every table in `public`. The public schema is exposed
--- on /rest/v1 and the anon key ships in the browser bundle, so a PT holding
--- their own access token could write their own rows straight through PostgREST:
--- self-granting the paid plan (`pts.plan` / `pts.plan_lifetime`, which
+-- WITH CHECK, and anon/authenticated already hold INSERT/UPDATE/DELETE on every
+-- table in `public`. Those grants come from the repo, not from Supabase: the
+-- `GRANT ALL ON ALL TABLES` that scripts/db-reset.ts runs after migrating, and
+-- the per-table `GRANT ALL ON TABLE` in 0012/0013/0021/0022. The public schema is
+-- exposed on /rest/v1 and the anon key ships in the browser bundle, so a PT
+-- holding their own access token could write their own rows straight through
+-- PostgREST: self-granting the paid plan (`pts.plan` / `pts.plan_lifetime`, which
 -- lib/billing/entitlements.ts trusts), erasing their `audit_log` trail, raising
 -- `pts.retention_days` past the GDPR purge, or resetting the metered counters in
 -- `conversation_days` / `reminder_jobs`. The same channel let a tenant forge
@@ -14,11 +16,20 @@
 -- through Drizzle as the table owner (DATABASE_URL), and the supabase-js browser
 -- client is used only for auth and for Realtime `postgres_changes`, which needs
 -- SELECT only. So the tenant surface becomes read-only: revoke the write
--- privileges (plus the default privileges that would re-grant them on the next
--- CREATE TABLE) and narrow every `FOR ALL` policy to `FOR SELECT`, keeping the
+-- privileges and narrow every `FOR ALL` policy to `FOR SELECT`, keeping the
 -- existing per-tenant USING predicate so Realtime keeps delivering. This is the
 -- posture 0022 already chose for the `billing_orders` money ledger, now applied
 -- to the whole schema.
+--
+-- CONVENTION for every migration after this one: a new table gets
+-- `GRANT SELECT ON TABLE "x" TO anon, authenticated` (which still turns a denied
+-- read into zero rows rather than a 42501), never `GRANT ALL` — see the
+-- corrected notes in 0021/0022. scripts/db-reset.ts re-grants the same way.
+--
+-- The ALTER DEFAULT PRIVILEGES below is a no-op on the local Supabase image:
+-- pg_default_acl has no row for schema `public` there, so nothing re-grants
+-- writes on the next CREATE TABLE. It stays because hosted Supabase does ship
+-- that default and this must not depend on which one you are looking at.
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA "public" FROM anon, authenticated;--> statement-breakpoint
 ALTER DEFAULT PRIVILEGES IN SCHEMA "public" REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLES FROM anon, authenticated;--> statement-breakpoint
 

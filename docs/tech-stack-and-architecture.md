@@ -314,7 +314,10 @@ Before any product code is shipped:
    - Create a project in an EU region (Frankfurt recommended).
    - Enable RLS on every tenant-scoped table as it is created.
    - Configure Auth providers (email+password, Google OAuth).
-   - Set `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` env vars.
+   - Set `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` env vars.
+     - The `NEXT_PUBLIC_*` pair is what every auth client reads (`lib/supabase/env.ts` — middleware, the server client and the browser client). Omitting it throws `NEXT_PUBLIC_SUPABASE_URL is required` on every authenticated render; the unprefixed `SUPABASE_URL` alone is **not** enough.
+     - `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` stay unprefixed on purpose: they belong to the service-role client (`lib/supabase/service.ts`) and the scripts, and must never reach the client bundle.
+     - Rotation consequence: `NEXT_PUBLIC_*` are inlined at build time, so rotating the anon key needs a **redeploy** to take effect server-side — changing the env var alone leaves the old key baked into the running build.
 
 3. **Vercel**
    - Create the project, link the repo, set the EU deployment region for serverless functions (Frankfurt).

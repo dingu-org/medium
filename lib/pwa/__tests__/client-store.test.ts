@@ -24,6 +24,8 @@ function installBrowserStubs({ online = true } = {}) {
     }
   }
 
+  const localStorageMap = new Map<string, string>();
+
   vi.stubGlobal('indexedDB', new IDBFactory());
   vi.stubGlobal('IDBCursor', IDBCursor);
   vi.stubGlobal('IDBCursorWithValue', IDBCursorWithValue);
@@ -46,8 +48,15 @@ function installBrowserStubs({ online = true } = {}) {
       ready: Promise.resolve({ sync: { register: syncRegister } }),
     },
   });
+  // clearPwaData() also drops the push opt-out marker (lib/pwa/push-client.ts),
+  // which lives here.
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => localStorageMap.get(key) ?? null,
+    setItem: (key: string, value: string) => void localStorageMap.set(key, value),
+    removeItem: (key: string) => void localStorageMap.delete(key),
+  });
 
-  return { syncRegister };
+  return { syncRegister, localStorageMap };
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
@@ -320,5 +329,19 @@ describe('PWA client mutation queue', () => {
     });
     expect(queued).not.toHaveProperty('headers');
     expect(JSON.stringify(queued).toLowerCase()).not.toContain('cookie');
+  });
+
+  // W2 regression: OPT_OUT_KEY is scoped to the browser, not the signed-out PT
+  // (lib/pwa/push-client.ts). Both sign-out flows call clearPwaData(), so it
+  // must drop that marker too, or it silently withholds push from whichever PT
+  // signs in next on the same device.
+  it('clears the push opt-out marker on sign-out', async () => {
+    const { localStorageMap } = installBrowserStubs();
+    localStorageMap.set('medium:push-opted-out', '1');
+    const { clearPwaData } = await import('@/lib/pwa/client-store');
+
+    await clearPwaData();
+
+    expect(localStorageMap.has('medium:push-opted-out')).toBe(false);
   });
 });

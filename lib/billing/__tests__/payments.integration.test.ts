@@ -173,6 +173,31 @@ describe('applyOrderOutcome', () => {
     expect(await countPaymentEvents()).toBe(0);
   });
 
+  it('never overwrites a settled payment with a stale failure snapshot', async () => {
+    // Two settles racing on different POK snapshots: this one read 'created',
+    // then a concurrent settle observing the capture paid the order out before
+    // this one got to write. An unguarded write would stamp 'failed' over a
+    // plan the PT already paid for — and every later settle short-circuits on
+    // that status, so nothing would ever repair it.
+    const pokOrderId = await seedCreatedOrder('monthly');
+    mockGetOrder.mockImplementation(async () => {
+      await db
+        .update(billingOrders)
+        .set({ status: 'paid', paidAt: new Date() })
+        .where(eq(billingOrders.pokOrderId, pokOrderId));
+      return { id: pokOrderId, isCanceled: true };
+    });
+
+    const result = await applyOrderOutcome(pokOrderId);
+
+    expect(result).toBe('already_applied');
+    const [order] = await db
+      .select()
+      .from(billingOrders)
+      .where(eq(billingOrders.pokOrderId, pokOrderId));
+    expect(order.status).toBe('paid');
+  });
+
   it('marks the row failed on a terminal failure status', async () => {
     const pokOrderId = await seedCreatedOrder('monthly');
     mockGetOrder.mockResolvedValue({ id: pokOrderId, isCanceled: true });

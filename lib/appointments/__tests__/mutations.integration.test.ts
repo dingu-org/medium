@@ -372,6 +372,8 @@ describe('appointment mutations', () => {
       claimed: 1,
       published: 1,
       failed: 0,
+      rejected: 0,
+      deadLettered: 0,
     });
 
     const [published] = await db

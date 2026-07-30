@@ -33,12 +33,14 @@ type AvailabilityQueryRow = {
   appointments: BusyPeriodRow[];
 };
 
+// No service filter: availability_rules are practice-wide, so a service only
+// ever decides how long a slot is (`durationMinutes`). Accepting a service name
+// here would promise a filter the query cannot honour.
 type GetFreeSlotsInput = {
   ptId: string;
   start: Date;
   end: Date;
   durationMinutes?: number;
-  serviceType?: string;
 };
 
 type InternalGetFreeSlotsInput = GetFreeSlotsInput & {
@@ -101,17 +103,22 @@ function timeToSeconds(value: string): number {
   return (hours ?? 0) * 3600 + (minutes ?? 0) * 60 + (seconds ?? 0);
 }
 
-function localDateTime(
+/**
+ * The instant a wall time maps to, with a spring-forward gap resolved the way
+ * `Date` resolves it: forward to the moment the clock jumps to (Europe/Tirane
+ * skips 02:00 → 03:00 on the last Sunday of March).
+ */
+function wallDateTime(
   day: TZDate,
   secondsSinceMidnight: number,
   timezone: string,
-): TZDate | null {
+): { instant: TZDate; exact: boolean } {
   const targetDay = addDays(day, Math.floor(secondsSinceMidnight / 86_400));
   const wallSeconds = secondsSinceMidnight % 86_400;
   const hours = Math.floor(wallSeconds / 3600);
   const minutes = Math.floor((wallSeconds % 3600) / 60);
   const seconds = wallSeconds % 60;
-  const result = new TZDate(
+  const instant = new TZDate(
     targetDay.getFullYear(),
     targetDay.getMonth(),
     targetDay.getDate(),
@@ -122,19 +129,28 @@ function localDateTime(
     timezone,
   );
 
-  // A spring-forward wall time is normalized by Date. Reject it instead of
-  // silently offering a different local time.
-  if (
-    result.getFullYear() !== targetDay.getFullYear() ||
-    result.getMonth() !== targetDay.getMonth() ||
-    result.getDate() !== targetDay.getDate() ||
-    result.getHours() !== hours ||
-    result.getMinutes() !== minutes ||
-    result.getSeconds() !== seconds
-  ) {
-    return null;
-  }
-  return result;
+  const exact =
+    instant.getFullYear() === targetDay.getFullYear() &&
+    instant.getMonth() === targetDay.getMonth() &&
+    instant.getDate() === targetDay.getDate() &&
+    instant.getHours() === hours &&
+    instant.getMinutes() === minutes &&
+    instant.getSeconds() === seconds;
+  return { instant, exact };
+}
+
+/**
+ * A wall time that exists, or null. Offers are built from this: a slot whose
+ * start does not exist locally would be announced at a time the patient's clock
+ * never shows, so it is dropped rather than moved.
+ */
+function localDateTime(
+  day: TZDate,
+  secondsSinceMidnight: number,
+  timezone: string,
+): TZDate | null {
+  const { instant, exact } = wallDateTime(day, secondsSinceMidnight, timezone);
+  return exact ? instant : null;
 }
 
 function sameWallTime(date: TZDate, secondsSinceMidnight: number): boolean {
@@ -346,17 +362,20 @@ export async function isSlotBookable(
   for (const day of [addDays(slotDay, -1), slotDay]) {
     for (const rule of snapshot.rules) {
       if (rule.weekday !== day.getDay()) continue;
-      const ruleStart = localDateTime(
+      // Bounds, not offers: a rule edge inside the spring-forward gap moves with
+      // the clock instead of dropping the rule. Rejecting it would close the
+      // practice for the whole day — every slot under a 02:00 rule would become
+      // unbookable on the one Sunday a year the clock skips 02:00.
+      const ruleStart = wallDateTime(
         day,
         timeToSeconds(rule.startTime),
         snapshot.timezone,
-      );
-      const ruleEnd = localDateTime(
+      ).instant;
+      const ruleEnd = wallDateTime(
         day,
         timeToSeconds(rule.endTime),
         snapshot.timezone,
-      );
-      if (!ruleStart || !ruleEnd) continue;
+      ).instant;
       if (
         ruleStart.getTime() <= input.startsAt.getTime() &&
         input.endsAt.getTime() <= ruleEnd.getTime()

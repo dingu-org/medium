@@ -11,12 +11,14 @@ import {
   messages,
   patients,
   pts,
+  reminderDeliveries,
   reminderJobs,
   whatsappContacts,
 } from '@/lib/db/schema';
 import {
   conversationDayKeys,
   getConversationUsage,
+  getReminderUsage,
 } from '@/lib/billing/usage';
 import { createServiceClient } from '@/lib/supabase/service';
 import { erasePatient } from '../erase';
@@ -63,9 +65,11 @@ beforeEach(async () => {
   await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
   // erasure_archive has no FK to pts, so it survives every other cleanup.
   await db.delete(erasureArchive).where(eq(erasureArchive.ptId, ptId));
-  // conversation_days outlives the patient by design (SET NULL), so it needs its
-  // own cleanup — deleting patients no longer takes it with them.
+  // conversation_days and reminder_deliveries outlive the patient by design
+  // (SET NULL), so they need their own cleanup — deleting patients no longer
+  // takes them with it.
   await db.delete(conversationDays).where(eq(conversationDays.ptId, ptId));
+  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.ptId, ptId));
   await db.delete(patients).where(eq(patients.ptId, ptId));
   await db.delete(whatsappContacts).where(eq(whatsappContacts.ptId, ptId));
   await db.delete(events).where(eq(events.ptId, ptId));
@@ -215,11 +219,55 @@ describe('erasePatient', () => {
     expect(days[0].conversationId).toBeNull();
     expect(days[0].localDay).toBe(localDay);
     expect(days[0].monthKey).toBe(monthKey);
+    // first_message_id is a bare uuid with no FK, so nothing nulls it for us:
+    // erasure has to scrub it by hand or the surviving row keeps pointing at the
+    // deleted message.
+    expect(days[0].firstMessageId).toBeNull();
 
     // ...and still counts, so erasing clients can't win back free-plan quota.
     const after = await getConversationUsage(ptId, now);
     expect(after.used).toBe(before.used);
     expect(after.monthKey).toBe(monthKey);
+  });
+
+  it('keeps the metered reminder delivery counting after erasure', async () => {
+    const wamid = `wamid.erase-${Date.now()}`;
+    const deliveredAt = new Date();
+    await db.insert(reminderDeliveries).values({
+      ptId,
+      appointmentId: confirmedApptId,
+      externalId: wamid,
+      deliveredAt,
+    });
+
+    const before = await getReminderUsage(ptId, deliveredAt);
+    expect(before.delivered).toBe(1);
+    expect(before.used).toBe(1);
+
+    expect(await erasePatient({ patientId, ptId })).toEqual({ erased: true });
+
+    // The scheduling row is patient data and goes with the appointment...
+    expect(
+      await db.select().from(reminderJobs).where(eq(reminderJobs.ptId, ptId)),
+    ).toHaveLength(0);
+
+    // ...but the billed delivery survives with nothing patient-linked left on
+    // it: the appointment reference is nulled by the FK and the wamid (which
+    // embeds the recipient's number) is rewritten.
+    const deliveries = await db
+      .select()
+      .from(reminderDeliveries)
+      .where(eq(reminderDeliveries.ptId, ptId));
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0].appointmentId).toBeNull();
+    expect(deliveries[0].externalId).toBe(`erased:${deliveries[0].id}`);
+    expect(deliveries[0].deliveredAt.getTime()).toBe(deliveredAt.getTime());
+
+    // ...and still counts, so erasing clients can't win back reminder quota
+    // that was already spent with Meta.
+    const after = await getReminderUsage(ptId, deliveredAt);
+    expect(after.delivered).toBe(before.delivered);
+    expect(after.used).toBe(before.used);
   });
 
   it('archives a durable per-patient erasure proof outside audit_log', async () => {

@@ -99,10 +99,7 @@ export async function loadAppointmentJobContext(args: {
   };
 }
 
-export function formatAppointmentTime(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('sq-AL', {
-    timeZone: timezone,
-    dateStyle: 'full',
-    timeStyle: 'short',
-  }).format(date);
-}
+// Re-exported at its original path so the job modules keep their import; the
+// implementation lives in lib/format so the reminder response handler can share
+// it without depending on an Inngest module.
+export { formatAppointmentTime } from '@/lib/format/appointment-time';

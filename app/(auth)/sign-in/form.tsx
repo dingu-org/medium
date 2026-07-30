@@ -15,10 +15,13 @@ export function SignInForm({
   confirmHint,
   resetHint,
   callbackError,
+  canRequestNewLink = true,
 }: {
   confirmHint?: boolean;
   resetHint?: boolean;
   callbackError?: string | null;
+  /** False when the banner is not about an emailed link — see link-errors.ts. */
+  canRequestNewLink?: boolean;
 }) {
   const [state, action, pending] = useActionState(signIn, initialState);
 
@@ -37,12 +40,14 @@ export function SignInForm({
       {callbackError && (
         <div className="border-destructive/30 text-destructive rounded-md border bg-[var(--danger-50)] p-3 text-sm">
           <p>{callbackError}</p>
-          <Link
-            href="/forgot-password"
-            className="mt-1 inline-block font-medium underline"
-          >
-            {t.auth.signIn.linkFailedAction}
-          </Link>
+          {canRequestNewLink && (
+            <Link
+              href="/forgot-password"
+              className="mt-1 inline-block font-medium underline"
+            >
+              {t.auth.signIn.linkFailedAction}
+            </Link>
+          )}
         </div>
       )}
 

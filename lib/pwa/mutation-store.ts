@@ -24,7 +24,7 @@ const ABANDONED_ERROR = 'Ndryshimi nuk përfundoi. Kontrollo dhe provo sërish.'
 const GENERIC_ERROR = 'Ndryshimi dështoi. Provo sërish.';
 
 export type MutationStart =
-  | { kind: 'new'; id: string }
+  | { kind: 'new'; id: string; priorProgress: Record<string, unknown> | null }
   | { kind: 'recover'; id: string; externalMessageId: string | null }
   | { kind: 'success'; result: unknown }
   | { kind: 'failed'; error: string }
@@ -46,7 +46,7 @@ export async function beginPwaMutation(input: {
     .onConflictDoNothing()
     .returning({ id: pwaMutations.id });
 
-  if (inserted) return { kind: 'new', id: inserted.id };
+  if (inserted) return { kind: 'new', id: inserted.id, priorProgress: null };
 
   const [existing] = await db
     .select({
@@ -81,11 +81,14 @@ export async function beginPwaMutation(input: {
     // read-then-write would let both win and run the side-effect twice. The
     // staleness and reclaim-count guards are re-checked under the row lock, so
     // exactly one caller gets a row back — the loser is told 'processing'.
+    // The reclaims counter is merged into the existing object (`||`), not
+    // replaced by jsonb_build_object as before, so a `progress` key stashed by
+    // recordPwaMutationProgress survives the reclaim for the retry to read back.
     const [reclaimed] = await db
       .update(pwaMutations)
       .set({
         updatedAt: new Date(),
-        result: sql`jsonb_build_object('reclaims', coalesce((${pwaMutations.result}->>'reclaims')::int, 0) + 1)`,
+        result: sql`coalesce(${pwaMutations.result}, '{}'::jsonb) || jsonb_build_object('reclaims', coalesce((${pwaMutations.result}->>'reclaims')::int, 0) + 1)`,
         error: null,
       })
       .where(
@@ -100,7 +103,10 @@ export async function beginPwaMutation(input: {
       .returning({ id: pwaMutations.id });
 
     if (!reclaimed) return { kind: 'processing' };
-    return { kind: 'new', id: reclaimed.id };
+    // Surface whatever the dead attempt stashed (e.g. a patient it already
+    // created) so the caller can resume instead of redoing — and potentially
+    // failing on — a side-effect that already succeeded.
+    return { kind: 'new', id: reclaimed.id, priorProgress: readProgress(existing.result) };
   }
 
   return existingState(existing);
@@ -120,6 +126,15 @@ function readReclaims(result: unknown): number {
     return typeof value === 'number' ? value : 0;
   }
   return 0;
+}
+
+/** Reads back whatever recordPwaMutationProgress last stashed, if anything. */
+function readProgress(result: unknown): Record<string, unknown> | null {
+  if (result && typeof result === 'object' && 'progress' in result) {
+    const value = (result as { progress: unknown }).progress;
+    if (value && typeof value === 'object') return value as Record<string, unknown>;
+  }
+  return null;
 }
 
 function existingState(existing: StoredMutation | undefined): MutationStart {
@@ -213,6 +228,39 @@ export async function markPwaMutationSent(input: {
       status: 'sent',
       result: { graphMessageId: input.externalMessageId },
       error: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(pwaMutations.ptId, input.ptId),
+        eq(pwaMutations.clientMutationId, input.clientMutationId),
+        eq(pwaMutations.status, 'processing'),
+      ),
+    );
+}
+
+/**
+ * Stash a fragment of intermediate progress against a still-`processing` row,
+ * for a handler whose work is a sequence of side effects that isn't (and
+ * can't cheaply be made) one atomic transaction — e.g. appointment.manual_book
+ * creates a patient record, then books the appointment. If the process dies
+ * between the two, MAX_RECLAIMS lets exactly one retry re-run the handler; the
+ * stashed fragment (read back via `priorProgress` on the next `beginPwaMutation`
+ * call) lets that retry resume from the completed step instead of redoing it
+ * and dead-ending on its own leftover state (e.g. the patient it already
+ * created). Merged into the existing jsonb object so it survives the reclaim
+ * counter update above. Guarded on 'processing' so it is a no-op once the
+ * mutation has moved on to success/failed.
+ */
+export async function recordPwaMutationProgress(input: {
+  ptId: string;
+  clientMutationId: string;
+  progress: Record<string, unknown>;
+}): Promise<void> {
+  await db
+    .update(pwaMutations)
+    .set({
+      result: sql`coalesce(${pwaMutations.result}, '{}'::jsonb) || jsonb_build_object('progress', ${JSON.stringify(input.progress)}::jsonb)`,
       updatedAt: new Date(),
     })
     .where(

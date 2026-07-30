@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LINK_EXPIRED, LINK_FAILED } from '@/lib/auth/link-errors';
-import { RECOVERY_COOKIE } from '@/lib/auth/recovery';
+import { RECOVERY_COOKIE, recoveryCookieValue } from '@/lib/auth/recovery';
 
 const { verifyOtpMock, cookieSetMock } = vi.hoisted(() => ({
   verifyOtpMock: vi.fn(),
@@ -56,26 +56,68 @@ describe('GET /auth/confirm', () => {
   });
 
   it('verifies a signup confirmation without a next and uses the default', async () => {
-    const response = await confirm('?token_hash=hash-b&type=email');
+    const response = await confirm('?token_hash=hash-b&type=signup');
 
     expect(verifyOtpMock).toHaveBeenCalledWith({
-      type: 'email',
+      type: 'signup',
       token_hash: 'hash-b',
     });
     expect(target(response)).toBe('/today');
   });
 
-  it('stamps the recovery marker only for a recovery link', async () => {
+  it('stamps the recovery marker only for a recovery link, bound to that user', async () => {
     await confirm('?token_hash=hash-a&type=recovery&next=/reset-password');
     expect(cookieSetMock).toHaveBeenCalledWith(
       RECOVERY_COOKIE,
-      '1',
+      recoveryCookieValue('pt-a'),
       expect.objectContaining({ httpOnly: true, path: '/' }),
     );
 
     cookieSetMock.mockClear();
     await confirm('?token_hash=hash-b&type=signup&next=/reset-password');
     expect(cookieSetMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses to stamp a marker it cannot bind to a user', async () => {
+    verifyOtpMock.mockResolvedValue({ data: { user: null }, error: null });
+
+    const response = await confirm('?token_hash=hash-a&type=recovery');
+
+    expect(cookieSetMock).not.toHaveBeenCalled();
+    expect(target(response)).toBe(`/sign-in?error=${LINK_FAILED}`);
+  });
+
+  // GoTrue resolves `magiclink` and `email` against the same token column as
+  // `recovery`, so both used to verify a reset link and issue a full session —
+  // while the `type === 'recovery'` branch below skipped the recovery cookie and
+  // honoured `next`. A reset link could be rewritten into a silent takeover.
+  it.each(['magiclink', 'invite'])(
+    'refuses a recovery token presented as type=%s',
+    async (type) => {
+      const response = await confirm(
+        `?token_hash=hash-a&type=${type}&next=/settings/services`,
+      );
+
+      expect(verifyOtpMock).not.toHaveBeenCalled();
+      expect(cookieSetMock).not.toHaveBeenCalled();
+      expect(target(response)).toBe(`/sign-in?error=${LINK_FAILED}`);
+    },
+  );
+
+  // `email` is the one alias kept, for confirmation mail already in inboxes. It
+  // must verify as `signup` — the type GoTrue refuses a recovery hash under —
+  // so the rewrite fails at GoTrue instead of yielding a session here.
+  it('verifies a legacy type=email link as a signup token', async () => {
+    const response = await confirm(
+      '?token_hash=hash-a&type=email&next=/settings/services',
+    );
+
+    expect(verifyOtpMock).toHaveBeenCalledWith({
+      type: 'signup',
+      token_hash: 'hash-a',
+    });
+    expect(cookieSetMock).not.toHaveBeenCalled();
+    expect(target(response)).toBe('/settings/services');
   });
 
   it('rejects a missing token hash without calling Supabase', async () => {
@@ -139,13 +181,14 @@ describe('GET /auth/confirm', () => {
   it.each([
     ['//evil.example.com', '/today'],
     ['/\\evil.example.com', '/today'],
+    ['/\t/evil.example.com', '/today'],
     ['https://evil.example.com/steal', '/today'],
     ['/settings/services', '/settings/services'],
   ])('sanitises next=%s', async (next, expected) => {
     // Not `recovery`: that type ignores `next` entirely and always lands on
     // /reset-password (see the test below), so it cannot exercise safeNext.
     const response = await confirm(
-      `?token_hash=hash-a&type=magiclink&next=${encodeURIComponent(next)}`,
+      `?token_hash=hash-a&type=signup&next=${encodeURIComponent(next)}`,
     );
     expect(location(response)).toBe(expected);
   });

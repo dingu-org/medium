@@ -4,8 +4,8 @@
  * policy (`/privacy` and `/en/privacy`) so the disclosure has one source, and
  * asserted against the plan model config in
  * `__tests__/ai-providers.test.ts` — a model change that introduces an
- * undisclosed upstream provider fails that test until this list and the DPA
- * annex are updated.
+ * undisclosed upstream provider fails that test until this list, both terms of
+ * service versions, and the DPA subprocessor annex are updated.
  */
 export const DISCLOSED_AI_PROVIDERS = {
   anthropic: 'Anthropic',

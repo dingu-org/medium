@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { t } from '@/lib/i18n';
+import { logger } from '@/lib/log';
 import { requestPasswordReset } from '../actions';
 
 const { resetMock } = vi.hoisted(() => ({ resetMock: vi.fn() }));
@@ -50,5 +51,31 @@ describe('requestPasswordReset', () => {
 
     expect(state.fieldErrors?.email?.[0]).toBe(t.auth.errors.emailInvalid);
     expect(resetMock).not.toHaveBeenCalled();
+  });
+
+  // The 2/hour cap and a rejected redirect_to both fail here. The PT still gets
+  // the anti-enumeration answer, so the operator is the only one who can find
+  // out that the inbox they were told to check will stay empty.
+  it('logs a refused send while still reporting success', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    resetMock.mockResolvedValue({
+      data: {},
+      error: {
+        name: 'AuthApiError',
+        status: 429,
+        code: 'over_email_send_rate_limit',
+        message: 'For security purposes, you can only request this once',
+      },
+    });
+
+    const state = await requestPasswordReset(initial, form());
+
+    expect(state).toEqual({ error: null, fieldErrors: null, success: true });
+    expect(logged).toHaveBeenCalledWith(
+      'auth.reset_email_failed',
+      expect.any(String),
+      expect.objectContaining({ errorCode: 'over_email_send_rate_limit' }),
+    );
+    logged.mockRestore();
   });
 });

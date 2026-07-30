@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import {
   LINK_FAILED,
   classifyAuthError,
-  linkErrorFromQuery,
+  oauthLandingErrorFromQuery,
 } from '@/lib/auth/link-errors';
 import { RESET_PASSWORD_PATH, stampRecoveryCookie } from '@/lib/auth/recovery';
 import { safeNext } from '@/lib/auth/safe-next';
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get('code');
   const next = safeNext(url.searchParams.get('next'), url.origin);
 
-  const upstream = linkErrorFromQuery(url.searchParams);
+  const upstream = oauthLandingErrorFromQuery(url.searchParams);
   if (upstream) {
     return NextResponse.redirect(
       new URL(`/sign-in?error=${upstream}`, url.origin),
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createServerClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     return NextResponse.redirect(
@@ -44,7 +44,14 @@ export async function GET(request: NextRequest) {
 
   // Mark this as a genuine recovery session so /reset-password will accept it.
   // Scoped to the recovery redirect only; short-lived and cleared on success.
-  if (next === RESET_PASSWORD_PATH) await stampRecoveryCookie();
+  if (next === RESET_PASSWORD_PATH) {
+    if (!data.user) {
+      return NextResponse.redirect(
+        new URL(`/sign-in?error=${LINK_FAILED}`, url.origin),
+      );
+    }
+    await stampRecoveryCookie(data.user.id);
+  }
 
   return NextResponse.redirect(new URL(next, url.origin));
 }

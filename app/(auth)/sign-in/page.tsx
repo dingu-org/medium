@@ -1,4 +1,4 @@
-import { linkErrorMessage } from '@/lib/auth/link-errors';
+import { linkErrorMessage, offersFreshLink } from '@/lib/auth/link-errors';
 import { t } from '@/lib/i18n';
 import { SignInForm } from './form';
 
@@ -22,6 +22,7 @@ export default async function SignInPage({
         confirmHint={confirm === '1'}
         resetHint={reset === '1'}
         callbackError={linkErrorMessage(error)}
+        canRequestNewLink={offersFreshLink(error)}
       />
     </section>
   );

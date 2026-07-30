@@ -21,6 +21,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  or,
   sql,
 } from 'drizzle-orm';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
@@ -29,8 +30,11 @@ import {
   appointments,
   conversationDays,
   events,
+  messages,
   pts,
+  reminderDeliveries,
   reminderJobs,
+  waMessageStatuses,
 } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
@@ -322,8 +326,9 @@ export async function getConversationUsage(
 
 // ---------------------------------------------------------------------------
 // Reminder quota (Phase 16 C3). Reminders are counted ONLY on Meta delivery
-// confirmation (`reminder_jobs.delivered_at`, stamped by the statuses webhook) —
-// never on send/queue. There is no stored counter: usage is derived per month.
+// confirmation — one `reminder_deliveries` row per delivered wamid, written by
+// the statuses webhook — never on send/queue. There is no stored counter: usage
+// is derived per month.
 // ---------------------------------------------------------------------------
 
 /**
@@ -344,7 +349,15 @@ function reminderMonthBounds(
   };
 }
 
-/** Reminders Meta confirmed delivered within `[start, end)`. */
+/**
+ * Reminder templates Meta confirmed delivered within `[start, end)`.
+ *
+ * Counted from `reminder_deliveries` (one row per delivered wamid, 0026), not
+ * from `reminder_jobs.delivered_at`: that column is a single scalar on a row
+ * unique per appointment, so a rescheduled appointment's second — separately
+ * billed — template was never counted, and the whole history vanished with the
+ * patient when erasure cascaded the job rows away.
+ */
 async function countDeliveredReminders(
   ptId: string,
   start: Date,
@@ -352,33 +365,39 @@ async function countDeliveredReminders(
 ): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(reminderJobs)
+    .from(reminderDeliveries)
     .where(
       and(
-        eq(reminderJobs.ptId, ptId),
-        isNotNull(reminderJobs.deliveredAt),
-        gte(reminderJobs.deliveredAt, start),
-        lt(reminderJobs.deliveredAt, end),
+        eq(reminderDeliveries.ptId, ptId),
+        gte(reminderDeliveries.deliveredAt, start),
+        lt(reminderDeliveries.deliveredAt, end),
       ),
     );
   return row?.count ?? 0;
 }
 
 /**
- * How long a sent-but-unconfirmed reminder holds a quota slot. Meta's `delivered`
- * status normally lands in seconds; a reminder to a recipient whose device never
- * comes online gets no callback at all until Meta's ~30-day expiry, so without an
- * age bound those rows would silently eat the month's cap (and the PT-facing
- * meter, which shows `delivered` only, would still look like there was room).
+ * How long a sent-but-unconfirmed reminder can still hold a quota slot. Meta
+ * queues an accepted template for up to ~30 days, so a reminder to a phone that
+ * is simply switched off overnight IS still going to be delivered — and billed —
+ * and must keep holding its slot. A shorter window traded the stuck-slot bug for
+ * a quota bypass: ten evening reminders would drop out of `in_flight` before
+ * midnight, re-open the whole cap, and bill twice the plan limit by morning.
+ * The month clamp below is the practical bound; a send Meta has already reported
+ * `failed` frees its slot immediately, whatever its age.
  */
-const IN_FLIGHT_WINDOW_MS = 60 * 60 * 1000;
+const IN_FLIGHT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Reminders whose template Meta accepted (`status='sent'`, `sent_at` set) but
- * whose delivery confirmation hasn't arrived yet, within `[start, end)` and sent
- * in the last hour. The gate counts these so a burst can't overshoot the cap
- * while `delivered` webhooks are in transit; anything older is no longer "in
- * transit" and must not hold a slot for the rest of the month.
+ * that Meta has neither delivered nor failed, within `[start, end)`. The gate
+ * counts these so a burst can't overshoot the cap while `delivered` webhooks are
+ * in transit.
+ *
+ * Delivery is read per-wamid from `wa_message_statuses`, not from
+ * `reminder_jobs.delivered_at`: that column is a single scalar on a row that is
+ * unique per appointment, so a reschedule leaves the PREVIOUS cycle's
+ * `delivered_at` in place and the new cycle would be invisible to the gate.
  */
 async function countInFlightReminders(
   ptId: string,
@@ -388,19 +407,34 @@ async function countInFlightReminders(
 ): Promise<number> {
   // Never widen past the month clamp.
   const sentSince = new Date(
-    Math.max(start.getTime(), now.getTime() - IN_FLIGHT_WINDOW_MS),
+    Math.max(start.getTime(), now.getTime() - IN_FLIGHT_TTL_MS),
   );
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(reminderJobs)
+    .leftJoin(messages, eq(messages.id, reminderJobs.messageId))
+    .leftJoin(
+      waMessageStatuses,
+      and(
+        eq(waMessageStatuses.ptId, reminderJobs.ptId),
+        eq(waMessageStatuses.externalId, messages.externalId),
+      ),
+    )
     .where(
       and(
         eq(reminderJobs.ptId, ptId),
         eq(reminderJobs.status, 'sent'),
-        isNull(reminderJobs.deliveredAt),
         isNotNull(reminderJobs.sentAt),
         gte(reminderJobs.sentAt, sentSince),
         lt(reminderJobs.sentAt, end),
+        isNull(waMessageStatuses.deliveredAt),
+        isNull(waMessageStatuses.failedAt),
+        // A stamped `delivered_at` with no message left to join (retention
+        // purged it) is a delivery we can no longer see per-wamid — trust the
+        // stamp rather than resurrecting the row as outstanding. With the
+        // message still there, the stamp may belong to an earlier cycle, which
+        // is exactly the case the per-wamid lookup above resolves.
+        or(isNull(reminderJobs.deliveredAt), isNotNull(messages.id)),
       ),
     );
   return row?.count ?? 0;
@@ -409,7 +443,7 @@ async function countInFlightReminders(
 export type ReminderUsage = {
   /** Meta-confirmed deliveries this month (authoritative usage). */
   delivered: number;
-  /** Sent in the last hour, unconfirmed (gate-only overshoot guard). */
+  /** Sent this month, neither delivered nor failed yet (gate-only guard). */
   inFlight: number;
   /** delivered + inFlight — the value the gate compares to the limit. */
   used: number;
@@ -420,7 +454,7 @@ export type ReminderUsage = {
 
 /**
  * Monthly reminder usage for the PT's grace-aware effective plan. `used` counts
- * delivered + recently-sent-unconfirmed (conservative, for the send-time gate);
+ * delivered + still-outstanding sends (conservative, for the send-time gate);
  * `delivered` alone is the authoritative figure for reporting.
  */
 export async function getReminderUsage(

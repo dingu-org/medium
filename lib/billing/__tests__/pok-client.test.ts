@@ -95,6 +95,27 @@ describe('createPokClient', () => {
     expect(orderCalls).toBe(2);
   });
 
+  it('gives up on a POK request that never answers', async () => {
+    // Node's fetch would sit on this for ~5 minutes. The hourly reconcile polls
+    // its whole open set sequentially, so one hung request used to eat the run
+    // (and `concurrency: 1` then drops the next hour's tick entirely).
+    const fetchMock = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject((init.signal as AbortSignal).reason),
+          );
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createPokClient({ ...CONFIG, requestTimeoutMs: 25 });
+
+    await expect(client.getOrder('ord1')).rejects.toThrow(
+      'POK request timed out after 25ms',
+    );
+  });
+
   it('sends amount + currencyCode + autoCapture in the create-order body', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).endsWith('/auth/sdk/login')) return jsonResponse(200, loginBody('tok'));

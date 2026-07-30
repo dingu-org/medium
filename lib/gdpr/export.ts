@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, or } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import {
   appointments,
@@ -8,18 +8,24 @@ import {
   blockedPeriods,
   conversationDays,
   conversations,
+  costDaily,
   events,
   messageTemplates,
   messages,
   patients,
   pts,
   pushSubscriptions,
+  pwaMutations,
   reminderJobs,
   services,
+  waMessageStatuses,
   whatsappConnections,
   whatsappContacts,
 } from '@/lib/db/schema';
-import { patientWhatsappContactsFilter } from '@/lib/patients/whatsapp-contacts';
+import {
+  contactMatchesPatient,
+  patientWhatsappContactsFilter,
+} from '@/lib/patients/whatsapp-contacts';
 
 export type PatientExport = {
   patient: Record<string, unknown>;
@@ -42,7 +48,13 @@ export type PtExport = {
   availability_rules: Record<string, unknown>[];
   blocked_periods: Record<string, unknown>[];
   whatsapp_connection: Record<string, unknown> | null;
+  whatsapp_contacts: Record<string, unknown>[];
   message_templates: Record<string, unknown>[];
+  reminder_jobs: Record<string, unknown>[];
+  conversation_days: Record<string, unknown>[];
+  wa_message_statuses: Record<string, unknown>[];
+  cost_daily: Record<string, unknown>[];
+  pwa_mutations: Record<string, unknown>[];
   events: Record<string, unknown>[];
   billing_orders: Record<string, unknown>[];
   push_subscriptions: Record<string, unknown>[];
@@ -121,10 +133,26 @@ export async function buildPatientExport(input: {
   // The erasure path deletes these rows as part of the same patient's right to
   // erasure (lib/patients/erase.ts), so access has to disclose them — same
   // matcher on both sides keeps the subject boundary symmetric.
-  const contactRows = await db
+  //
+  // Except when the number is shared: nothing stops two patients of one PT from
+  // having the same phone (family, carer), and they then resolve to ONE contact
+  // row that names whoever WhatsApp says owns the number. That row is not this
+  // subject's data alone, so it is withheld rather than disclosed to either of
+  // them.
+  const contactCandidates = await db
     .select()
     .from(whatsappContacts)
     .where(patientWhatsappContactsFilter(patient));
+  const otherPatients = contactCandidates.length
+    ? await db
+        .select({ phone: patients.phone, waId: patients.waId })
+        .from(patients)
+        .where(and(eq(patients.ptId, ptId), ne(patients.id, patientId)))
+    : [];
+  const contactRows = contactCandidates.filter(
+    (contact) =>
+      !otherPatients.some((other) => contactMatchesPatient(contact, other)),
+  );
 
   // Access to a patient's data is audited against whichever row the operation
   // touched, so targetId is not always the patient id: AI conversation reads and
@@ -216,6 +244,33 @@ export async function buildPtExport(ptId: string): Promise<PtExport> {
     .select()
     .from(messageTemplates)
     .where(eq(messageTemplates.ptId, ptId));
+  // Tenant-scoped tables a single patient's DSAR already discloses (plus the
+  // operational ones): without them the PT's own subject access would return
+  // LESS about their practice than one of their patients can ask for.
+  const contactRows = await db
+    .select()
+    .from(whatsappContacts)
+    .where(eq(whatsappContacts.ptId, ptId));
+  const reminderRows = await db
+    .select()
+    .from(reminderJobs)
+    .where(eq(reminderJobs.ptId, ptId));
+  const conversationDayRows = await db
+    .select()
+    .from(conversationDays)
+    .where(eq(conversationDays.ptId, ptId));
+  const statusRows = await db
+    .select()
+    .from(waMessageStatuses)
+    .where(eq(waMessageStatuses.ptId, ptId));
+  const costRows = await db
+    .select()
+    .from(costDaily)
+    .where(eq(costDaily.ptId, ptId));
+  const mutationRows = await db
+    .select()
+    .from(pwaMutations)
+    .where(eq(pwaMutations.ptId, ptId));
   const eventRows = await db
     .select()
     .from(events)
@@ -285,7 +340,13 @@ export async function buildPtExport(ptId: string): Promise<PtExport> {
     whatsapp_connection: connection
       ? { ...serializeRow(connection), accessTokenEncrypted: 'REDACTED' }
       : null,
+    whatsapp_contacts: contactRows.map(serializeRow),
     message_templates: templateRows.map(serializeRow),
+    reminder_jobs: reminderRows.map(serializeRow),
+    conversation_days: conversationDayRows.map(serializeRow),
+    wa_message_statuses: statusRows.map(serializeRow),
+    cost_daily: costRows.map(serializeRow),
+    pwa_mutations: mutationRows.map(serializeRow),
     events: eventRows.map(serializeRow),
     billing_orders: orderRows.map(serializeRow),
     push_subscriptions: pushRows.map((row) => ({

@@ -30,6 +30,12 @@ CREATE INDEX "reminder_jobs_pt_delivered_idx" ON "reminder_jobs" USING btree ("p
 -- erasure_archive posture (0016). drizzle-kit does not emit RLS; hand-appended
 -- per repo convention (see 0016/0017/0020). The explicit GRANT (as in 0012/0013)
 -- makes a denied query return zero rows instead of a permission error.
+--
+-- CORRECTION (0024): `GRANT ALL` is NOT the convention to copy. Only SELECT is
+-- needed to turn a denied read into zero rows; the rest of `ALL` is what handed
+-- anon/authenticated INSERT/UPDATE/DELETE on this table, and 0024 had to revoke
+-- them schema-wide. A new table wants `GRANT SELECT ON TABLE "x" TO anon,
+-- authenticated`.
 GRANT ALL ON TABLE "wa_message_statuses" TO postgres, anon, authenticated, service_role;--> statement-breakpoint
 ALTER TABLE "wa_message_statuses" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE POLICY "wa_message_statuses_tenant_isolation" ON "wa_message_statuses"

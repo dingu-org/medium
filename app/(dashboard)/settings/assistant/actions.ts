@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
+import { sanitizePromptField } from '@/lib/ai/prompt';
 import { getPlan } from '@/lib/billing/plans';
 import { loadEffectivePlan } from '@/lib/billing/read-model';
 import { t } from '@/lib/i18n';
@@ -41,16 +42,17 @@ export const setAssistantPaused = instrumentedAction(
 const emptyToUndefined = (v: unknown) =>
   typeof v === 'string' && v.trim() === '' ? undefined : v;
 
+// All three fields are interpolated into the system prompt, so they are stripped
+// of line breaks, control codes and the greeting fence marker before storage: a
+// stored newline renders as its own authoritative context bullet, and a stored
+// marker closes the fence the greeting is quoted inside (lib/ai/prompt.ts).
+const promptSafe = (v: unknown) =>
+  emptyToUndefined(typeof v === 'string' ? sanitizePromptField(v) : v);
+
 const identitySchema = z.object({
-  aiName: z.preprocess(emptyToUndefined, z.string().trim().max(60).optional()),
-  aiGreeting: z.preprocess(
-    emptyToUndefined,
-    z.string().trim().max(1000).optional(),
-  ),
-  aiEscalationKeyword: z.preprocess(
-    emptyToUndefined,
-    z.string().trim().max(40).optional(),
-  ),
+  aiName: z.preprocess(promptSafe, z.string().max(60).optional()),
+  aiGreeting: z.preprocess(promptSafe, z.string().max(1000).optional()),
+  aiEscalationKeyword: z.preprocess(promptSafe, z.string().max(40).optional()),
 });
 
 async function updateAssistantIdentityImpl(

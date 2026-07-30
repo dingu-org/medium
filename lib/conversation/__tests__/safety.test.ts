@@ -41,6 +41,54 @@ describe('deterministic conversation safety', () => {
     expect(detectSafetyEscalation(content, 'HUMAN')).toBe(reason);
   });
 
+  // Albanian typed on a phone loses 'ë'/'ç' and gains U+2019 for the
+  // apostrophe, and WhatsApp messages wrap across lines. None of that may
+  // change the classification of an emergency.
+  it.each([
+    ['NDIHME', 'human_requested'],
+    ['ndihme', 'human_requested'],
+    ['nuk mund te marr fryme', 'urgent_health_concern'],
+    ['Kam veshtiresi ne frymemarrje', 'urgent_health_concern'],
+    ['Dua te flas me fizioterapistet', 'human_requested'],
+    ['Do te flas me avokatin', 'legal_or_billing'],
+    ['S’mund të ec', 'urgent_health_concern'],
+    ['I can’t walk', 'urgent_health_concern'],
+    ['Nuk mund\ntë marr frymë', 'urgent_health_concern'],
+    ['Kam dhimbje\nnë gjoks', 'urgent_health_concern'],
+  ] as const)('classifies unaccented or wrapped %s', (content, reason) => {
+    expect(detectSafetyEscalation(content, 'HUMAN')).toBe(reason);
+  });
+
+  // A patient in an emergency writes the natural form, not the one the regex
+  // was built around: singular agreement, an intensifier between noun and
+  // adjective, and 'në gjoks' rather than the genitive 'gjoksi'.
+  it.each([
+    ['Kam dhimbje e fortë', 'urgent_health_concern'],
+    ['Kam dhimbje shumë të forta', 'urgent_health_concern'],
+    ['Kam dhimbje në gjoks', 'urgent_health_concern'],
+    ['Kam dhimbje gjoksi', 'urgent_health_concern'],
+    ['Kam dhimbje në kraharor', 'urgent_health_concern'],
+    ['Është urgjente!', 'urgent_health_concern'],
+    ['Faturimi është i gabuar', 'legal_or_billing'],
+    ['Më keni faturuar gabim', 'legal_or_billing'],
+    ['Asgjë nuk funksionon me ju', 'high_frustration'],
+    ['Nuk funksionon fare!', 'high_frustration'],
+  ] as const)('classifies natural Albanian phrasing %s', (content, reason) => {
+    expect(detectSafetyEscalation(content, 'HUMAN')).toBe(reason);
+  });
+
+  // 'rimbursim' is Albanian for both refund and reimbursement, so the two
+  // languages must land on the same canned reply.
+  it('routes refund and reimbursement the same way in both languages', () => {
+    for (const content of [
+      'I want a refund',
+      'I want a reimbursement',
+      'Dua rimbursim',
+    ]) {
+      expect(detectSafetyEscalation(content, 'HUMAN')).toBe('legal_or_billing');
+    }
+  });
+
   it('does not treat ordinary scheduling language as an escalation', () => {
     for (const content of [
       'Can you help me book next Tuesday?',
@@ -53,6 +101,18 @@ describe('deterministic conversation safety', () => {
       'Dua një takim me fizioterapistin',
       'Dua terapi personale',
       'Dua një trajtim personal',
+      // 'në lidhje me' is standard Albanian for "regarding", so an open 'lidh'
+      // stem escalated the most ordinary reschedule request there is.
+      'Në lidhje me takimin me fizioterapistin, a mund ta ndryshoj?',
+      'Në lidhje me pagesën',
+      // Declining a proposed slot is not frustration.
+      'E marta nuk funksionon, a keni të mërkurën?',
+      'Ora 10 nuk funksionon për mua',
+      'Linku nuk funksionon',
+      // 'ambulancë' also means outpatient clinic.
+      'Ku ndodhet ambulanca juaj?',
+      // Negated severity must not read as severe pain.
+      'Kam dhimbje jo të forta',
     ]) {
       expect(detectSafetyEscalation(content, 'HUMAN')).toBeNull();
     }

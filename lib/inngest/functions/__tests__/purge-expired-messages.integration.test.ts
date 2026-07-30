@@ -6,6 +6,8 @@ import {
   appointments,
   auditLog,
   conversations,
+  eventOutbox,
+  events,
   messages,
   patients,
   reminderJobs,
@@ -38,6 +40,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
+  await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
+  await db.delete(events).where(eq(events.ptId, ptId));
   await db.delete(patients).where(eq(patients.ptId, ptId));
 
   const [patient] = await db
@@ -117,6 +121,67 @@ describe('purgePtExpiredMessages', () => {
       .where(inArray(messages.id, [expired.id, recent.id, protectedMsg.id]));
     expect(remaining.map((r) => r.id).sort()).toEqual(
       [recent.id, protectedMsg.id].sort(),
+    );
+  });
+});
+
+describe('purgePtExpiredMessages — events retention', () => {
+  it('drops expired events but keeps unpublished and billing ones', async () => {
+    const now = new Date();
+    const [expiredEvent, recentEvent, owedEvent, billingEvent] = await db
+      .insert(events)
+      .values([
+        {
+          ptId,
+          type: 'appointment.booked',
+          payload: { ptId, patientId },
+          occurredAt: subDays(now, 31),
+        },
+        {
+          ptId,
+          type: 'appointment.booked',
+          payload: { ptId, patientId },
+          occurredAt: subDays(now, 29),
+        },
+        {
+          ptId,
+          type: 'appointment.cancelled',
+          payload: { ptId, patientId },
+          occurredAt: subDays(now, 31),
+        },
+        {
+          ptId,
+          type: 'billing.limit_warning',
+          payload: { ptId, kind: 'reminders', monthKey: '2026-07' },
+          occurredAt: subDays(now, 31),
+        },
+      ])
+      .returning({ id: events.id });
+
+    // Still owed to a consumer — and event_outbox cascades from events.
+    await db.insert(eventOutbox).values({
+      ptId,
+      eventId: owedEvent.id,
+      eventType: 'appointment.cancelled',
+      payload: { ptId, patientId },
+    });
+
+    const result = await purgePtExpiredMessages({ ptId, retentionDays: 30, now });
+    expect(result.deletedEventCount).toBe(1);
+
+    const survivors = await db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        inArray(events.id, [
+          expiredEvent.id,
+          recentEvent.id,
+          owedEvent.id,
+          billingEvent.id,
+        ]),
+      );
+    expect(survivors.map((r) => r.id).sort()).toEqual(
+      [recentEvent.id, owedEvent.id, billingEvent.id].sort(),
     );
   });
 });

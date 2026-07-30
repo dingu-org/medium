@@ -22,7 +22,9 @@ const DASHBOARD_NAVIGATION_PREFIXES = [
   '/clients',
   '/settings',
 ];
-const NEVER_CACHE_PREFIXES = [
+// Exported so the source-of-truth list, not a copy, drives the test's coverage
+// of the never-cache policy (__tests__/service-worker.test.ts).
+export const NEVER_CACHE_PREFIXES = [
   '/api/webhooks',
   '/api/inngest',
   '/api/auth',
@@ -33,7 +35,9 @@ const BACKGROUND_SYNC_TAG = 'medium-pwa-mutations';
 const okOnly = () => new CacheableResponsePlugin({ statuses: [200] });
 const okOrOpaque = () => new CacheableResponsePlugin({ statuses: [0, 200] });
 
-const runtimeCaching: RuntimeCaching[] = [
+// Exported (only) so the test in __tests__/service-worker.test.ts can drive the
+// actual matcher/handler wiring instead of grepping this file's source text.
+export const runtimeCaching: RuntimeCaching[] = [
   {
     matcher: ({ request, sameOrigin, url }) =>
       request.method === 'GET' &&

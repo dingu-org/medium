@@ -868,4 +868,69 @@ describe('PWA appointment mutation API', () => {
       'Ndryshimi nuk përfundoi. Kontrollo dhe provo sërish.',
     );
   });
+
+  // W3 regression: createManualPatient and bookAppointment are two separate
+  // writes. If a crashed first attempt got as far as creating the patient but
+  // died before booking, a naive retry would call createManualPatient again,
+  // get DUPLICATE_PHONE for the patient it just made, and dead-end forever —
+  // even though the fix is to just finish the booking. Simulate that crashed
+  // state directly: a stale 'processing' row with the created patient's id
+  // stashed exactly as recordPwaMutationProgress leaves it.
+  it('reuses the patient a crashed manual_book attempt already created instead of dead-ending on DUPLICATE_PHONE', async () => {
+    const clientMutationId = nextId();
+    const phone = `+15550${(++counter).toString().padStart(6, '0')}`;
+    const [priorPatient] = await db
+      .insert(patients)
+      .values({ ptId, name: 'Agim Prior', phone })
+      .returning({ id: patients.id });
+    await db.insert(pwaMutations).values({
+      ptId,
+      clientMutationId,
+      type: 'appointment.manual_book',
+      status: 'processing',
+      // Nested under `progress` because that is the shape
+      // recordPwaMutationProgress writes and beginPwaMutation reads back; a
+      // top-level key is invisible to the reclaim and the retry would create the
+      // patient a second time.
+      result: { progress: { createdPatientId: priorPatient.id } },
+      updatedAt: new Date(Date.now() - 5 * 60 * 1000),
+    });
+
+    const res = await postAppointment(
+      makePost('/api/pwa/mutations/appointment', {
+        clientMutationId,
+        action: 'manual_book',
+        newPatient: { name: 'Agim Prior', phone },
+        date: '2026-07-13',
+        time: '09:00',
+        serviceType: 'Recovered booking',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+
+    const patientsWithPhone = await db
+      .select({ id: patients.id })
+      .from(patients)
+      .where(and(eq(patients.ptId, ptId), eq(patients.phone, phone)));
+    expect(patientsWithPhone).toHaveLength(1);
+
+    const booked = await db
+      .select({ patientId: appointments.patientId })
+      .from(appointments)
+      .where(eq(appointments.ptId, ptId));
+    expect(booked).toHaveLength(1);
+    expect(booked[0].patientId).toBe(priorPatient.id);
+
+    const [storedMutation] = await db
+      .select({ status: pwaMutations.status })
+      .from(pwaMutations)
+      .where(
+        and(
+          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.clientMutationId, clientMutationId),
+        ),
+      );
+    expect(storedMutation.status).toBe('success');
+  });
 });

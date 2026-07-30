@@ -21,6 +21,7 @@ import {
   pts,
   pushSubscriptions,
   pwaMutations,
+  reminderDeliveries,
   reminderJobs,
   services,
   waMessageStatuses,
@@ -101,6 +102,12 @@ const seedFactories: Record<
     appointment_id: appointmentId,
     scheduled_for: new Date().toISOString(),
   }),
+  reminder_deliveries: ({ ptId, appointmentId }) => ({
+    pt_id: ptId,
+    appointment_id: appointmentId,
+    external_id: `wamid-rls-${Date.now()}-${Math.random()}`,
+    delivered_at: new Date().toISOString(),
+  }),
   push_subscriptions: ({ ptId }) => ({
     pt_id: ptId,
     endpoint: `https://example.test/${Date.now()}`,
@@ -169,6 +176,9 @@ const UPDATE_COL: Record<string, Record<string, unknown>> = {
   blocked_periods: { label: 'rls-probe' },
   message_templates: { meta_id: 'rls-probe' },
   reminder_jobs: { last_error: 'rls-probe' },
+  // Not external_id: a unique-violation would satisfy the "rejected" assertion
+  // without the privilege check ever being the reason.
+  reminder_deliveries: { delivered_at: new Date(0).toISOString() },
   push_subscriptions: { user_agent: 'rls-probe' },
   pwa_mutations: { error: 'rls-probe' },
   events: { type: 'rls-probe' },
@@ -182,10 +192,20 @@ const UPDATE_COL: Record<string, Record<string, unknown>> = {
 };
 
 // Operator-only tables: their policy is USING (false), so even the owning tenant
-// reads nothing (0016 erasure_archive, 0021 wa_message_statuses).
-const DENY_ALL = new Set(['erasure_archive', 'wa_message_statuses']);
+// reads nothing (0016 erasure_archive, 0021 wa_message_statuses, 0026
+// reminder_deliveries).
+const DENY_ALL = new Set([
+  'erasure_archive',
+  'wa_message_statuses',
+  'reminder_deliveries',
+]);
 
 const TENANT_ID_COL: Record<string, 'pt_id' | 'id'> = { pts: 'id' };
+
+// Mirrors the allowlist in coverage.integration.test.ts: tables in `public` that
+// legitimately carry no tenant column. Enumerating "has a pt_id column" instead
+// would let a future shared table skip this whole matrix unnoticed.
+const NON_TENANT_TABLES = new Set<string>();
 
 let sql: ReturnType<typeof postgres>;
 let ptIdA = '';
@@ -256,6 +276,12 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
     ptId,
     appointmentId: appt.id,
     scheduledFor: new Date(),
+  });
+  await db.insert(reminderDeliveries).values({
+    ptId,
+    appointmentId: appt.id,
+    externalId: `wamid-seed-${Date.now()}-${Math.random()}`,
+    deliveredAt: new Date(),
   });
   await db.insert(services).values({
     ptId,
@@ -359,19 +385,17 @@ afterAll(async () => {
 });
 
 async function tenantTablesFromDb(): Promise<string[]> {
-  const rows = await sql<{ table_name: string }[]>`
-    SELECT DISTINCT table_name
-    FROM information_schema.columns
-    WHERE table_schema = 'public' AND column_name = 'pt_id'
-    UNION
-    SELECT 'pts'::text
-    ORDER BY table_name
+  const rows = await sql<{ relname: string }[]>`
+    SELECT relname
+    FROM pg_class
+    WHERE relnamespace = 'public'::regnamespace AND relkind = 'r'
+    ORDER BY relname
   `;
-  return rows.map((r) => r.table_name);
+  return rows.map((r) => r.relname).filter((t) => !NON_TENANT_TABLES.has(t));
 }
 
 describe('RLS isolation registry covers every tenant-scoped table', () => {
-  it('seedFactories covers all pt_id-bearing tables (pts handled separately)', async () => {
+  it('seedFactories covers every table in public (pts handled separately)', async () => {
     const dbTables = (await tenantTablesFromDb()).filter((t) => t !== 'pts');
     const registered = Object.keys(seedFactories).sort();
     expect(registered).toEqual(dbTables.sort());

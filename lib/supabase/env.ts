@@ -27,3 +27,15 @@ export function supabaseAnonKey(): string {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   );
 }
+
+/**
+ * Whether a client can be built at all. Callers that must keep working without
+ * one — the public pages, which carry no session — ask first instead of
+ * catching; everyone else calls the accessors above and gets the loud throw.
+ */
+export function hasSupabaseConfig(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  );
+}

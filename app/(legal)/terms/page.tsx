@@ -7,11 +7,16 @@ export const metadata: Metadata = {
     'Kushtet për përdorimin e Medium, asistentit të takimeve në WhatsApp për praktikat.',
   alternates: {
     canonical: '/terms',
-    languages: { sq: '/terms', en: '/en/terms' },
+    // The Albanian version is canonical, so it is also the x-default.
+    languages: {
+      sq: '/terms',
+      en: '/en/terms',
+      'x-default': '/terms',
+    },
   },
 };
 
-const updatedAt = '14 korrik 2026';
+const updatedAt = '30 korrik 2026';
 
 /** Canonical (Albanian) terms of service. `/en/terms` is the English reading
  * copy kept for Meta App Review — same sections, same order, so the two can be
@@ -71,9 +76,9 @@ export default function TermsPage() {
       <LegalSection title="WhatsApp dhe shërbimet e palëve të treta">
         <p>
           Medium varet nga API-të e Meta WhatsApp Business, Supabase, Vercel,
-          Inngest, OpenRouter, OpenAI dhe nga ofrues të tjerë infrastrukture.
-          Përdorimi juaj i WhatsApp-it i nënshtrohet gjithashtu kushteve dhe
-          politikave të Meta WhatsApp Business.
+          Inngest, OpenRouter, Anthropic, OpenAI dhe nga ofrues të tjerë
+          infrastrukture. Përdorimi juaj i WhatsApp-it i nënshtrohet gjithashtu
+          kushteve dhe politikave të Meta WhatsApp Business.
         </p>
         <p>
           Ne nuk jemi përgjegjës për ndërprerjet, vonesat në shqyrtim, kufizimet

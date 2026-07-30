@@ -16,9 +16,12 @@ import {
   messageTemplates,
   messages,
   patients,
+  pts,
+  reminderDeliveries,
   reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
+import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getReminderUsage } from '@/lib/billing/usage';
 import { getUnreadChatCount } from '@/lib/chat/queries';
@@ -103,6 +106,9 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  // Outlives its appointment by design (ON DELETE SET NULL), so the cascade
+  // below leaves it behind — it needs its own cleanup.
+  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.ptId, ptId));
   // Cascades conversations + messages.
   await db.delete(patients).where(eq(patients.ptId, ptId));
   const [patient] = await db
@@ -346,7 +352,11 @@ describe('sendUpcomingReminderTemplate', () => {
     templateId = template.id;
   });
 
-  /** Delivered reminder jobs in the current month, one per throwaway appointment. */
+  /**
+   * Delivered reminders in the current month, one per throwaway appointment.
+   * Seeds both writes the statuses webhook makes: the job's latest-cycle stamp
+   * and the `reminder_deliveries` row the month is counted from.
+   */
   async function seedDeliveredReminders(count: number): Promise<void> {
     const now = new Date();
     for (let index = 0; index < count; index++) {
@@ -366,6 +376,12 @@ describe('sendUpcomingReminderTemplate', () => {
         scheduledFor: now,
         status: 'sent',
         sentAt: now,
+        deliveredAt: now,
+      });
+      await db.insert(reminderDeliveries).values({
+        ptId,
+        appointmentId: past.id,
+        externalId: `wamid.seeded-${index}-${Date.now()}`,
         deliveredAt: now,
       });
     }
@@ -396,6 +412,32 @@ describe('sendUpcomingReminderTemplate', () => {
       .from(conversations)
       .where(eq(conversations.id, conversationId));
     expect(conv.aiActive).toBe(false);
+  });
+
+  /**
+   * The manual send fills the same variable slot of the same approved template
+   * that send-reminder.ts fills automatically, so both paths have to name the
+   * booking identically — a patient comparing the two messages is looking at one
+   * appointment. This path once built its own Intl.DateTimeFormat (no year, a
+   * different separator) while the job used lib/format/appointment-time, so the
+   * same booking arrived as two different times depending on who sent it.
+   */
+  it('names the appointment with the shared formatter, as the automated job does', async () => {
+    const [pt] = await db
+      .select({ timezone: pts.timezone })
+      .from(pts)
+      .where(eq(pts.id, ptId));
+
+    await sendUpcomingReminderTemplate(conversationId);
+
+    const variables = sendTemplateMock.mock.calls[0][4] as string[];
+    const expected = formatAppointmentTime(
+      new Date('2026-08-01T09:00:00.000Z'),
+      pt.timezone,
+    );
+    // Guard the guard: a formatter that returned '' would make this tautological.
+    expect(expected).toMatch(/\d/);
+    expect(variables.at(-1)).toBe(expected);
   });
 
   it('reports "sent but not saved" (not "not sent") and logs the wamid when persistence fails', async () => {
@@ -534,6 +576,12 @@ describe('sendUpcomingReminderTemplate', () => {
         responseMessageId: newerId,
       })
       .where(eq(reminderJobs.appointmentId, appointmentId));
+    await db.insert(reminderDeliveries).values({
+      ptId,
+      appointmentId,
+      externalId: 'wamid.tpl',
+      deliveredAt: respondedAt,
+    });
     // Age the first template past the 60s double-tap dedupe so the second
     // nudge is a genuine second send rather than a no-op.
     await db
@@ -559,7 +607,14 @@ describe('sendUpcomingReminderTemplate', () => {
     // delivered_at survives: it is a Meta-billed fact and the only source of
     // monthly usage, so clearing it would refund quota the PT already spent.
     expect(job.deliveredAt).toEqual(respondedAt);
-    await expect(getReminderUsage(ptId)).resolves.toMatchObject({ used: 1 });
+    // And the second template Meta just charged for is outstanding on top of
+    // it: the quota read resolves delivery per-wamid, so a re-armed cycle is no
+    // longer invisible just because the row still carries cycle 1's stamp.
+    await expect(getReminderUsage(ptId)).resolves.toMatchObject({
+      delivered: 1,
+      inFlight: 1,
+      used: 2,
+    });
   });
 
   it('refuses the send once the monthly reminder quota is exhausted', async () => {
@@ -587,5 +642,53 @@ describe('sendUpcomingReminderTemplate', () => {
       .from(reminderJobs)
       .where(eq(reminderJobs.appointmentId, appointmentId));
     expect(jobs).toHaveLength(0);
+  });
+
+  // W4 regression: the conversation-scoped lock only serializes retries of the
+  // SAME thread. With exactly one quota slot left, two manual sends fired at
+  // once from two different conversations for the same pt must not both read
+  // "quota available" — only one may go through.
+  it('serializes quota consumption across two conversations for the same pt', async () => {
+    await seedDeliveredReminders(9); // 9 of 10 used, one slot left this month.
+
+    const [otherPatient] = await db
+      .insert(patients)
+      .values({
+        ptId,
+        name: 'Beta Patient',
+        phone: '447700900800',
+        waId: '447700900800',
+      })
+      .returning({ id: patients.id });
+    const [otherConversation] = await db
+      .insert(conversations)
+      .values({ ptId, patientId: otherPatient.id, channel: 'whatsapp' })
+      .returning({ id: conversations.id });
+    await db.insert(appointments).values({
+      ptId,
+      patientId: otherPatient.id,
+      startsAt: new Date('2026-08-02T09:00:00.000Z'),
+      endsAt: new Date('2026-08-02T10:00:00.000Z'),
+      status: 'confirmed',
+    });
+
+    const results = await Promise.all([
+      sendUpcomingReminderTemplate(conversationId),
+      sendUpcomingReminderTemplate(otherConversation.id),
+    ]);
+
+    const succeeded = results.filter((r) => r.ok);
+    const quotaRefused = results.filter(
+      (r) => !r.ok && r.error === 'Kufiri i kujtesave u arrit për këtë muaj.',
+    );
+    expect(succeeded).toHaveLength(1);
+    expect(quotaRefused).toHaveLength(1);
+    expect(sendTemplateMock).toHaveBeenCalledTimes(1);
+
+    await expect(getReminderUsage(ptId)).resolves.toMatchObject({
+      inFlight: 1,
+      used: 10,
+      limit: 10,
+    });
   });
 });

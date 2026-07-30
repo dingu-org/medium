@@ -12,6 +12,7 @@ import {
   reminderJobs,
 } from '@/lib/db/schema';
 import type { InboundMessage } from '@/lib/conversation/types';
+import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { createServiceClient } from '@/lib/supabase/service';
 import { handleReminderResponse } from '../response-handler';
 
@@ -109,7 +110,10 @@ afterAll(async () => {
   if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
 });
 
-async function inbound(content: string): Promise<InboundMessage> {
+async function inbound(
+  content: string,
+  occurredAt: Date = now,
+): Promise<InboundMessage> {
   const [message] = await db
     .insert(messages)
     .values({
@@ -119,7 +123,7 @@ async function inbound(content: string): Promise<InboundMessage> {
       role: 'patient',
       channel: 'whatsapp',
       content,
-      createdAt: now,
+      createdAt: occurredAt,
     })
     .returning({ id: messages.id });
   return {
@@ -130,8 +134,15 @@ async function inbound(content: string): Promise<InboundMessage> {
     content,
     channel: 'whatsapp',
     externalId: null,
-    occurredAt: now,
+    occurredAt,
   };
+}
+
+/** The crash window R10 is about: the mutation committed, the reply did not. */
+async function dropReply(inboundMessage: InboundMessage): Promise<void> {
+  await db
+    .delete(messages)
+    .where(eq(messages.replyToMessageId, inboundMessage.id));
 }
 
 describe('handleReminderResponse', () => {
@@ -167,6 +178,59 @@ describe('handleReminderResponse', () => {
     expect(job.responseType).toBe('confirm');
     expect(job.responseMessageId).toBe(inboundMessage.id);
     expect(replies).toHaveLength(1);
+    // One renderer for every patient-facing appointment time: the reminder that
+    // asked the question and this answer have to name the same instant the same
+    // way.
+    if (first.kind !== 'outbound') return;
+    expect(first.outbound.content).toContain(
+      formatAppointmentTime(startsAt, 'Europe/Tirane'),
+    );
+  });
+
+  // A retry after the transition committed but the reply did not: without it the
+  // candidate query no longer matches and the patient is never answered.
+  it('re-answers a confirmation whose reply was lost after the transition', async () => {
+    const inboundMessage = await inbound('KONFIRMO');
+    await handleReminderResponse({ inbound: inboundMessage, now });
+    await dropReply(inboundMessage);
+
+    const retry = await handleReminderResponse({
+      inbound: inboundMessage,
+      now,
+    });
+
+    expect(retry.kind).toBe('outbound');
+    const [appointment] = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.id, appointmentId));
+    expect(appointment.status).toBe('confirmed');
+    const replies = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.replyToMessageId, inboundMessage.id));
+    expect(replies).toHaveLength(1);
+  });
+
+  it('re-answers a cancellation whose reply was lost after the transition', async () => {
+    const inboundMessage = await inbound('ANULO');
+    await handleReminderResponse({ inbound: inboundMessage, now });
+    await dropReply(inboundMessage);
+
+    const retry = await handleReminderResponse({
+      inbound: inboundMessage,
+      now,
+    });
+
+    expect(retry.kind).toBe('outbound');
+    if (retry.kind !== 'outbound') return;
+    expect(retry.outbound.content).toContain('u anulua');
+    const [appointment] = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.id, appointmentId));
+    expect(appointment.status).toBe('cancelled');
+    expect(appointment.cancelledBy).toBe('patient');
   });
 
   it('cancels with patient metadata and avoids duplicate replies', async () => {
@@ -271,6 +335,41 @@ describe('handleReminderResponse', () => {
       .from(messages)
       .where(eq(messages.replyToMessageId, inboundMessage.id));
     expect(replies).toHaveLength(1);
+  });
+
+  // Inngest bounds per-conversation parallelism but promises no FIFO, so the
+  // older message can reach the handler last. The patient's newest instruction
+  // has to win either way — otherwise a patient who opted back in stays silent
+  // forever because the stale NDAL ran second.
+  it('keeps a newer AKTIVIZO from being undone by an NDAL handled after it', async () => {
+    const optOut = await inbound('NDAL');
+    await inbound('AKTIVIZO', addHours(now, 1));
+
+    const result = await handleReminderResponse({ inbound: optOut, now });
+
+    expect(result.kind).toBe('outbound');
+    const [patient] = await db
+      .select()
+      .from(patients)
+      .where(eq(patients.id, patientId));
+    expect(patient.reminderOptedOutAt).toBeNull();
+  });
+
+  it('keeps a newer NDAL from being undone by an AKTIVIZO handled after it', async () => {
+    await db
+      .update(patients)
+      .set({ reminderOptedOutAt: subHours(now, 1) })
+      .where(eq(patients.id, patientId));
+    const optIn = await inbound('AKTIVIZO');
+    await inbound('NDAL', addHours(now, 1));
+
+    await handleReminderResponse({ inbound: optIn, now });
+
+    const [patient] = await db
+      .select()
+      .from(patients)
+      .where(eq(patients.id, patientId));
+    expect(patient.reminderOptedOutAt).not.toBeNull();
   });
 
   it('offers real available slots for a reschedule request', async () => {

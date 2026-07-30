@@ -349,29 +349,58 @@ async function upsertMessageStatus(args: {
     });
 }
 
-/** First-write-wins: stamp `delivered_at` on the reminder job for this wamid. */
+/**
+ * Record the delivery Meta confirmed for the message the reminder job is
+ * CURRENTLY linked to. The timestamp is read back from `wa_message_statuses`,
+ * which is already first-write-wins per wamid, so a redelivered `delivered`
+ * webhook can never move it.
+ *
+ * Two writes, one statement so they cannot disagree:
+ * - `reminder_deliveries` gets the metered fact, one row per delivered wamid.
+ *   This is what the monthly plan quota counts (lib/billing/usage.ts), and it is
+ *   what makes a rescheduled appointment's second — separately billed — template
+ *   countable at all: `reminder_jobs` is unique per appointment, so one scalar
+ *   there can only ever describe one of the two cycles.
+ * - `reminder_jobs.delivered_at` keeps the latest cycle for the appointment
+ *   badge. Skipping the UPDATE when it already holds this delivery keeps it from
+ *   churning; the delivery row is still written either way.
+ */
 async function markReminderDelivered(
   ptId: string,
   wamid: string,
-  ts: Date,
 ): Promise<void> {
   await db.execute(sql`
-    UPDATE reminder_jobs AS rj
-    SET delivered_at = ${ts.toISOString()}::timestamptz
-    FROM messages AS m
-    WHERE m.external_id = ${wamid}
-      AND m.pt_id = ${ptId}
-      AND rj.message_id = m.id
-      AND rj.pt_id = ${ptId}
-      AND rj.delivered_at IS NULL
+    WITH delivered AS (
+      SELECT rj.id AS job_id, rj.pt_id, rj.appointment_id, s.delivered_at
+      FROM reminder_jobs AS rj
+      INNER JOIN messages AS m ON m.id = rj.message_id
+      INNER JOIN wa_message_statuses AS s
+        ON s.external_id = m.external_id AND s.pt_id = m.pt_id
+      WHERE m.external_id = ${wamid}
+        AND m.pt_id = ${ptId}
+        AND rj.pt_id = ${ptId}
+        AND s.delivered_at IS NOT NULL
+    ), stamped AS (
+      UPDATE reminder_jobs AS rj
+      SET delivered_at = delivered.delivered_at
+      FROM delivered
+      WHERE rj.id = delivered.job_id
+        AND rj.delivered_at IS DISTINCT FROM delivered.delivered_at
+    )
+    INSERT INTO reminder_deliveries (pt_id, appointment_id, external_id, delivered_at)
+    SELECT pt_id, appointment_id, ${wamid}, delivered_at FROM delivered
+    ON CONFLICT (external_id) DO NOTHING
   `);
 }
 
 /**
  * A `failed` status for a reminder whose template Meta accepted then dropped:
  * mark the job failed and emit `reminder.failed` (existing push/bell/flag
- * pipeline). Guarded so an already-delivered or already-answered reminder is
- * never re-flagged.
+ * pipeline). Guarded so an already-answered reminder is never re-flagged, and so
+ * a failure is ignored once Meta has confirmed delivery — of THIS wamid, per
+ * `wa_message_statuses`, not of whatever cycle last stamped
+ * `reminder_jobs.delivered_at` (a reschedule leaves that scalar behind, which
+ * silently swallowed every second-cycle failure).
  */
 async function failReminderDelivery(args: {
   ptId: string;
@@ -390,8 +419,14 @@ async function failReminderDelivery(args: {
         AND rj.message_id = m.id
         AND rj.pt_id = ${args.ptId}
         AND rj.status = 'sent'
-        AND rj.delivered_at IS NULL
         AND rj.response_type IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM wa_message_statuses AS s
+          WHERE s.external_id = m.external_id
+            AND s.pt_id = m.pt_id
+            AND s.delivered_at IS NOT NULL
+        )
       RETURNING rj.appointment_id AS "appointmentId"
     `);
     const [row] = affected;
@@ -459,7 +494,7 @@ async function handleStatusesChange(
     });
 
     if (narrowed === 'delivered') {
-      await markReminderDelivered(ptId, status.id, ts);
+      await markReminderDelivered(ptId, status.id);
     } else if (narrowed === 'failed') {
       const firstError = status.errors?.[0];
       const reason = firstError
@@ -674,9 +709,12 @@ async function contactName(ptId: string, phone: string): Promise<string> {
  *
  * `inboundAt` is passed for inbounds we do not persist (no `messages` row means
  * no `external_id` dedupe). Meta redelivers the whole batch whenever any change
- * in the POST throws, so the reopen is keyed off the inbound's own timestamp: a
- * conversation the PT closed *after* the patient wrote stays closed however many
- * times the batch comes back.
+ * in the POST throws, so both the reopen AND the window itself are keyed off the
+ * inbound's own timestamp, never `now()`: a conversation the PT closed *after*
+ * the patient wrote stays closed however many times the batch comes back, and a
+ * redelivered image from yesterday cannot re-open a service window that has in
+ * fact expired (the PT's free-form reply would then be rejected by Meta or
+ * billed as a new conversation). `GREATEST` keeps the window monotonic.
  */
 async function bumpLastInboundAt(
   tx: DBTransaction,
@@ -689,7 +727,10 @@ async function bumpLastInboundAt(
   await tx
     .update(conversations)
     .set({
-      lastInboundAt: sql`now()`,
+      // GREATEST ignores NULLs, so a first inbound stamps the inbound's own time.
+      lastInboundAt: inboundAt
+        ? sql`GREATEST(${conversations.lastInboundAt}, ${inboundAt.toISOString()}::timestamptz)`
+        : sql`now()`,
       closedAt: sql`CASE WHEN ${reopen} THEN NULL ELSE ${conversations.closedAt} END`,
       aiActive: sql`CASE WHEN ${reopen} THEN true ELSE ${conversations.aiActive} END`,
       escalationState: sql`CASE WHEN ${reopen} THEN 'idle' ELSE ${conversations.escalationState} END`,

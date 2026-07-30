@@ -14,6 +14,11 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  // Without a base, Next leaves `alternates.canonical` and the hreflang links
+  // on the legal pages as relative hrefs, which crawlers cannot resolve.
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+  ),
   applicationName: 'Medium',
   title: 'Medium',
   description:

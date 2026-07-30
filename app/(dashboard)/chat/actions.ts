@@ -19,6 +19,7 @@ import {
 } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
+import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { logger, serializeError } from '@/lib/log';
 import { withAuditLog } from '@/lib/tenancy';
 import { instrumentedAction } from '@/lib/actions/instrument';
@@ -288,15 +289,14 @@ async function sendUpcomingReminderTemplateImpl(
     };
   }
 
-  const localTime = new Intl.DateTimeFormat('sq-AL', {
-    timeZone: context.timezone,
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(appointment.startsAt);
+  // Must be the SHARED formatter, not a local one: this fills the same variable
+  // slot of the same approved template that send-reminder.ts fills automatically,
+  // so a second formatter here makes one booking arrive as two different times
+  // depending on whether the PT tapped send or the job fired.
+  const localTime = formatAppointmentTime(
+    appointment.startsAt,
+    context.timezone,
+  );
   const firstName = context.patientName.trim().split(/\s+/)[0] || 'Ju';
   const practiceName = context.practiceName?.trim() || 'praktika';
   const variables =
@@ -324,126 +324,136 @@ async function sendUpcomingReminderTemplateImpl(
       return { ok: true };
     }
 
-    // A manual template is billed by Meta and counts against the plan's monthly
-    // reminder cap exactly like the automated one (send-reminder.ts gates on the
-    // same helper) — without this the cap is circumventable one thread at a time.
-    const sentAt = new Date();
-    if (!(await reminderQuotaAvailable(ptId, sentAt))) {
-      return { ok: false, error: 'Kufiri i kujtesave u arrit për këtë muaj.' };
-    }
+    // The conversation lock above only serializes retries of THIS thread, so two
+    // manual sends fired at once in two different conversations for the same PT
+    // could both read "quota available" before either books a reminder_jobs row.
+    // Nest a PT-scoped lock around the check-and-consume section — a second key
+    // on the same withAdvisoryLock connection, so it serializes across
+    // conversations without reserving another pooled connection per attempt.
+    return withAdvisoryLock(`reminder-quota:${ptId}`, async () => {
+      // A manual template is billed by Meta and counts against the plan's
+      // monthly reminder cap exactly like the automated one (send-reminder.ts
+      // gates on the same helper) — without this the cap is circumventable one
+      // thread at a time.
+      const sentAt = new Date();
+      if (!(await reminderQuotaAvailable(ptId, sentAt))) {
+        return { ok: false, error: 'Kufiri i kujtesave u arrit për këtë muaj.' };
+      }
 
-    let sent: { messageId: string | null };
-    try {
-      sent = await sendTemplate(
-        connection.id,
-        waId,
-        definition.name,
-        definition.language,
-        variables,
-      );
-    } catch {
-      // Not sent (Graph refused/failed) — safe to invite a retry.
-      return { ok: false, error: 'Kujtesa nuk u dërgua. Provo sërish.' };
-    }
+      let sent: { messageId: string | null };
+      try {
+        sent = await sendTemplate(
+          connection.id,
+          waId,
+          definition.name,
+          definition.language,
+          variables,
+        );
+      } catch {
+        // Not sent (Graph refused/failed) — safe to invite a retry.
+        return { ok: false, error: 'Kujtesa nuk u dërgua. Provo sërish.' };
+      }
 
-    // The template HAS been sent (and billed). A persistence failure here must
-    // NOT return the "not sent, try again" copy: that lures the PT into a second
-    // paid template send that the 60s dedupe cannot catch (no messages row was
-    // written). Report a distinct "sent but not saved" state and log the wamid.
-    try {
-      await db.transaction(async (tx) => {
-        const [created] = await tx
-          .insert(messages)
-          .values({
-            ptId,
-            conversationId,
-            role: 'pt',
-            channel: 'whatsapp',
-            content: `Kujtesë për takimin më ${localTime}.`,
-            templateId: template.id,
-            externalId: sent.messageId,
-          })
-          .returning({ id: messages.id });
-        // The reminder_jobs row is what makes the manual send visible to the rest
-        // of the system: the plan meter counts jobs only (usage.ts), and
-        // loadReminderCandidates joins jobs → messages, so without it the
-        // patient's KONFIRMO/ANULO reply matches nothing and is dropped.
-        await tx
-          .insert(reminderJobs)
-          .values({
-            ptId,
-            appointmentId: appointment.id,
-            scheduledFor: sentAt,
-            status: 'sent',
-            sentAt,
-            messageId: created.id,
-          })
-          .onConflictDoUpdate({
-            target: reminderJobs.appointmentId,
-            // One job per appointment, so this stamps the manual send onto a
-            // still-scheduled automated job. inngestRunId/scheduledFor are left
-            // untouched deliberately: clearing them makes the sleeping run trip
-            // loadReminderAttempt's stale_run guard, and that branch marks the
-            // job skipped — rewriting this 'sent' row, so the patient's
-            // KONFIRMO/ANULO in the final hours matches no candidate and the
-            // appointment badge claims no reminder was sent. The woken run
-            // cannot double-send either way: prepareReminderMessage reuses the
-            // messageId below and its wamid instead of paying for a second
-            // template (send-reminder.ts).
-            set: {
+      // The template HAS been sent (and billed). A persistence failure here must
+      // NOT return the "not sent, try again" copy: that lures the PT into a
+      // second paid template send that the 60s dedupe cannot catch (no messages
+      // row was written). Report a distinct "sent but not saved" state and log
+      // the wamid.
+      try {
+        await db.transaction(async (tx) => {
+          const [created] = await tx
+            .insert(messages)
+            .values({
+              ptId,
+              conversationId,
+              role: 'pt',
+              channel: 'whatsapp',
+              content: `Kujtesë për takimin më ${localTime}.`,
+              templateId: template.id,
+              externalId: sent.messageId,
+            })
+            .returning({ id: messages.id });
+          // The reminder_jobs row is what makes the manual send visible to the
+          // rest of the system: the plan meter counts jobs only (usage.ts), and
+          // loadReminderCandidates joins jobs → messages, so without it the
+          // patient's KONFIRMO/ANULO reply matches nothing and is dropped.
+          await tx
+            .insert(reminderJobs)
+            .values({
+              ptId,
+              appointmentId: appointment.id,
+              scheduledFor: sentAt,
               status: 'sent',
-              attempts: 0,
-              lastError: null,
-              skippedReason: null,
               sentAt,
               messageId: created.id,
-              // The patient's answer belongs to the cycle it answered, so it is
-              // cleared exactly like upsertReminderSchedule does, or this send
-              // inherits the previous cycle's reply and chooseCandidate filters
-              // the row out — the patient's next ANULO would cancel nothing.
-              // `delivered_at` is NOT cleared, for the same reason as there: it
-              // is a Meta-billed fact and the only source of monthly usage
-              // (lib/billing/usage.ts countDeliveredReminders), so wiping it
-              // would refund quota the PT already spent. The trade-off is that
-              // markReminderDelivered is first-write-wins, so a manual nudge on
-              // an appointment whose automated reminder was already delivered is
-              // not separately counted.
-              responseType: null,
-              respondedAt: null,
-              responseMessageId: null,
-            },
-          });
-        await tx
-          .update(conversations)
-          // Match every other pause path: clear aiPausedUntil/aiPauseReason too,
-          // or a conversation paused for the WhatsApp-echo reason keeps showing a
-          // stale "paused" badge after the PT sends a reminder.
-          .set({ aiActive: false, aiPausedUntil: null, aiPauseReason: null })
-          .where(
-            and(
-              eq(conversations.id, conversationId),
-              eq(conversations.ptId, ptId),
-            ),
-          );
-      });
-    } catch (error) {
-      logger.error(
-        'chat.reminder_persist_failed',
-        'Reminder template sent but not persisted',
-        {
-          ptId,
-          conversationId,
-          externalId: sent.messageId,
-          ...serializeError(error),
-        },
-      );
-      return {
-        ok: false,
-        error: 'Kujtesa u dërgua, por nuk u ruajt. Rifresko bisedën.',
-      };
-    }
-    revalidatePath(`/chat/${conversationId}`);
-    return { ok: true };
+            })
+            .onConflictDoUpdate({
+              target: reminderJobs.appointmentId,
+              // One job per appointment, so this stamps the manual send onto a
+              // still-scheduled automated job. inngestRunId/scheduledFor are left
+              // untouched deliberately: clearing them makes the sleeping run trip
+              // loadReminderAttempt's stale_run guard, and that branch marks the
+              // job skipped — rewriting this 'sent' row, so the patient's
+              // KONFIRMO/ANULO in the final hours matches no candidate and the
+              // appointment badge claims no reminder was sent. The woken run
+              // cannot double-send either way: prepareReminderMessage reuses the
+              // messageId below and its wamid instead of paying for a second
+              // template (send-reminder.ts).
+              set: {
+                status: 'sent',
+                attempts: 0,
+                lastError: null,
+                skippedReason: null,
+                sentAt,
+                messageId: created.id,
+                // The patient's answer belongs to the cycle it answered, so it is
+                // cleared exactly like upsertReminderSchedule does, or this send
+                // inherits the previous cycle's reply and chooseCandidate filters
+                // the row out — the patient's next ANULO would cancel nothing.
+                // `delivered_at` is NOT cleared, for the same reason as there: it
+                // is a Meta-billed fact and the only source of monthly usage
+                // (lib/billing/usage.ts countDeliveredReminders), so wiping it
+                // would refund quota the PT already spent. The trade-off is that
+                // markReminderDelivered is first-write-wins, so a manual nudge on
+                // an appointment whose automated reminder was already delivered is
+                // not separately counted.
+                responseType: null,
+                respondedAt: null,
+                responseMessageId: null,
+              },
+            });
+          await tx
+            .update(conversations)
+            // Match every other pause path: clear aiPausedUntil/aiPauseReason too,
+            // or a conversation paused for the WhatsApp-echo reason keeps showing
+            // a stale "paused" badge after the PT sends a reminder.
+            .set({ aiActive: false, aiPausedUntil: null, aiPauseReason: null })
+            .where(
+              and(
+                eq(conversations.id, conversationId),
+                eq(conversations.ptId, ptId),
+              ),
+            );
+        });
+      } catch (error) {
+        logger.error(
+          'chat.reminder_persist_failed',
+          'Reminder template sent but not persisted',
+          {
+            ptId,
+            conversationId,
+            externalId: sent.messageId,
+            ...serializeError(error),
+          },
+        );
+        return {
+          ok: false,
+          error: 'Kujtesa u dërgua, por nuk u ruajt. Rifresko bisedën.',
+        };
+      }
+      revalidatePath(`/chat/${conversationId}`);
+      return { ok: true };
+    });
   });
 }
 

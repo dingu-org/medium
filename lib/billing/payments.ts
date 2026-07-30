@@ -22,7 +22,7 @@
  */
 import { TZDate } from '@date-fns/tz';
 import { addMonths, addYears } from 'date-fns';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { billingOrders, pts } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
@@ -227,10 +227,29 @@ export async function applyOrderOutcome(
   const outcome = classifyPokStatus(order);
 
   if (outcome === 'failed') {
-    await db
+    // Guarded on status='created', like settleOrder's locked re-check: two
+    // overlapping settles can hold different POK snapshots (a canceled one and a
+    // captured one), and an unguarded write would stamp 'failed' over an order
+    // that already extended the plan and emitted billing.payment_received —
+    // after which every later settle short-circuits to 'failed' forever.
+    const failed = await db
       .update(billingOrders)
       .set({ status: 'failed' })
-      .where(eq(billingOrders.pokOrderId, pokOrderId));
+      .where(
+        and(
+          eq(billingOrders.pokOrderId, pokOrderId),
+          eq(billingOrders.status, 'created'),
+        ),
+      )
+      .returning({ id: billingOrders.id });
+    if (failed.length === 0) {
+      const [current] = await db
+        .select({ status: billingOrders.status })
+        .from(billingOrders)
+        .where(eq(billingOrders.pokOrderId, pokOrderId))
+        .limit(1);
+      return current?.status === 'paid' ? 'already_applied' : 'failed';
+    }
     log.info('pok.order_failed', 'POK order settled as failed', {
       order_id: pokOrderId,
       canceled: order.isCanceled ?? null,

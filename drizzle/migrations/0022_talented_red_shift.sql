@@ -27,6 +27,12 @@ CREATE INDEX "billing_orders_pending_idx" ON "billing_orders" USING btree ("crea
 -- narrower than the repo's default FOR ALL. drizzle-kit does not emit RLS; this
 -- block is hand-appended per repo convention (see 0012/0013/0020/0021). The
 -- explicit GRANT makes a denied query return zero rows instead of a 42501 error.
+--
+-- CORRECTION (0024): `GRANT ALL` is NOT the convention to copy. Only SELECT is
+-- needed for the zero-rows behaviour; the rest of `ALL` is what handed
+-- anon/authenticated INSERT/UPDATE/DELETE on this ledger, and 0024 had to revoke
+-- them schema-wide. A new table wants `GRANT SELECT ON TABLE "x" TO anon,
+-- authenticated`.
 GRANT ALL ON TABLE "billing_orders" TO postgres, anon, authenticated, service_role;--> statement-breakpoint
 ALTER TABLE "billing_orders" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE POLICY "billing_orders_tenant_isolation" ON "billing_orders"

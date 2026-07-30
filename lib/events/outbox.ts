@@ -8,6 +8,11 @@ import { logger, serializeError } from '@/lib/log';
 
 const LEASE_MINUTES = 5;
 const MAX_BACKOFF_MINUTES = 60;
+// Attempts before a row that keeps failing to reach Inngest is given up on.
+// With the capped backoff that is ~a day of retrying, so a long Inngest outage
+// still drains once it ends; past that the row is poison, and retrying it
+// forever only buries the log in the same failure every minute.
+export const MAX_PUBLISH_ATTEMPTS = 25;
 
 type OutboxRow = {
   id: string;
@@ -90,10 +95,22 @@ async function claimOutboxRows(args: {
   `);
 }
 
+/**
+ * What became of one claimed row. `rejected` (a forgery the publisher refused)
+ * and `dead_letter` (a row that will never reach Inngest) are drained states,
+ * NOT transport failures: lumping them into one `failed` count made a healthy
+ * run that dropped a forged row look exactly like Inngest being down.
+ */
+export type PublishOutcome =
+  | 'published'
+  | 'rejected'
+  | 'failed'
+  | 'dead_letter';
+
 async function publishClaimed(
   row: OutboxRow,
   sendEvent: SendEvent = inngest.send.bind(inngest),
-): Promise<boolean> {
+): Promise<PublishOutcome> {
   const rejected = rejectionReason(row);
   if (rejected) {
     await db
@@ -119,7 +136,7 @@ async function publishClaimed(
         reason: rejected,
       },
     );
-    return false;
+    return 'rejected';
   }
 
   try {
@@ -142,18 +159,37 @@ async function publishClaimed(
           sql`${eventOutbox.publishedAt} IS NULL`,
         ),
       );
-    return true;
+    return 'published';
   } catch (error) {
+    const exhausted = row.attempts >= MAX_PUBLISH_ATTEMPTS;
     await db
       .update(eventOutbox)
       .set({
-        availableAt: new Date(
-          Date.now() + backoffMinutes(row.attempts) * 60_000,
-        ),
+        ...(exhausted
+          ? { publishedAt: new Date() }
+          : {
+              availableAt: new Date(
+                Date.now() + backoffMinutes(row.attempts) * 60_000,
+              ),
+            }),
         lockedAt: null,
-        lastError: sanitizedError(error),
+        lastError: `${exhausted ? 'dead_letter: ' : ''}${sanitizedError(error)}`,
       })
       .where(eq(eventOutbox.id, row.id));
+
+    if (exhausted) {
+      logger.error(
+        'outbox.publish_dead_lettered',
+        'Outbox event abandoned after exhausting publish attempts',
+        {
+          event_id: row.eventId,
+          outbox_event_type: row.eventType,
+          attempts: row.attempts,
+          ...serializeError(error),
+        },
+      );
+      return 'dead_letter';
+    }
 
     logger.warn('outbox.publish_failed', 'Outbox event publish failed', {
       event_id: row.eventId,
@@ -161,7 +197,7 @@ async function publishClaimed(
       attempts: row.attempts,
       ...serializeError(error),
     });
-    return false;
+    return 'failed';
   }
 }
 
@@ -170,7 +206,7 @@ export async function publishOutboxEvent(
 ): Promise<{ published: boolean; claimed: boolean }> {
   const [row] = await claimOutboxRows({ eventId, limit: 1 });
   if (!row) return { published: false, claimed: false };
-  return { published: await publishClaimed(row), claimed: true };
+  return { published: (await publishClaimed(row)) === 'published', claimed: true };
 }
 
 export async function tryPublishOutboxEvent(eventId: string): Promise<void> {
@@ -185,17 +221,24 @@ export async function tryPublishOutboxEvent(eventId: string): Promise<void> {
   }
 }
 
-export async function publishDueOutboxEvents(
-  limit = 50,
-): Promise<{ claimed: number; published: number; failed: number }> {
+export async function publishDueOutboxEvents(limit = 50): Promise<{
+  claimed: number;
+  published: number;
+  /** Transport failures only — the count that means "Inngest is unreachable". */
+  failed: number;
+  /** Refused by the publisher's trust check (forged type/tenant). */
+  rejected: number;
+  /** Gave up after MAX_PUBLISH_ATTEMPTS. */
+  deadLettered: number;
+}> {
   const rows = await claimOutboxRows({ limit });
-  let published = 0;
+  const tally = { published: 0, failed: 0, rejected: 0, deadLettered: 0 };
   for (const row of rows) {
-    if (await publishClaimed(row)) published++;
+    const outcome = await publishClaimed(row);
+    if (outcome === 'published') tally.published++;
+    else if (outcome === 'rejected') tally.rejected++;
+    else if (outcome === 'dead_letter') tally.deadLettered++;
+    else tally.failed++;
   }
-  return {
-    claimed: rows.length,
-    published,
-    failed: rows.length - published,
-  };
+  return { claimed: rows.length, ...tally };
 }

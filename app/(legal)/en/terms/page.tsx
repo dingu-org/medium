@@ -7,11 +7,15 @@ export const metadata: Metadata = {
     'Terms for using Medium, the WhatsApp scheduling assistant for practices.',
   alternates: {
     canonical: '/en/terms',
-    languages: { sq: '/terms', en: '/en/terms' },
+    languages: {
+      sq: '/terms',
+      en: '/en/terms',
+      'x-default': '/terms',
+    },
   },
 };
 
-const updatedAt = 'July 14, 2026';
+const updatedAt = 'July 30, 2026';
 
 /** English reading copy of `/terms`, kept for Meta App Review and Business
  * Verification. The Albanian version at `/terms` is the one the practice
@@ -70,9 +74,9 @@ export default function EnglishTermsPage() {
       <LegalSection title="WhatsApp and third-party services">
         <p>
           Medium depends on Meta WhatsApp Business APIs, Supabase, Vercel,
-          Inngest, OpenRouter, OpenAI, and other infrastructure providers. Your
-          use of WhatsApp is also subject to Meta WhatsApp Business terms and
-          policies.
+          Inngest, OpenRouter, Anthropic, OpenAI, and other infrastructure
+          providers. Your use of WhatsApp is also subject to Meta WhatsApp
+          Business terms and policies.
         </p>
         <p>
           We are not responsible for outages, review delays, account

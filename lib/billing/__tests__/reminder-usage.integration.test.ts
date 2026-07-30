@@ -3,11 +3,15 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import {
   appointments,
+  conversations,
   eventOutbox,
   events,
+  messages,
   patients,
   pts,
+  reminderDeliveries,
   reminderJobs,
+  waMessageStatuses,
   whatsappConnections,
 } from '@/lib/db/schema';
 import {
@@ -31,15 +35,22 @@ const JUST_SENT = new Date(NOW.getTime() - 5 * 60_000);
 
 let ptId = '';
 let patientId = '';
+let conversationId = '';
 let apptOffset = 0;
 
-/** Seed one reminder_jobs row (each needs its own appointment — unique index). */
+/**
+ * Seed one reminder_jobs row (each needs its own appointment — unique index).
+ * A confirmed delivery is the pair the webhook writes: the job's latest-cycle
+ * stamp AND the `reminder_deliveries` row the month is actually counted from.
+ */
 async function seedReminderJob(opts: {
   status: 'sent' | 'scheduled' | 'requeued';
   deliveredAt?: Date | null;
   sentAt?: Date | null;
   apptStatus?: 'pending' | 'confirmed' | 'cancelled';
   startsAt?: Date;
+  /** Meta reported this send undeliverable (wa_message_statuses.failed_at). */
+  metaFailedAt?: Date;
 }): Promise<void> {
   apptOffset += 1;
   const startsAt =
@@ -54,6 +65,30 @@ async function seedReminderJob(opts: {
       status: opts.apptStatus ?? 'confirmed',
     })
     .returning({ id: appointments.id });
+
+  let messageId: string | null = null;
+  if (opts.metaFailedAt) {
+    const externalId = `wamid.usage-${apptOffset}-${Date.now()}`;
+    const [message] = await db
+      .insert(messages)
+      .values({
+        ptId,
+        conversationId,
+        externalId,
+        role: 'ai',
+        channel: 'whatsapp',
+        content: 'Kujtesë',
+      })
+      .returning({ id: messages.id });
+    messageId = message.id;
+    await db.insert(waMessageStatuses).values({
+      ptId,
+      externalId,
+      lastStatus: 'failed',
+      failedAt: opts.metaFailedAt,
+    });
+  }
+
   await db.insert(reminderJobs).values({
     ptId,
     appointmentId: appt.id,
@@ -61,7 +96,17 @@ async function seedReminderJob(opts: {
     status: opts.status,
     sentAt: opts.sentAt ?? null,
     deliveredAt: opts.deliveredAt ?? null,
+    messageId,
   });
+
+  if (opts.deliveredAt) {
+    await db.insert(reminderDeliveries).values({
+      ptId,
+      appointmentId: appt.id,
+      externalId: `wamid.delivered-${apptOffset}-${Date.now()}`,
+      deliveredAt: opts.deliveredAt,
+    });
+  }
 }
 
 async function reminderEvents(type: string, kind: string) {
@@ -86,10 +131,14 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await db.delete(reminderJobs).where(eq(reminderJobs.ptId, ptId));
+  // Deliberately outlives its appointment (ON DELETE SET NULL), so deleting the
+  // appointments below leaves it behind — it needs its own cleanup.
+  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.ptId, ptId));
   await db.delete(appointments).where(eq(appointments.ptId, ptId));
   await db.delete(whatsappConnections).where(eq(whatsappConnections.ptId, ptId));
   await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
   await db.delete(events).where(eq(events.ptId, ptId));
+  await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptId));
   await db.delete(patients).where(eq(patients.ptId, ptId));
   await db
     .update(pts)
@@ -100,6 +149,11 @@ beforeEach(async () => {
     .values({ ptId, name: 'Rem', phone: `+15550${Date.now()}`, waId: `wa-${Date.now()}` })
     .returning({ id: patients.id });
   patientId = patient.id;
+  const [conversation] = await db
+    .insert(conversations)
+    .values({ ptId, patientId, channel: 'whatsapp' })
+    .returning({ id: conversations.id });
+  conversationId = conversation.id;
   apptOffset = 0;
 });
 
@@ -129,9 +183,11 @@ describe('getReminderUsage', () => {
     expect(usage.monthKey).toBe('2026-07');
   });
 
-  it('stops counting a never-confirmed send once it is older than an hour', async () => {
-    // Recipient's device never came online: Meta accepted the template and sent
-    // no further status. It must not hold a quota slot for the rest of the month.
+  it('keeps counting an overnight send Meta has not confirmed yet', async () => {
+    // The recipient's phone is off: Meta accepted the template and will keep
+    // trying for ~30 days, so the send is still going to be delivered and
+    // billed. Dropping it out of `used` after an hour re-opened the whole cap
+    // every evening and billed the month at double the plan limit.
     await seedReminderJob({
       status: 'sent',
       deliveredAt: null,
@@ -141,6 +197,77 @@ describe('getReminderUsage', () => {
       status: 'sent',
       deliveredAt: null,
       sentAt: new Date(NOW.getTime() - 90 * 60_000),
+    });
+
+    const usage = await getReminderUsage(ptId, NOW);
+    expect(usage.inFlight).toBe(2);
+    expect(usage.used).toBe(2);
+    expect(usage.remaining).toBe(FREE_REMINDERS - 2);
+  });
+
+  it('counts both billed cycles of a rescheduled appointment', async () => {
+    // A reschedule re-arms the SAME reminder_jobs row (unique per appointment)
+    // onto a second template Meta bills separately. The job's one delivered_at
+    // scalar can only describe the later cycle, so counting that column made
+    // every first template free.
+    await seedReminderJob({
+      status: 'sent',
+      deliveredAt: IN_MONTH,
+      sentAt: IN_MONTH,
+    });
+    const [job] = await db
+      .select({ appointmentId: reminderJobs.appointmentId })
+      .from(reminderJobs)
+      .where(eq(reminderJobs.ptId, ptId));
+    const secondDelivery = new Date(IN_MONTH.getTime() + 86_400_000);
+    await db.insert(reminderDeliveries).values({
+      ptId,
+      appointmentId: job.appointmentId,
+      externalId: `wamid.cycle2-${Date.now()}`,
+      deliveredAt: secondDelivery,
+    });
+    await db
+      .update(reminderJobs)
+      .set({ sentAt: secondDelivery, deliveredAt: secondDelivery })
+      .where(eq(reminderJobs.ptId, ptId));
+
+    const usage = await getReminderUsage(ptId, NOW);
+    expect(usage.delivered).toBe(2);
+    expect(usage.inFlight).toBe(0);
+    expect(usage.used).toBe(2);
+  });
+
+  it('ignores a redelivered webhook for a wamid already counted', async () => {
+    await seedReminderJob({
+      status: 'sent',
+      deliveredAt: IN_MONTH,
+      sentAt: IN_MONTH,
+    });
+    const [delivery] = await db
+      .select()
+      .from(reminderDeliveries)
+      .where(eq(reminderDeliveries.ptId, ptId));
+
+    // The unique wamid is what makes the count idempotent, whatever the webhook
+    // does; a second row for the same template must be impossible.
+    await expect(
+      db.insert(reminderDeliveries).values({
+        ptId,
+        appointmentId: delivery.appointmentId,
+        externalId: delivery.externalId,
+        deliveredAt: new Date(IN_MONTH.getTime() + 60_000),
+      }),
+    ).rejects.toThrow();
+
+    expect((await getReminderUsage(ptId, NOW)).delivered).toBe(1);
+  });
+
+  it('frees the slot of a send Meta reported undeliverable', async () => {
+    await seedReminderJob({
+      status: 'sent',
+      deliveredAt: null,
+      sentAt: JUST_SENT,
+      metaFailedAt: new Date(NOW.getTime() - 60_000),
     });
 
     const usage = await getReminderUsage(ptId, NOW);
@@ -171,7 +298,7 @@ describe('reminderQuotaAvailable (send-time gate)', () => {
     expect(await reminderQuotaAvailable(ptId, NOW)).toBe(false);
   });
 
-  it('does not let a stale unconfirmed send consume the last slot', async () => {
+  it('still blocks when the last slot is an unconfirmed send from days ago', async () => {
     for (let i = 0; i < FREE_REMINDERS - 1; i += 1) {
       await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
     }
@@ -179,6 +306,19 @@ describe('reminderQuotaAvailable (send-time gate)', () => {
       status: 'sent',
       deliveredAt: null,
       sentAt: new Date(NOW.getTime() - 3 * 86_400_000),
+    });
+    expect(await reminderQuotaAvailable(ptId, NOW)).toBe(false);
+  });
+
+  it('re-opens the last slot once Meta reports that send failed', async () => {
+    for (let i = 0; i < FREE_REMINDERS - 1; i += 1) {
+      await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
+    }
+    await seedReminderJob({
+      status: 'sent',
+      deliveredAt: null,
+      sentAt: new Date(NOW.getTime() - 3 * 86_400_000),
+      metaFailedAt: new Date(NOW.getTime() - 2 * 86_400_000),
     });
     expect(await reminderQuotaAvailable(ptId, NOW)).toBe(true);
   });
