@@ -50,3 +50,7 @@ supabase/.temp/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ua
+.ua/.trash*
+.ua/temp*

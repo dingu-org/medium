@@ -18,6 +18,19 @@ For any task:
 4. Test the changes.
 5. Mark the current in-flight work as done by updating the relevant tracker files in `task-manager/`.
 
+# Codebase understanding
+
+This project has the `understand-anything` plugin available. Prefer its knowledge-graph skills over ad-hoc file exploration when a task needs a broad view of the codebase:
+
+- `/understand` — this is used manually by the human to build a knowledge graph
+- Once a graph exists, prefer these over a full rescan:
+  - `/understand-chat` — answer questions about the codebase
+  - `/understand-explain <path>` — deep-dive on a specific file/function/module
+  - `/understand-diff` — assess impact/risk of the current diff or a PR
+  - `/understand-domain` — business-domain/flow mapping
+  - `/understand-onboard` — generate an onboarding guide
+  - `/understand-dashboard` — visualize the graph in the browser (dont use this unless user asks)
+
 # Communication
 
 - Keep answers concise.

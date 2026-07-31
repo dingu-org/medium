@@ -1,0 +1,5508 @@
+{
+  "name": "medium",
+  "description": "Medium is a multi-tenant SaaS scaffold that lets solo physical therapists manage patient bookings over WhatsApp with an AI assistant, overseen from a mobile-first PWA. It is built on Next.js App Router with Tailwind CSS and shadcn/ui, with placeholder API routes for WhatsApp, Meta embedded auth, and Inngest still to be wired to live services. Note: this project has over 100 source files; consider scoping analysis to a subdirectory for faster results.",
+  "languages": [
+    "config",
+    "css",
+    "html",
+    "javascript",
+    "json",
+    "markdown",
+    "shell",
+    "sql",
+    "toml",
+    "typescript",
+    "unknown",
+    "yaml"
+  ],
+  "frameworks": [
+    "Next.js",
+    "React",
+    "Tailwind CSS",
+    "Vitest"
+  ],
+  "files": [
+    {
+      "path": "__tests__/middleware.test.ts",
+      "language": "typescript",
+      "sizeLines": 127,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/launch.json",
+      "language": "json",
+      "sizeLines": 17,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".env.example",
+      "language": "config",
+      "sizeLines": 35,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".env.local.dev.example",
+      "language": "config",
+      "sizeLines": 11,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".env.test",
+      "language": "config",
+      "sizeLines": 27,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".husky/pre-commit",
+      "language": "unknown",
+      "sizeLines": 2,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".prettierrc.json",
+      "language": "json",
+      "sizeLines": 5,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".ua/.understandignore",
+      "language": "unknown",
+      "sizeLines": 85,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".ua/config.json",
+      "language": "json",
+      "sizeLines": 3,
+      "fileCategory": "config"
+    },
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "sizeLines": 24,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "app/__tests__/page.test.tsx",
+      "language": "typescript",
+      "sizeLines": 74,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/_landing/landing-page.tsx",
+      "language": "typescript",
+      "sizeLines": 491,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/forgot-password/__tests__/actions.test.ts",
+      "language": "typescript",
+      "sizeLines": 81,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/forgot-password/actions.ts",
+      "language": "typescript",
+      "sizeLines": 57,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/forgot-password/form.tsx",
+      "language": "typescript",
+      "sizeLines": 51,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/forgot-password/page.tsx",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/layout.tsx",
+      "language": "typescript",
+      "sizeLines": 35,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/reset-password/__tests__/actions.test.ts",
+      "language": "typescript",
+      "sizeLines": 147,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/reset-password/actions.ts",
+      "language": "typescript",
+      "sizeLines": 52,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/reset-password/form.tsx",
+      "language": "typescript",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/reset-password/page.tsx",
+      "language": "typescript",
+      "sizeLines": 30,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/sign-in/__tests__/page.test.tsx",
+      "language": "typescript",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/sign-in/actions.ts",
+      "language": "typescript",
+      "sizeLines": 35,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/sign-in/form.tsx",
+      "language": "typescript",
+      "sizeLines": 128,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/sign-in/oauth-buttons.tsx",
+      "language": "typescript",
+      "sizeLines": 41,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/sign-in/page.tsx",
+      "language": "typescript",
+      "sizeLines": 29,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/sign-up/__tests__/actions.test.ts",
+      "language": "typescript",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/sign-up/actions.ts",
+      "language": "typescript",
+      "sizeLines": 58,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/sign-up/form.tsx",
+      "language": "typescript",
+      "sizeLines": 70,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(auth)/sign-up/page.tsx",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/admin/__tests__/gate.test.ts",
+      "language": "typescript",
+      "sizeLines": 32,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/admin/gate.ts",
+      "language": "typescript",
+      "sizeLines": 20,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/admin/page.tsx",
+      "language": "typescript",
+      "sizeLines": 467,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/admin/payments-export/route.ts",
+      "language": "typescript",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/calendar/actions.ts",
+      "language": "typescript",
+      "sizeLines": 361,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/calendar/calendar-client.tsx",
+      "language": "typescript",
+      "sizeLines": 495,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/calendar/calendar-fab.tsx",
+      "language": "typescript",
+      "sizeLines": 477,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/calendar/page.tsx",
+      "language": "typescript",
+      "sizeLines": 40,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/chat/__tests__/actions.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 694,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/chat/[conversationId]/chat-thread.tsx",
+      "language": "typescript",
+      "sizeLines": 635,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/chat/[conversationId]/loading.tsx",
+      "language": "typescript",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/chat/[conversationId]/page.tsx",
+      "language": "typescript",
+      "sizeLines": 39,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/chat/actions.ts",
+      "language": "typescript",
+      "sizeLines": 463,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/chat/chat-list.tsx",
+      "language": "typescript",
+      "sizeLines": 308,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/chat/loading.tsx",
+      "language": "typescript",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/chat/page.tsx",
+      "language": "typescript",
+      "sizeLines": 30,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/chat/pagination-actions.ts",
+      "language": "typescript",
+      "sizeLines": 64,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/clients/__tests__/actions.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 172,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/clients/[id]/client-detail.tsx",
+      "language": "typescript",
+      "sizeLines": 422,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/clients/[id]/page.tsx",
+      "language": "typescript",
+      "sizeLines": 20,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/clients/actions.ts",
+      "language": "typescript",
+      "sizeLines": 166,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/clients/clients-directory.tsx",
+      "language": "typescript",
+      "sizeLines": 150,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/clients/loading.tsx",
+      "language": "typescript",
+      "sizeLines": 12,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/clients/new/new-client-form.tsx",
+      "language": "typescript",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/clients/new/page.tsx",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/clients/page.tsx",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/layout.tsx",
+      "language": "typescript",
+      "sizeLines": 75,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/loading.tsx",
+      "language": "typescript",
+      "sizeLines": 5,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/pwa-install-actions.ts",
+      "language": "typescript",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/__tests__/actions.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 273,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/__tests__/push-actions.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 150,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/__tests__/scoped-update-actions.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 279,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/account/__tests__/actions.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 97,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/account/account-danger.tsx",
+      "language": "typescript",
+      "sizeLines": 129,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/account/actions.ts",
+      "language": "typescript",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/account/data-group.tsx",
+      "language": "typescript",
+      "sizeLines": 173,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/account/page.tsx",
+      "language": "typescript",
+      "sizeLines": 48,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/actions.ts",
+      "language": "typescript",
+      "sizeLines": 146,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/assistant/__tests__/actions.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 119,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/assistant/actions.ts",
+      "language": "typescript",
+      "sizeLines": 112,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/assistant/assistant-identity.tsx",
+      "language": "typescript",
+      "sizeLines": 230,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/assistant/page.tsx",
+      "language": "typescript",
+      "sizeLines": 41,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/availability/__tests__/actions.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 151,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/availability/actions.ts",
+      "language": "typescript",
+      "sizeLines": 172,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/availability/availability-editor.tsx",
+      "language": "typescript",
+      "sizeLines": 558,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/availability/page.tsx",
+      "language": "typescript",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/billing/actions.ts",
+      "language": "typescript",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/billing/checkout-form.tsx",
+      "language": "typescript",
+      "sizeLines": 134,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/billing/page.tsx",
+      "language": "typescript",
+      "sizeLines": 209,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/billing/plan-card.tsx",
+      "language": "typescript",
+      "sizeLines": 63,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/billing/usage-meter.tsx",
+      "language": "typescript",
+      "sizeLines": 53,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/connect-whatsapp.tsx",
+      "language": "typescript",
+      "sizeLines": 327,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/constants.ts",
+      "language": "typescript",
+      "sizeLines": 34,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/notifications/actions.ts",
+      "language": "typescript",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/notifications/device-push-card.tsx",
+      "language": "typescript",
+      "sizeLines": 107,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/notifications/notification-prefs.tsx",
+      "language": "typescript",
+      "sizeLines": 117,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/notifications/page.tsx",
+      "language": "typescript",
+      "sizeLines": 31,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/page.tsx",
+      "language": "typescript",
+      "sizeLines": 165,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/profile-card.tsx",
+      "language": "typescript",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/profile/actions.ts",
+      "language": "typescript",
+      "sizeLines": 77,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/profile/page.tsx",
+      "language": "typescript",
+      "sizeLines": 30,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/profile/profile-form.tsx",
+      "language": "typescript",
+      "sizeLines": 112,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/push-actions.ts",
+      "language": "typescript",
+      "sizeLines": 138,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/services/__tests__/actions.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 179,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/services/__tests__/plan-gate.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 117,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/services/actions.ts",
+      "language": "typescript",
+      "sizeLines": 255,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/services/page.tsx",
+      "language": "typescript",
+      "sizeLines": 24,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/services/services-editor.tsx",
+      "language": "typescript",
+      "sizeLines": 289,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/sign-out-row.tsx",
+      "language": "typescript",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/whatsapp/disconnect-section.tsx",
+      "language": "typescript",
+      "sizeLines": 97,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/settings/whatsapp/page.tsx",
+      "language": "typescript",
+      "sizeLines": 144,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/today/__tests__/today-client.test.tsx",
+      "language": "typescript",
+      "sizeLines": 173,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/today/loading.tsx",
+      "language": "typescript",
+      "sizeLines": 20,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/today/page.tsx",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(dashboard)/today/today-client.tsx",
+      "language": "typescript",
+      "sizeLines": 385,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/__tests__/legal-routes.test.tsx",
+      "language": "typescript",
+      "sizeLines": 135,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/en/privacy/page.tsx",
+      "language": "typescript",
+      "sizeLines": 210,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/en/terms/page.tsx",
+      "language": "typescript",
+      "sizeLines": 225,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/help/ai-bookings/page.tsx",
+      "language": "typescript",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/help/availability/page.tsx",
+      "language": "typescript",
+      "sizeLines": 55,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/help/page.tsx",
+      "language": "typescript",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/help/plans/page.tsx",
+      "language": "typescript",
+      "sizeLines": 129,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/help/policy-section.tsx",
+      "language": "typescript",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/help/whatsapp/page.tsx",
+      "language": "typescript",
+      "sizeLines": 68,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/layout.tsx",
+      "language": "typescript",
+      "sizeLines": 55,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/legal-section.tsx",
+      "language": "typescript",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/privacy/__tests__/ai-providers.test.ts",
+      "language": "typescript",
+      "sizeLines": 101,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/privacy/ai-providers.ts",
+      "language": "typescript",
+      "sizeLines": 28,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/privacy/page.tsx",
+      "language": "typescript",
+      "sizeLines": 237,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/(legal)/terms/page.tsx",
+      "language": "typescript",
+      "sizeLines": 237,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/auth/meta-embedded/__tests__/route.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 395,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/auth/meta-embedded/route.ts",
+      "language": "typescript",
+      "sizeLines": 424,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/inngest/route.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/metrics/vitals/__tests__/route.test.ts",
+      "language": "typescript",
+      "sizeLines": 65,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/metrics/vitals/route.ts",
+      "language": "typescript",
+      "sizeLines": 53,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/pwa/mutations/__tests__/route.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 936,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/pwa/mutations/appointment/route.ts",
+      "language": "typescript",
+      "sizeLines": 292,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/pwa/mutations/message/route.ts",
+      "language": "typescript",
+      "sizeLines": 378,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/webhooks/pok/route.ts",
+      "language": "typescript",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/webhooks/whatsapp/__tests__/route.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 1611,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/api/webhooks/whatsapp/route.ts",
+      "language": "typescript",
+      "sizeLines": 1031,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/auth/callback/__tests__/route.test.ts",
+      "language": "typescript",
+      "sizeLines": 141,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/auth/callback/route.ts",
+      "language": "typescript",
+      "sizeLines": 57,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/auth/confirm/__tests__/route.test.ts",
+      "language": "typescript",
+      "sizeLines": 209,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/auth/confirm/route.ts",
+      "language": "typescript",
+      "sizeLines": 99,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/error.tsx",
+      "language": "typescript",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/global-error.tsx",
+      "language": "typescript",
+      "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/globals.css",
+      "language": "css",
+      "sizeLines": 221,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "app/layout.tsx",
+      "language": "typescript",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/onboarding/__tests__/actions.test.ts",
+      "language": "typescript",
+      "sizeLines": 94,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/onboarding/__tests__/constants.test.ts",
+      "language": "typescript",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/onboarding/actions.ts",
+      "language": "typescript",
+      "sizeLines": 104,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/onboarding/constants.ts",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/onboarding/layout.tsx",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/onboarding/page.tsx",
+      "language": "typescript",
+      "sizeLines": 308,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/page.tsx",
+      "language": "typescript",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/sw.ts",
+      "language": "typescript",
+      "sizeLines": 197,
+      "fileCategory": "code"
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 1,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "components.json",
+      "language": "json",
+      "sizeLines": 25,
+      "fileCategory": "config"
+    },
+    {
+      "path": "components/appointments/__tests__/badges.test.ts",
+      "language": "typescript",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/appointments/appointment-sheet.tsx",
+      "language": "typescript",
+      "sizeLines": 476,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/appointments/badges.tsx",
+      "language": "typescript",
+      "sizeLines": 68,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/appointments/types.ts",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/chat/composer.tsx",
+      "language": "typescript",
+      "sizeLines": 148,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/chat/notice.tsx",
+      "language": "typescript",
+      "sizeLines": 79,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/chat/status-row.tsx",
+      "language": "typescript",
+      "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/chat/sys-line.tsx",
+      "language": "typescript",
+      "sizeLines": 10,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/dashboard/bottom-nav.tsx",
+      "language": "typescript",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/dashboard/dashboard-chrome.tsx",
+      "language": "typescript",
+      "sizeLines": 111,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/dashboard/nav-bar.tsx",
+      "language": "typescript",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/dashboard/sign-out-button.tsx",
+      "language": "typescript",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/dashboard/sync-indicator.tsx",
+      "language": "typescript",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/dashboard/top-header.tsx",
+      "language": "typescript",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/notifications/actions.ts",
+      "language": "typescript",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/notifications/notification-bell.tsx",
+      "language": "typescript",
+      "sizeLines": 207,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/pwa/pwa-provider.tsx",
+      "language": "typescript",
+      "sizeLines": 511,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/realtime-refresher.tsx",
+      "language": "typescript",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/settings/add-dashed.tsx",
+      "language": "typescript",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/settings/assistant-card.tsx",
+      "language": "typescript",
+      "sizeLines": 77,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/settings/dur-chips.tsx",
+      "language": "typescript",
+      "sizeLines": 60,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/settings/offline-note.tsx",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/settings/save-action.tsx",
+      "language": "typescript",
+      "sizeLines": 24,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/settings/set-field.tsx",
+      "language": "typescript",
+      "sizeLines": 96,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/settings/template-preview.tsx",
+      "language": "typescript",
+      "sizeLines": 81,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/settings/version-foot.tsx",
+      "language": "typescript",
+      "sizeLines": 12,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/settings/wa-hero.tsx",
+      "language": "typescript",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/states/index.tsx",
+      "language": "typescript",
+      "sizeLines": 106,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/app-banner.tsx",
+      "language": "typescript",
+      "sizeLines": 48,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/avatar.tsx",
+      "language": "typescript",
+      "sizeLines": 112,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/badge.tsx",
+      "language": "typescript",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/button.tsx",
+      "language": "typescript",
+      "sizeLines": 70,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/card.tsx",
+      "language": "typescript",
+      "sizeLines": 103,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/channel-chip.tsx",
+      "language": "typescript",
+      "sizeLines": 65,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/chat-bubble.tsx",
+      "language": "typescript",
+      "sizeLines": 110,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/checkbox.tsx",
+      "language": "typescript",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/count-badge.tsx",
+      "language": "typescript",
+      "sizeLines": 27,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/dialog.tsx",
+      "language": "typescript",
+      "sizeLines": 169,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/dropdown-menu.tsx",
+      "language": "typescript",
+      "sizeLines": 269,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/grouped-list.tsx",
+      "language": "typescript",
+      "sizeLines": 132,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/handled-by.tsx",
+      "language": "typescript",
+      "sizeLines": 40,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/initials-avatar.tsx",
+      "language": "typescript",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/input.tsx",
+      "language": "typescript",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/label.tsx",
+      "language": "typescript",
+      "sizeLines": 24,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/logo-mark.tsx",
+      "language": "typescript",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/popover.tsx",
+      "language": "typescript",
+      "sizeLines": 89,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/round-button.tsx",
+      "language": "typescript",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/scroll-area.tsx",
+      "language": "typescript",
+      "sizeLines": 55,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/section-label.tsx",
+      "language": "typescript",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/segmented-control.tsx",
+      "language": "typescript",
+      "sizeLines": 56,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/select.tsx",
+      "language": "typescript",
+      "sizeLines": 192,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/separator.tsx",
+      "language": "typescript",
+      "sizeLines": 28,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/sheet.tsx",
+      "language": "typescript",
+      "sizeLines": 148,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/skeleton.tsx",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/sonner.tsx",
+      "language": "typescript",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/status-pill.tsx",
+      "language": "typescript",
+      "sizeLines": 64,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/switch.tsx",
+      "language": "typescript",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/tabs.tsx",
+      "language": "typescript",
+      "sizeLines": 90,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/textarea.tsx",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/ui/whatsapp-mark.tsx",
+      "language": "typescript",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "components/web-vitals-reporter.tsx",
+      "language": "typescript",
+      "sizeLines": 30,
+      "fileCategory": "code"
+    },
+    {
+      "path": "drizzle.config.ts",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "drizzle/migrations/0000_init_extensions.sql",
+      "language": "sql",
+      "sizeLines": 1,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0001_init_schema.sql",
+      "language": "sql",
+      "sizeLines": 165,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0002_rls_policies.sql",
+      "language": "sql",
+      "sizeLines": 81,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0003_pts_signup_trigger.sql",
+      "language": "sql",
+      "sizeLines": 22,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0004_whatsapp_webhook_indexes.sql",
+      "language": "sql",
+      "sizeLines": 1,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0005_whatsapp_connection_unique.sql",
+      "language": "sql",
+      "sizeLines": 1,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0006_ai_conversation_metadata.sql",
+      "language": "sql",
+      "sizeLines": 3,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0007_phase4_appointments.sql",
+      "language": "sql",
+      "sizeLines": 36,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0008_phase5_background_jobs.sql",
+      "language": "sql",
+      "sizeLines": 17,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0009_phase6_reminders.sql",
+      "language": "sql",
+      "sizeLines": 6,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0010_phase7_realtime.sql",
+      "language": "sql",
+      "sizeLines": 30,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0011_phase8_pwa.sql",
+      "language": "sql",
+      "sizeLines": 20,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0012_whatsapp_coexistence.sql",
+      "language": "sql",
+      "sizeLines": 34,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0013_phase13_design_reconciliation.sql",
+      "language": "sql",
+      "sizeLines": 99,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0014_phase13_review_hardening.sql",
+      "language": "sql",
+      "sizeLines": 2,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0015_phase9_push_subscription_unique.sql",
+      "language": "sql",
+      "sizeLines": 0,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0016_phase10_gdpr.sql",
+      "language": "sql",
+      "sizeLines": 21,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0017_phase11_cost_daily.sql",
+      "language": "sql",
+      "sizeLines": 21,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0018_phase15_settings_fields.sql",
+      "language": "sql",
+      "sizeLines": 6,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0019_sudden_weapon_omega.sql",
+      "language": "sql",
+      "sizeLines": 9,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0020_steep_rattler.sql",
+      "language": "sql",
+      "sizeLines": 31,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0021_simple_silk_fever.sql",
+      "language": "sql",
+      "sizeLines": 43,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0022_talented_red_shift.sql",
+      "language": "sql",
+      "sizeLines": 39,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0023_violet_meteorite.sql",
+      "language": "sql",
+      "sizeLines": 20,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0024_tenant_read_only_rls.sql",
+      "language": "sql",
+      "sizeLines": 143,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0025_conversation_days_survive_erasure.sql",
+      "language": "sql",
+      "sizeLines": 27,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0026_reminder_deliveries.sql",
+      "language": "sql",
+      "sizeLines": 56,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/0027_revoke_reference_and_trigger_grants.sql",
+      "language": "sql",
+      "sizeLines": 29,
+      "fileCategory": "data"
+    },
+    {
+      "path": "drizzle/migrations/meta/_journal.json",
+      "language": "json",
+      "sizeLines": 201,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0000_snapshot.json",
+      "language": "json",
+      "sizeLines": 17,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0001_snapshot.json",
+      "language": "json",
+      "sizeLines": 1211,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0002_snapshot.json",
+      "language": "json",
+      "sizeLines": 1211,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0003_snapshot.json",
+      "language": "json",
+      "sizeLines": 1211,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0004_snapshot.json",
+      "language": "json",
+      "sizeLines": 1249,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0005_snapshot.json",
+      "language": "json",
+      "sizeLines": 1249,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0006_snapshot.json",
+      "language": "json",
+      "sizeLines": 1290,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0007_snapshot.json",
+      "language": "json",
+      "sizeLines": 1501,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0008_snapshot.json",
+      "language": "json",
+      "sizeLines": 1603,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0009_snapshot.json",
+      "language": "json",
+      "sizeLines": 1667,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0010_snapshot.json",
+      "language": "json",
+      "sizeLines": 1679,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0011_snapshot.json",
+      "language": "json",
+      "sizeLines": 1813,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0012_snapshot.json",
+      "language": "json",
+      "sizeLines": 2047,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0013_snapshot.json",
+      "language": "json",
+      "sizeLines": 2091,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0014_snapshot.json",
+      "language": "json",
+      "sizeLines": 2216,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0015_snapshot.json",
+      "language": "json",
+      "sizeLines": 2232,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0016_snapshot.json",
+      "language": "json",
+      "sizeLines": 2294,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0017_snapshot.json",
+      "language": "json",
+      "sizeLines": 2397,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0018_snapshot.json",
+      "language": "json",
+      "sizeLines": 2438,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0019_snapshot.json",
+      "language": "json",
+      "sizeLines": 2516,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0020_snapshot.json",
+      "language": "json",
+      "sizeLines": 2715,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0021_snapshot.json",
+      "language": "json",
+      "sizeLines": 2935,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0022_snapshot.json",
+      "language": "json",
+      "sizeLines": 3118,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0023_snapshot.json",
+      "language": "json",
+      "sizeLines": 3139,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0024_snapshot.json",
+      "language": "json",
+      "sizeLines": 3139,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0025_snapshot.json",
+      "language": "json",
+      "sizeLines": 3139,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0026_snapshot.json",
+      "language": "json",
+      "sizeLines": 3254,
+      "fileCategory": "config"
+    },
+    {
+      "path": "drizzle/migrations/meta/0027_snapshot.json",
+      "language": "json",
+      "sizeLines": 3254,
+      "fileCategory": "config"
+    },
+    {
+      "path": "eslint.config.mjs",
+      "language": "javascript",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": "landing/index.html",
+      "language": "html",
+      "sizeLines": 509,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "lib/__tests__/log.test.ts",
+      "language": "typescript",
+      "sizeLines": 216,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/actions/__tests__/instrument.test.ts",
+      "language": "typescript",
+      "sizeLines": 58,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/actions/instrument.ts",
+      "language": "typescript",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/__tests__/client.test.ts",
+      "language": "typescript",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/__tests__/dispatcher.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 238,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/__tests__/models.test.ts",
+      "language": "typescript",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/__tests__/prompt-bundle.test.ts",
+      "language": "typescript",
+      "sizeLines": 29,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/__tests__/prompt.test.ts",
+      "language": "typescript",
+      "sizeLines": 350,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/__tests__/tools.test.ts",
+      "language": "typescript",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/.gitkeep",
+      "language": "unknown",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/client.ts",
+      "language": "typescript",
+      "sizeLines": 60,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/dispatcher.ts",
+      "language": "typescript",
+      "sizeLines": 257,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/models.ts",
+      "language": "typescript",
+      "sizeLines": 48,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/prompt.ts",
+      "language": "typescript",
+      "sizeLines": 108,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/prompts/scheduling-assistant.ts",
+      "language": "typescript",
+      "sizeLines": 74,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/ai/tools.ts",
+      "language": "typescript",
+      "sizeLines": 120,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/__tests__/availability.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 345,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/__tests__/mutations.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 386,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/__tests__/state.test.ts",
+      "language": "typescript",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/.gitkeep",
+      "language": "unknown",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/availability.ts",
+      "language": "typescript",
+      "sizeLines": 388,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/book.ts",
+      "language": "typescript",
+      "sizeLines": 152,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/cancel.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/errors.ts",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/index.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/lock.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/queries.ts",
+      "language": "typescript",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/reschedule.ts",
+      "language": "typescript",
+      "sizeLines": 132,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/state.ts",
+      "language": "typescript",
+      "sizeLines": 149,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/appointments/types.ts",
+      "language": "typescript",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/auth/__tests__/safe-next.test.ts",
+      "language": "typescript",
+      "sizeLines": 68,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/auth/actions.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/auth/email-links.ts",
+      "language": "typescript",
+      "sizeLines": 34,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/auth/link-errors.ts",
+      "language": "typescript",
+      "sizeLines": 71,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/auth/recovery.ts",
+      "language": "typescript",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/auth/safe-next.ts",
+      "language": "typescript",
+      "sizeLines": 45,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/cap-handoff.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 156,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/checkout-slot.test.ts",
+      "language": "typescript",
+      "sizeLines": 131,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/entitlements.test.ts",
+      "language": "typescript",
+      "sizeLines": 184,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/meta.test.ts",
+      "language": "typescript",
+      "sizeLines": 184,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/payments-extension.test.ts",
+      "language": "typescript",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/payments-lazy-client.test.ts",
+      "language": "typescript",
+      "sizeLines": 40,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/payments.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 215,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/plans.test.ts",
+      "language": "typescript",
+      "sizeLines": 114,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/pok-client.test.ts",
+      "language": "typescript",
+      "sizeLines": 152,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/read-model.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 183,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/reminder-usage.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 466,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/usage.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 268,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/__tests__/usage.test.ts",
+      "language": "typescript",
+      "sizeLines": 56,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/cap-handoff.ts",
+      "language": "typescript",
+      "sizeLines": 137,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/entitlements.ts",
+      "language": "typescript",
+      "sizeLines": 81,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/meta.ts",
+      "language": "typescript",
+      "sizeLines": 211,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/payments.ts",
+      "language": "typescript",
+      "sizeLines": 335,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/plans.ts",
+      "language": "typescript",
+      "sizeLines": 179,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/pok/client.ts",
+      "language": "typescript",
+      "sizeLines": 262,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/pok/types.ts",
+      "language": "typescript",
+      "sizeLines": 77,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/read-model.ts",
+      "language": "typescript",
+      "sizeLines": 280,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/billing/usage.ts",
+      "language": "typescript",
+      "sizeLines": 635,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/__tests__/client.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 385,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/__tests__/graph.test.ts",
+      "language": "typescript",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/__tests__/payload.test.ts",
+      "language": "typescript",
+      "sizeLines": 55,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/__tests__/signature.test.ts",
+      "language": "typescript",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/.gitkeep",
+      "language": "unknown",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/client.ts",
+      "language": "typescript",
+      "sizeLines": 389,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/constants.ts",
+      "language": "typescript",
+      "sizeLines": 5,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/errors.ts",
+      "language": "typescript",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/graph.ts",
+      "language": "typescript",
+      "sizeLines": 79,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/payload.ts",
+      "language": "typescript",
+      "sizeLines": 146,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/channels/whatsapp/signature.ts",
+      "language": "typescript",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/chat/__tests__/chat-list-page.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/chat/__tests__/queries.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 96,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/chat/queries.ts",
+      "language": "typescript",
+      "sizeLines": 141,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/clients/__tests__/phone.test.ts",
+      "language": "typescript",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/clients/__tests__/queries.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 166,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/clients/mutations.ts",
+      "language": "typescript",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/clients/phone.ts",
+      "language": "typescript",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/clients/queries.ts",
+      "language": "typescript",
+      "sizeLines": 301,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/__tests__/engine.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 838,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/__tests__/engine.test.ts",
+      "language": "typescript",
+      "sizeLines": 261,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/__tests__/escalation.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 137,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/__tests__/safety.test.ts",
+      "language": "typescript",
+      "sizeLines": 144,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/.gitkeep",
+      "language": "unknown",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/engine.ts",
+      "language": "typescript",
+      "sizeLines": 865,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/errors.ts",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/escalation.ts",
+      "language": "typescript",
+      "sizeLines": 51,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/safety.ts",
+      "language": "typescript",
+      "sizeLines": 168,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/conversation/types.ts",
+      "language": "typescript",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/db/__tests__/advisory-lock.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 104,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/db/__tests__/crypto.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/db/__tests__/crypto.test.ts",
+      "language": "typescript",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/db/advisory-lock.ts",
+      "language": "typescript",
+      "sizeLines": 81,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/db/crypto.ts",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/db/index.ts",
+      "language": "typescript",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/db/postgres-errors.ts",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/db/schema.ts",
+      "language": "typescript",
+      "sizeLines": 736,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/events/__tests__/outbox.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 220,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/events/__tests__/schemas.test.ts",
+      "language": "typescript",
+      "sizeLines": 75,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/events/.gitkeep",
+      "language": "unknown",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/events/appointments.ts",
+      "language": "typescript",
+      "sizeLines": 94,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/events/background.ts",
+      "language": "typescript",
+      "sizeLines": 243,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/events/outbox.ts",
+      "language": "typescript",
+      "sizeLines": 244,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/events/store.ts",
+      "language": "typescript",
+      "sizeLines": 29,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/format/__tests__/name.test.ts",
+      "language": "typescript",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/format/appointment-time.ts",
+      "language": "typescript",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/format/name.ts",
+      "language": "typescript",
+      "sizeLines": 7,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/gdpr/__tests__/export.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 426,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/gdpr/archive.ts",
+      "language": "typescript",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/gdpr/export.ts",
+      "language": "typescript",
+      "sizeLines": 359,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/hooks/__tests__/realtime.test.ts",
+      "language": "typescript",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/hooks/realtime.ts",
+      "language": "typescript",
+      "sizeLines": 393,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/__tests__/number.test.ts",
+      "language": "typescript",
+      "sizeLines": 14,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/datetime.ts",
+      "language": "typescript",
+      "sizeLines": 97,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/appointment.ts",
+      "language": "typescript",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/auth.ts",
+      "language": "typescript",
+      "sizeLines": 75,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/billing.ts",
+      "language": "typescript",
+      "sizeLines": 111,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/calendar.ts",
+      "language": "typescript",
+      "sizeLines": 92,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/chat.ts",
+      "language": "typescript",
+      "sizeLines": 95,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/clients.ts",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/common.ts",
+      "language": "typescript",
+      "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/onboarding.ts",
+      "language": "typescript",
+      "sizeLines": 35,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/pwa.ts",
+      "language": "typescript",
+      "sizeLines": 51,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/settings.ts",
+      "language": "typescript",
+      "sizeLines": 309,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/dict/today.ts",
+      "language": "typescript",
+      "sizeLines": 7,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/index.ts",
+      "language": "typescript",
+      "sizeLines": 12,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/number.ts",
+      "language": "typescript",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/i18n/sq.ts",
+      "language": "typescript",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/__tests__/client.test.ts",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/client.ts",
+      "language": "typescript",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/events.ts",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions.ts",
+      "language": "typescript",
+      "sizeLines": 40,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/appointment-events.test.ts",
+      "language": "typescript",
+      "sizeLines": 75,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/appointments-background.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 796,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/billing-renewal-monitor.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 238,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/billing-renewal-monitor.test.ts",
+      "language": "typescript",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/bootstrap-wa-connection.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 307,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/daily-cost-rollup.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 413,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/handle-inbound-message.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 591,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/maintenance.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 251,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/offer-resume.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/offer-resume.test.ts",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/poll-whatsapp-health.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 221,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/purge-expired-messages.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 220,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/reconcile-pok-orders.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 345,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/resume-business-app-ai.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 130,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/retention-clamp.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 68,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/send-reminder-delivery.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 208,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/send-reminder.test.ts",
+      "language": "typescript",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/__tests__/sync-whatsapp-coexistence.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 146,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/appointment-context.ts",
+      "language": "typescript",
+      "sizeLines": 105,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/appointment-events.ts",
+      "language": "typescript",
+      "sizeLines": 414,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/billing-renewal-monitor.ts",
+      "language": "typescript",
+      "sizeLines": 297,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/billing-usage-monitor.ts",
+      "language": "typescript",
+      "sizeLines": 74,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/bootstrap-wa-connection.ts",
+      "language": "typescript",
+      "sizeLines": 287,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/daily-cost-rollup.ts",
+      "language": "typescript",
+      "sizeLines": 258,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/dispatch-push.ts",
+      "language": "typescript",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/handle-inbound-message.ts",
+      "language": "typescript",
+      "sizeLines": 547,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/offer-resume.ts",
+      "language": "typescript",
+      "sizeLines": 108,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/poll-whatsapp-health.ts",
+      "language": "typescript",
+      "sizeLines": 198,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/publish-event-outbox.ts",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/purge-expired-messages.ts",
+      "language": "typescript",
+      "sizeLines": 166,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/reconcile-pok-orders.ts",
+      "language": "typescript",
+      "sizeLines": 239,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/reconcile-reminder-templates.ts",
+      "language": "typescript",
+      "sizeLines": 168,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/resume-business-app-ai.ts",
+      "language": "typescript",
+      "sizeLines": 64,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/send-reminder.ts",
+      "language": "typescript",
+      "sizeLines": 741,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/inngest/functions/sync-whatsapp-coexistence.ts",
+      "language": "typescript",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/log.ts",
+      "language": "typescript",
+      "sizeLines": 199,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/metrics/__tests__/admin.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 757,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/metrics/__tests__/payments-export.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 171,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/metrics/__tests__/payments-export.test.ts",
+      "language": "typescript",
+      "sizeLines": 84,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/metrics/admin.ts",
+      "language": "typescript",
+      "sizeLines": 872,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/metrics/payments-export.ts",
+      "language": "typescript",
+      "sizeLines": 172,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/__tests__/format.test.ts",
+      "language": "typescript",
+      "sizeLines": 37,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/__tests__/push-dispatch.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 308,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/__tests__/push-payload.test.ts",
+      "language": "typescript",
+      "sizeLines": 180,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/__tests__/push.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 139,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/.gitkeep",
+      "language": "unknown",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/format.ts",
+      "language": "typescript",
+      "sizeLines": 184,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/push-dispatch.ts",
+      "language": "typescript",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/push-payload.ts",
+      "language": "typescript",
+      "sizeLines": 179,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/push.ts",
+      "language": "typescript",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/notifications/query.ts",
+      "language": "typescript",
+      "sizeLines": 104,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/onboarding/__tests__/state.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/onboarding/state.ts",
+      "language": "typescript",
+      "sizeLines": 107,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/patients/__tests__/erase.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 371,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/patients/erase.ts",
+      "language": "typescript",
+      "sizeLines": 177,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/patients/whatsapp-contacts.ts",
+      "language": "typescript",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/__tests__/chat-thread-delivery.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 88,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/__tests__/chat-thread-older.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 152,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/__tests__/client-store.test.ts",
+      "language": "typescript",
+      "sizeLines": 347,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/__tests__/manifest.test.ts",
+      "language": "typescript",
+      "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/__tests__/push-client.test.ts",
+      "language": "typescript",
+      "sizeLines": 262,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/__tests__/service-worker.test.ts",
+      "language": "typescript",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/__tests__/settings-snapshot.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 136,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/auth.ts",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/client-store.ts",
+      "language": "typescript",
+      "sizeLines": 318,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/mutation-client.ts",
+      "language": "typescript",
+      "sizeLines": 84,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/mutation-store.ts",
+      "language": "typescript",
+      "sizeLines": 294,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/push-client.ts",
+      "language": "typescript",
+      "sizeLines": 168,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/pwa/read-models.ts",
+      "language": "typescript",
+      "sizeLines": 606,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/reminders/__tests__/parse-response.test.ts",
+      "language": "typescript",
+      "sizeLines": 261,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/reminders/__tests__/response-handler.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 482,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/reminders/.gitkeep",
+      "language": "unknown",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/reminders/parse-response.ts",
+      "language": "typescript",
+      "sizeLines": 185,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/reminders/response-handler.ts",
+      "language": "typescript",
+      "sizeLines": 563,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/services/__tests__/queries.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/services/queries.ts",
+      "language": "typescript",
+      "sizeLines": 117,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/settings/__tests__/confirm-phrase.test.ts",
+      "language": "typescript",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/settings/availability-summary.ts",
+      "language": "typescript",
+      "sizeLines": 27,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/settings/confirm-phrase.ts",
+      "language": "typescript",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/supabase/__tests__/env.test.ts",
+      "language": "typescript",
+      "sizeLines": 24,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/supabase/browser.ts",
+      "language": "typescript",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/supabase/env.ts",
+      "language": "typescript",
+      "sizeLines": 41,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/supabase/server.ts",
+      "language": "typescript",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/supabase/service.ts",
+      "language": "typescript",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/tenancy/__tests__/audit.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/tenancy/__tests__/service-client.test.ts",
+      "language": "typescript",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/tenancy/audit.ts",
+      "language": "typescript",
+      "sizeLines": 31,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/tenancy/authed-client.ts",
+      "language": "typescript",
+      "sizeLines": 5,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/tenancy/errors.ts",
+      "language": "typescript",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/tenancy/index.ts",
+      "language": "typescript",
+      "sizeLines": 4,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/tenancy/service-client.ts",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/today/__tests__/queries.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 235,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/today/queries.ts",
+      "language": "typescript",
+      "sizeLines": 330,
+      "fileCategory": "code"
+    },
+    {
+      "path": "lib/utils.ts",
+      "language": "typescript",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "middleware.ts",
+      "language": "typescript",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "next.config.ts",
+      "language": "typescript",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "sizeLines": 94,
+      "fileCategory": "config"
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "language": "yaml",
+      "sizeLines": 3,
+      "fileCategory": "config"
+    },
+    {
+      "path": "postcss.config.mjs",
+      "language": "javascript",
+      "sizeLines": 7,
+      "fileCategory": "code"
+    },
+    {
+      "path": "public/manifest.json",
+      "language": "json",
+      "sizeLines": 46,
+      "fileCategory": "config"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "sizeLines": 74,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "scripts/__tests__/backfill-display-number.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 197,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/__tests__/rotate-token-key.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 112,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/__tests__/seed.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 146,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/backfill-display-number.ts",
+      "language": "typescript",
+      "sizeLines": 96,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/db-reset.ts",
+      "language": "typescript",
+      "sizeLines": 45,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/dev-test.sh",
+      "language": "shell",
+      "sizeLines": 7,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/generate-pwa-icons.mjs",
+      "language": "javascript",
+      "sizeLines": 43,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/rotate-token-key.ts",
+      "language": "typescript",
+      "sizeLines": 73,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/seed-qa.ts",
+      "language": "typescript",
+      "sizeLines": 273,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/seed-reset.ts",
+      "language": "typescript",
+      "sizeLines": 29,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/seed.ts",
+      "language": "typescript",
+      "sizeLines": 257,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/smoke-ai.ts",
+      "language": "typescript",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/smoke-pok.ts",
+      "language": "typescript",
+      "sizeLines": 212,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/smoke-push.ts",
+      "language": "typescript",
+      "sizeLines": 211,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/smoke-tenancy.ts",
+      "language": "typescript",
+      "sizeLines": 162,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/tunnel.sh",
+      "language": "shell",
+      "sizeLines": 13,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/verify-schema.ts",
+      "language": "typescript",
+      "sizeLines": 87,
+      "fileCategory": "code"
+    },
+    {
+      "path": "supabase/config.toml",
+      "language": "toml",
+      "sizeLines": 426,
+      "fileCategory": "config"
+    },
+    {
+      "path": "supabase/templates/confirmation.html",
+      "language": "html",
+      "sizeLines": 25,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "supabase/templates/recovery.html",
+      "language": "html",
+      "sizeLines": 25,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "tests/rls/coverage.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 215,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/rls/isolation.integration.test.ts",
+      "language": "typescript",
+      "sizeLines": 543,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/setup/global.ts",
+      "language": "typescript",
+      "sizeLines": 31,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tsconfig.json",
+      "language": "json",
+      "sizeLines": 42,
+      "fileCategory": "config"
+    },
+    {
+      "path": "vitest.config.ts",
+      "language": "typescript",
+      "sizeLines": 37,
+      "fileCategory": "code"
+    }
+  ],
+  "totalFiles": 526,
+  "filteredByIgnore": 30,
+  "estimatedComplexity": "very-large",
+  "importMap": {
+    "__tests__/middleware.test.ts": [
+      "middleware.ts"
+    ],
+    ".claude/launch.json": [],
+    ".env.example": [],
+    ".env.local.dev.example": [],
+    ".env.test": [],
+    ".husky/pre-commit": [],
+    ".prettierrc.json": [],
+    ".ua/.understandignore": [],
+    ".ua/config.json": [],
+    "AGENTS.md": [],
+    "app/__tests__/page.test.tsx": [
+      "app/_landing/landing-page.tsx",
+      "app/page.tsx"
+    ],
+    "app/_landing/landing-page.tsx": [
+      "components/ui/button.tsx",
+      "components/ui/logo-mark.tsx",
+      "components/ui/whatsapp-mark.tsx",
+      "lib/billing/plans.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/forgot-password/__tests__/actions.test.ts": [
+      "app/(auth)/forgot-password/actions.ts",
+      "lib/i18n/index.ts",
+      "lib/log.ts"
+    ],
+    "app/(auth)/forgot-password/actions.ts": [
+      "lib/auth/email-links.ts",
+      "lib/i18n/index.ts",
+      "lib/log.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(auth)/forgot-password/form.tsx": [
+      "app/(auth)/forgot-password/actions.ts",
+      "components/ui/button.tsx",
+      "components/ui/input.tsx",
+      "components/ui/label.tsx",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/forgot-password/page.tsx": [
+      "app/(auth)/forgot-password/form.tsx",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/layout.tsx": [
+      "components/ui/logo-mark.tsx",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/reset-password/__tests__/actions.test.ts": [
+      "app/(auth)/reset-password/actions.ts",
+      "lib/auth/recovery.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/reset-password/actions.ts": [
+      "lib/auth/recovery.ts",
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(auth)/reset-password/form.tsx": [
+      "app/(auth)/reset-password/actions.ts",
+      "components/ui/button.tsx",
+      "components/ui/input.tsx",
+      "components/ui/label.tsx",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/reset-password/page.tsx": [
+      "app/(auth)/reset-password/form.tsx",
+      "lib/auth/recovery.ts",
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(auth)/sign-in/__tests__/page.test.tsx": [
+      "app/(auth)/sign-in/page.tsx",
+      "lib/auth/link-errors.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/sign-in/actions.ts": [
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(auth)/sign-in/form.tsx": [
+      "app/(auth)/sign-in/actions.ts",
+      "app/(auth)/sign-in/oauth-buttons.tsx",
+      "components/ui/button.tsx",
+      "components/ui/input.tsx",
+      "components/ui/label.tsx",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/sign-in/oauth-buttons.tsx": [
+      "components/ui/button.tsx",
+      "lib/i18n/index.ts",
+      "lib/supabase/browser.ts"
+    ],
+    "app/(auth)/sign-in/page.tsx": [
+      "app/(auth)/sign-in/form.tsx",
+      "lib/auth/link-errors.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/sign-up/__tests__/actions.test.ts": [
+      "app/(auth)/sign-up/actions.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/sign-up/actions.ts": [
+      "lib/auth/email-links.ts",
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(auth)/sign-up/form.tsx": [
+      "app/(auth)/sign-in/oauth-buttons.tsx",
+      "app/(auth)/sign-up/actions.ts",
+      "components/ui/button.tsx",
+      "components/ui/input.tsx",
+      "components/ui/label.tsx",
+      "lib/i18n/index.ts"
+    ],
+    "app/(auth)/sign-up/page.tsx": [
+      "app/(auth)/sign-up/form.tsx",
+      "lib/i18n/index.ts"
+    ],
+    "app/(dashboard)/admin/__tests__/gate.test.ts": [
+      "app/(dashboard)/admin/gate.ts"
+    ],
+    "app/(dashboard)/admin/gate.ts": [],
+    "app/(dashboard)/admin/page.tsx": [
+      "app/(dashboard)/admin/gate.ts",
+      "components/ui/card.tsx",
+      "lib/metrics/admin.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/admin/payments-export/route.ts": [
+      "app/(dashboard)/admin/gate.ts",
+      "lib/metrics/payments-export.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/calendar/actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/appointments/availability.ts",
+      "lib/appointments/index.ts",
+      "lib/clients/mutations.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/services/queries.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/calendar/calendar-client.tsx": [
+      "app/(dashboard)/calendar/calendar-fab.tsx",
+      "components/appointments/appointment-sheet.tsx",
+      "components/appointments/badges.tsx",
+      "components/appointments/types.ts",
+      "components/realtime-refresher.tsx",
+      "components/states/index.tsx",
+      "components/ui/segmented-control.tsx",
+      "components/ui/status-pill.tsx",
+      "lib/i18n/index.ts",
+      "lib/pwa/client-store.ts",
+      "lib/services/queries.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/calendar/calendar-fab.tsx": [
+      "app/(dashboard)/calendar/actions.ts",
+      "app/(dashboard)/settings/availability/actions.ts",
+      "components/ui/button.tsx",
+      "components/ui/input.tsx",
+      "components/ui/label.tsx",
+      "components/ui/sheet.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/pwa/mutation-client.ts",
+      "lib/services/queries.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/calendar/page.tsx": [
+      "app/(dashboard)/calendar/calendar-client.tsx",
+      "lib/i18n/index.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/chat/__tests__/actions.integration.test.ts": [
+      "app/(dashboard)/chat/actions.ts",
+      "lib/billing/usage.ts",
+      "lib/chat/queries.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/format/appointment-time.ts",
+      "lib/inngest/functions/bootstrap-wa-connection.ts",
+      "lib/inngest/functions/send-reminder.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/service.ts"
+    ],
+    "app/(dashboard)/chat/[conversationId]/chat-thread.tsx": [
+      "app/(dashboard)/chat/actions.ts",
+      "app/(dashboard)/chat/pagination-actions.ts",
+      "components/chat/composer.tsx",
+      "components/chat/notice.tsx",
+      "components/chat/status-row.tsx",
+      "components/chat/sys-line.tsx",
+      "components/dashboard/nav-bar.tsx",
+      "components/ui/chat-bubble.tsx",
+      "components/ui/round-button.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/datetime.ts",
+      "lib/i18n/index.ts",
+      "lib/pwa/client-store.ts",
+      "lib/pwa/mutation-client.ts"
+    ],
+    "app/(dashboard)/chat/[conversationId]/loading.tsx": [
+      "components/ui/skeleton.tsx",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/chat/[conversationId]/page.tsx": [
+      "app/(dashboard)/chat/[conversationId]/chat-thread.tsx",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/chat/actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/billing/usage.ts",
+      "lib/channels/whatsapp/client.ts",
+      "lib/db/advisory-lock.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/format/appointment-time.ts",
+      "lib/inngest/functions/bootstrap-wa-connection.ts",
+      "lib/log.ts",
+      "lib/supabase/server.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "app/(dashboard)/chat/chat-list.tsx": [
+      "app/(dashboard)/chat/pagination-actions.ts",
+      "components/realtime-refresher.tsx",
+      "components/states/index.tsx",
+      "components/ui/button.tsx",
+      "components/ui/count-badge.tsx",
+      "components/ui/handled-by.tsx",
+      "components/ui/initials-avatar.tsx",
+      "components/ui/input.tsx",
+      "components/ui/section-label.tsx",
+      "components/ui/segmented-control.tsx",
+      "lib/format/name.ts",
+      "lib/i18n/datetime.ts",
+      "lib/i18n/index.ts",
+      "lib/pwa/read-models.ts"
+    ],
+    "app/(dashboard)/chat/loading.tsx": [
+      "components/states/index.tsx",
+      "components/ui/skeleton.tsx"
+    ],
+    "app/(dashboard)/chat/page.tsx": [
+      "app/(dashboard)/chat/chat-list.tsx",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/chat/pagination-actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/chat/queries.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/clients/__tests__/actions.integration.test.ts": [
+      "app/(dashboard)/clients/actions.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "app/(dashboard)/clients/[id]/client-detail.tsx": [
+      "app/(dashboard)/clients/actions.ts",
+      "components/appointments/appointment-sheet.tsx",
+      "components/appointments/badges.tsx",
+      "components/appointments/types.ts",
+      "components/dashboard/nav-bar.tsx",
+      "components/realtime-refresher.tsx",
+      "components/ui/app-banner.tsx",
+      "components/ui/button.tsx",
+      "components/ui/channel-chip.tsx",
+      "components/ui/dialog.tsx",
+      "components/ui/initials-avatar.tsx",
+      "components/ui/input.tsx",
+      "components/ui/label.tsx",
+      "components/ui/section-label.tsx",
+      "components/ui/textarea.tsx",
+      "components/ui/whatsapp-mark.tsx",
+      "lib/clients/queries.ts",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/settings/confirm-phrase.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/clients/[id]/page.tsx": [
+      "app/(dashboard)/clients/[id]/client-detail.tsx",
+      "lib/clients/queries.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/clients/actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/clients/mutations.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/gdpr/export.ts",
+      "lib/patients/erase.ts",
+      "lib/supabase/server.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "app/(dashboard)/clients/clients-directory.tsx": [
+      "components/realtime-refresher.tsx",
+      "components/states/index.tsx",
+      "components/ui/button.tsx",
+      "components/ui/initials-avatar.tsx",
+      "components/ui/section-label.tsx",
+      "lib/clients/queries.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(dashboard)/clients/loading.tsx": [
+      "components/states/index.tsx",
+      "components/ui/skeleton.tsx"
+    ],
+    "app/(dashboard)/clients/new/new-client-form.tsx": [
+      "app/(dashboard)/clients/actions.ts",
+      "components/ui/app-banner.tsx",
+      "components/ui/button.tsx",
+      "components/ui/input.tsx",
+      "components/ui/label.tsx",
+      "components/ui/textarea.tsx",
+      "lib/hooks/realtime.ts"
+    ],
+    "app/(dashboard)/clients/new/page.tsx": [
+      "app/(dashboard)/clients/new/new-client-form.tsx",
+      "components/dashboard/nav-bar.tsx"
+    ],
+    "app/(dashboard)/clients/page.tsx": [
+      "app/(dashboard)/clients/clients-directory.tsx",
+      "lib/clients/queries.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/layout.tsx": [
+      "app/onboarding/constants.ts",
+      "components/dashboard/dashboard-chrome.tsx",
+      "components/pwa/pwa-provider.tsx",
+      "components/realtime-refresher.tsx",
+      "components/ui/sonner.tsx",
+      "components/web-vitals-reporter.tsx",
+      "lib/chat/queries.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/notifications/query.ts",
+      "lib/onboarding/state.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/loading.tsx": [
+      "components/states/index.tsx"
+    ],
+    "app/(dashboard)/pwa-install-actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/db/index.ts",
+      "lib/events/background.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/__tests__/actions.integration.test.ts": [
+      "app/(dashboard)/settings/actions.ts",
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "app/(dashboard)/settings/__tests__/push-actions.integration.test.ts": [
+      "app/(dashboard)/pwa-install-actions.ts",
+      "app/(dashboard)/settings/push-actions.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "app/(dashboard)/settings/__tests__/scoped-update-actions.integration.test.ts": [
+      "app/(dashboard)/settings/account/actions.ts",
+      "app/(dashboard)/settings/assistant/actions.ts",
+      "app/(dashboard)/settings/constants.ts",
+      "app/(dashboard)/settings/notifications/actions.ts",
+      "app/(dashboard)/settings/profile/actions.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "app/(dashboard)/settings/account/__tests__/actions.integration.test.ts": [
+      "app/(dashboard)/settings/account/actions.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(dashboard)/settings/account/account-danger.tsx": [
+      "app/(dashboard)/settings/actions.ts",
+      "components/ui/button.tsx",
+      "components/ui/dialog.tsx",
+      "components/ui/grouped-list.tsx",
+      "components/ui/input.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/settings/confirm-phrase.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/account/actions.ts": [
+      "app/(dashboard)/settings/constants.ts",
+      "lib/actions/instrument.ts",
+      "lib/billing/plans.ts",
+      "lib/billing/read-model.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/account/data-group.tsx": [
+      "app/(dashboard)/settings/account/actions.ts",
+      "app/(dashboard)/settings/actions.ts",
+      "app/(dashboard)/settings/constants.ts",
+      "components/ui/grouped-list.tsx",
+      "components/ui/sheet.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/account/page.tsx": [
+      "app/(dashboard)/settings/account/account-danger.tsx",
+      "app/(dashboard)/settings/account/data-group.tsx",
+      "components/dashboard/nav-bar.tsx",
+      "components/settings/offline-note.tsx",
+      "components/ui/grouped-list.tsx",
+      "lib/i18n/index.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/channels/whatsapp/client.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/gdpr/archive.ts",
+      "lib/gdpr/export.ts",
+      "lib/log.ts",
+      "lib/supabase/server.ts",
+      "lib/supabase/service.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "app/(dashboard)/settings/assistant/__tests__/actions.integration.test.ts": [
+      "app/(dashboard)/settings/assistant/actions.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(dashboard)/settings/assistant/actions.ts": [
+      "app/(dashboard)/settings/constants.ts",
+      "lib/actions/instrument.ts",
+      "lib/ai/prompt.ts",
+      "lib/billing/plans.ts",
+      "lib/billing/read-model.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/assistant/assistant-identity.tsx": [
+      "app/(dashboard)/settings/assistant/actions.ts",
+      "app/(dashboard)/settings/constants.ts",
+      "components/settings/set-field.tsx",
+      "components/ui/button.tsx",
+      "components/ui/grouped-list.tsx",
+      "components/ui/sheet.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/assistant/page.tsx": [
+      "app/(dashboard)/settings/assistant/actions.ts",
+      "app/(dashboard)/settings/assistant/assistant-identity.tsx",
+      "components/dashboard/nav-bar.tsx",
+      "components/settings/assistant-card.tsx",
+      "components/settings/offline-note.tsx",
+      "lib/i18n/index.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/availability/__tests__/actions.integration.test.ts": [
+      "app/(dashboard)/settings/availability/actions.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "app/(dashboard)/settings/availability/actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/availability/availability-editor.tsx": [
+      "app/(dashboard)/settings/availability/actions.ts",
+      "components/dashboard/nav-bar.tsx",
+      "components/settings/add-dashed.tsx",
+      "components/settings/offline-note.tsx",
+      "components/settings/save-action.tsx",
+      "components/ui/button.tsx",
+      "components/ui/grouped-list.tsx",
+      "components/ui/input.tsx",
+      "components/ui/section-label.tsx",
+      "components/ui/sheet.tsx",
+      "components/ui/switch.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/availability/page.tsx": [
+      "app/(dashboard)/settings/availability/availability-editor.tsx",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/i18n/datetime.ts",
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/billing/actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/billing/payments.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/billing/checkout-form.tsx": [
+      "app/(dashboard)/settings/billing/actions.ts",
+      "components/ui/button.tsx",
+      "lib/billing/payments.ts",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/billing/page.tsx": [
+      "app/(dashboard)/settings/billing/checkout-form.tsx",
+      "app/(dashboard)/settings/billing/plan-card.tsx",
+      "app/(dashboard)/settings/billing/usage-meter.tsx",
+      "components/dashboard/nav-bar.tsx",
+      "lib/billing/payments.ts",
+      "lib/billing/read-model.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/billing/plan-card.tsx": [
+      "lib/billing/read-model.ts",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/billing/usage-meter.tsx": [
+      "lib/billing/read-model.ts",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/connect-whatsapp.tsx": [
+      "components/ui/app-banner.tsx",
+      "components/ui/whatsapp-mark.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(dashboard)/settings/constants.ts": [],
+    "app/(dashboard)/settings/notifications/actions.ts": [
+      "app/(dashboard)/settings/constants.ts",
+      "lib/actions/instrument.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/notifications/device-push-card.tsx": [
+      "components/ui/switch.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/pwa/push-client.ts"
+    ],
+    "app/(dashboard)/settings/notifications/notification-prefs.tsx": [
+      "app/(dashboard)/settings/constants.ts",
+      "app/(dashboard)/settings/notifications/actions.ts",
+      "components/ui/grouped-list.tsx",
+      "components/ui/switch.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(dashboard)/settings/notifications/page.tsx": [
+      "app/(dashboard)/settings/notifications/device-push-card.tsx",
+      "app/(dashboard)/settings/notifications/notification-prefs.tsx",
+      "components/dashboard/nav-bar.tsx",
+      "components/settings/offline-note.tsx",
+      "lib/i18n/index.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/page.tsx": [
+      "app/(dashboard)/settings/assistant/actions.ts",
+      "app/(dashboard)/settings/profile-card.tsx",
+      "app/(dashboard)/settings/sign-out-row.tsx",
+      "components/settings/assistant-card.tsx",
+      "components/settings/version-foot.tsx",
+      "components/ui/grouped-list.tsx",
+      "lib/i18n/index.ts",
+      "lib/pwa/read-models.ts",
+      "lib/services/queries.ts",
+      "lib/settings/availability-summary.ts",
+      "lib/supabase/server.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/profile-card.tsx": [
+      "components/ui/initials-avatar.tsx"
+    ],
+    "app/(dashboard)/settings/profile/actions.ts": [
+      "app/(dashboard)/settings/constants.ts",
+      "lib/actions/instrument.ts",
+      "lib/ai/prompt.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/profile/page.tsx": [
+      "app/(dashboard)/settings/profile/profile-form.tsx",
+      "lib/i18n/index.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/profile/profile-form.tsx": [
+      "app/(dashboard)/settings/constants.ts",
+      "app/(dashboard)/settings/profile/actions.ts",
+      "components/dashboard/nav-bar.tsx",
+      "components/settings/offline-note.tsx",
+      "components/settings/save-action.tsx",
+      "components/settings/set-field.tsx",
+      "components/ui/initials-avatar.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(dashboard)/settings/push-actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/notifications/push.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/services/__tests__/actions.integration.test.ts": [
+      "app/(dashboard)/settings/services/actions.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/services/queries.ts"
+    ],
+    "app/(dashboard)/settings/services/__tests__/plan-gate.integration.test.ts": [
+      "app/(dashboard)/settings/services/actions.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/services/queries.ts"
+    ],
+    "app/(dashboard)/settings/services/actions.ts": [
+      "lib/actions/instrument.ts",
+      "lib/ai/prompt.ts",
+      "lib/billing/plans.ts",
+      "lib/billing/read-model.ts",
+      "lib/db/advisory-lock.ts",
+      "lib/db/index.ts",
+      "lib/db/postgres-errors.ts",
+      "lib/db/schema.ts",
+      "lib/i18n/index.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/services/page.tsx": [
+      "app/(dashboard)/settings/services/services-editor.tsx",
+      "components/dashboard/nav-bar.tsx",
+      "lib/i18n/index.ts",
+      "lib/services/queries.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/settings/services/services-editor.tsx": [
+      "app/(dashboard)/settings/services/actions.ts",
+      "components/settings/add-dashed.tsx",
+      "components/settings/dur-chips.tsx",
+      "components/settings/offline-note.tsx",
+      "components/settings/set-field.tsx",
+      "components/states/index.tsx",
+      "components/ui/button.tsx",
+      "components/ui/grouped-list.tsx",
+      "components/ui/sheet.tsx",
+      "components/ui/switch.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/services/queries.ts",
+      "lib/utils.ts"
+    ],
+    "app/(dashboard)/settings/sign-out-row.tsx": [
+      "components/ui/grouped-list.tsx",
+      "lib/auth/actions.ts",
+      "lib/i18n/index.ts",
+      "lib/pwa/client-store.ts",
+      "lib/pwa/push-client.ts"
+    ],
+    "app/(dashboard)/settings/whatsapp/disconnect-section.tsx": [
+      "app/(dashboard)/settings/actions.ts",
+      "components/ui/button.tsx",
+      "components/ui/dialog.tsx",
+      "components/ui/grouped-list.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(dashboard)/settings/whatsapp/page.tsx": [
+      "app/(dashboard)/settings/connect-whatsapp.tsx",
+      "app/(dashboard)/settings/whatsapp/disconnect-section.tsx",
+      "components/dashboard/nav-bar.tsx",
+      "components/settings/offline-note.tsx",
+      "components/settings/template-preview.tsx",
+      "components/settings/wa-hero.tsx",
+      "components/ui/channel-chip.tsx",
+      "components/ui/section-label.tsx",
+      "lib/channels/whatsapp/constants.ts",
+      "lib/i18n/index.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/(dashboard)/today/__tests__/today-client.test.tsx": [
+      "app/(dashboard)/today/today-client.tsx",
+      "lib/i18n/index.ts",
+      "lib/today/queries.ts"
+    ],
+    "app/(dashboard)/today/loading.tsx": [
+      "components/ui/skeleton.tsx"
+    ],
+    "app/(dashboard)/today/page.tsx": [
+      "app/(dashboard)/today/today-client.tsx",
+      "lib/supabase/server.ts",
+      "lib/today/queries.ts"
+    ],
+    "app/(dashboard)/today/today-client.tsx": [
+      "components/appointments/appointment-sheet.tsx",
+      "components/appointments/badges.tsx",
+      "components/realtime-refresher.tsx",
+      "components/ui/button.tsx",
+      "components/ui/dialog.tsx",
+      "components/ui/label.tsx",
+      "components/ui/section-label.tsx",
+      "components/ui/textarea.tsx",
+      "lib/i18n/index.ts",
+      "lib/pwa/mutation-client.ts",
+      "lib/today/queries.ts"
+    ],
+    "app/(legal)/__tests__/legal-routes.test.tsx": [
+      "app/(legal)/en/privacy/page.tsx",
+      "app/(legal)/en/terms/page.tsx",
+      "app/(legal)/layout.tsx",
+      "app/(legal)/privacy/page.tsx",
+      "app/(legal)/terms/page.tsx"
+    ],
+    "app/(legal)/en/privacy/page.tsx": [
+      "app/(legal)/legal-section.tsx",
+      "app/(legal)/privacy/ai-providers.ts"
+    ],
+    "app/(legal)/en/terms/page.tsx": [
+      "app/(legal)/legal-section.tsx"
+    ],
+    "app/(legal)/help/ai-bookings/page.tsx": [
+      "app/(legal)/help/policy-section.tsx"
+    ],
+    "app/(legal)/help/availability/page.tsx": [
+      "app/(legal)/help/policy-section.tsx"
+    ],
+    "app/(legal)/help/page.tsx": [],
+    "app/(legal)/help/plans/page.tsx": [
+      "app/(legal)/help/policy-section.tsx",
+      "lib/billing/plans.ts",
+      "lib/i18n/index.ts"
+    ],
+    "app/(legal)/help/policy-section.tsx": [],
+    "app/(legal)/help/whatsapp/page.tsx": [
+      "app/(legal)/help/policy-section.tsx"
+    ],
+    "app/(legal)/layout.tsx": [],
+    "app/(legal)/legal-section.tsx": [],
+    "app/(legal)/privacy/__tests__/ai-providers.test.ts": [
+      "app/(legal)/en/privacy/page.tsx",
+      "app/(legal)/en/terms/page.tsx",
+      "app/(legal)/privacy/ai-providers.ts",
+      "app/(legal)/privacy/page.tsx",
+      "app/(legal)/terms/page.tsx",
+      "lib/billing/plans.ts"
+    ],
+    "app/(legal)/privacy/ai-providers.ts": [],
+    "app/(legal)/privacy/page.tsx": [
+      "app/(legal)/legal-section.tsx",
+      "app/(legal)/privacy/ai-providers.ts"
+    ],
+    "app/(legal)/terms/page.tsx": [
+      "app/(legal)/legal-section.tsx"
+    ],
+    "app/api/auth/meta-embedded/__tests__/route.integration.test.ts": [
+      "app/api/auth/meta-embedded/route.ts",
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/supabase/service.ts"
+    ],
+    "app/api/auth/meta-embedded/route.ts": [
+      "lib/channels/whatsapp/errors.ts",
+      "lib/channels/whatsapp/graph.ts",
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/log.ts",
+      "lib/supabase/server.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "app/api/inngest/route.ts": [
+      "lib/inngest/client.ts",
+      "lib/inngest/functions.ts"
+    ],
+    "app/api/metrics/vitals/__tests__/route.test.ts": [
+      "app/api/metrics/vitals/route.ts"
+    ],
+    "app/api/metrics/vitals/route.ts": [
+      "lib/log.ts"
+    ],
+    "app/api/pwa/mutations/__tests__/route.integration.test.ts": [
+      "app/api/pwa/mutations/appointment/route.ts",
+      "app/api/pwa/mutations/message/route.ts",
+      "lib/channels/whatsapp/errors.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/supabase/service.ts"
+    ],
+    "app/api/pwa/mutations/appointment/route.ts": [
+      "lib/appointments/index.ts",
+      "lib/clients/mutations.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/pwa/auth.ts",
+      "lib/pwa/mutation-store.ts",
+      "lib/services/queries.ts"
+    ],
+    "app/api/pwa/mutations/message/route.ts": [
+      "lib/channels/whatsapp/client.ts",
+      "lib/channels/whatsapp/errors.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/pwa/auth.ts",
+      "lib/pwa/mutation-store.ts"
+    ],
+    "app/api/webhooks/pok/route.ts": [
+      "lib/billing/payments.ts",
+      "lib/log.ts"
+    ],
+    "app/api/webhooks/whatsapp/__tests__/route.integration.test.ts": [
+      "app/api/webhooks/whatsapp/route.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/supabase/service.ts"
+    ],
+    "app/api/webhooks/whatsapp/route.ts": [
+      "lib/channels/whatsapp/client.ts",
+      "lib/channels/whatsapp/payload.ts",
+      "lib/channels/whatsapp/signature.ts",
+      "lib/db/index.ts",
+      "lib/db/postgres-errors.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/log.ts"
+    ],
+    "app/auth/callback/__tests__/route.test.ts": [
+      "app/auth/callback/route.ts",
+      "lib/auth/link-errors.ts",
+      "lib/auth/recovery.ts"
+    ],
+    "app/auth/callback/route.ts": [
+      "lib/auth/link-errors.ts",
+      "lib/auth/recovery.ts",
+      "lib/auth/safe-next.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/auth/confirm/__tests__/route.test.ts": [
+      "app/auth/confirm/route.ts",
+      "lib/auth/link-errors.ts",
+      "lib/auth/recovery.ts"
+    ],
+    "app/auth/confirm/route.ts": [
+      "lib/auth/link-errors.ts",
+      "lib/auth/recovery.ts",
+      "lib/auth/safe-next.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/error.tsx": [
+      "components/states/index.tsx",
+      "components/ui/button.tsx",
+      "lib/i18n/index.ts"
+    ],
+    "app/global-error.tsx": [],
+    "app/globals.css": [],
+    "app/layout.tsx": [
+      "app/globals.css"
+    ],
+    "app/onboarding/__tests__/actions.test.ts": [
+      "app/onboarding/actions.ts",
+      "app/onboarding/constants.ts"
+    ],
+    "app/onboarding/__tests__/constants.test.ts": [
+      "app/onboarding/constants.ts"
+    ],
+    "app/onboarding/actions.ts": [
+      "app/onboarding/constants.ts",
+      "lib/auth/safe-next.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/onboarding/constants.ts": [],
+    "app/onboarding/layout.tsx": [
+      "lib/supabase/server.ts"
+    ],
+    "app/onboarding/page.tsx": [
+      "app/onboarding/actions.ts",
+      "components/ui/button.tsx",
+      "lib/billing/plans.ts",
+      "lib/i18n/index.ts",
+      "lib/onboarding/state.ts",
+      "lib/services/queries.ts",
+      "lib/supabase/server.ts",
+      "lib/utils.ts"
+    ],
+    "app/page.tsx": [
+      "app/_landing/landing-page.tsx",
+      "lib/auth/recovery.ts",
+      "lib/supabase/env.ts",
+      "lib/supabase/server.ts"
+    ],
+    "app/sw.ts": [],
+    "CLAUDE.md": [],
+    "components.json": [],
+    "components/appointments/__tests__/badges.test.ts": [
+      "components/appointments/badges.tsx",
+      "lib/i18n/index.ts"
+    ],
+    "components/appointments/appointment-sheet.tsx": [
+      "app/(dashboard)/calendar/actions.ts",
+      "components/appointments/badges.tsx",
+      "components/appointments/types.ts",
+      "components/ui/button.tsx",
+      "components/ui/sheet.tsx",
+      "components/ui/status-pill.tsx",
+      "components/ui/textarea.tsx",
+      "components/ui/whatsapp-mark.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/pwa/client-store.ts",
+      "lib/pwa/mutation-client.ts"
+    ],
+    "components/appointments/badges.tsx": [
+      "components/ui/status-pill.tsx",
+      "lib/appointments/index.ts",
+      "lib/i18n/index.ts"
+    ],
+    "components/appointments/types.ts": [
+      "components/appointments/badges.tsx",
+      "lib/appointments/index.ts"
+    ],
+    "components/chat/composer.tsx": [
+      "components/ui/whatsapp-mark.tsx",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/chat/notice.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/chat/status-row.tsx": [
+      "components/ui/switch.tsx",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/chat/sys-line.tsx": [],
+    "components/dashboard/bottom-nav.tsx": [
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/dashboard/dashboard-chrome.tsx": [
+      "components/dashboard/bottom-nav.tsx",
+      "components/dashboard/top-header.tsx",
+      "components/ui/round-button.tsx",
+      "lib/i18n/index.ts",
+      "lib/notifications/format.ts",
+      "lib/utils.ts"
+    ],
+    "components/dashboard/nav-bar.tsx": [
+      "components/ui/round-button.tsx",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/dashboard/sign-out-button.tsx": [
+      "components/ui/dropdown-menu.tsx",
+      "lib/auth/actions.ts",
+      "lib/i18n/index.ts",
+      "lib/pwa/client-store.ts",
+      "lib/pwa/push-client.ts"
+    ],
+    "components/dashboard/sync-indicator.tsx": [
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/dashboard/top-header.tsx": [
+      "components/dashboard/sign-out-button.tsx",
+      "components/dashboard/sync-indicator.tsx",
+      "components/notifications/notification-bell.tsx",
+      "components/ui/dropdown-menu.tsx",
+      "components/ui/initials-avatar.tsx",
+      "lib/notifications/format.ts"
+    ],
+    "components/notifications/actions.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/server.ts"
+    ],
+    "components/notifications/notification-bell.tsx": [
+      "components/notifications/actions.ts",
+      "components/states/index.tsx",
+      "components/ui/round-button.tsx",
+      "components/ui/scroll-area.tsx",
+      "components/ui/section-label.tsx",
+      "components/ui/sheet.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/datetime.ts",
+      "lib/i18n/index.ts",
+      "lib/notifications/format.ts",
+      "lib/utils.ts"
+    ],
+    "components/pwa/pwa-provider.tsx": [
+      "app/(dashboard)/pwa-install-actions.ts",
+      "components/ui/app-banner.tsx",
+      "components/ui/button.tsx",
+      "lib/i18n/index.ts",
+      "lib/pwa/client-store.ts",
+      "lib/pwa/push-client.ts"
+    ],
+    "components/realtime-refresher.tsx": [
+      "lib/hooks/realtime.ts"
+    ],
+    "components/settings/add-dashed.tsx": [],
+    "components/settings/assistant-card.tsx": [
+      "components/ui/switch.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/settings/dur-chips.tsx": [
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/settings/offline-note.tsx": [
+      "components/ui/app-banner.tsx",
+      "lib/hooks/realtime.ts",
+      "lib/i18n/index.ts"
+    ],
+    "components/settings/save-action.tsx": [
+      "lib/i18n/index.ts"
+    ],
+    "components/settings/set-field.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/settings/template-preview.tsx": [
+      "components/ui/whatsapp-mark.tsx",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/settings/version-foot.tsx": [
+      "lib/i18n/index.ts"
+    ],
+    "components/settings/wa-hero.tsx": [
+      "components/ui/channel-chip.tsx",
+      "components/ui/whatsapp-mark.tsx"
+    ],
+    "components/states/index.tsx": [
+      "components/ui/skeleton.tsx",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/ui/app-banner.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/avatar.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/badge.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/button.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/card.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/channel-chip.tsx": [
+      "components/ui/whatsapp-mark.tsx",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/ui/chat-bubble.tsx": [
+      "lib/i18n/index.ts",
+      "lib/pwa/read-models.ts",
+      "lib/utils.ts"
+    ],
+    "components/ui/checkbox.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/count-badge.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/dialog.tsx": [
+      "components/ui/button.tsx",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/ui/dropdown-menu.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/grouped-list.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/handled-by.tsx": [
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/ui/initials-avatar.tsx": [
+      "components/ui/status-pill.tsx",
+      "lib/utils.ts"
+    ],
+    "components/ui/input.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/label.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/logo-mark.tsx": [],
+    "components/ui/popover.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/round-button.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/scroll-area.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/section-label.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/segmented-control.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/select.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/separator.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/sheet.tsx": [
+      "components/ui/button.tsx",
+      "lib/i18n/index.ts",
+      "lib/utils.ts"
+    ],
+    "components/ui/skeleton.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/sonner.tsx": [],
+    "components/ui/status-pill.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/switch.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/tabs.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/textarea.tsx": [
+      "lib/utils.ts"
+    ],
+    "components/ui/whatsapp-mark.tsx": [],
+    "components/web-vitals-reporter.tsx": [],
+    "drizzle.config.ts": [],
+    "drizzle/migrations/0000_init_extensions.sql": [],
+    "drizzle/migrations/0001_init_schema.sql": [],
+    "drizzle/migrations/0002_rls_policies.sql": [],
+    "drizzle/migrations/0003_pts_signup_trigger.sql": [],
+    "drizzle/migrations/0004_whatsapp_webhook_indexes.sql": [],
+    "drizzle/migrations/0005_whatsapp_connection_unique.sql": [],
+    "drizzle/migrations/0006_ai_conversation_metadata.sql": [],
+    "drizzle/migrations/0007_phase4_appointments.sql": [],
+    "drizzle/migrations/0008_phase5_background_jobs.sql": [],
+    "drizzle/migrations/0009_phase6_reminders.sql": [],
+    "drizzle/migrations/0010_phase7_realtime.sql": [],
+    "drizzle/migrations/0011_phase8_pwa.sql": [],
+    "drizzle/migrations/0012_whatsapp_coexistence.sql": [],
+    "drizzle/migrations/0013_phase13_design_reconciliation.sql": [],
+    "drizzle/migrations/0014_phase13_review_hardening.sql": [],
+    "drizzle/migrations/0015_phase9_push_subscription_unique.sql": [],
+    "drizzle/migrations/0016_phase10_gdpr.sql": [],
+    "drizzle/migrations/0017_phase11_cost_daily.sql": [],
+    "drizzle/migrations/0018_phase15_settings_fields.sql": [],
+    "drizzle/migrations/0019_sudden_weapon_omega.sql": [],
+    "drizzle/migrations/0020_steep_rattler.sql": [],
+    "drizzle/migrations/0021_simple_silk_fever.sql": [],
+    "drizzle/migrations/0022_talented_red_shift.sql": [],
+    "drizzle/migrations/0023_violet_meteorite.sql": [],
+    "drizzle/migrations/0024_tenant_read_only_rls.sql": [],
+    "drizzle/migrations/0025_conversation_days_survive_erasure.sql": [],
+    "drizzle/migrations/0026_reminder_deliveries.sql": [],
+    "drizzle/migrations/0027_revoke_reference_and_trigger_grants.sql": [],
+    "drizzle/migrations/meta/_journal.json": [],
+    "drizzle/migrations/meta/0000_snapshot.json": [],
+    "drizzle/migrations/meta/0001_snapshot.json": [],
+    "drizzle/migrations/meta/0002_snapshot.json": [],
+    "drizzle/migrations/meta/0003_snapshot.json": [],
+    "drizzle/migrations/meta/0004_snapshot.json": [],
+    "drizzle/migrations/meta/0005_snapshot.json": [],
+    "drizzle/migrations/meta/0006_snapshot.json": [],
+    "drizzle/migrations/meta/0007_snapshot.json": [],
+    "drizzle/migrations/meta/0008_snapshot.json": [],
+    "drizzle/migrations/meta/0009_snapshot.json": [],
+    "drizzle/migrations/meta/0010_snapshot.json": [],
+    "drizzle/migrations/meta/0011_snapshot.json": [],
+    "drizzle/migrations/meta/0012_snapshot.json": [],
+    "drizzle/migrations/meta/0013_snapshot.json": [],
+    "drizzle/migrations/meta/0014_snapshot.json": [],
+    "drizzle/migrations/meta/0015_snapshot.json": [],
+    "drizzle/migrations/meta/0016_snapshot.json": [],
+    "drizzle/migrations/meta/0017_snapshot.json": [],
+    "drizzle/migrations/meta/0018_snapshot.json": [],
+    "drizzle/migrations/meta/0019_snapshot.json": [],
+    "drizzle/migrations/meta/0020_snapshot.json": [],
+    "drizzle/migrations/meta/0021_snapshot.json": [],
+    "drizzle/migrations/meta/0022_snapshot.json": [],
+    "drizzle/migrations/meta/0023_snapshot.json": [],
+    "drizzle/migrations/meta/0024_snapshot.json": [],
+    "drizzle/migrations/meta/0025_snapshot.json": [],
+    "drizzle/migrations/meta/0026_snapshot.json": [],
+    "drizzle/migrations/meta/0027_snapshot.json": [],
+    "eslint.config.mjs": [],
+    "landing/index.html": [],
+    "lib/__tests__/log.test.ts": [
+      "lib/log.ts"
+    ],
+    "lib/actions/__tests__/instrument.test.ts": [
+      "lib/actions/instrument.ts",
+      "lib/log.ts"
+    ],
+    "lib/actions/instrument.ts": [
+      "lib/log.ts"
+    ],
+    "lib/ai/__tests__/client.test.ts": [],
+    "lib/ai/__tests__/dispatcher.integration.test.ts": [
+      "lib/ai/dispatcher.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/ai/__tests__/models.test.ts": [
+      "lib/ai/models.ts"
+    ],
+    "lib/ai/__tests__/prompt-bundle.test.ts": [],
+    "lib/ai/__tests__/prompt.test.ts": [
+      "lib/ai/prompt.ts"
+    ],
+    "lib/ai/__tests__/tools.test.ts": [
+      "lib/ai/tools.ts"
+    ],
+    "lib/ai/.gitkeep": [],
+    "lib/ai/client.ts": [
+      "lib/ai/models.ts"
+    ],
+    "lib/ai/dispatcher.ts": [
+      "lib/ai/tools.ts",
+      "lib/appointments/index.ts",
+      "lib/conversation/escalation.ts",
+      "lib/log.ts",
+      "lib/services/queries.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "lib/ai/models.ts": [
+      "lib/billing/plans.ts"
+    ],
+    "lib/ai/prompt.ts": [
+      "lib/ai/prompts/scheduling-assistant.ts"
+    ],
+    "lib/ai/prompts/scheduling-assistant.ts": [],
+    "lib/ai/tools.ts": [],
+    "lib/appointments/__tests__/availability.integration.test.ts": [
+      "lib/appointments/availability.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/appointments/__tests__/mutations.integration.test.ts": [
+      "lib/appointments/book.ts",
+      "lib/appointments/cancel.ts",
+      "lib/appointments/errors.ts",
+      "lib/appointments/reschedule.ts",
+      "lib/appointments/state.ts",
+      "lib/db/index.ts",
+      "lib/db/postgres-errors.ts",
+      "lib/db/schema.ts",
+      "lib/events/outbox.ts",
+      "lib/inngest/client.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/appointments/__tests__/state.test.ts": [
+      "lib/appointments/errors.ts",
+      "lib/appointments/state.ts"
+    ],
+    "lib/appointments/.gitkeep": [],
+    "lib/appointments/availability.ts": [
+      "lib/appointments/errors.ts",
+      "lib/appointments/types.ts",
+      "lib/db/index.ts"
+    ],
+    "lib/appointments/book.ts": [
+      "lib/appointments/availability.ts",
+      "lib/appointments/errors.ts",
+      "lib/appointments/lock.ts",
+      "lib/appointments/types.ts",
+      "lib/db/index.ts",
+      "lib/db/postgres-errors.ts",
+      "lib/db/schema.ts",
+      "lib/events/appointments.ts",
+      "lib/events/outbox.ts"
+    ],
+    "lib/appointments/cancel.ts": [
+      "lib/appointments/state.ts",
+      "lib/appointments/types.ts"
+    ],
+    "lib/appointments/errors.ts": [],
+    "lib/appointments/index.ts": [],
+    "lib/appointments/lock.ts": [
+      "lib/db/advisory-lock.ts"
+    ],
+    "lib/appointments/queries.ts": [
+      "lib/appointments/types.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/appointments/reschedule.ts": [
+      "lib/appointments/availability.ts",
+      "lib/appointments/errors.ts",
+      "lib/appointments/lock.ts",
+      "lib/appointments/types.ts",
+      "lib/db/index.ts",
+      "lib/db/postgres-errors.ts",
+      "lib/db/schema.ts",
+      "lib/events/appointments.ts",
+      "lib/events/outbox.ts"
+    ],
+    "lib/appointments/state.ts": [
+      "lib/appointments/errors.ts",
+      "lib/appointments/lock.ts",
+      "lib/appointments/types.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/appointments.ts",
+      "lib/events/outbox.ts"
+    ],
+    "lib/appointments/types.ts": [
+      "lib/db/schema.ts"
+    ],
+    "lib/auth/__tests__/safe-next.test.ts": [
+      "lib/auth/safe-next.ts"
+    ],
+    "lib/auth/actions.ts": [
+      "lib/auth/recovery.ts",
+      "lib/supabase/server.ts"
+    ],
+    "lib/auth/email-links.ts": [
+      "lib/log.ts"
+    ],
+    "lib/auth/link-errors.ts": [
+      "lib/i18n/index.ts"
+    ],
+    "lib/auth/recovery.ts": [],
+    "lib/auth/safe-next.ts": [],
+    "lib/billing/__tests__/cap-handoff.integration.test.ts": [
+      "lib/billing/cap-handoff.ts",
+      "lib/conversation/types.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/billing/__tests__/checkout-slot.test.ts": [
+      "lib/billing/read-model.ts"
+    ],
+    "lib/billing/__tests__/entitlements.test.ts": [
+      "lib/billing/entitlements.ts"
+    ],
+    "lib/billing/__tests__/meta.test.ts": [
+      "lib/billing/meta.ts"
+    ],
+    "lib/billing/__tests__/payments-extension.test.ts": [
+      "lib/billing/payments.ts"
+    ],
+    "lib/billing/__tests__/payments-lazy-client.test.ts": [],
+    "lib/billing/__tests__/payments.integration.test.ts": [
+      "lib/billing/payments.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/billing/__tests__/plans.test.ts": [
+      "lib/billing/plans.ts"
+    ],
+    "lib/billing/__tests__/pok-client.test.ts": [
+      "lib/billing/pok/client.ts"
+    ],
+    "lib/billing/__tests__/read-model.integration.test.ts": [
+      "lib/billing/read-model.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/billing/__tests__/reminder-usage.integration.test.ts": [
+      "lib/billing/plans.ts",
+      "lib/billing/usage.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/billing-usage-monitor.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/billing/__tests__/usage.integration.test.ts": [
+      "lib/billing/plans.ts",
+      "lib/billing/usage.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/billing/__tests__/usage.test.ts": [
+      "lib/billing/plans.ts",
+      "lib/billing/usage.ts"
+    ],
+    "lib/billing/cap-handoff.ts": [
+      "lib/billing/usage.ts",
+      "lib/conversation/types.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/billing/entitlements.ts": [
+      "lib/billing/plans.ts"
+    ],
+    "lib/billing/meta.ts": [],
+    "lib/billing/payments.ts": [
+      "lib/billing/plans.ts",
+      "lib/billing/pok/client.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/log.ts"
+    ],
+    "lib/billing/plans.ts": [],
+    "lib/billing/pok/client.ts": [
+      "lib/billing/pok/types.ts"
+    ],
+    "lib/billing/pok/types.ts": [],
+    "lib/billing/read-model.ts": [
+      "lib/billing/entitlements.ts",
+      "lib/billing/payments.ts",
+      "lib/billing/plans.ts",
+      "lib/billing/usage.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/billing/usage.ts": [
+      "lib/billing/entitlements.ts",
+      "lib/billing/plans.ts",
+      "lib/db/advisory-lock.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts"
+    ],
+    "lib/channels/whatsapp/__tests__/client.integration.test.ts": [
+      "lib/channels/whatsapp/client.ts",
+      "lib/channels/whatsapp/errors.ts",
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/channels/whatsapp/__tests__/graph.test.ts": [
+      "lib/channels/whatsapp/constants.ts",
+      "lib/channels/whatsapp/errors.ts",
+      "lib/channels/whatsapp/graph.ts"
+    ],
+    "lib/channels/whatsapp/__tests__/payload.test.ts": [
+      "lib/channels/whatsapp/payload.ts"
+    ],
+    "lib/channels/whatsapp/__tests__/signature.test.ts": [
+      "lib/channels/whatsapp/signature.ts"
+    ],
+    "lib/channels/whatsapp/.gitkeep": [],
+    "lib/channels/whatsapp/client.ts": [
+      "lib/channels/whatsapp/errors.ts",
+      "lib/channels/whatsapp/graph.ts",
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts"
+    ],
+    "lib/channels/whatsapp/constants.ts": [],
+    "lib/channels/whatsapp/errors.ts": [],
+    "lib/channels/whatsapp/graph.ts": [
+      "lib/channels/whatsapp/constants.ts",
+      "lib/channels/whatsapp/errors.ts",
+      "lib/log.ts"
+    ],
+    "lib/channels/whatsapp/payload.ts": [],
+    "lib/channels/whatsapp/signature.ts": [],
+    "lib/chat/__tests__/chat-list-page.integration.test.ts": [
+      "lib/chat/queries.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/chat/__tests__/queries.integration.test.ts": [
+      "lib/chat/queries.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/chat/queries.ts": [
+      "lib/db/index.ts",
+      "lib/pwa/read-models.ts"
+    ],
+    "lib/clients/__tests__/phone.test.ts": [
+      "lib/clients/phone.ts"
+    ],
+    "lib/clients/__tests__/queries.integration.test.ts": [
+      "lib/clients/mutations.ts",
+      "lib/clients/queries.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/clients/mutations.ts": [
+      "lib/clients/phone.ts",
+      "lib/db/advisory-lock.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/clients/phone.ts": [],
+    "lib/clients/queries.ts": [
+      "components/appointments/types.ts",
+      "lib/clients/phone.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/conversation/__tests__/engine.integration.test.ts": [
+      "lib/ai/tools.ts",
+      "lib/conversation/engine.ts",
+      "lib/conversation/errors.ts",
+      "lib/conversation/types.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/conversation/__tests__/engine.test.ts": [
+      "lib/ai/tools.ts",
+      "lib/conversation/engine.ts",
+      "lib/conversation/errors.ts"
+    ],
+    "lib/conversation/__tests__/escalation.integration.test.ts": [
+      "lib/conversation/escalation.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/conversation/__tests__/safety.test.ts": [
+      "lib/conversation/safety.ts"
+    ],
+    "lib/conversation/.gitkeep": [],
+    "lib/conversation/engine.ts": [
+      "lib/ai/client.ts",
+      "lib/ai/dispatcher.ts",
+      "lib/ai/models.ts",
+      "lib/ai/prompt.ts",
+      "lib/ai/tools.ts",
+      "lib/billing/entitlements.ts",
+      "lib/billing/plans.ts",
+      "lib/conversation/errors.ts",
+      "lib/conversation/safety.ts",
+      "lib/conversation/types.ts",
+      "lib/db/advisory-lock.ts",
+      "lib/db/schema.ts",
+      "lib/log.ts",
+      "lib/notifications/push-dispatch.ts",
+      "lib/services/queries.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "lib/conversation/errors.ts": [],
+    "lib/conversation/escalation.ts": [
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "lib/conversation/safety.ts": [],
+    "lib/conversation/types.ts": [],
+    "lib/db/__tests__/advisory-lock.integration.test.ts": [
+      "lib/db/advisory-lock.ts"
+    ],
+    "lib/db/__tests__/crypto.integration.test.ts": [
+      "lib/db/crypto.ts"
+    ],
+    "lib/db/__tests__/crypto.test.ts": [],
+    "lib/db/advisory-lock.ts": [],
+    "lib/db/crypto.ts": [
+      "lib/db/index.ts"
+    ],
+    "lib/db/index.ts": [
+      "lib/db/schema.ts"
+    ],
+    "lib/db/postgres-errors.ts": [],
+    "lib/db/schema.ts": [],
+    "lib/events/__tests__/outbox.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/outbox.ts",
+      "lib/inngest/client.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/events/__tests__/schemas.test.ts": [
+      "lib/events/appointments.ts",
+      "lib/events/background.ts"
+    ],
+    "lib/events/.gitkeep": [],
+    "lib/events/appointments.ts": [
+      "lib/db/index.ts",
+      "lib/events/store.ts"
+    ],
+    "lib/events/background.ts": [
+      "lib/db/index.ts",
+      "lib/events/store.ts"
+    ],
+    "lib/events/outbox.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/appointments.ts",
+      "lib/events/background.ts",
+      "lib/inngest/client.ts",
+      "lib/log.ts"
+    ],
+    "lib/events/store.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/format/__tests__/name.test.ts": [
+      "lib/format/name.ts"
+    ],
+    "lib/format/appointment-time.ts": [],
+    "lib/format/name.ts": [],
+    "lib/gdpr/__tests__/export.integration.test.ts": [
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/gdpr/export.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/gdpr/archive.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/gdpr/export.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/patients/whatsapp-contacts.ts"
+    ],
+    "lib/hooks/__tests__/realtime.test.ts": [
+      "lib/hooks/realtime.ts"
+    ],
+    "lib/hooks/realtime.ts": [
+      "lib/pwa/read-models.ts"
+    ],
+    "lib/i18n/__tests__/number.test.ts": [
+      "lib/i18n/number.ts"
+    ],
+    "lib/i18n/datetime.ts": [],
+    "lib/i18n/dict/appointment.ts": [],
+    "lib/i18n/dict/auth.ts": [],
+    "lib/i18n/dict/billing.ts": [],
+    "lib/i18n/dict/calendar.ts": [
+      "lib/i18n/dict/common.ts"
+    ],
+    "lib/i18n/dict/chat.ts": [],
+    "lib/i18n/dict/clients.ts": [],
+    "lib/i18n/dict/common.ts": [],
+    "lib/i18n/dict/onboarding.ts": [],
+    "lib/i18n/dict/pwa.ts": [
+      "lib/i18n/dict/common.ts"
+    ],
+    "lib/i18n/dict/settings.ts": [],
+    "lib/i18n/dict/today.ts": [],
+    "lib/i18n/index.ts": [
+      "lib/i18n/sq.ts"
+    ],
+    "lib/i18n/number.ts": [],
+    "lib/i18n/sq.ts": [
+      "lib/i18n/dict/appointment.ts",
+      "lib/i18n/dict/auth.ts",
+      "lib/i18n/dict/billing.ts",
+      "lib/i18n/dict/calendar.ts",
+      "lib/i18n/dict/chat.ts",
+      "lib/i18n/dict/clients.ts",
+      "lib/i18n/dict/common.ts",
+      "lib/i18n/dict/onboarding.ts",
+      "lib/i18n/dict/pwa.ts",
+      "lib/i18n/dict/settings.ts",
+      "lib/i18n/dict/today.ts"
+    ],
+    "lib/inngest/__tests__/client.test.ts": [],
+    "lib/inngest/client.ts": [
+      "lib/inngest/events.ts"
+    ],
+    "lib/inngest/events.ts": [
+      "lib/events/appointments.ts",
+      "lib/events/background.ts"
+    ],
+    "lib/inngest/functions.ts": [
+      "lib/inngest/functions/appointment-events.ts",
+      "lib/inngest/functions/billing-renewal-monitor.ts",
+      "lib/inngest/functions/billing-usage-monitor.ts",
+      "lib/inngest/functions/bootstrap-wa-connection.ts",
+      "lib/inngest/functions/daily-cost-rollup.ts",
+      "lib/inngest/functions/dispatch-push.ts",
+      "lib/inngest/functions/handle-inbound-message.ts",
+      "lib/inngest/functions/offer-resume.ts",
+      "lib/inngest/functions/poll-whatsapp-health.ts",
+      "lib/inngest/functions/publish-event-outbox.ts",
+      "lib/inngest/functions/purge-expired-messages.ts",
+      "lib/inngest/functions/reconcile-pok-orders.ts",
+      "lib/inngest/functions/reconcile-reminder-templates.ts",
+      "lib/inngest/functions/resume-business-app-ai.ts",
+      "lib/inngest/functions/send-reminder.ts",
+      "lib/inngest/functions/sync-whatsapp-coexistence.ts"
+    ],
+    "lib/inngest/functions/__tests__/appointment-events.test.ts": [
+      "lib/inngest/functions/appointment-events.ts"
+    ],
+    "lib/inngest/functions/__tests__/appointments-background.integration.test.ts": [
+      "lib/billing/usage.ts",
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/appointment-events.ts",
+      "lib/inngest/functions/bootstrap-wa-connection.ts",
+      "lib/inngest/functions/send-reminder.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/billing-renewal-monitor.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/billing-renewal-monitor.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/billing-renewal-monitor.test.ts": [
+      "lib/inngest/functions/billing-renewal-monitor.ts"
+    ],
+    "lib/inngest/functions/__tests__/bootstrap-wa-connection.integration.test.ts": [
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/bootstrap-wa-connection.ts",
+      "lib/inngest/functions/reconcile-reminder-templates.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/daily-cost-rollup.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/daily-cost-rollup.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/handle-inbound-message.integration.test.ts": [
+      "lib/conversation/errors.ts",
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/handle-inbound-message.ts",
+      "lib/notifications/query.ts",
+      "lib/reminders/response-handler.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/maintenance.integration.test.ts": [
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/offer-resume.ts",
+      "lib/inngest/functions/poll-whatsapp-health.ts",
+      "lib/inngest/functions/purge-expired-messages.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/offer-resume.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/offer-resume.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/offer-resume.test.ts": [
+      "lib/inngest/functions/offer-resume.ts"
+    ],
+    "lib/inngest/functions/__tests__/poll-whatsapp-health.integration.test.ts": [
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/inngest/functions/poll-whatsapp-health.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/purge-expired-messages.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/purge-expired-messages.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/reconcile-pok-orders.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/reconcile-pok-orders.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/resume-business-app-ai.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/resume-business-app-ai.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/retention-clamp.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/purge-expired-messages.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/send-reminder-delivery.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/send-reminder.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/__tests__/send-reminder.test.ts": [
+      "lib/inngest/functions/send-reminder.ts"
+    ],
+    "lib/inngest/functions/__tests__/sync-whatsapp-coexistence.integration.test.ts": [
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/sync-whatsapp-coexistence.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/inngest/functions/appointment-context.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/inngest/functions/appointment-events.ts": [
+      "lib/channels/whatsapp/client.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/inngest/client.ts",
+      "lib/inngest/functions/appointment-context.ts"
+    ],
+    "lib/inngest/functions/billing-renewal-monitor.ts": [
+      "lib/billing/plans.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/inngest/client.ts",
+      "lib/log.ts"
+    ],
+    "lib/inngest/functions/billing-usage-monitor.ts": [
+      "lib/billing/usage.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts"
+    ],
+    "lib/inngest/functions/bootstrap-wa-connection.ts": [
+      "lib/channels/whatsapp/client.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "lib/inngest/functions/daily-cost-rollup.ts": [
+      "lib/billing/meta.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/log.ts"
+    ],
+    "lib/inngest/functions/dispatch-push.ts": [
+      "lib/inngest/client.ts",
+      "lib/notifications/push-dispatch.ts",
+      "lib/notifications/push-payload.ts"
+    ],
+    "lib/inngest/functions/handle-inbound-message.ts": [
+      "lib/billing/cap-handoff.ts",
+      "lib/billing/entitlements.ts",
+      "lib/billing/plans.ts",
+      "lib/billing/usage.ts",
+      "lib/channels/whatsapp/client.ts",
+      "lib/conversation/errors.ts",
+      "lib/conversation/types.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/inngest/client.ts",
+      "lib/log.ts",
+      "lib/notifications/push-dispatch.ts",
+      "lib/reminders/response-handler.ts"
+    ],
+    "lib/inngest/functions/offer-resume.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts"
+    ],
+    "lib/inngest/functions/poll-whatsapp-health.ts": [
+      "lib/channels/whatsapp/client.ts",
+      "lib/channels/whatsapp/errors.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/inngest/client.ts"
+    ],
+    "lib/inngest/functions/publish-event-outbox.ts": [
+      "lib/events/outbox.ts",
+      "lib/inngest/client.ts"
+    ],
+    "lib/inngest/functions/purge-expired-messages.ts": [
+      "lib/billing/entitlements.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts"
+    ],
+    "lib/inngest/functions/reconcile-pok-orders.ts": [
+      "lib/billing/payments.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/log.ts"
+    ],
+    "lib/inngest/functions/reconcile-reminder-templates.ts": [
+      "lib/channels/whatsapp/client.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts",
+      "lib/inngest/functions/bootstrap-wa-connection.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "lib/inngest/functions/resume-business-app-ai.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts"
+    ],
+    "lib/inngest/functions/send-reminder.ts": [
+      "lib/billing/usage.ts",
+      "lib/channels/whatsapp/client.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/events/outbox.ts",
+      "lib/inngest/client.ts",
+      "lib/inngest/functions/appointment-context.ts",
+      "lib/inngest/functions/bootstrap-wa-connection.ts"
+    ],
+    "lib/inngest/functions/sync-whatsapp-coexistence.ts": [
+      "lib/channels/whatsapp/client.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/client.ts"
+    ],
+    "lib/log.ts": [],
+    "lib/metrics/__tests__/admin.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/metrics/admin.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/metrics/__tests__/payments-export.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/metrics/payments-export.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/metrics/__tests__/payments-export.test.ts": [
+      "lib/metrics/payments-export.ts"
+    ],
+    "lib/metrics/admin.ts": [
+      "lib/billing/entitlements.ts",
+      "lib/billing/meta.ts",
+      "lib/billing/plans.ts",
+      "lib/db/index.ts"
+    ],
+    "lib/metrics/payments-export.ts": [
+      "lib/db/index.ts"
+    ],
+    "lib/notifications/__tests__/format.test.ts": [
+      "lib/notifications/format.ts"
+    ],
+    "lib/notifications/__tests__/push-dispatch.integration.test.ts": [
+      "app/(dashboard)/settings/constants.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/notifications/push-dispatch.ts",
+      "lib/notifications/push-payload.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/notifications/__tests__/push-payload.test.ts": [
+      "lib/notifications/push-payload.ts"
+    ],
+    "lib/notifications/__tests__/push.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/notifications/push.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/notifications/.gitkeep": [],
+    "lib/notifications/format.ts": [],
+    "lib/notifications/push-dispatch.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/background.ts",
+      "lib/format/name.ts",
+      "lib/log.ts",
+      "lib/notifications/push-payload.ts",
+      "lib/notifications/push.ts",
+      "lib/pwa/read-models.ts"
+    ],
+    "lib/notifications/push-payload.ts": [
+      "app/(dashboard)/settings/constants.ts",
+      "lib/events/background.ts",
+      "lib/notifications/format.ts",
+      "lib/notifications/push.ts"
+    ],
+    "lib/notifications/push.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/log.ts"
+    ],
+    "lib/notifications/query.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/format/name.ts",
+      "lib/notifications/format.ts"
+    ],
+    "lib/onboarding/__tests__/state.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/onboarding/state.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/onboarding/state.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/patients/__tests__/erase.integration.test.ts": [
+      "lib/billing/usage.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/patients/erase.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/patients/erase.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/events/appointments.ts",
+      "lib/events/outbox.ts",
+      "lib/gdpr/archive.ts",
+      "lib/log.ts",
+      "lib/patients/whatsapp-contacts.ts"
+    ],
+    "lib/patients/whatsapp-contacts.ts": [
+      "lib/db/schema.ts"
+    ],
+    "lib/pwa/__tests__/chat-thread-delivery.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/pwa/__tests__/chat-thread-older.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/pwa/__tests__/client-store.test.ts": [
+      "lib/i18n/index.ts"
+    ],
+    "lib/pwa/__tests__/manifest.test.ts": [],
+    "lib/pwa/__tests__/push-client.test.ts": [],
+    "lib/pwa/__tests__/service-worker.test.ts": [],
+    "lib/pwa/__tests__/settings-snapshot.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/inngest/functions/bootstrap-wa-connection.ts",
+      "lib/pwa/read-models.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/pwa/auth.ts": [
+      "lib/supabase/server.ts"
+    ],
+    "lib/pwa/client-store.ts": [
+      "lib/i18n/index.ts",
+      "lib/pwa/push-client.ts"
+    ],
+    "lib/pwa/mutation-client.ts": [
+      "lib/pwa/client-store.ts"
+    ],
+    "lib/pwa/mutation-store.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/pwa/push-client.ts": [
+      "app/(dashboard)/settings/push-actions.ts"
+    ],
+    "lib/pwa/read-models.ts": [
+      "app/(dashboard)/settings/constants.ts",
+      "lib/billing/entitlements.ts",
+      "lib/billing/plans.ts",
+      "lib/billing/usage.ts",
+      "lib/channels/whatsapp/constants.ts",
+      "lib/chat/queries.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/format/name.ts",
+      "lib/i18n/index.ts",
+      "lib/inngest/functions/bootstrap-wa-connection.ts",
+      "lib/services/queries.ts"
+    ],
+    "lib/reminders/__tests__/parse-response.test.ts": [
+      "lib/reminders/parse-response.ts"
+    ],
+    "lib/reminders/__tests__/response-handler.integration.test.ts": [
+      "lib/conversation/types.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/format/appointment-time.ts",
+      "lib/reminders/response-handler.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/reminders/.gitkeep": [],
+    "lib/reminders/parse-response.ts": [],
+    "lib/reminders/response-handler.ts": [
+      "lib/appointments/availability.ts",
+      "lib/appointments/cancel.ts",
+      "lib/appointments/state.ts",
+      "lib/conversation/types.ts",
+      "lib/db/advisory-lock.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/format/appointment-time.ts",
+      "lib/reminders/parse-response.ts"
+    ],
+    "lib/services/__tests__/queries.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/services/queries.ts",
+      "lib/supabase/service.ts"
+    ],
+    "lib/services/queries.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "lib/settings/__tests__/confirm-phrase.test.ts": [
+      "lib/settings/confirm-phrase.ts"
+    ],
+    "lib/settings/availability-summary.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/i18n/index.ts"
+    ],
+    "lib/settings/confirm-phrase.ts": [],
+    "lib/supabase/__tests__/env.test.ts": [
+      "lib/supabase/env.ts"
+    ],
+    "lib/supabase/browser.ts": [
+      "lib/supabase/env.ts"
+    ],
+    "lib/supabase/env.ts": [],
+    "lib/supabase/server.ts": [
+      "lib/supabase/env.ts"
+    ],
+    "lib/supabase/service.ts": [],
+    "lib/tenancy/__tests__/audit.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "lib/tenancy/__tests__/service-client.test.ts": [
+      "lib/tenancy/index.ts"
+    ],
+    "lib/tenancy/audit.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/tenancy/errors.ts"
+    ],
+    "lib/tenancy/authed-client.ts": [
+      "lib/supabase/server.ts"
+    ],
+    "lib/tenancy/errors.ts": [],
+    "lib/tenancy/index.ts": [],
+    "lib/tenancy/service-client.ts": [
+      "lib/db/index.ts",
+      "lib/tenancy/errors.ts"
+    ],
+    "lib/today/__tests__/queries.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts",
+      "lib/today/queries.ts"
+    ],
+    "lib/today/queries.ts": [
+      "components/appointments/types.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/format/name.ts",
+      "lib/i18n/index.ts"
+    ],
+    "lib/utils.ts": [],
+    "middleware.ts": [
+      "lib/supabase/env.ts"
+    ],
+    "next.config.ts": [
+      "package.json"
+    ],
+    "package.json": [],
+    "pnpm-workspace.yaml": [],
+    "postcss.config.mjs": [],
+    "public/manifest.json": [],
+    "README.md": [],
+    "scripts/__tests__/backfill-display-number.integration.test.ts": [
+      "lib/channels/whatsapp/errors.ts",
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts",
+      "scripts/backfill-display-number.ts"
+    ],
+    "scripts/__tests__/rotate-token-key.integration.test.ts": [
+      "lib/db/crypto.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts",
+      "scripts/rotate-token-key.ts"
+    ],
+    "scripts/__tests__/seed.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "scripts/seed.ts"
+    ],
+    "scripts/backfill-display-number.ts": [
+      "lib/channels/whatsapp/client.ts",
+      "lib/channels/whatsapp/errors.ts",
+      "lib/db/index.ts",
+      "lib/db/schema.ts"
+    ],
+    "scripts/db-reset.ts": [],
+    "scripts/dev-test.sh": [],
+    "scripts/generate-pwa-icons.mjs": [],
+    "scripts/rotate-token-key.ts": [
+      "lib/db/index.ts"
+    ],
+    "scripts/seed-qa.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "scripts/seed-reset.ts": [
+      "lib/supabase/service.ts",
+      "scripts/seed.ts"
+    ],
+    "scripts/seed.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "scripts/smoke-ai.ts": [
+      "lib/ai/client.ts",
+      "lib/ai/models.ts"
+    ],
+    "scripts/smoke-pok.ts": [
+      "lib/billing/pok/client.ts"
+    ],
+    "scripts/smoke-push.ts": [],
+    "scripts/smoke-tenancy.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts",
+      "lib/tenancy/index.ts"
+    ],
+    "scripts/tunnel.sh": [],
+    "scripts/verify-schema.ts": [],
+    "supabase/config.toml": [],
+    "supabase/templates/confirmation.html": [],
+    "supabase/templates/recovery.html": [],
+    "tests/rls/coverage.integration.test.ts": [],
+    "tests/rls/isolation.integration.test.ts": [
+      "lib/db/index.ts",
+      "lib/db/schema.ts",
+      "lib/supabase/service.ts"
+    ],
+    "tests/setup/global.ts": [],
+    "tsconfig.json": [],
+    "vitest.config.ts": []
+  }
+}
