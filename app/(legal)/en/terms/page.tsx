@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { disclosedAiProviderNames } from '../../privacy/ai-providers';
 import { LanguageSwitch, LegalSection } from '../../legal-section';
 
 export const metadata: Metadata = {
@@ -74,9 +75,9 @@ export default function EnglishTermsPage() {
       <LegalSection title="WhatsApp and third-party services">
         <p>
           Medium depends on Meta WhatsApp Business APIs, Supabase, Vercel,
-          Inngest, OpenRouter, Anthropic, OpenAI, and other infrastructure
-          providers. Your use of WhatsApp is also subject to Meta WhatsApp
-          Business terms and policies.
+          Inngest, OpenRouter, {disclosedAiProviderNames()}, and other
+          infrastructure providers. Your use of WhatsApp is also subject to
+          Meta WhatsApp Business terms and policies.
         </p>
         <p>
           We are not responsible for outages, review delays, account

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { disclosedAiProviderNames } from '../privacy/ai-providers';
 import { LanguageSwitch, LegalSection } from '../legal-section';
 
 export const metadata: Metadata = {
@@ -76,9 +77,9 @@ export default function TermsPage() {
       <LegalSection title="WhatsApp dhe shërbimet e palëve të treta">
         <p>
           Medium varet nga API-të e Meta WhatsApp Business, Supabase, Vercel,
-          Inngest, OpenRouter, Anthropic, OpenAI dhe nga ofrues të tjerë
-          infrastrukture. Përdorimi juaj i WhatsApp-it i nënshtrohet gjithashtu
-          kushteve dhe politikave të Meta WhatsApp Business.
+          Inngest, OpenRouter, {disclosedAiProviderNames()} dhe nga ofrues të
+          tjerë infrastrukture. Përdorimi juaj i WhatsApp-it i nënshtrohet
+          gjithashtu kushteve dhe politikave të Meta WhatsApp Business.
         </p>
         <p>
           Ne nuk jemi përgjegjës për ndërprerjet, vonesat në shqyrtim, kufizimet
