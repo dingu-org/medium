@@ -1,5 +1,5 @@
 import { transitionAppointment } from './state';
-import type { AppointmentRecord } from './types';
+import type { AppointmentMutationResult } from './types';
 
 export async function cancelAppointment(input: {
   ptId: string;
@@ -7,7 +7,8 @@ export async function cancelAppointment(input: {
   patientId?: string;
   reason?: string;
   cancelledBy: 'patient' | 'pt' | 'ai';
-}): Promise<AppointmentRecord> {
+  origin?: 'conversation' | 'pt';
+}): Promise<AppointmentMutationResult> {
   return transitionAppointment({
     ...input,
     nextStatus: 'cancelled',

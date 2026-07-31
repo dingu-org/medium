@@ -43,7 +43,7 @@ import {
   REMINDER_TEMPLATE,
 } from '../bootstrap-wa-connection';
 import {
-  hasDeliveredActorReply,
+  appointmentEventPlan,
   persistAppointmentConfirmation,
   prepareAppointmentConfirmation,
   recordConfirmationFailure,
@@ -194,6 +194,71 @@ describe('appointment event confirmation', () => {
     expect(stored[0].externalId).toBe('wamid.EVENT');
   });
 
+  /**
+   * The turn that made the change has already sent the patient this exact text,
+   * so the job is the second sender and returns before preparing anything. The
+   * suppression is final: with one producer per change there is nothing to
+   * coordinate with, so no sleep and no re-check can reverse it.
+   */
+  it('prepares and sends nothing for a conversation-originated change', async () => {
+    const sourceEventId = randomUUID();
+    const sendFn = vi.fn(async () => ({ messageId: 'wamid.NEVER' }));
+    const plan = appointmentEventPlan({
+      kind: 'appointment.booked',
+      origin: 'conversation',
+    });
+    if (plan.confirmPatient) {
+      const confirmation = await prepareAppointmentConfirmation({
+        sourceEventId,
+        kind: 'appointment.booked',
+        ptId,
+        appointmentId,
+        startsAt,
+      });
+      if (confirmation.kind === 'ready') {
+        await sendAppointmentConfirmation({ ...confirmation, sendFn });
+      }
+    }
+
+    expect(plan).toEqual({
+      notifyPt: true,
+      confirmPatient: false,
+      skipped: 'conversation_replied',
+    });
+    expect(sendFn).not.toHaveBeenCalled();
+    const stored = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.sourceEventId, sourceEventId));
+    expect(stored).toHaveLength(0);
+  });
+
+  it('confirms a PT-originated change on the first pass', async () => {
+    const sourceEventId = randomUUID();
+    const sendFn = vi.fn(async () => ({ messageId: 'wamid.PT_ORIGIN' }));
+    const plan = appointmentEventPlan({
+      kind: 'appointment.booked',
+      origin: 'pt',
+    });
+    expect(plan).toEqual({ notifyPt: true, confirmPatient: true });
+
+    const confirmation = await prepareAppointmentConfirmation({
+      sourceEventId,
+      kind: 'appointment.booked',
+      ptId,
+      appointmentId,
+      startsAt,
+    });
+    expect(confirmation.kind).toBe('ready');
+    if (confirmation.kind !== 'ready') return;
+    await expect(
+      sendAppointmentConfirmation({ ...confirmation, sendFn }),
+    ).resolves.toEqual({ externalId: 'wamid.PT_ORIGIN', replay: false });
+
+    expect(sendFn).toHaveBeenCalledTimes(1);
+    expect(confirmation.content).toContain('Takimi juaj u rezervua');
+  });
+
   it('surfaces a confirmation whose sends all failed instead of leaving it silent', async () => {
     await db.delete(events).where(eq(events.ptId, ptId));
     const sourceEventId = randomUUID();
@@ -256,94 +321,6 @@ describe('appointment event confirmation', () => {
         and(eq(events.ptId, ptId), eq(events.type, 'conversation.failed')),
       );
     expect(failures).toHaveLength(0);
-  });
-});
-
-describe('suppressed cancellation backstop', () => {
-  async function insertAiReply(args: {
-    content: string;
-    model: string;
-    externalId: string | null;
-    createdAt: Date;
-  }): Promise<void> {
-    await db.insert(messages).values({
-      ptId,
-      conversationId,
-      role: 'ai',
-      channel: 'whatsapp',
-      content: args.content,
-      model: args.model,
-      provider: 'internal',
-      externalId: args.externalId,
-      tokensIn: 0,
-      tokensOut: 0,
-      cachedTokens: 0,
-      aiCostMicrousd: 0,
-      createdAt: args.createdAt,
-    });
-  }
-
-  it('reports no delivered reply when the cancelling turn sent nothing', async () => {
-    // The AI committed the cancellation in its tool call and then died: the
-    // deterministic confirmation is the only thing left that can tell the patient.
-    await expect(
-      hasDeliveredActorReply({
-        ptId,
-        appointmentId,
-        since: subHours(new Date(), 1),
-      }),
-    ).resolves.toBe(false);
-  });
-
-  it('reports the reply the cancelling turn did deliver', async () => {
-    const since = subHours(new Date(), 1);
-    await insertAiReply({
-      content: 'Takimi juaj u anulua.',
-      model: 'openai/gpt-4o-mini',
-      externalId: `wamid.AI.${randomUUID()}`,
-      createdAt: new Date(),
-    });
-
-    await expect(
-      hasDeliveredActorReply({ ptId, appointmentId, since }),
-    ).resolves.toBe(true);
-  });
-
-  it('does not count the generic failure handoff as having told the patient', async () => {
-    // recoverFailedInbound's text only says the practice will get back to them —
-    // it never states the appointment was cancelled, so the confirmation must
-    // still go out.
-    const since = subHours(new Date(), 1);
-    await insertAiReply({
-      content: 'Faleminderit. Praktika do t’ju kthehet së shpejti.',
-      model: 'deterministic-failure-handoff',
-      externalId: `wamid.HANDOFF.${randomUUID()}`,
-      createdAt: new Date(),
-    });
-
-    await expect(
-      hasDeliveredActorReply({ ptId, appointmentId, since }),
-    ).resolves.toBe(false);
-  });
-
-  it('ignores an older reply and one WhatsApp never accepted', async () => {
-    const since = new Date();
-    await insertAiReply({
-      content: 'Përshëndetje, si mund të ndihmoj?',
-      model: 'openai/gpt-4o-mini',
-      externalId: `wamid.OLD.${randomUUID()}`,
-      createdAt: subHours(since, 2),
-    });
-    await insertAiReply({
-      content: 'Takimi juaj u anulua.',
-      model: 'openai/gpt-4o-mini',
-      externalId: null,
-      createdAt: addMinutes(since, 1),
-    });
-
-    await expect(
-      hasDeliveredActorReply({ ptId, appointmentId, since }),
-    ).resolves.toBe(false);
   });
 });
 

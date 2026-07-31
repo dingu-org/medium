@@ -137,6 +137,85 @@ describe('appointment mutations', () => {
     );
   });
 
+  // The consumer of these payloads decides whether to speak to the patient, so
+  // the origin has to survive the write — it is not derivable from the row.
+  it('records the origin of each change in its event payload', async () => {
+    const booked = await bookAppointment({
+      ptId,
+      patientId,
+      startsAt: mondayAt(9),
+      serviceType: 'Treatment',
+      origin: 'conversation',
+    });
+    await rescheduleAppointment({
+      ptId,
+      patientId,
+      appointmentId: booked.id,
+      newStartsAt: tuesdayAt(9),
+      origin: 'pt',
+    });
+    await cancelAppointment({
+      ptId,
+      patientId,
+      appointmentId: booked.id,
+      cancelledBy: 'ai',
+      origin: 'conversation',
+    });
+
+    const rows = await db
+      .select({ type: events.type, payload: events.payload })
+      .from(events)
+      .where(eq(events.ptId, ptId));
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'appointment.booked',
+          payload: expect.objectContaining({ origin: 'conversation' }),
+        },
+        {
+          type: 'appointment.rescheduled',
+          payload: expect.objectContaining({ origin: 'pt' }),
+        },
+        {
+          type: 'appointment.cancelled',
+          payload: expect.objectContaining({
+            origin: 'conversation',
+            cancelledBy: 'ai',
+          }),
+        },
+      ]),
+    );
+  });
+
+  it('returns the event it appended, and null when nothing was appended', async () => {
+    const input = {
+      ptId,
+      patientId,
+      startsAt: mondayAt(9),
+      serviceType: 'Treatment',
+      origin: 'conversation' as const,
+    };
+
+    const first = await bookAppointment(input);
+    const replay = await bookAppointment(input);
+    const noop = await rescheduleAppointment({
+      ptId,
+      patientId,
+      appointmentId: first.id,
+      newStartsAt: mondayAt(9),
+    });
+
+    const [stored] = await db
+      .select({ id: events.id })
+      .from(events)
+      .where(and(eq(events.ptId, ptId), eq(events.type, 'appointment.booked')));
+    expect(first.eventId).toBe(stored.id);
+    // A replay and a same-time reschedule both return the row unchanged and
+    // publish nothing, so neither may claim the event the first call produced.
+    expect(replay.eventId).toBeNull();
+    expect(noop.eventId).toBeNull();
+  });
+
   it('allows only one of two patients to claim the same slot concurrently', async () => {
     const results = await Promise.allSettled([
       bookAppointment({

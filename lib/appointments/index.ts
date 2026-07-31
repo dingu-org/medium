@@ -5,4 +5,9 @@ export { AppointmentError } from './errors';
 export { listUpcomingAppointments } from './queries';
 export { rescheduleAppointment } from './reschedule';
 export { assertAppointmentTransition, transitionAppointment } from './state';
-export type { AppointmentRecord, AppointmentStatus, FreeSlot } from './types';
+export type {
+  AppointmentMutationResult,
+  AppointmentRecord,
+  AppointmentStatus,
+  FreeSlot,
+} from './types';

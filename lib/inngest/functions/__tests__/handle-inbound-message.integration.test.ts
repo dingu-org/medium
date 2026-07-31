@@ -17,12 +17,14 @@ vi.mock('@/lib/events/outbox', () => ({
 }));
 
 import { APICallError } from 'ai';
+import { MockLanguageModelV3 } from 'ai/test';
 import { addHours, subHours } from 'date-fns';
 import { and, eq } from 'drizzle-orm';
 import { NonRetriableError } from 'inngest';
 import { db } from '@/lib/db';
 import {
   appointments,
+  availabilityRules,
   conversations,
   eventOutbox,
   events,
@@ -33,13 +35,20 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
+import { runTurnCore } from '@/lib/conversation/engine';
 import { ConversationEngineError } from '@/lib/conversation/errors';
+import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { getNotificationData } from '@/lib/notifications/query';
 import {
   handleReminderResponse,
   type ReminderHandlingResult,
 } from '@/lib/reminders/response-handler';
 import { createServiceClient } from '@/lib/supabase/service';
+import {
+  appointmentEventPlan,
+  prepareAppointmentConfirmation,
+  sendAppointmentConfirmation,
+} from '../appointment-events';
 import {
   loadInboundJobContext,
   persistInboundReplyDelivery,
@@ -503,6 +512,120 @@ describe('handleInboundMessage cores', () => {
       alreadyDelivered: true,
     });
     expect(sendFn).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The regression this whole change exists for. A booking used to be announced
+   * twice — once by the model, whose reply this job sends, and once by
+   * handleAppointmentEvent's deterministic confirmation — with no ordering
+   * between them. Both senders are exercised here against one shared send mock,
+   * so a second producer coming back would show up as a second call.
+   */
+  it('sends exactly one WhatsApp message for an AI booking turn', async () => {
+    await db
+      .update(pts)
+      .set({ timezone: 'Europe/Tirane' })
+      .where(eq(pts.id, ptId));
+    await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
+    await db.insert(availabilityRules).values({
+      ptId,
+      weekday: 1,
+      startTime: '09:00:00',
+      endTime: '17:00:00',
+    });
+    const startsAt = new Date('2026-07-06T07:00:00.000Z');
+
+    const context = (await loadInboundJobContext({
+      messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    }))!;
+    const outbound = await runTurnCore({
+      inboundMessage: {
+        ...context.inbound,
+        occurredAt: new Date(context.inbound.occurredAt),
+      },
+      modelId: 'requested/model',
+      model: new MockLanguageModelV3({
+        provider: 'openrouter',
+        modelId: 'mock-model',
+        doGenerate: async () => ({
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'book-1',
+              toolName: 'book_appointment',
+              input: JSON.stringify({
+                starts_at: '2026-07-06T09:00:00+02:00',
+                service_type: 'Vlerësim i parë',
+              }),
+            },
+          ],
+          finishReason: { unified: 'tool-calls', raw: undefined },
+          usage: {
+            inputTokens: {
+              total: 20,
+              noCache: 20,
+              cacheRead: undefined,
+              cacheWrite: undefined,
+            },
+            outputTokens: { total: 6, text: 6, reasoning: undefined },
+          },
+          warnings: [],
+        }),
+      }),
+    });
+
+    const sendFn = vi.fn(async () => ({ messageId: 'wamid.ONLY' }));
+    const delivery = await sendInboundReply({
+      outbound,
+      connectionId,
+      recipient: '447700900100',
+      sendFn,
+    });
+    await persistInboundReplyDelivery({
+      outboundId: outbound.id,
+      messageId: delivery.messageId,
+    });
+
+    // The other producer, driven exactly as handleAppointmentEvent drives it
+    // from the domain event the booking just appended.
+    const [booked] = await db
+      .select()
+      .from(events)
+      .where(and(eq(events.ptId, ptId), eq(events.type, 'appointment.booked')));
+    const payload = booked.payload as {
+      appointmentId: string;
+      origin?: 'conversation' | 'pt';
+    };
+    const plan = appointmentEventPlan({
+      kind: 'appointment.booked',
+      origin: payload.origin,
+    });
+    if (plan.confirmPatient) {
+      const confirmation = await prepareAppointmentConfirmation({
+        sourceEventId: booked.id,
+        kind: 'appointment.booked',
+        ptId,
+        appointmentId: payload.appointmentId,
+        startsAt,
+      });
+      if (confirmation.kind === 'ready') {
+        await sendAppointmentConfirmation({ ...confirmation, sendFn });
+      }
+    }
+
+    expect(sendFn).toHaveBeenCalledTimes(1);
+    expect(sendFn).toHaveBeenCalledWith(
+      connectionId,
+      '447700900100',
+      `Takimi juaj u rezervua për ${formatAppointmentTime(startsAt, 'Europe/Tirane')} (Vlerësim i parë). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`,
+    );
+    const sent = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.ptId, ptId), eq(messages.role, 'ai')));
+    expect(sent).toHaveLength(1);
   });
 
   it('runs reminder-aware AI turns with reminder context', async () => {

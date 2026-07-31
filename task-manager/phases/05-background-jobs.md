@@ -93,6 +93,8 @@
 
 ### Event subscribers (Inngest functions reacting to domain events)
 
+> **Amended 2026-08-01.** The patient confirmations below are now sent only for `origin: 'pt'` changes (dashboard/PWA). A change made inside the patient conversation is confirmed inline by the conversation turn itself, from the shared copy in `lib/format/appointment-confirmation.ts` — the job would otherwise be a second producer of the same message, which is what made bookings and reschedules double-send. The PT `notification.requested` push is unchanged and still fires for every origin. See the 2026-08-01 entry in `progress.md`.
+
 - [x] `appointment.booked` →
   - [x] Send an idempotent patient confirmation.
   - [x] Schedule `sendReminder`.

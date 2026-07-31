@@ -11,7 +11,7 @@ import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { isSlotBookable } from './availability';
 import { AppointmentError } from './errors';
 import { withAppointmentLock } from './lock';
-import type { AppointmentRecord } from './types';
+import type { AppointmentMutationResult } from './types';
 
 const DEFAULT_APPOINTMENT_DURATION_MINUTES = 60;
 
@@ -26,6 +26,7 @@ type BookAppointmentInput = {
   // periods. Double-booking is still prevented by the active-overlap exclusion
   // constraint, so we only skip the availability-window check here.
   allowOutsideAvailability?: boolean;
+  origin?: 'conversation' | 'pt';
 };
 
 async function findExisting(input: BookAppointmentInput) {
@@ -63,7 +64,7 @@ async function assertPatientBelongsToPractice(
 
 export async function bookAppointment(
   input: BookAppointmentInput,
-): Promise<AppointmentRecord> {
+): Promise<AppointmentMutationResult> {
   if (Number.isNaN(input.startsAt.getTime())) {
     throw new AppointmentError(
       'invalid_input',
@@ -90,7 +91,7 @@ export async function bookAppointment(
     await assertPatientBelongsToPractice(input.ptId, input.patientId);
 
     const existing = await findExisting(input);
-    if (existing) return existing;
+    if (existing) return { ...existing, eventId: null };
 
     const endsAt = addMinutes(input.startsAt, durationMinutes);
     if (!input.allowOutsideAvailability) {
@@ -127,18 +128,19 @@ export async function bookAppointment(
           data: {
             ...eventPayloadFromAppointment(appointment),
             status: 'pending',
+            origin: input.origin,
           },
         });
         return { appointment, eventId };
       });
 
       await tryPublishOutboxEvent(result.eventId);
-      return result.appointment;
+      return { ...result.appointment, eventId: result.eventId };
     } catch (error) {
       const code = getPostgresErrorCode(error);
       if (code === '23505') {
         const replay = await findExisting(input);
-        if (replay) return replay;
+        if (replay) return { ...replay, eventId: null };
       }
       if (code === '23505' || code === '23P01') {
         throw new AppointmentError(

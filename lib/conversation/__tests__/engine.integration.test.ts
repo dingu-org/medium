@@ -11,6 +11,7 @@ import {
 } from 'vitest';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { ToolResult } from '@/lib/ai/tools';
+import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { db } from '@/lib/db';
 import {
   appointments,
@@ -36,6 +37,49 @@ const usage = {
   inputTokens: { total: 21, noCache: 16, cacheRead: 5, cacheWrite: undefined },
   outputTokens: { total: 7, text: 7, reasoning: undefined },
 };
+
+const billedMetadata = {
+  openrouter: { provider: 'Azure', usage: { cost: 0.000123 } },
+};
+
+function sequenceModel(results: MockGenerateResult[]) {
+  let index = 0;
+  return new MockLanguageModelV3({
+    provider: 'openrouter',
+    modelId: 'mock-model',
+    doGenerate: async () => results[index++] ?? results.at(-1)!,
+  });
+}
+
+function toolCallStep(
+  toolCallId: string,
+  toolName: string,
+  input: unknown,
+  providerMetadata?: MockGenerateResult['providerMetadata'],
+): MockGenerateResult {
+  return {
+    content: [
+      { type: 'tool-call', toolCallId, toolName, input: JSON.stringify(input) },
+    ],
+    finishReason: { unified: 'tool-calls', raw: undefined },
+    usage,
+    warnings: [],
+    providerMetadata,
+  };
+}
+
+function textStep(text: string): MockGenerateResult {
+  return {
+    content: [{ type: 'text', text }],
+    finishReason: { unified: 'stop', raw: undefined },
+    usage,
+    warnings: [],
+    providerMetadata: billedMetadata,
+  };
+}
+
+const tirane = (isoInstant: string) =>
+  formatAppointmentTime(new Date(isoInstant), 'Europe/Tirane');
 
 function responseModel(text = 'I can help with that.') {
   return new MockLanguageModelV3({
@@ -414,7 +458,13 @@ describe('runTurnCore', () => {
     const dispatch = vi.fn(
       async (): Promise<ToolResult> => ({
         ok: true,
-        data: { appointment_id: 'appointment-1' },
+        data: { appointment_id: '00000000-0000-4000-8000-00000000aaaa' },
+        effect: {
+          kind: 'booked',
+          appointmentId: '00000000-0000-4000-8000-00000000aaaa',
+          startsAt: '2026-06-12T08:00:00.000Z',
+          serviceType: 'Vlerësim i parë',
+        },
       }),
     );
 
@@ -437,7 +487,12 @@ describe('runTurnCore', () => {
 
     const [firstReply, secondReply] = await Promise.all([first, second]);
     expect(secondReply).toEqual(firstReply);
-    expect(firstModel.doGenerateCalls).toHaveLength(2);
+    expect(firstReply.content).toBe(
+      `Takimi juaj u rezervua për ${tirane('2026-06-12T08:00:00.000Z')} (Vlerësim i parë). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`,
+    );
+    // The booking stops the loop, so the second round the fixture holds is never
+    // requested.
+    expect(firstModel.doGenerateCalls).toHaveLength(1);
     expect(secondModel.doGenerateCalls).toHaveLength(0);
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledWith(
@@ -456,14 +511,23 @@ describe('runTurnCore', () => {
   });
 
   it('uses real availability and booking tools end to end', async () => {
+    const model = phase4BookingModel();
     const result = await runTurnCore({
       inboundMessage: inbound,
-      model: phase4BookingModel(),
+      model,
       modelId: 'requested/model',
       now: new Date('2026-07-01T10:00:00.000Z'),
     });
 
-    expect(result.content).toContain('July 6 at 9:00 AM');
+    expect(result.content).toBe(
+      `Takimi juaj u rezervua për ${tirane('2026-07-06T07:00:00.000Z')} (Vlerësim i parë). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`,
+    );
+    // The fixture still holds a third round whose text names the same booking in
+    // the model's own words. It is never requested, and would be discarded if it
+    // were: the patient gets one message per change and it is this one.
+    expect(model.doGenerateCalls).toHaveLength(2);
+    expect(result.content).not.toContain('July 6 at 9:00 AM');
+
     const [appointment] = await db
       .select()
       .from(appointments)
@@ -478,6 +542,122 @@ describe('runTurnCore', () => {
     });
   });
 
+  it('quotes the cancelled appointment own start, not the turn time', async () => {
+    const startsAt = new Date('2026-07-06T07:00:00.000Z');
+    const [appointment] = await db
+      .insert(appointments)
+      .values({
+        ptId,
+        patientId,
+        startsAt,
+        endsAt: new Date('2026-07-06T07:45:00.000Z'),
+        serviceType: 'Vlerësim i parë',
+      })
+      .returning({ id: appointments.id });
+
+    const result = await runTurnCore({
+      inboundMessage: inbound,
+      model: sequenceModel([
+        toolCallStep('cancel-1', 'cancel_appointment', {
+          appointment_id: appointment.id,
+        }),
+        textStep('E anulova takimin tuaj.'),
+      ]),
+      modelId: 'requested/model',
+    });
+
+    expect(result.content).toBe(
+      `Takimi juaj për ${tirane(startsAt.toISOString())} u anulua. Nëse dëshironi një orar tjetër, më shkruani ditën ose orën që ju përshtatet.`,
+    );
+  });
+
+  it('quotes the new start of a reschedule, never the one it replaced', async () => {
+    const [appointment] = await db
+      .insert(appointments)
+      .values({
+        ptId,
+        patientId,
+        startsAt: new Date('2026-07-06T07:00:00.000Z'),
+        endsAt: new Date('2026-07-06T07:45:00.000Z'),
+        serviceType: 'Vlerësim i parë',
+      })
+      .returning({ id: appointments.id });
+
+    const result = await runTurnCore({
+      inboundMessage: inbound,
+      model: sequenceModel([
+        toolCallStep('reschedule-1', 'reschedule_appointment', {
+          appointment_id: appointment.id,
+          new_starts_at: '2026-07-06T11:00:00+02:00',
+        }),
+        textStep('E ricaktova takimin tuaj.'),
+      ]),
+      modelId: 'requested/model',
+    });
+
+    expect(result.content).toBe(
+      `Takimi juaj u ricaktua për ${tirane('2026-07-06T09:00:00.000Z')} (Vlerësim i parë). Nëse doni ta ndryshoni sërish ose ta anuloni, më shkruani këtu.`,
+    );
+    expect(result.content).not.toContain(tirane('2026-07-06T07:00:00.000Z'));
+  });
+
+  // The wording is deterministic but the round that produced it was billed.
+  // Stamping the internal/zero metadata the other fixed-text paths use would
+  // under-report every booking turn on the cost dashboard.
+  it('stamps the confirmation with the real cost of the round behind it', async () => {
+    const result = await runTurnCore({
+      inboundMessage: inbound,
+      model: sequenceModel([
+        toolCallStep(
+          'book-1',
+          'book_appointment',
+          {
+            starts_at: '2026-07-06T09:00:00+02:00',
+            service_type: 'Vlerësim i parë',
+          },
+          billedMetadata,
+        ),
+      ]),
+      modelId: 'requested/model',
+    });
+
+    const [stored] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, result.id));
+    expect(stored).toMatchObject({
+      model: 'requested/model',
+      provider: 'Azure',
+      tokensIn: 21,
+      tokensOut: 7,
+      cachedTokens: 5,
+      aiCostMicrousd: 123,
+    });
+  });
+
+  it('lets the model answer in its own words when the turn changes nothing', async () => {
+    const model = sequenceModel([
+      toolCallStep('availability-1', 'get_availability', {
+        start: '2026-07-06T09:00:00+02:00',
+        end: '2026-07-06T12:00:00+02:00',
+      }),
+      textStep('Të hënën kam të lirë në 9:00 dhe në 10:00.'),
+    ]);
+
+    const result = await runTurnCore({
+      inboundMessage: inbound,
+      model,
+      modelId: 'requested/model',
+      now: new Date('2026-07-01T10:00:00.000Z'),
+    });
+
+    expect(result.content).toBe('Të hënën kam të lirë në 9:00 dhe në 10:00.');
+    expect(model.doGenerateCalls).toHaveLength(2);
+  });
+
+  // The fixture books a Friday against Monday-only availability, so the mutation
+  // fails: a booking that succeeds stops the loop and speaks for itself, and can
+  // never leave the turn speechless. A failed attempt still can.
   it('hands off after a mutation attempt ends without final text', async () => {
     const result = await runTurnCore({
       inboundMessage: inbound,

@@ -42,8 +42,23 @@ export type ToolInput<TName extends ToolName> = z.infer<
   (typeof toolSchemas)[TName]
 >;
 
+/**
+ * An appointment change the conversation engine can confirm deterministically.
+ * Read out of the step's tool result, never rendered by the model.
+ */
+export type AppointmentMutationEffect = {
+  kind: 'booked' | 'rescheduled' | 'cancelled';
+  appointmentId: string;
+  /** New start for booked/rescheduled; the cancelled appointment's own start. */
+  startsAt: string;
+  serviceType: string | null;
+};
+
 export type ToolResult<T = unknown> =
-  | { ok: true; data: T }
+  // `effect` is a sibling of `data`, not a field inside it: `data` is the
+  // documented result shape each tool promises, and the effect is engine
+  // plumbing that must not become part of it.
+  | { ok: true; data: T; effect?: AppointmentMutationEffect }
   | {
       ok: false;
       error: {

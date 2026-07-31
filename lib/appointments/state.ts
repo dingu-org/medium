@@ -9,7 +9,11 @@ import {
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { AppointmentError } from './errors';
 import { withAppointmentLock } from './lock';
-import type { AppointmentRecord, AppointmentStatus } from './types';
+import type {
+  AppointmentMutationResult,
+  AppointmentRecord,
+  AppointmentStatus,
+} from './types';
 
 const allowedTransitions: Record<AppointmentStatus, AppointmentStatus[]> = {
   pending: ['confirmed', 'cancelled', 'completed', 'no_show'],
@@ -40,6 +44,7 @@ type TransitionAppointmentInput = {
   patientId?: string;
   cancelledBy?: 'patient' | 'pt' | 'ai';
   reason?: string;
+  origin?: 'conversation' | 'pt';
 };
 
 function transitionEvent(
@@ -47,7 +52,10 @@ function transitionEvent(
   nextStatus: AppointmentStatus,
   input: TransitionAppointmentInput,
 ): AppointmentEvent {
-  const summary = eventPayloadFromAppointment(appointment);
+  const summary = {
+    ...eventPayloadFromAppointment(appointment),
+    origin: input.origin,
+  };
   if (nextStatus === 'confirmed') {
     return {
       type: 'appointment.confirmed',
@@ -91,7 +99,7 @@ function transitionEvent(
 
 export async function transitionAppointment(
   input: TransitionAppointmentInput,
-): Promise<AppointmentRecord> {
+): Promise<AppointmentMutationResult> {
   return withAppointmentLock(input.ptId, async () => {
     const result = await db.transaction(async (tx) => {
       const conditions = [
@@ -144,6 +152,6 @@ export async function transitionAppointment(
     });
 
     if (result.eventId) await tryPublishOutboxEvent(result.eventId);
-    return result.appointment;
+    return { ...result.appointment, eventId: result.eventId };
   });
 }

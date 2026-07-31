@@ -151,6 +151,7 @@ async function runAppointmentMutation(
       appointmentId: input.appointmentId,
       cancelledBy: 'pt',
       reason: input.reason,
+      origin: 'pt',
     });
     return { ok: true, appointmentId: appointment.id };
   }
@@ -160,6 +161,7 @@ async function runAppointmentMutation(
       ptId,
       appointmentId: input.appointmentId,
       newStartsAt: dateValue,
+      origin: 'pt',
     });
     return { ok: true, appointmentId: appointment.id };
   }
@@ -168,6 +170,7 @@ async function runAppointmentMutation(
       ptId,
       appointmentId: input.appointmentId,
       nextStatus: input.nextStatus,
+      origin: 'pt',
     });
     return { ok: true, appointmentId: appointment.id };
   }
@@ -264,6 +267,7 @@ async function bookManual(
     durationMinutes: service.durationMinutes,
     notes: input.notes,
     allowOutsideAvailability: true,
+    origin: 'pt',
   });
 }
 

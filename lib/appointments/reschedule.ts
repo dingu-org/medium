@@ -8,14 +8,15 @@ import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { isSlotBookable } from './availability';
 import { AppointmentError } from './errors';
 import { withAppointmentLock } from './lock';
-import type { AppointmentRecord } from './types';
+import type { AppointmentMutationResult } from './types';
 
 export async function rescheduleAppointment(input: {
   ptId: string;
   appointmentId: string;
   patientId?: string;
   newStartsAt: Date;
-}): Promise<AppointmentRecord> {
+  origin?: 'conversation' | 'pt';
+}): Promise<AppointmentMutationResult> {
   if (Number.isNaN(input.newStartsAt.getTime())) {
     throw new AppointmentError(
       'invalid_input',
@@ -45,7 +46,7 @@ export async function rescheduleAppointment(input: {
       );
     }
     if (existing.startsAt.getTime() === input.newStartsAt.getTime()) {
-      return existing;
+      return { ...existing, eventId: null };
     }
 
     const durationMinutes = Math.round(
@@ -111,13 +112,14 @@ export async function rescheduleAppointment(input: {
               startsAt: appointment.startsAt.toISOString(),
               endsAt: appointment.endsAt.toISOString(),
             },
+            origin: input.origin,
           },
         });
         return { appointment, eventId };
       });
 
       await tryPublishOutboxEvent(result.eventId);
-      return result.appointment;
+      return { ...result.appointment, eventId: result.eventId };
     } catch (error) {
       const code = getPostgresErrorCode(error);
       if (code === '23505' || code === '23P01') {

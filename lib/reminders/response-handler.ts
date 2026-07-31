@@ -304,6 +304,7 @@ async function handleConfirm(args: {
     patientId: args.inbound.patientId,
     appointmentId: args.candidate.appointmentId,
     nextStatus: 'confirmed',
+    origin: 'conversation',
   });
   await recordReminderResponse({
     candidate: args.candidate,
@@ -330,6 +331,7 @@ async function handleCancel(args: {
     appointmentId: args.candidate.appointmentId,
     cancelledBy: 'patient',
     reason: args.inbound.content,
+    origin: 'conversation',
   });
   await recordReminderResponse({
     candidate: args.candidate,

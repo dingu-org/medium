@@ -89,6 +89,7 @@ async function executeTool(
       serviceType: service.name,
       durationMinutes: service.durationMinutes,
       notes: input.notes as string | undefined,
+      origin: 'conversation',
     });
     return {
       ok: true,
@@ -97,7 +98,12 @@ async function executeTool(
         starts_at: appointment.startsAt.toISOString(),
         ends_at: appointment.endsAt.toISOString(),
         status: appointment.status,
-        confirmation_summary: `${appointment.serviceType ?? 'Takim'} më ${appointment.startsAt.toISOString()}`,
+      },
+      effect: {
+        kind: 'booked',
+        appointmentId: appointment.id,
+        startsAt: appointment.startsAt.toISOString(),
+        serviceType: appointment.serviceType,
       },
     };
   }
@@ -108,6 +114,7 @@ async function executeTool(
       patientId: ctx.patientId,
       appointmentId: input.appointment_id as string,
       newStartsAt: new Date(input.new_starts_at as string),
+      origin: 'conversation',
     });
     return {
       ok: true,
@@ -116,6 +123,14 @@ async function executeTool(
         starts_at: appointment.startsAt.toISOString(),
         ends_at: appointment.endsAt.toISOString(),
         status: appointment.status,
+      },
+      // The row after the update, so the inline confirmation and the domain
+      // event quote the same instant.
+      effect: {
+        kind: 'rescheduled',
+        appointmentId: appointment.id,
+        startsAt: appointment.startsAt.toISOString(),
+        serviceType: appointment.serviceType,
       },
     };
   }
@@ -127,13 +142,21 @@ async function executeTool(
       appointmentId: input.appointment_id as string,
       reason: input.reason as string | undefined,
       cancelledBy: ctx.cancellationActor ?? 'ai',
+      origin: 'conversation',
     });
     return {
       ok: true,
       data: {
         appointment_id: appointment.id,
+        starts_at: appointment.startsAt.toISOString(),
         status: appointment.status,
         reason: appointment.cancellationReason,
+      },
+      effect: {
+        kind: 'cancelled',
+        appointmentId: appointment.id,
+        startsAt: appointment.startsAt.toISOString(),
+        serviceType: appointment.serviceType,
       },
     };
   }

@@ -1,126 +1,104 @@
-import { and, eq, gte, isNotNull, isNull, ne, or } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { messages, reminderJobs } from '@/lib/db/schema';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
-import { inngest } from '../client';
 import {
-  formatAppointmentTime,
-  loadAppointmentJobContext,
-} from './appointment-context';
+  appointmentConfirmationContent,
+  type AppointmentConfirmationKind,
+} from '@/lib/format/appointment-confirmation';
+import { inngest } from '../client';
+import { loadAppointmentJobContext } from './appointment-context';
 
 type AppointmentNotificationKind =
   | 'appointment.booked'
   | 'appointment.cancelled'
   | 'appointment.rescheduled';
 
+const confirmationKinds: Record<
+  AppointmentNotificationKind,
+  AppointmentConfirmationKind
+> = {
+  'appointment.booked': 'booked',
+  'appointment.cancelled': 'cancelled',
+  'appointment.rescheduled': 'rescheduled',
+};
+
 function confirmationContent(args: {
   kind: AppointmentNotificationKind;
   startsAt: Date;
   timezone: string;
+  serviceType: string | null;
 }): string {
-  const time = formatAppointmentTime(args.startsAt, args.timezone);
-  if (args.kind === 'appointment.booked') {
-    return `Takimi juaj u rezervua për ${time}.`;
-  }
-  if (args.kind === 'appointment.cancelled') {
-    return `Takimi juaj për ${time} u anulua.`;
-  }
-  return `Takimi juaj u ricaktua për ${time}.`;
+  return appointmentConfirmationContent({
+    kind: confirmationKinds[args.kind],
+    startsAt: args.startsAt,
+    timezone: args.timezone,
+    serviceType: args.serviceType,
+  });
 }
 
 /**
  * Which side effects an appointment event still warrants.
  *
- * - A patient- or AI-initiated cancellation was already answered inside the same
- *   turn — the reminder handler's own "u anulua" text, or the AI's reply — so the
- *   deterministic confirmation would be a second, near-identical billable send
- *   with no ordering guarantee against that reply. `skipped:'actor_already_replied'`
- *   is provisional: the caller re-checks after ACTOR_REPLY_GRACE and confirms
- *   anyway if that reply never reached the patient (hasDeliveredActorReply).
- * - A GDPR erasure cancels every active appointment on its way to deleting the
- *   patient: the PT tapped Fshi herself and the patient row is already gone, so
- *   a push naming a deleted client is noise and there is nobody left to confirm
- *   to. The marker is only trusted on a PT-side cancellation — a patient's own
- *   reason is their free-text reply and must not be able to spoof it.
+ * Exactly one side of the product speaks per change, and `origin` says which:
+ * a conversation-originated change was already confirmed inline by the turn that
+ * made it (lib/conversation/engine.ts sends this same deterministic text), so a
+ * second send here would be a duplicate. That suppression is final — there is no
+ * second producer to coordinate with, so nothing to wait for and nothing to
+ * re-check. Delivery reliability is the ordinary contract every other
+ * patient-facing send has: retry, then `conversation.failed` on the PT's bell
+ * and the thread handed to a human.
  *
- * Bookings and reschedules carry no actor in their payloads yet, so they stay
- * unconditional.
+ * `origin` is deliberately not `cancelledBy`: that records who decided, not who
+ * speaks, and the two diverge in the reminder-fallback turn, which records a
+ * patient cancellation from inside an AI turn.
+ *
+ * A GDPR erasure cancels every active appointment on its way to deleting the
+ * patient: the PT tapped Fshi herself and the patient row is already gone, so a
+ * push naming a deleted client is noise and there is nobody left to confirm to.
+ * It resolves first so the marker stays trusted only on a PT-side cancellation —
+ * a patient's own reason is their free-text reply and must not be able to spoof
+ * it.
  */
 export function appointmentEventPlan(args: {
   kind: AppointmentNotificationKind;
+  origin?: 'conversation' | 'pt' | null;
   cancelledBy?: 'patient' | 'pt' | 'ai' | null;
   cancellationReason?: string | null;
 }): { notifyPt: boolean; confirmPatient: boolean; skipped?: string } {
-  if (args.kind !== 'appointment.cancelled') {
-    return { notifyPt: true, confirmPatient: true };
-  }
-  if (args.cancelledBy !== 'pt') {
-    return {
-      notifyPt: true,
-      confirmPatient: false,
-      skipped: 'actor_already_replied',
-    };
-  }
-  if (args.cancellationReason === 'patient_erased') {
+  if (
+    args.kind === 'appointment.cancelled' &&
+    args.cancelledBy === 'pt' &&
+    args.cancellationReason === 'patient_erased'
+  ) {
     return {
       notifyPt: false,
       confirmPatient: false,
       skipped: 'patient_erased',
     };
   }
+
+  // Payloads written before `origin` existed still drain out of the outbox.
+  // Infer the value that reproduces their old routing exactly: cancellations
+  // went by actor, bookings and reschedules always confirmed.
+  const origin =
+    args.origin ??
+    (args.kind === 'appointment.cancelled'
+      ? args.cancelledBy === 'pt'
+        ? 'pt'
+        : 'conversation'
+      : 'pt');
+
+  if (origin === 'conversation') {
+    return {
+      notifyPt: true,
+      confirmPatient: false,
+      skipped: 'conversation_replied',
+    };
+  }
   return { notifyPt: true, confirmPatient: true };
-}
-
-/**
- * How long the suppressed cancellation waits for the originating turn to deliver
- * its own patient-facing reply. Wide enough to cover the turn's remaining model
- * rounds AND its retry budget, so the backstop below never races a reply that is
- * still in flight.
- */
-const ACTOR_REPLY_GRACE = '15m';
-
-/**
- * Stamped by handoffFailedTurn (lib/conversation/engine.ts) on the generic
- * "the practice will get back to you" text an exhausted turn falls back to. It
- * never names the cancellation, so it does NOT count as having told the patient.
- */
-const FAILURE_HANDOFF_MODEL = 'deterministic-failure-handoff';
-
-/**
- * Did the turn that cancelled actually reach the patient? `appointmentEventPlan`
- * suppresses the deterministic confirmation for a patient/AI cancellation on the
- * assumption that turn already said it — but in the AI path the text comes from a
- * LATER model round (lib/ai/dispatcher.ts commits the cancellation in the tool
- * call), and if that round or its send exhausts retries the patient only gets the
- * failure handoff. Without this check the patient would keep believing the
- * appointment stands while the slot is already free.
- */
-export async function hasDeliveredActorReply(args: {
-  ptId: string;
-  appointmentId: string;
-  since: Date;
-}): Promise<boolean> {
-  const context = await loadAppointmentJobContext(args);
-  if (!context?.conversationId) return false;
-
-  const [delivered] = await db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.ptId, args.ptId),
-        eq(messages.conversationId, context.conversationId),
-        eq(messages.role, 'ai'),
-        // externalId is stamped only once WhatsApp accepted the send.
-        isNotNull(messages.externalId),
-        gte(messages.createdAt, args.since),
-        or(isNull(messages.model), ne(messages.model, FAILURE_HANDOFF_MODEL)),
-      ),
-    )
-    .limit(1);
-  return delivered !== undefined;
 }
 
 export async function prepareAppointmentConfirmation(args: {
@@ -150,6 +128,7 @@ export async function prepareAppointmentConfirmation(args: {
     kind: args.kind,
     startsAt: args.startsAt,
     timezone: context.timezone,
+    serviceType: context.serviceType,
   });
   await db
     .insert(messages)
@@ -299,6 +278,7 @@ export const handleAppointmentEvent = inngest.createFunction(
     let ptId: string;
     let appointmentId: string;
     let patientId: string;
+    let origin: 'conversation' | 'pt' | null = null;
     let cancelledBy: 'patient' | 'pt' | 'ai' | null = null;
     let cancellationReason: string | null = null;
     switch (event.name) {
@@ -309,6 +289,7 @@ export const handleAppointmentEvent = inngest.createFunction(
         ptId = event.data.ptId;
         appointmentId = event.data.appointmentId;
         patientId = event.data.patientId;
+        origin = event.data.origin ?? null;
         break;
       case 'appointment.cancelled':
         kind = event.name;
@@ -317,6 +298,7 @@ export const handleAppointmentEvent = inngest.createFunction(
         ptId = event.data.ptId;
         appointmentId = event.data.appointmentId;
         patientId = event.data.patientId;
+        origin = event.data.origin ?? null;
         cancelledBy = event.data.cancelledBy;
         cancellationReason = event.data.reason;
         break;
@@ -327,6 +309,7 @@ export const handleAppointmentEvent = inngest.createFunction(
         ptId = event.data.ptId;
         appointmentId = event.data.appointmentId;
         patientId = event.data.patientId;
+        origin = event.data.origin ?? null;
         break;
       default:
         return { skipped: 'unsupported_trigger' };
@@ -343,6 +326,7 @@ export const handleAppointmentEvent = inngest.createFunction(
 
     const plan = appointmentEventPlan({
       kind,
+      origin,
       cancelledBy,
       cancellationReason,
     });
@@ -361,24 +345,7 @@ export const handleAppointmentEvent = inngest.createFunction(
       });
     }
     if (!plan.confirmPatient) {
-      // A GDPR erasure has nobody left to confirm to — that suppression is final.
-      if (plan.skipped !== 'actor_already_replied') {
-        return { patientConfirmation: null, skipped: plan.skipped };
-      }
-      // "The actor already replied" is an assumption, not a fact, and this
-      // fan-out is the only backstop with retries of its own. Sit out the turn,
-      // then confirm anyway if nothing ever reached the patient.
-      await step.sleep('await-actor-reply', ACTOR_REPLY_GRACE);
-      const replied = await step.run('check-actor-reply', () =>
-        hasDeliveredActorReply({
-          ptId,
-          appointmentId,
-          since: new Date(event.ts ?? Date.now()),
-        }),
-      );
-      if (replied) {
-        return { patientConfirmation: null, skipped: plan.skipped };
-      }
+      return { patientConfirmation: null, skipped: plan.skipped };
     }
 
     const confirmation = await step.run('prepare-patient-confirmation', () =>

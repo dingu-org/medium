@@ -4,16 +4,20 @@ import {
   stepCountIs,
   type LanguageModel,
   type ModelMessage,
+  type StepResult,
+  type StopCondition,
 } from 'ai';
 import { buildSystemPrompt } from '@/lib/ai/prompt';
 import { buildModelSettings, getOpenRouterModel } from '@/lib/ai/client';
 import { dispatchTool } from '@/lib/ai/dispatcher';
 import {
   createConversationTools,
+  type AppointmentMutationEffect,
   type ToolExecutionContext,
   type ToolResult,
   type ToolName,
 } from '@/lib/ai/tools';
+import { appointmentConfirmationContent } from '@/lib/format/appointment-confirmation';
 import { selectModelForPlan } from '@/lib/ai/models';
 import { effectiveAssistantIdentity } from '@/lib/billing/entitlements';
 import type { PlanId } from '@/lib/billing/plans';
@@ -49,6 +53,50 @@ const MUTATING_TOOLS = new Set<ToolName>([
   'cancel_appointment',
   'escalate_to_human',
 ]);
+
+// Deliberately not the same set as MUTATING_TOOLS, and the two must never be
+// merged: that set decides whether an empty turn is a handoff, and an escalation
+// belongs in it. This one decides whether a deterministic confirmation exists to
+// send in place of the model's own words — none exists for an escalation, so the
+// model must still speak there.
+const CONFIRMABLE_MUTATIONS = new Set<ToolName>([
+  'book_appointment',
+  'reschedule_appointment',
+  'cancel_appointment',
+]);
+
+type ConversationTools = ReturnType<typeof createConversationTools>;
+
+// The tool wrappers hand dispatchTool's ToolResult back untouched, so a step's
+// tool output is that value verbatim — typed `unknown` here only because the
+// step type unions in the dynamic-tool shape.
+function mutationEffect(output: unknown): AppointmentMutationEffect | null {
+  if (!output || typeof output !== 'object') return null;
+  const result = output as ToolResult;
+  return result.ok ? (result.effect ?? null) : null;
+}
+
+function confirmableEffects(
+  step: StepResult<ConversationTools>,
+): AppointmentMutationEffect[] {
+  const effects: AppointmentMutationEffect[] = [];
+  for (const toolResult of step.toolResults) {
+    if (!CONFIRMABLE_MUTATIONS.has(toolResult.toolName as ToolName)) continue;
+    const effect = mutationEffect(toolResult.output);
+    if (effect) effects.push(effect);
+  }
+  return effects;
+}
+
+// Once a confirmable mutation has committed there is nothing left for the model
+// to add: the change is already made and its wording is fixed. Stopping here is
+// what saves the final round.
+const stopOnConfirmedMutation: StopCondition<ConversationTools> = ({
+  steps,
+}) => {
+  const latest = steps.at(-1);
+  return latest ? confirmableEffects(latest).length > 0 : false;
+};
 
 type Dispatch = (
   toolName: ToolName,
@@ -91,6 +139,10 @@ export type ModelTurnResult =
   | (ModelTurnMetadata & {
       outcome: 'handoff_required';
       reason: 'empty_response' | 'step_limit_reached';
+    })
+  | (ModelTurnMetadata & {
+      outcome: 'appointment_mutation';
+      effect: AppointmentMutationEffect;
     });
 
 function getOpenRouterStepMetadata(providerMetadata: unknown): {
@@ -130,7 +182,7 @@ export async function runModelTurn(args: {
     system: args.system,
     messages: args.messages,
     tools,
-    stopWhen: stepCountIs(STEP_LIMIT),
+    stopWhen: [stepCountIs(STEP_LIMIT), stopOnConfirmedMutation],
     temperature: 0.2,
     maxOutputTokens: 500,
     maxRetries: 0,
@@ -155,12 +207,18 @@ export async function runModelTurn(args: {
     costMicrousd: Math.round(cost * 1_000_000),
   };
 
-  // Per-turn cost/usage telemetry for the cost dashboard (Phase 11). ids +
-  // counts only — no message content.
-  createLogger({
+  // A confirmable mutation stops the loop, so any effect can only be on the last
+  // step — the same step stopOnConfirmedMutation judged.
+  const lastStep = result.steps.at(-1);
+  const effects = lastStep ? confirmableEffects(lastStep) : [];
+
+  const turnLogger = createLogger({
     pt_id: args.toolContext.ptId,
     conversation_id: args.toolContext.conversationId,
-  }).info('ai.turn_completed', 'AI model turn completed', {
+  });
+  // Per-turn cost/usage telemetry for the cost dashboard (Phase 11). ids +
+  // counts only — no message content.
+  turnLogger.info('ai.turn_completed', 'AI model turn completed', {
     model: args.modelId,
     provider: metadata.provider,
     tokensIn: metadata.tokensIn,
@@ -169,7 +227,29 @@ export async function runModelTurn(args: {
     costMicrousd: metadata.costMicrousd,
     steps: result.steps.length,
     durationMs,
+    deterministic_confirmation: effects.length > 0,
   });
+
+  // Ahead of the text branch on purpose: result.text is the LAST step's text, so
+  // a model that wrote prose alongside the stopping tool call would otherwise
+  // win. Discarding that prose is the contract — the patient gets exactly one
+  // message per change and it is the deterministic one.
+  if (effects.length > 0) {
+    if (effects.length > 1) {
+      // One step committed several changes. Only the last is announced, so the
+      // others happened silently; the prompt steers against it, this catches it.
+      turnLogger.warn(
+        'ai.multi_mutation_turn',
+        'A single step committed more than one appointment change',
+        { count: effects.length },
+      );
+    }
+    return {
+      outcome: 'appointment_mutation',
+      effect: effects[effects.length - 1],
+      ...metadata,
+    };
+  }
 
   const text = result.text.trim();
   if (text) {
@@ -654,6 +734,29 @@ async function runTurnCoreUnlocked(args: {
     },
     dispatch: args.dispatch,
   });
+
+  // Deterministic wording, but a billed model round did happen: stamping the
+  // internal/zero metadata the other fixed-text paths use would under-report
+  // every booking turn on the cost dashboard.
+  if (result.outcome === 'appointment_mutation') {
+    return persistReply({
+      inbound: context.inbound,
+      content: appointmentConfirmationContent({
+        kind: result.effect.kind,
+        startsAt: new Date(result.effect.startsAt),
+        // pts.timezone, the same column loadAppointmentJobContext reads, so the
+        // background job would render this instant identically.
+        timezone: context.timezone,
+        serviceType: result.effect.serviceType,
+      }),
+      model: args.modelId,
+      provider: result.provider,
+      tokensIn: result.tokensIn,
+      tokensOut: result.tokensOut,
+      cachedTokens: result.cachedTokens,
+      costMicrousd: result.costMicrousd,
+    });
+  }
 
   if (result.outcome === 'handoff_required') {
     return runFailedTurnHandoff(context, 'booking_unconfirmed', {

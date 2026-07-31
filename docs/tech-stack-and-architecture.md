@@ -129,11 +129,12 @@ Every query through `lib/tenancy/` either uses the authenticated PT's session (R
 1. **Meta → `POST /api/webhooks/whatsapp`.** Handler verifies the Meta signature against the shared secret, inserts the raw payload into `messages` with `external_id` for idempotency, emits an `message.received` event to Inngest, and returns 200 in under a second.
 2. **Inngest function `handleInboundMessage`** loads PT context by `phone_number_id` via `whatsapp_connections`, upserts the `patients` row, opens or reuses the `conversations` row, updates `last_inbound_at`, and calls the conversation engine.
 3. **Conversation engine** runs an AI SDK turn through OpenRouter with tools: `get_availability`, `book_appointment`, `reschedule_appointment`, `cancel_appointment`, `escalate_to_human`. Tool calls invoke `lib/appointments` and `lib/tenancy` directly (in-process, transactional).
-4. **`book_appointment` tool** writes the `appointments` row, emits an `appointment.booked` event, returns a structured confirmation to the AI, which renders the final patient-facing message.
-5. **Event subscribers react to `appointment.booked`:**
-   - `lib/channels/whatsapp` sends the confirmation back through the Graph API.
+4. **`book_appointment` tool** writes the `appointments` row, emits an `appointment.booked` event tagged `origin: 'conversation'`, and returns the mutation effect to the engine. The engine ends the model loop there and composes the patient-facing confirmation itself from the shared deterministic copy in `lib/format/` — the model never writes its own.
+5. **That confirmation is the turn's single reply.** It is persisted as the AI reply to the inbound message and `lib/channels/whatsapp` sends it through the Graph API, exactly like any other AI turn.
+6. **Event subscribers react to `appointment.booked`:**
    - `lib/reminders` schedules a `sendReminder` Inngest job for `starts_at - 24h`.
    - `lib/notifications` pushes a Web Push notification to the PT's registered devices.
+   - The background appointment-event job confirms only PT-originated changes (`origin: 'pt'` — dashboard or PWA). A conversation-originated change was already confirmed by the turn itself, so the job stays silent and the patient gets one message per change.
    - Supabase Realtime broadcasts the row insert, and the PT's PWA calendar updates without a refresh.
 
 ### 5.2 Reminder dispatch (24 hours before appointment)
@@ -204,7 +205,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 - Availability, appointment discovery, booking, and state changes happen through **tool use** with well-typed schemas defined in `lib/ai/tools.ts`. The model never writes JSON that the app then parses from prose.
 - `pt_id` and `patient_id` are injected from validated engine context and are never accepted from model tool input. `list_upcoming_appointments` resolves safe appointment IDs before cancellation or rescheduling.
-- Tool results are returned to the model so it can render a natural confirmation, but the authoritative state change already happened in the transactional tool call.
+- Tool results are returned to the model so it can carry on the conversation, but the authoritative state change already happened in the transactional tool call. `book_appointment`, `reschedule_appointment`, and `cancel_appointment` are the exception: a successful call stops the turn and the engine sends deterministic confirmation copy, so the wording of an appointment change is never model-written.
 - Explicit human requests plus emergency, legal/billing, insurance, and severe-frustration phrases are handled by a deterministic pre-inference guard. These messages bypass OpenRouter and immediately disable AI handling for the conversation.
 - Each inbound message turn is serialized with a transaction-scoped Postgres advisory lock before model or tool execution. The reply unique index remains the persistence backstop, while the lock prevents concurrent retries from executing scheduling tools twice.
 - If a scheduling mutation is attempted but the model returns no final text, the engine does not retry the mutation. It escalates and persists a neutral verification handoff with the original turn's usage metadata. Read-only empty or step-limited turns remain retryable for Phase 5.

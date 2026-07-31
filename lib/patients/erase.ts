@@ -95,6 +95,7 @@ export async function erasePatient(input: {
           status: 'cancelled',
           cancelledBy: 'pt',
           reason: 'patient_erased',
+          origin: 'pt',
         },
       });
       eventIds.push(eventId);

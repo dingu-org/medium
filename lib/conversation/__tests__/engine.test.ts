@@ -3,6 +3,7 @@ import { MockLanguageModelV3 } from 'ai/test';
 import { ConversationEngineError } from '../errors';
 import { runModelTurn } from '../engine';
 import type {
+  AppointmentMutationEffect,
   ToolExecutionContext,
   ToolName,
   ToolResult,
@@ -44,19 +45,41 @@ const toolCallResult = (
   toolCallId: string,
   toolName: string,
   input: unknown,
+): MockGenerateResult => toolStepResult([{ toolCallId, toolName, input }]);
+
+const toolStepResult = (
+  calls: { toolCallId: string; toolName: string; input: unknown }[],
+  text?: string,
 ): MockGenerateResult => ({
   content: [
-    {
+    ...(text ? [{ type: 'text' as const, text }] : []),
+    ...calls.map((call) => ({
       type: 'tool-call' as const,
-      toolCallId,
-      toolName,
-      input: JSON.stringify(input),
-    },
+      toolCallId: call.toolCallId,
+      toolName: call.toolName,
+      input: JSON.stringify(call.input),
+    })),
   ],
   finishReason: { unified: 'tool-calls' as const, raw: undefined },
   usage: usage(8, 2),
   warnings: [],
 });
+
+const bookingCall = {
+  toolCallId: 'book-1',
+  toolName: 'book_appointment',
+  input: {
+    starts_at: '2026-06-12T10:00:00+02:00',
+    service_type: 'Vlerësim i parë',
+  },
+};
+
+const bookedEffect: AppointmentMutationEffect = {
+  kind: 'booked',
+  appointmentId: '99999999-8888-4777-a666-555555555555',
+  startsAt: '2026-06-12T08:00:00.000Z',
+  serviceType: 'Vlerësim i parë',
+};
 
 function sequence(...results: MockGenerateResult[]) {
   let index = 0;
@@ -146,27 +169,29 @@ describe('runModelTurn', () => {
     );
   });
 
+  // escalate_to_human is the only MUTATING_TOOLS member that can reach a handoff
+  // now: the three confirmable mutations stop the loop and speak for themselves,
+  // so a successful one never gets to leave the turn speechless.
   it('requests a handoff when a mutation is followed by an empty response', async () => {
     const model = new MockLanguageModelV3({
       provider: 'openrouter',
       modelId: 'test-model',
       doGenerate: sequence(
-        toolCallResult('call-1', 'book_appointment', {
-          starts_at: '2026-06-12T10:00:00+02:00',
-          service_type: 'Initial consultation',
+        toolCallResult('call-1', 'escalate_to_human', {
+          reason: 'Patient asked for the therapist.',
         }),
         textResult('', 12, 6, 0.000012),
       ),
     });
     const dispatch = async (): Promise<ToolResult> => ({
       ok: true,
-      data: { appointment_id: 'appointment-1' },
+      data: { escalated: true },
     });
 
     const result = await runModelTurn({
       model,
       system: 'system',
-      messages: [{ role: 'user', content: 'Book that time' }],
+      messages: [{ role: 'user', content: 'I want to talk to a person' }],
       toolContext,
       dispatch,
     });
@@ -185,9 +210,8 @@ describe('runModelTurn', () => {
   it('requests a handoff when the step limit follows a mutation attempt', async () => {
     const model = new MockLanguageModelV3({
       doGenerate: sequence(
-        toolCallResult('call-1', 'book_appointment', {
-          starts_at: '2026-06-12T10:00:00+02:00',
-          service_type: 'Initial consultation',
+        toolCallResult('call-1', 'escalate_to_human', {
+          reason: 'Patient asked for the therapist.',
         }),
         ...Array.from({ length: 4 }, (_, index) =>
           toolCallResult(`call-${index + 2}`, 'list_upcoming_appointments', {}),
@@ -202,7 +226,7 @@ describe('runModelTurn', () => {
     const result = await runModelTurn({
       model,
       system: 'system',
-      messages: [{ role: 'user', content: 'Book that time' }],
+      messages: [{ role: 'user', content: 'I want to talk to a person' }],
       toolContext,
       dispatch,
     });
@@ -212,6 +236,165 @@ describe('runModelTurn', () => {
       reason: 'step_limit_reached',
       tokensIn: 40,
       tokensOut: 10,
+    });
+  });
+
+  it('stops the loop as soon as a booking commits', async () => {
+    const model = new MockLanguageModelV3({
+      provider: 'openrouter',
+      modelId: 'test-model',
+      doGenerate: sequence(
+        toolStepResult([bookingCall]),
+        textResult('Your appointment is confirmed.'),
+      ),
+    });
+    const dispatch = async (): Promise<ToolResult> => ({
+      ok: true,
+      data: { appointment_id: bookedEffect.appointmentId },
+      effect: bookedEffect,
+    });
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'Book that time' }],
+      toolContext,
+      dispatch,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'appointment_mutation',
+      effect: bookedEffect,
+    });
+    // The saved round: the model is never asked to write the confirmation.
+    expect(model.doGenerateCalls).toHaveLength(1);
+  });
+
+  // Discarding the model's own words is the contract, not an accident: the
+  // patient gets one message per change and it is the deterministic one.
+  it('prefers the deterministic outcome over prose written beside the tool call', async () => {
+    const model = new MockLanguageModelV3({
+      doGenerate: sequence(
+        toolStepResult([bookingCall], 'E rezervova për të hënën në 9.'),
+      ),
+    });
+    const dispatch = async (): Promise<ToolResult> => ({
+      ok: true,
+      data: { appointment_id: bookedEffect.appointmentId },
+      effect: bookedEffect,
+    });
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'Book that time' }],
+      toolContext,
+      dispatch,
+    });
+
+    expect(result.outcome).toBe('appointment_mutation');
+    expect(result).not.toHaveProperty('text');
+  });
+
+  it('keeps looping when the mutation came back as an error', async () => {
+    const model = new MockLanguageModelV3({
+      doGenerate: sequence(
+        toolStepResult([bookingCall]),
+        textResult('That slot has just gone — would 10:00 work?'),
+      ),
+    });
+    const dispatch = async (): Promise<ToolResult> => ({
+      ok: false,
+      error: {
+        code: 'conflict',
+        message: 'Slot is no longer available',
+        retryable: false,
+      },
+    });
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'Book that time' }],
+      toolContext,
+      dispatch,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'response',
+      text: 'That slot has just gone — would 10:00 work?',
+    });
+    expect(model.doGenerateCalls).toHaveLength(2);
+  });
+
+  // No deterministic copy exists for an escalation, so the model still has to
+  // write the handoff sentence — CONFIRMABLE_MUTATIONS must stay narrower than
+  // MUTATING_TOOLS.
+  it('keeps looping after escalate_to_human', async () => {
+    const model = new MockLanguageModelV3({
+      doGenerate: sequence(
+        toolCallResult('call-1', 'escalate_to_human', {
+          reason: 'Patient asked for the therapist.',
+        }),
+        textResult('Ia kalova bisedën praktikës.'),
+      ),
+    });
+    const dispatch = async (): Promise<ToolResult> => ({
+      ok: true,
+      data: { escalated: true },
+    });
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'I want to talk to a person' }],
+      toolContext,
+      dispatch,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'response',
+      text: 'Ia kalova bisedën praktikës.',
+    });
+    expect(model.doGenerateCalls).toHaveLength(2);
+  });
+
+  it('reports the last effect when one step commits two changes', async () => {
+    const cancelledEffect: AppointmentMutationEffect = {
+      kind: 'cancelled',
+      appointmentId: '11111111-2222-4333-8444-555555555555',
+      startsAt: '2026-06-15T08:00:00.000Z',
+      serviceType: 'Terapi',
+    };
+    const model = new MockLanguageModelV3({
+      doGenerate: sequence(
+        toolStepResult([
+          bookingCall,
+          {
+            toolCallId: 'cancel-1',
+            toolName: 'cancel_appointment',
+            input: { appointment_id: cancelledEffect.appointmentId },
+          },
+        ]),
+      ),
+    });
+    const dispatch = async (toolName: ToolName): Promise<ToolResult> =>
+      toolName === 'book_appointment'
+        ? { ok: true, data: {}, effect: bookedEffect }
+        : { ok: true, data: {}, effect: cancelledEffect };
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'Move me to Monday' }],
+      toolContext,
+      dispatch,
+    });
+
+    // Only one change is announced; the warning log is what surfaces the other.
+    expect(result).toMatchObject({
+      outcome: 'appointment_mutation',
+      effect: cancelledEffect,
     });
   });
 

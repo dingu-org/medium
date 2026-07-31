@@ -59,6 +59,7 @@ async function cancelAppointmentActionImpl(
       appointmentId,
       cancelledBy: 'pt',
       reason: reason?.trim() || undefined,
+      origin: 'pt',
     });
     revalidatePath('/calendar');
     return { ok: true };
@@ -91,6 +92,7 @@ async function transitionAppointmentActionImpl(
       ptId,
       appointmentId,
       nextStatus: parsed.data,
+      origin: 'pt',
     });
     revalidatePath('/calendar');
     return { ok: true };
@@ -118,7 +120,12 @@ async function rescheduleAppointmentActionImpl(
     };
   }
   try {
-    await rescheduleAppointment({ ptId, appointmentId, newStartsAt: date });
+    await rescheduleAppointment({
+      ptId,
+      appointmentId,
+      newStartsAt: date,
+      origin: 'pt',
+    });
     revalidatePath('/calendar');
     return { ok: true };
   } catch (error) {
@@ -347,6 +354,7 @@ async function bookManualAppointmentImpl(input: {
       durationMinutes: service.durationMinutes,
       notes: parsed.data.notes,
       allowOutsideAvailability: true,
+      origin: 'pt',
     });
     revalidatePath('/calendar');
     return { ok: true };

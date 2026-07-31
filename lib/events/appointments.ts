@@ -10,6 +10,13 @@ const cancellationActor = z.enum(['patient', 'pt', 'ai']);
 // keys.
 const traceId = z.uuid().optional();
 
+// Which side of the product produced the change, and so whether the patient was
+// already answered inside the originating turn. Distinct from `cancelledBy`,
+// which records who decided, not who speaks. Optional so old outbox rows still
+// validate; declared explicitly because z.object().parse() strips undeclared
+// keys.
+const mutationOrigin = z.enum(['conversation', 'pt']).optional();
+
 const appointmentSummary = z.object({
   ptId: z.uuid(),
   appointmentId: z.uuid(),
@@ -18,6 +25,7 @@ const appointmentSummary = z.object({
   endsAt: isoDateTime,
   serviceType: z.string().nullable(),
   traceId,
+  origin: mutationOrigin,
 });
 
 export const appointmentEventSchemas = {
@@ -41,6 +49,7 @@ export const appointmentEventSchemas = {
     from: z.object({ startsAt: isoDateTime, endsAt: isoDateTime }),
     to: z.object({ startsAt: isoDateTime, endsAt: isoDateTime }),
     traceId,
+    origin: mutationOrigin,
   }),
   'appointment.completed': appointmentSummary.extend({
     status: z.literal('completed'),
