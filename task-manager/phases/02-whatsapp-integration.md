@@ -57,6 +57,17 @@ Implemented via Meta's current JS-SDK popup flow (2026-05-22 decision log), whic
 - [x] Error UI per spec doc §9 — rejection / duplicate number / abandoned flow (toast keyed on the typed error kind; abandoned = no `authResponse`).
 - [x] Unique index on `whatsapp_connections.phone_number_id` (migration `0005`) backs the 409 path + the unambiguous webhook lookup.
 
+> **Deprecation — act before 2026-10-15.** Meta retires Embedded Signup v2 on that date and the migration target is v4. The client currently sends `sessionInfoVersion: '3'` (`app/(dashboard)/settings/connect-whatsapp.tsx`). Not yet owned by any phase — schedule it before the cutoff.
+
+### Meta-side configuration (dashboard / Graph API — not code)
+
+These live in the Meta app, not the repo, so the checklists above can be fully green while the flow still fails. All verified against the live app on 2026-08-03.
+
+- [x] **App-level webhook field subscription.** `POST /<appId>/subscriptions` with `object=whatsapp_business_account` must list all five fields: `messages`, `account_update`, `history`, `smb_app_state_sync`, `smb_message_echoes`. The three coexistence fields are a documented prerequisite for `featureType: whatsapp_business_app_onboarding`; without them `syncWhatsappCoexistence` requests a sync whose callbacks never arrive and Business-app replies never mirror. Shipping the handlers is not the same as subscribing — the handlers and their tests were done long before the subscription existed, which was only added 2026-08-03. Verify with `GET /<appId>/subscriptions?access_token=<appId>|<appSecret>`.
+- [x] **`NEXT_PUBLIC_META_CONFIG_ID` must be this app's own Embedded Signup configuration.** A wrong-but-well-formed config ID fails as a bare "Sorry, something went wrong" in the popup *before* login, with no diagnostic and no error code — it cost a full debugging session on 2026-08-03. Config IDs are not readable through the Graph API (`GET /<configId>` returns `GraphMethodException` even with a valid app token), so this can only be checked by eye in the dashboard.
+- [x] **Calling origin must be allowlisted** in App Settings → Basic → App Domains *and* Facebook Login for Business → Allowed Domains for the JavaScript SDK. Currently `medium.emae.events` / `emae.events` only — Vercel preview domains (`*.vercel.app`) are absent and will fail the JS-SDK domain check.
+- `NEXT_PUBLIC_*` values are inlined at build time, so changing the config ID in Vercel needs a **redeploy**, not just an env-var save.
+
 ### Channel adapter — `lib/channels/whatsapp/`
 
 Shared plumbing landed too: `constants.ts` (`GRAPH_VERSION = v25.0`), `graph.ts` (`graphUrl` + `graphFetch` → typed `GraphApiError`), `errors.ts`.

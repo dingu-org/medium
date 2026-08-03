@@ -53,6 +53,14 @@ _Things that need an external answer or an account / approval I'm waiting on._
 
 ---
 
+## Deadlines
+
+_Dated external cutoffs that no phase currently owns._
+
+- **2026-10-15 — Embedded Signup v2 retired.** Meta's migration target is v4; the client currently sends `sessionInfoVersion: '3'` (`app/(dashboard)/settings/connect-whatsapp.tsx`). Onboarding breaks at the cutoff if unmigrated. Detail in `task-manager/phases/02-whatsapp-integration.md`.
+
+---
+
 ## Verification notes
 
 _What is actually complete versus still missing for Phase 0._
