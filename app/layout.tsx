@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { JetBrains_Mono, Manrope } from 'next/font/google';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 
 import './globals.css';
 
@@ -59,6 +60,7 @@ export default function RootLayout({
       <body
         className={`bg-background text-foreground flex min-h-full flex-col`}
       >
+        <SpeedInsights />
         {children}
       </body>
     </html>
