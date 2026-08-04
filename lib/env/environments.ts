@@ -37,15 +37,10 @@ export const ENVIRONMENTS: Readonly<Record<AppEnv, EnvironmentIdentity>> = {
     appUrl: 'http://localhost:3000',
   },
   preview: {
-    // TODO(devops): set to the `medium-preview` Supabase project ref once it
-    // is provisioned (docs/environments.md §Provisioning). Until then preview
-    // deployments fail closed at build/boot — deliberately.
-    supabaseProjectRef: null,
+    supabaseProjectRef: 'nnqucuyrsqkhboiczhed',
     appUrl: 'https://medium-preview.dingu.org',
   },
   production: {
-    // The original project. It predates the three-environment split and was
-    // kept as production's own; preview/development get their own worlds.
     supabaseProjectRef: 'fozwkvyydqgpduxxgatm',
     appUrl: 'https://medium.dingu.org',
   },
@@ -60,7 +55,9 @@ const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
  * `null` for anything unparseable so callers report "unrecognised" rather than
  * silently comparing garbage.
  */
-export function supabaseProjectRefFromUrl(url: string | undefined): string | null {
+export function supabaseProjectRefFromUrl(
+  url: string | undefined,
+): string | null {
   if (!url) return null;
   let host: string;
   try {
@@ -81,7 +78,9 @@ export function supabaseProjectRefFromUrl(url: string | undefined): string | nul
  * in the username, as `postgres.<ref>` — so the host-based path above cannot be
  * reused. Direct connections do use `db.<ref>.supabase.co`.
  */
-export function supabaseProjectRefFromDatabaseUrl(url: string | undefined): string | null {
+export function supabaseProjectRefFromDatabaseUrl(
+  url: string | undefined,
+): string | null {
   if (!url) return null;
   let parsed: URL;
   try {
