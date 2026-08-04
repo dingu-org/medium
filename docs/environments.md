@@ -14,7 +14,7 @@ environment is, how configuration is verified, and the runbooks.
 | Inngest        | local Dev Server           | cloud env `preview` (custom)     | cloud env `production`      |
 | Meta           | fake creds (may borrow the test app) | owns the **test app**  | live app, exclusively       |
 | POK            | staging                    | staging                          | production                  |
-| AI model       | free model, no ZDR (plans.ts) | free model, no ZDR (plans.ts) | `claude-haiku-4.5` + fallback, high effort, ZDR (plans.ts) |
+| AI model       | free model, no ZDR (plans.ts) | free model, no ZDR (plans.ts) | `claude-haiku-4.5` + fallback, ZDR (plans.ts) |
 | Sentry/PostHog | shared (dormant)           | shared                           | shared                      |
 | Push (VAPID)   | throwaway committed pair   | own pair                         | own pair                    |
 

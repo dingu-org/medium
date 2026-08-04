@@ -35,17 +35,20 @@ describe('OpenRouter client', () => {
     ).toEqual(NON_PROD_PRIVACY);
   });
 
-  it('builds the production request: paid fallback routing + reasoning + zdr', async () => {
+  it('builds the production request: paid fallback routing + zdr, no reasoning', async () => {
     process.env.OPENROUTER_API_KEY = 'test';
     const { buildModelSettings } = await import('../client');
     const settings = buildModelSettings(
       selectModelForPlan('free', {}, 'production'),
     );
+    // No `reasoning` key at all. It was sent once with `effort: 'high'` against
+    // the engine's 500-token maxOutputTokens, which handed OpenRouter a
+    // 1024-token thinking budget inside a 500-token allowance and emptied the
+    // reply on every turn the model actually thought on.
     expect(settings).toEqual({
       provider: PROD_PRIVACY,
       usage: { include: true },
       models: ['anthropic/claude-haiku-4.5', 'openai/gpt-5-mini'],
-      reasoning: { effort: 'high' },
     });
   });
 
@@ -62,8 +65,9 @@ describe('OpenRouter client', () => {
       // endpoint rate-limits.
       expect(settings).not.toHaveProperty('models');
       expect(settings.provider).toEqual(NON_PROD_PRIVACY);
-      // Effort applies uniformly — same request shape as production.
-      expect(settings.reasoning).toEqual({ effort: 'high' });
+      // Same request shape as production, reasoning included: dev and preview
+      // would hit the identical empty-response failure if effort came back.
+      expect(settings).not.toHaveProperty('reasoning');
     }
   });
 

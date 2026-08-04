@@ -13,7 +13,7 @@ describe('selectModelForPlan', () => {
     expect(selectModelForPlan('free', {}, 'production')).toEqual({
       primary: 'anthropic/claude-haiku-4.5',
       fallbacks: ['openai/gpt-5-mini'],
-      reasoningEffort: 'high',
+      reasoningEffort: undefined,
       privacy: PROD_PRIVACY,
     });
   });
@@ -28,8 +28,21 @@ describe('selectModelForPlan', () => {
       const config = selectModelForPlan('free', {}, appEnv);
       expect(config.primary.endsWith(':free')).toBe(true);
       expect(config.fallbacks).toEqual([]);
-      expect(config.reasoningEffort).toBe('high');
+      expect(config.reasoningEffort).toBeUndefined();
       expect(config.privacy).toEqual(NON_PROD_PRIVACY);
+    },
+  );
+
+  // A reasoning budget is derived from the request's max_tokens and floored at
+  // 1024, so any effort at all is unsafe until the engine's maxOutputTokens
+  // clears that floor — thinking otherwise consumes the whole allowance and the
+  // turn returns no patient-facing text. Guards every environment, not just
+  // production: dev and preview send the same request shape.
+  it.each(['development', 'preview', 'production'] as const)(
+    'sets no reasoning effort in %s while maxOutputTokens is below the 1024 floor',
+    (appEnv) => {
+      expect(selectModelForPlan('free', {}, appEnv).reasoningEffort).toBeUndefined();
+      expect(selectModelForPlan('solo', {}, appEnv).reasoningEffort).toBeUndefined();
     },
   );
 
@@ -59,7 +72,7 @@ describe('selectModelForPlan', () => {
     ).toEqual({
       primary: 'custom/model',
       fallbacks: ['openai/gpt-5-mini'],
-      reasoningEffort: 'high',
+      reasoningEffort: undefined,
       privacy: PROD_PRIVACY,
     });
   });

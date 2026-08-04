@@ -13,7 +13,7 @@ Key invariants (do not violate — details in the architecture doc):
 - Conversation = active patient-day (PT timezone); metered via `conversation_days` fact table; reminders counted only on Meta delivery confirmation.
 - Hard stop at 100% with one static handoff message; PT inbox/manual chat never blocked; capped reminders flag the appointment; nothing fails silently.
 - All limits/prices/models in `lib/billing/plans.ts` config (env override escape hatch), never scattered.
-- One model all plans: haiku-4.5 + gpt-5-mini fallback, low reasoning, ZDR + data_collection:deny preserved.
+- One model all plans: haiku-4.5 + gpt-5-mini fallback, **no reasoning effort** (it cannot fit inside the engine's 500-token `maxOutputTokens`), ZDR + data_collection:deny preserved.
 - Downgrade deletes nothing: services beyond limit deactivate (oldest active stays; PT can swap), retention clamps after 30-day grace.
 
 ## Chunks (dependency order)
@@ -27,7 +27,8 @@ Key invariants (do not violate — details in the architecture doc):
   - C6 copy decision RESOLVED: kept patient-facing "asistenti i rezervimeve" (prompt fallback untouched); "Medium" used only as the PT-facing app label; Free assistant identity rows locked with upgrade CTA. Reversible in one line if the product-doc "Medium" nominal is later preferred.
 - [x] C7 Admin metrics — plan distribution / conversion / renewal / downgrades / cap-hits / Free COGS cards + PT-payments table + monthly CSV export on the ADMIN_EMAILS-gated /admin (depends C5+C6). Amounts shown raw (minor units) — no conversion until the POK spike confirms the factor.
 - [~] C8 Polish & QA — CODEABLE parts done: Albanian copy audit (clean, no changes), new `/help/plans` page + help index, ToS/privacy DRAFT edits (English, pending sign-off). DEFERRED (blocked/pre-launch, NOT done): POK-staging E2E (blocked on valid creds → factor + LIVE_PAYMENTS_ENABLED), visual QA vs billing/*.jsx designs (main-session: DesignSync + browser), and the model cutover below.
-  - Model cutover (**done 2026-08-04**): `OPENROUTER_DEV_MODEL`/`OPENROUTER_PROD_MODEL` are removed everywhere — the per-environment table in `lib/billing/plans.ts` is now the only source (production: haiku-4.5 + gpt-5-mini fallback, `high` reasoning, ZDR; dev/preview: free model, no fallback, no ZDR). `OPENROUTER_MODEL_OVERRIDE` remains as the single escape hatch. Still to verify before launch: `scripts/smoke-ai.ts` and one real production turn.
+  - Model cutover (**done 2026-08-04**): `OPENROUTER_DEV_MODEL`/`OPENROUTER_PROD_MODEL` are removed everywhere — the per-environment table in `lib/billing/plans.ts` is now the only source (production: haiku-4.5 + gpt-5-mini fallback, ZDR; dev/preview: free model, no fallback, no ZDR). `OPENROUTER_MODEL_OVERRIDE` remains as the single escape hatch. Still to verify before launch: `scripts/smoke-ai.ts` and one real production turn.
+  - Reasoning effort removed (**2026-08-05**): the cutover shipped `reasoningEffort: 'high'` against the engine's `maxOutputTokens: 500`, which is a live outage in production — see the decisions log. No environment sets an effort now.
 
 ## C1 pilot flip (run manually, do not automate)
 
