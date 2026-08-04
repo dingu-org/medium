@@ -87,12 +87,12 @@ the Settings danger zone (`disconnectWhatsApp` server action,
 `whatsapp_connections.status = 'revoked'` — then message the PT out-of-band
 to explain what happened and next steps.
 
-## Local HTTPS dev loop (`.env.local.dev`)
+## Local HTTPS dev loop (Meta test-app borrow)
 
-Meta test-app credentials for local Embedded Signup live in the git-ignored
-`.env.local.dev` file (template: `.env.local.dev.example`). Run `pnpm tunnel`
-to expose `localhost:3000` over a Cloudflare quick tunnel HTTPS URL, then
-point `META_REDIRECT_URI` / `NEXT_PUBLIC_APP_URL` at that URL.
+For local Embedded Signup E2E, borrow Preview's Meta test app: run
+`pnpm tunnel` to expose `localhost:3000` over a Cloudflare quick tunnel, then
+fill and uncomment the borrow block at the bottom of `.env` (see the notes
+there — point the test app's webhook back at the preview domain afterwards).
 
 ## Operational rehearsal — existing coverage
 

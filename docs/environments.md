@@ -145,7 +145,7 @@ local-only by design.
 
 ### Borrowing the Meta test app for local E2E
 
-See `.env.local.dev.example`. Short version: tunnel, repoint the test app's
+See the borrow block at the bottom of `.env`. Short version: tunnel, repoint the test app's
 webhook at the tunnel, QA, **repoint it back at the preview domain** —
 preview's WhatsApp is broken while you hold the borrow.
 

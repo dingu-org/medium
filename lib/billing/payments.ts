@@ -40,9 +40,9 @@ export type ApplyOrderResult =
   | 'failed'
   | 'unknown';
 
-// POK_* live in .env.local (dev/build) and the deployment env (prod), where a
+// POK_* live in .env (dev/build) and the deployment env (prod), where a
 // missing var is a hard misconfiguration and must throw. They are deliberately
-// absent from .env.test (C5 must not touch env files) and the network client is
+// absent by default in .env (C5 must not touch env files) and the network client is
 // mocked in every test, so under Vitest we fall back to an obviously-fake value
 // that is never used for a real request. (Smallest correct deviation from the
 // plain module-top throw convention, forced by the untouchable test env.)

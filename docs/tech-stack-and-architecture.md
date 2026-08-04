@@ -338,7 +338,7 @@ Before any product code is shipped:
    - Use structured Vercel / Supabase logs and internal event-derived dashboards instead.
 
 7. **Local dev loop**
-   - `.env.local` mirrors production env var names with dev values.
+   - `.env` mirrors production env var names with local-stack dev values.
    - ngrok or Cloudflare Tunnel for local webhook testing with a separate Meta test app.
    - Seed script creates a test PT and a test patient for fast iteration.
 

@@ -5,7 +5,7 @@
  * messages. Unlike `seed-qa.ts` (multi-patient design-QA fixture), this is
  * the minimal single-tenant fixture the Phase 12 spec calls for.
  *
- * Run: pnpm seed        (tsx --env-file=.env.test — LOCAL Supabase only)
+ * Run: pnpm seed        (local stack via .env)
  * Sign in with seed@medium.local / seed-medium-1234.
  */
 import { fileURLToPath } from 'node:url';

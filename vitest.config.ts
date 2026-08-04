@@ -2,7 +2,7 @@ import { config as loadDotenv } from 'dotenv';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import { defineConfig } from 'vitest/config';
 
-const env = loadDotenv({ path: '.env.test' }).parsed ?? {};
+const env = loadDotenv({ path: '.env' }).parsed ?? {};
 
 export default defineConfig({
   plugins: [tsconfigPaths()],

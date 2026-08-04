@@ -1,7 +1,7 @@
 /**
  * Wipes the seed test PT and re-seeds it from scratch (Phase 12).
  *
- * Run: pnpm seed:reset   (tsx --env-file=.env.test — LOCAL Supabase only)
+ * Run: pnpm seed:reset   (local stack via .env)
  */
 import { fileURLToPath } from 'node:url';
 import { createServiceClient } from '@/lib/supabase/service';

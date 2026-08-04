@@ -18,7 +18,7 @@
  *   - a JWT that verifies (ES256) against our public key, with the right
  *     audience (push origin), subject, and a sane expiry
  *
- * Run: `pnpm push:smoke` (loads .env.local for VAPID_*). Exits non-zero on any
+ * Run: `pnpm push:smoke` (loads .env for VAPID_*). Exits non-zero on any
  * failed assertion.
  */
 import * as crypto from 'node:crypto';
@@ -29,7 +29,7 @@ const publicKey = process.env.VAPID_PUBLIC_KEY;
 const privateKey = process.env.VAPID_PRIVATE_KEY;
 if (!subject || !publicKey || !privateKey) {
   throw new Error(
-    'VAPID_SUBJECT, VAPID_PUBLIC_KEY, and VAPID_PRIVATE_KEY are required (run with --env-file=.env.local)',
+    'VAPID_SUBJECT, VAPID_PUBLIC_KEY, and VAPID_PRIVATE_KEY are required (run with --env-file=.env)',
   );
 }
 webpush.setVapidDetails(subject, publicKey, privateKey);

@@ -10,10 +10,10 @@ Bootstrap scaffold for **Medium**: a multi-tenant SaaS that lets solo physical t
 pnpm install
 ```
 
-2. Copy the env template and fill the unresolved values:
+2. Copy the env template (works as-is — local-stack values):
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
 3. Start the app:
@@ -62,7 +62,7 @@ stack (Postgres + GoTrue) brought up by the Supabase CLI.
 brew install supabase/tap/supabase   # one-time
 supabase start                        # boot the local stack (Docker required)
 supabase status                       # confirm keys + URLs
-pnpm test:integration                 # runs against the local stack via .env.test
+pnpm test:integration                 # runs against the local stack via .env
 ```
 
 Stop with `supabase stop`. Inbucket (test email inbox) at
@@ -70,5 +70,7 @@ http://127.0.0.1:54324; Studio at http://127.0.0.1:54323.
 
 ## Notes
 
-- `.env.local` is gitignored.
+- `.env` is gitignored; `.env.example` is a working copy of it. Deployed
+  credentials are never kept locally except as pulled, git-ignored
+  `.env.vercel.*` files (see `docs/environments.md`).
 - The repo also contains planning docs under `task-manager/` and product/architecture docs under `docs/`.

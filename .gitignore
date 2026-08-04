@@ -34,11 +34,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — only the template is committed; `cp .env.example .env` to start
 .env*
 !.env.example
-!.env.test
-!.env.local.dev.example
 
 # supabase local stack runtime files
 supabase/.branches/

@@ -3,7 +3,7 @@
  * canvases (chat handling states, send states, today/calendar, clients), so
  * signed-in visual QA can compare app screens against the artboards.
  *
- * Run: pnpm seed:qa           (local stack, .env.test)
+ * Run: pnpm seed:qa           (local stack via .env)
  *      pnpm seed:qa:preview   (preview project, pulled .env.vercel.preview)
  * Sign in with qa@medium.local / qa-medium-1234.
  */
