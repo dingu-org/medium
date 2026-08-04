@@ -9,7 +9,7 @@ import { assertEnvironmentIntegrity } from './lib/env/guard';
 //
 // `override: true` because the point of naming a file is that the file wins —
 // a DATABASE_URL left over in the shell must not silently redirect a migration.
-const envFile = process.env.ENV_FILE ?? '.env.local';
+const envFile = process.env.ENV_FILE ?? '.env';
 config({ path: envFile, override: true });
 
 // A migration is the single most destructive thing pointed at a database, so

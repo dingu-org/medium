@@ -43,7 +43,7 @@ losing any PT's WhatsApp connection.
      row rotates or none do.
 6. **Promote the new key.** Once the script reports success, set
    `TOKEN_ENCRYPTION_KEY` to the value that was in `TOKEN_ENCRYPTION_KEY_NEXT`
-   in every environment (local `.env.local`, Vercel Preview, Vercel
+   in every environment (local `.env`, Vercel Preview, Vercel
    Production), remove `TOKEN_ENCRYPTION_KEY_NEXT`, and redeploy. The app's
    `lib/db/crypto.ts` binds `TOKEN_ENCRYPTION_KEY` once at module load, so a
    redeploy (not just an env change) is required for the new key to take effect.

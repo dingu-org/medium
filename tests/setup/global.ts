@@ -5,7 +5,7 @@ import postgres from 'postgres';
 export async function setup() {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    throw new Error('DATABASE_URL missing — Vitest could not load .env.test');
+    throw new Error('DATABASE_URL missing — Vitest could not load .env (cp .env.example .env)');
   }
   if (!url.includes('127.0.0.1') && !url.includes('localhost')) {
     throw new Error(`Refusing to run tests against non-local DATABASE_URL: ${url}`);

@@ -18,7 +18,7 @@ import journal from '@/drizzle/migrations/meta/_journal.json';
 // Ambient env wins (dotenv never overrides), so on Vercel — where no env file
 // exists — this is a no-op and the deployment's own variables are checked.
 // Locally it defaults to the dev environment; ENV_FILE targets another one.
-loadDotenv({ path: process.env.ENV_FILE ?? '.env.local', quiet: true });
+loadDotenv({ path: process.env.ENV_FILE ?? '.env', quiet: true });
 
 type JournalEntry = { when: number; tag: string };
 
