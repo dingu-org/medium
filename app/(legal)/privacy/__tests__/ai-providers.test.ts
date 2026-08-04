@@ -27,11 +27,15 @@ const subprocessorAnnex = readFileSync(
   'utf8',
 );
 
+// Production only, deliberately: it is the sole environment that processes
+// patient data, so it is the sole environment whose upstream providers belong
+// in the privacy policy and the DPA subprocessor annex. Development and
+// preview run a free model against local/QA fixtures and disclose nothing.
 function configuredModelIds(): string[] {
   return [
     ...new Set(
       PLAN_IDS.flatMap((plan) => {
-        const { primary, fallbacks } = getPlan(plan).model;
+        const { primary, fallbacks } = getPlan(plan).model.production;
         return [primary, ...fallbacks];
       }),
     ),
@@ -43,7 +47,7 @@ describe('disclosed AI providers', () => {
     const disclosed = Object.keys(DISCLOSED_AI_PROVIDERS);
 
     for (const plan of PLAN_IDS) {
-      const { primary, fallbacks } = getPlan(plan).model;
+      const { primary, fallbacks } = getPlan(plan).model.production;
       for (const modelId of [primary, ...fallbacks]) {
         // Fails until the privacy policy + subprocessor doc name the provider.
         expect(disclosed).toContain(providerFromModelId(modelId));

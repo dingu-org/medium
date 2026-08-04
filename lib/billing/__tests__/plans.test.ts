@@ -32,13 +32,20 @@ describe('PLANS config', () => {
     });
   });
 
-  it('both plans share the haiku-4.5 primary + gpt-5-mini fallback at high effort', () => {
+  it('both plans declare the same model table for every environment', () => {
     for (const plan of [PLANS.free, PLANS.solo]) {
-      expect(plan.model).toEqual({
+      expect(plan.model.production).toEqual({
         primary: 'anthropic/claude-haiku-4.5',
         fallbacks: ['openai/gpt-5-mini'],
         reasoningEffort: 'high',
       });
+      // Development and preview share one free config — no paid fallback, so a
+      // rate-limited free endpoint can never spill into billed usage.
+      for (const appEnv of ['development', 'preview'] as const) {
+        expect(plan.model[appEnv].primary.endsWith(':free')).toBe(true);
+        expect(plan.model[appEnv].fallbacks).toEqual([]);
+        expect(plan.model[appEnv].reasoningEffort).toBe('high');
+      }
     }
   });
 
@@ -92,16 +99,18 @@ describe('resolvePlans', () => {
     expect(plans.solo).toEqual(PLANS.solo);
   });
 
-  it('replaces a nested model fallbacks array while keeping other model fields', () => {
+  it('replaces a nested model fallbacks array for one environment only', () => {
     const plans = resolvePlans(
-      '{"solo":{"model":{"fallbacks":["x/one","x/two"]}}}',
+      '{"solo":{"model":{"production":{"fallbacks":["x/one","x/two"]}}}}',
     );
-    expect(plans.solo.model).toEqual({
+    expect(plans.solo.model.production).toEqual({
       primary: 'anthropic/claude-haiku-4.5',
       fallbacks: ['x/one', 'x/two'],
       reasoningEffort: 'high',
     });
-    expect(plans.free.model.fallbacks).toEqual(['openai/gpt-5-mini']);
+    // The other environments, and the other plan, are untouched.
+    expect(plans.solo.model.preview).toEqual(PLANS.solo.model.preview);
+    expect(plans.free.model.production.fallbacks).toEqual(['openai/gpt-5-mini']);
   });
 
   it('allows nulling the price and unlimiting services', () => {

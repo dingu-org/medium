@@ -9,6 +9,7 @@
  * POK payments chunk (C5) after a sandbox spike confirms the factor.
  */
 import { z } from 'zod';
+import { APP_ENVS, type AppEnv } from '@/lib/env/app-env';
 
 export const PLAN_IDS = ['free', 'solo'] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
@@ -20,6 +21,18 @@ export type PlanModelConfig = {
   fallbacks: string[];
   reasoningEffort: ReasoningEffort;
 };
+
+/**
+ * A plan's model config, declared once per environment.
+ *
+ * Every environment resolves through this same map — there is no separate
+ * env-var path that produces a differently shaped request. Only the *values*
+ * differ: production runs a paid model with a paid fallback, development and
+ * preview run a free model with none. This is the seam the config moves to the
+ * database behind; keep the shape identical for all three so that move is a
+ * data migration rather than a rewrite.
+ */
+export type PlanModelByEnv = Record<AppEnv, PlanModelConfig>;
 
 /** Whole ALL (Lekë), VAT-inclusive. */
 export type PlanPrice = {
@@ -41,15 +54,34 @@ export type PlanConfig = {
   customAssistantIdentity: boolean;
   /** null = not purchasable (free). */
   price: PlanPrice | null;
-  model: PlanModelConfig;
+  model: PlanModelByEnv;
 };
 
-// One model for all plans today — the per-plan seam is the deliverable, not a
-// per-plan model split.
-const SHARED_MODEL: PlanModelConfig = {
+/**
+ * Development and preview. A free model, and deliberately **no fallback** — a
+ * paid fallback here would silently bill real money the moment the free
+ * endpoint rate-limits, which is exactly the failure the environment split
+ * exists to prevent.
+ */
+const FREE_MODEL: PlanModelConfig = {
+  primary: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+  fallbacks: [],
+  reasoningEffort: 'high',
+};
+
+/** Production. Paid primary + paid fallback; the only environment that sees patient data. */
+const PRODUCTION_MODEL: PlanModelConfig = {
   primary: 'anthropic/claude-haiku-4.5',
   fallbacks: ['openai/gpt-5-mini'],
   reasoningEffort: 'high',
+};
+
+// One model table for all plans today — the per-plan seam is the deliverable,
+// not a per-plan model split. Give a plan its own record to diverge.
+const SHARED_MODEL: PlanModelByEnv = {
+  development: FREE_MODEL,
+  preview: FREE_MODEL,
+  production: PRODUCTION_MODEL,
 };
 
 const BASE_PLANS: Record<PlanId, PlanConfig> = {
@@ -90,6 +122,17 @@ const modelOverrideSchema = z
   })
   .partial();
 
+// Env-keyed like the config it overrides, so an override can target one
+// environment without reshaping the others.
+const modelByEnvOverrideSchema = z
+  .object(
+    Object.fromEntries(APP_ENVS.map((env) => [env, modelOverrideSchema])) as Record<
+      AppEnv,
+      typeof modelOverrideSchema
+    >,
+  )
+  .partial();
+
 const priceOverrideSchema = z
   .object({
     currency: z.literal('ALL'),
@@ -106,7 +149,7 @@ const planOverrideSchema = z
     retentionMaxDays: z.number().int().positive(),
     customAssistantIdentity: z.boolean(),
     price: priceOverrideSchema.nullable(),
-    model: modelOverrideSchema,
+    model: modelByEnvOverrideSchema,
   })
   .partial();
 
