@@ -1,4 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { selectModelForPlan } from '../models';
+
+const PROD_PRIVACY = {
+  allow_fallbacks: true,
+  data_collection: 'deny',
+  zdr: true,
+} as const;
+
+const NON_PROD_PRIVACY = { allow_fallbacks: true } as const;
 
 describe('OpenRouter client', () => {
   beforeEach(() => {
@@ -14,56 +23,60 @@ describe('OpenRouter client', () => {
     process.env.OPENROUTER_API_KEY = original;
   });
 
-  it('locks privacy, fallbacks, and usage accounting in the default settings', async () => {
-    process.env.OPENROUTER_API_KEY = 'test';
-    const { OPENROUTER_MODEL_SETTINGS } = await import('../client');
-    expect(OPENROUTER_MODEL_SETTINGS).toEqual({
-      provider: {
-        allow_fallbacks: true,
-        data_collection: 'deny',
-        zdr: true,
-      },
-      usage: { include: true },
-    });
-  });
-
-  it('buildModelSettings adds fallback routing + reasoning while preserving zdr and data_collection', async () => {
+  it('carries privacy routing from the resolved config, not a global default', async () => {
     process.env.OPENROUTER_API_KEY = 'test';
     const { buildModelSettings } = await import('../client');
-    const settings = buildModelSettings({
-      primary: 'anthropic/claude-haiku-4.5',
-      fallbacks: ['openai/gpt-5-mini'],
-      reasoningEffort: 'low',
-    });
-    expect(settings).toEqual({
-      provider: {
-        allow_fallbacks: true,
-        data_collection: 'deny',
-        zdr: true,
-      },
-      usage: { include: true },
-      models: ['anthropic/claude-haiku-4.5', 'openai/gpt-5-mini'],
-      reasoning: { effort: 'low' },
-    });
-    // The privacy invariants must survive any settings construction path.
-    expect(settings.provider?.zdr).toBe(true);
-    expect(settings.provider?.data_collection).toBe('deny');
+
+    expect(
+      buildModelSettings(selectModelForPlan('free', {}, 'production')).provider,
+    ).toEqual(PROD_PRIVACY);
+    expect(
+      buildModelSettings(selectModelForPlan('free', {}, 'preview')).provider,
+    ).toEqual(NON_PROD_PRIVACY);
   });
 
-  it('buildModelSettings on an env-override config reproduces the legacy request shape', async () => {
+  it('builds the production request: paid fallback routing + reasoning + zdr', async () => {
     process.env.OPENROUTER_API_KEY = 'test';
-    const { OPENROUTER_MODEL_SETTINGS, buildModelSettings } = await import(
-      '../client'
+    const { buildModelSettings } = await import('../client');
+    const settings = buildModelSettings(
+      selectModelForPlan('free', {}, 'production'),
     );
+    expect(settings).toEqual({
+      provider: PROD_PRIVACY,
+      usage: { include: true },
+      models: ['anthropic/claude-haiku-4.5', 'openai/gpt-5-mini'],
+      reasoning: { effort: 'high' },
+    });
+  });
+
+  it('builds dev/preview the same way: free model, no paid fallback, no zdr', async () => {
+    process.env.OPENROUTER_API_KEY = 'test';
+    const { buildModelSettings } = await import('../client');
+
+    for (const appEnv of ['development', 'preview'] as const) {
+      const config = selectModelForPlan('free', {}, appEnv);
+      const settings = buildModelSettings(config);
+
+      expect(config.primary.endsWith(':free')).toBe(true);
+      // A paid fallback here would bill real money the moment the free
+      // endpoint rate-limits.
+      expect(settings).not.toHaveProperty('models');
+      expect(settings.provider).toEqual(NON_PROD_PRIVACY);
+      // Effort applies uniformly — same request shape as production.
+      expect(settings.reasoning).toEqual({ effort: 'high' });
+    }
+  });
+
+  it('omits the models array when there are no fallbacks', async () => {
+    process.env.OPENROUTER_API_KEY = 'test';
+    const { buildModelSettings } = await import('../client');
     const settings = buildModelSettings({
       primary: 'custom/model',
       fallbacks: [],
       reasoningEffort: undefined,
+      privacy: NON_PROD_PRIVACY,
     });
-    expect(settings).toEqual(OPENROUTER_MODEL_SETTINGS);
     expect(settings).not.toHaveProperty('models');
     expect(settings).not.toHaveProperty('reasoning');
-    expect(settings.provider?.zdr).toBe(true);
-    expect(settings.provider?.data_collection).toBe('deny');
   });
 });

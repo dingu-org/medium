@@ -198,32 +198,15 @@ export const ENV_VARS: readonly EnvVarSpec[] = [
       'attribution on the OpenRouter activity dashboard.',
   },
   {
-    name: 'OPENROUTER_DEV_MODEL',
-    requiredIn: NONE,
-    mustDiffer: false,
-    secret: false,
-    description:
-      'Model used in development and preview. Keep it a :free model that ' +
-      'supports tool calling — pnpm ai:smoke refuses a non-:free id, and the ' +
-      'appointment tools need function calling.',
-  },
-  {
-    name: 'OPENROUTER_PROD_MODEL',
-    requiredIn: NONE,
-    mustDiffer: false,
-    secret: false,
-    description:
-      'Production-only escape hatch. Deliberately UNSET since the 2026-08-04 ' +
-      'cutover: setting it makes production take the env path, which carries ' +
-      'no reasoning effort and no fallback routing, silently dropping the ' +
-      "`high` effort configured in lib/billing/plans.ts. Leave it unset.",
-  },
-  {
     name: 'OPENROUTER_MODEL_OVERRIDE',
     requiredIn: NONE,
     mustDiffer: false,
     secret: false,
-    description: 'Wins over both of the above, in every environment.',
+    description:
+      'Debug escape hatch: swaps the primary model id in any environment, ' +
+      "keeping that environment's fallbacks, reasoning effort, and provider " +
+      'routing. The model per environment is code, not config — see the ' +
+      'per-environment table in lib/billing/plans.ts.',
   },
 
   // ------------------------------------------------------------------ payments

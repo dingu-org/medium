@@ -34,7 +34,7 @@
 
 - [x] Install pinned `ai@6.0.199` and `@openrouter/ai-sdk-provider@2.9.0`.
 - [x] `lib/ai/client.ts` — shared AI SDK / OpenRouter wrapper; reads `OPENROUTER_API_KEY` and keeps provider routing options in one place.
-- [x] `lib/ai/models.ts` — exports `selectModel()` returning, in order of precedence: `OPENROUTER_MODEL_OVERRIDE` if set; else `OPENROUTER_PROD_MODEL` when `NODE_ENV === 'production'`; else `OPENROUTER_DEV_MODEL`. Each branch validates its env var is set and throws on missing — no silent fallback.
+- [x] `lib/ai/models.ts` — exports `selectModelForPlan()` returning `OPENROUTER_MODEL_OVERRIDE` as the primary when set, else the plan's entry for `appEnv()` in the per-environment table (`lib/billing/plans.ts`). Superseded the per-environment env vars on 2026-08-04: one table, one request shape, values differing per environment. Provider/privacy routing resolves at the same seam.
 - [x] Unit tests covering all three `selectModel()` branches plus the missing-env throw.
 - [x] Codify the routing policy in one place: ZDR on, provider data collection denied, parameter-safe routing, and same-model provider fallback. Apply it on every route call.
 - [x] Keep model selection behind `selectModel()` so swapping or A/B-testing models is an env change, not a code change.
@@ -97,7 +97,7 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 ### Model routing policy — `lib/ai/models.ts` + `lib/ai/client.ts`
 
 - [x] Engine routes every runtime turn through `selectModel()` — no model ID constants in engine call sites.
-- [x] Production: `anthropic/claude-haiku-4.5` + `openai/gpt-5-mini` fallback at `high` effort, from `plans.ts` (`OPENROUTER_PROD_MODEL` unset). Dev/preview: `nvidia/nemotron-3-ultra-550b-a55b:free`. `OPENROUTER_MODEL_OVERRIDE` wins when set.
+- [x] One per-environment model table in `plans.ts` for every environment. Production: `anthropic/claude-haiku-4.5` + `openai/gpt-5-mini` fallback, `high` effort, ZDR routing. Dev/preview: `nvidia/nemotron-3-ultra-550b-a55b:free`, no fallback, `high` effort, no ZDR. `OPENROUTER_MODEL_OVERRIDE` swaps the primary id in any environment.
 - [x] Keep the selection behind the helper so a future runtime fallback chain can be added without touching the engine call sites.
 - [x] If the resolved model becomes unavailable or inadequate, fail observably; provider fallbacks may serve only the same resolved model under the enforced routing policy.
 
@@ -116,7 +116,7 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 ## Acceptance criteria
 
 - [x] Given a fixture inbound "I'd like to book a session next week", the engine returns a coherent response that calls `get_availability` and (with stubbed slots) `book_appointment`.
-- [x] `selectModel()` returns `OPENROUTER_DEV_MODEL` when `NODE_ENV !== 'production'`, `OPENROUTER_PROD_MODEL` when it is, and `OPENROUTER_MODEL_OVERRIDE` whenever set. Missing env throws.
+- [x] `selectModelForPlan()` keys on `appEnv()` (never `NODE_ENV`) and reads the per-environment table; `OPENROUTER_MODEL_OVERRIDE` swaps the primary id in any environment.
 - [x] Tool input that fails Zod validation does not throw — it surfaces as a tool result error and the model recovers on the next turn.
 - [x] Engine runtime has no WhatsApp imports — only the channel-agnostic shape.
 - [x] Re-running a turn for the same inbound message returns the existing AI reply.

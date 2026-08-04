@@ -1,14 +1,15 @@
 import { generateText, stepCountIs, tool } from 'ai';
 import { z } from 'zod';
-import { getOpenRouterModel } from '@/lib/ai/client';
+import { buildModelSettings, getOpenRouterModel } from '@/lib/ai/client';
 import { selectModelForPlan } from '@/lib/ai/models';
 
 async function main() {
-  const modelId = selectModelForPlan(
+  const config = selectModelForPlan(
     'free',
     { ...process.env, OPENROUTER_MODEL_OVERRIDE: '' },
     'development',
-  ).primary;
+  );
+  const modelId = config.primary;
   if (!modelId.endsWith(':free')) {
     throw new Error(
       `Refusing live smoke against non-free development model: ${modelId}`,
@@ -16,7 +17,7 @@ async function main() {
   }
 
   const result = await generateText({
-    model: getOpenRouterModel(modelId),
+    model: getOpenRouterModel(modelId, buildModelSettings(config)),
     system:
       'This is a synthetic provider smoke test. Always call get_availability once, then briefly summarize the returned slot.',
     prompt:
