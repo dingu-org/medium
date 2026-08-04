@@ -5,12 +5,10 @@
  */
 import { fileURLToPath } from 'node:url';
 import { createServiceClient } from '@/lib/supabase/service';
+import { assertSeedTarget } from './lib/seed-target';
 import { deleteSeedPt, seedCore, SEED_EMAIL, SEED_PASSWORD } from './seed';
 
-const dbUrl = process.env.DATABASE_URL ?? '';
-if (!dbUrl.includes('127.0.0.1') && !dbUrl.includes('localhost')) {
-  throw new Error(`Refusing to seed non-local DATABASE_URL: ${dbUrl}`);
-}
+assertSeedTarget();
 
 async function main(): Promise<void> {
   const supabase = createServiceClient();

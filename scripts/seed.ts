@@ -21,22 +21,12 @@ import {
   services,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
+import { assertSeedTarget } from './lib/seed-target';
 
 export const SEED_EMAIL = 'seed@medium.local';
 export const SEED_PASSWORD = 'seed-medium-1234';
 
-const dbUrl = process.env.DATABASE_URL ?? '';
-if (!dbUrl.includes('127.0.0.1') && !dbUrl.includes('localhost')) {
-  throw new Error(`Refusing to seed non-local DATABASE_URL: ${dbUrl}`);
-}
-
-// The auth-admin ops (deleteUser/createUser) hit SUPABASE_URL, not
-// DATABASE_URL — guard both endpoints or the destructive user ops could
-// reach a remote auth store while the Postgres guard passes.
-const supabaseUrl = process.env.SUPABASE_URL ?? '';
-if (!supabaseUrl.includes('127.0.0.1') && !supabaseUrl.includes('localhost')) {
-  throw new Error(`Refusing to seed non-local SUPABASE_URL: ${supabaseUrl}`);
-}
+assertSeedTarget();
 
 function at(daysFromToday: number, hour: number, minute = 0) {
   const d = new Date();

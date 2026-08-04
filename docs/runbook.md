@@ -2,7 +2,8 @@
 
 One-page reference for the most likely launch-week incidents. See
 `docs/observability/launch-log-review.md` for the full log-review checklist
-and `lib/log.ts` for the structured log line shape.
+and `lib/log.ts` for the structured log line shape. Environment topology,
+provisioning, and migration/rollback runbooks live in `docs/environments.md`.
 
 ## Incidents
 

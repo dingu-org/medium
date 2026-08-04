@@ -1,4 +1,5 @@
 import { getPlan, type PlanId, type ReasoningEffort } from '@/lib/billing/plans';
+import { resolveAppEnv, type AppEnv } from '@/lib/env/app-env';
 
 type ModelEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -10,13 +11,16 @@ export type ResolvedModelConfig = {
 
 function resolveEnvModelId(
   env: ModelEnvironment,
-  nodeEnv: string | undefined,
+  appEnv: AppEnv,
 ): string | null {
   const override = env.OPENROUTER_MODEL_OVERRIDE?.trim();
   if (override) return override;
 
+  // Keyed on the app environment, not NODE_ENV: Vercel builds Preview with
+  // NODE_ENV=production, so the old check sent every preview turn to the paid
+  // production model. Preview shares development's free model.
   const envName =
-    nodeEnv === 'production' ? 'OPENROUTER_PROD_MODEL' : 'OPENROUTER_DEV_MODEL';
+    appEnv === 'production' ? 'OPENROUTER_PROD_MODEL' : 'OPENROUTER_DEV_MODEL';
   return env[envName]?.trim() || null;
 }
 
@@ -33,9 +37,9 @@ function resolveEnvModelId(
 export function selectModelForPlan(
   plan: PlanId,
   env: ModelEnvironment = process.env,
-  nodeEnv: string | undefined = env.NODE_ENV,
+  appEnv: AppEnv = resolveAppEnv(env),
 ): ResolvedModelConfig {
-  const envModelId = resolveEnvModelId(env, nodeEnv);
+  const envModelId = resolveEnvModelId(env, appEnv);
   if (envModelId) {
     return { primary: envModelId, fallbacks: [], reasoningEffort: undefined };
   }

@@ -3,7 +3,8 @@
  * canvases (chat handling states, send states, today/calendar, clients), so
  * signed-in visual QA can compare app screens against the artboards.
  *
- * Run: pnpm seed:qa   (tsx --env-file=.env.test — LOCAL Supabase only)
+ * Run: pnpm seed:qa           (local stack, .env.test)
+ *      pnpm seed:qa:preview   (preview project, pulled .env.vercel.preview)
  * Sign in with qa@medium.local / qa-medium-1234.
  */
 import { eq } from 'drizzle-orm';
@@ -19,22 +20,14 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
+import { assertSeedTarget } from './lib/seed-target';
 
 const EMAIL = 'qa@medium.local';
 const PASSWORD = 'qa-medium-1234';
 
-const dbUrl = process.env.DATABASE_URL ?? '';
-if (!dbUrl.includes('127.0.0.1') && !dbUrl.includes('localhost')) {
-  throw new Error(`Refusing to seed non-local DATABASE_URL: ${dbUrl}`);
-}
-
-// The auth-admin ops below (deleteUser/createUser) hit SUPABASE_URL, not
-// DATABASE_URL — both endpoints need the guard, or a remote auth store could be
-// wiped while the Postgres guard passes.
-const supabaseUrl = process.env.SUPABASE_URL ?? '';
-if (!supabaseUrl.includes('127.0.0.1') && !supabaseUrl.includes('localhost')) {
-  throw new Error(`Refusing to seed non-local SUPABASE_URL: ${supabaseUrl}`);
-}
+// Development (local stack) by default; preview via `pnpm seed:qa:preview`.
+// Production is unreachable from here by construction — see seed-target.ts.
+assertSeedTarget();
 
 function at(daysFromToday: number, hour: number, minute = 0) {
   const d = new Date();
