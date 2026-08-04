@@ -99,6 +99,19 @@ describe('checkEnvironmentIntegrity', () => {
       codes(localEnv({ NEXT_PUBLIC_SUPABASE_URL: 'https://example.com' })),
     ).toEqual(['unrecognised-url']);
   });
+
+  // `vercel env pull` writes this placeholder for Sensitive variables; the
+  // message must say so instead of a generic parse failure.
+  it('names the Sensitive-placeholder cause for pulled files', () => {
+    const report = checkEnvironmentIntegrity(
+      localEnv({ SUPABASE_URL: '"[SENSITIVE]"' }),
+      MANIFEST,
+    );
+    expect(report.problems).toEqual([
+      expect.objectContaining({ code: 'unrecognised-url', variable: 'SUPABASE_URL' }),
+    ]);
+    expect(report.problems[0].message).toMatch(/Sensitive/);
+  });
 });
 
 describe('assertEnvironmentIntegrity', () => {

@@ -80,8 +80,10 @@ Preview fails closed until this is done — that is intended.
    from `.env.local.pre-split.bak`, i.e. today's live values) and a
    Preview-only entry (new project's URLs/keys, the minted secrets, the Meta
    **test app** ids, `NEXT_PUBLIC_APP_URL=https://medium-preview.dingu.org`,
-   `POK_ENV=staging`, Inngest `preview` keys). The full required/differs
-   matrix is `lib/env/env-vars.ts`. Then: `pnpm check:env:vercel` → green.
+   `POK_ENV=staging`, Inngest `preview` keys). Store them **plain, not
+   Sensitive** (see §Sensitive above) so `vercel env pull` works. The full
+   required/differs matrix is `lib/env/env-vars.ts`. Then:
+   `pnpm check:env:vercel` → green.
 6. **Meta test app**: point the WhatsApp webhook callback, Embedded Signup
    redirect, and allowed domains at `https://medium-preview.dingu.org`, with
    the preview `META_WEBHOOK_VERIFY_TOKEN`.
@@ -97,6 +99,26 @@ Preview fails closed until this is done — that is intended.
    guard passes, and `medium-preview.dingu.org` serves the QA fixture.
    Redeploy `main` once to confirm Production is green under the re-entered
    variables.
+
+## Sensitive variables and `vercel env pull`
+
+Variables stored as **Sensitive** in Vercel cannot be read back:
+`vercel env pull` writes the literal placeholder `[SENSITIVE]` instead of the
+value, and the guard rejects such a file by name. Two workable postures:
+
+- **Store deployed variables as plain (encrypted) rather than Sensitive.**
+  Then `pnpm env:pull:preview` / `env:pull:prod` produce usable files and the
+  `db:migrate:*` / `seed:*:preview` scripts work as documented. This is the
+  recommended posture for this solo project.
+- **Keep them Sensitive** and maintain the local env files by hand
+  (`.env.vercel.preview` / `.env.vercel.production` are git-ignored either
+  way). You become the sync mechanism; `pnpm check:env` at least verifies the
+  file you maintain points at the right project.
+
+Until the per-environment re-entry is done, production's real values live in
+`.env.local.pre-split.bak`, so production-targeting commands take
+`ENV_FILE=.env.local.pre-split.bak` (e.g.
+`APP_ENV=production ENV_FILE=.env.local.pre-split.bak pnpm exec drizzle-kit migrate`).
 
 ## Runbooks
 

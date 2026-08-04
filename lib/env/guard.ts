@@ -63,6 +63,21 @@ export function checkEnvironmentIntegrity(
   for (const { variable, extract } of SUPABASE_POINTERS) {
     const raw = env[variable];
     if (!raw) continue; // Absence is the presence check's job, below.
+    // `vercel env pull` writes this placeholder for variables stored as
+    // Sensitive — their values cannot be pulled. Without this check the
+    // generic "unrecognised URL" error sends people debugging the wrong thing.
+    if (raw.includes('[SENSITIVE]')) {
+      problems.push({
+        code: 'unrecognised-url',
+        variable,
+        message:
+          `${variable} is the literal '[SENSITIVE]' placeholder — this env ` +
+          `file was pulled from Vercel, where the variable is marked ` +
+          `Sensitive and cannot be read back. Use a locally kept env file ` +
+          `for this environment instead (docs/environments.md §Sensitive).`,
+      });
+      continue;
+    }
     const actual = extract(raw);
     if (actual === null) {
       problems.push({
