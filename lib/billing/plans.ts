@@ -19,7 +19,22 @@ export type ReasoningEffort = 'low' | 'medium' | 'high';
 export type PlanModelConfig = {
   primary: string;
   fallbacks: string[];
-  reasoningEffort: ReasoningEffort;
+  /**
+   * Omitted = no `reasoning` field on the request at all.
+   *
+   * Setting this is not free-standing: OpenRouter derives the thinking budget
+   * from the request's `max_tokens` as
+   * `max(min(max_tokens * ratio, 128000), 1024)` (ratio 0.2/0.5/0.8 for
+   * low/medium/high) and requires `max_tokens` to be strictly *higher* than the
+   * budget so the reply has somewhere to go. The 1024 floor is what bites: below
+   * `max_tokens` 5120 every effort level collapses onto it, so the engine's
+   * `maxOutputTokens` must clear 1024 before ANY effort value is safe — picking
+   * `low` is not a way to make a small budget work. Get it wrong and thinking
+   * eats the whole allowance, the model returns no text, and the turn dies as
+   * `empty_response`. Raise `maxOutputTokens` in `lib/conversation/engine.ts`
+   * first, then set this.
+   */
+  reasoningEffort?: ReasoningEffort;
 };
 
 /**
@@ -57,6 +72,13 @@ export type PlanConfig = {
   model: PlanModelByEnv;
 };
 
+// Neither environment sets `reasoningEffort`, and that is a fix rather than an
+// omission: `high` against the engine's 500-token `maxOutputTokens` gave
+// OpenRouter a 1024-token thinking budget inside a 500-token allowance, so every
+// turn on which the model actually thought returned no text and failed as
+// `empty_response`. Read the constraint on `PlanModelConfig.reasoningEffort`
+// before setting it again.
+
 /**
  * Development and preview. A free model, and deliberately **no fallback** — a
  * paid fallback here would silently bill real money the moment the free
@@ -66,14 +88,12 @@ export type PlanConfig = {
 const FREE_MODEL: PlanModelConfig = {
   primary: 'nvidia/nemotron-3-ultra-550b-a55b:free',
   fallbacks: [],
-  reasoningEffort: 'high',
 };
 
 /** Production. Paid primary + paid fallback; the only environment that sees patient data. */
 const PRODUCTION_MODEL: PlanModelConfig = {
   primary: 'anthropic/claude-haiku-4.5',
   fallbacks: ['openai/gpt-5-mini'],
-  reasoningEffort: 'high',
 };
 
 // One model table for all plans today — the per-plan seam is the deliverable,

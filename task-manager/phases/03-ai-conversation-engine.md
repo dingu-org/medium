@@ -1,6 +1,6 @@
 # Phase 3 — AI conversation engine
 
-**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through OpenRouter — `nvidia/nemotron-3-ultra-550b-a55b:free` in dev/preview (env-driven) and `anthropic/claude-haiku-4.5` at high reasoning effort in prod (from `lib/billing/plans.ts`, post-cutover) — and emits the model's chosen tool calls to the appointments layer.
+**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through OpenRouter — `nvidia/nemotron-3-ultra-550b-a55b:free` in dev/preview (env-driven) and `anthropic/claude-haiku-4.5` in prod (from `lib/billing/plans.ts`, post-cutover; no reasoning effort — it cannot fit inside the turn's 500-token `maxOutputTokens`) — and emits the model's chosen tool calls to the appointments layer.
 
 **Source.** Tech doc §3 (module boundaries), §8 (AI orchestration); product spec `docs/medium-canvas/documents/ai-conversation-behavior.md`.
 
@@ -97,7 +97,7 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 ### Model routing policy — `lib/ai/models.ts` + `lib/ai/client.ts`
 
 - [x] Engine routes every runtime turn through `selectModel()` — no model ID constants in engine call sites.
-- [x] One per-environment model table in `plans.ts` for every environment. Production: `anthropic/claude-haiku-4.5` + `openai/gpt-5-mini` fallback, `high` effort, ZDR routing. Dev/preview: `nvidia/nemotron-3-ultra-550b-a55b:free`, no fallback, `high` effort, no ZDR. `OPENROUTER_MODEL_OVERRIDE` swaps the primary id in any environment.
+- [x] One per-environment model table in `plans.ts` for every environment. Production: `anthropic/claude-haiku-4.5` + `openai/gpt-5-mini` fallback, ZDR routing. Dev/preview: `nvidia/nemotron-3-ultra-550b-a55b:free`, no fallback, no ZDR. No environment sets a reasoning effort. `OPENROUTER_MODEL_OVERRIDE` swaps the primary id in any environment.
 - [x] Keep the selection behind the helper so a future runtime fallback chain can be added without touching the engine call sites.
 - [x] If the resolved model becomes unavailable or inadequate, fail observably; provider fallbacks may serve only the same resolved model under the enforced routing policy.
 

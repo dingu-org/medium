@@ -34,7 +34,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 | ORM                           | **Drizzle**                                                                                                          | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies                                                                                              |
 | Auth (PTs)                    | **Supabase Auth** (email+password, Google OAuth)                                                                     | Integrates with RLS through `auth.uid()`                                                                                                                                                    |
 | Background jobs & scheduling  | **Inngest**                                                                                                          | Delayed jobs (24h reminders), retries, event bus — matches the docs' event-driven principle; generous free tier                                                                             |
-| AI                            | **OpenRouter + AI SDK**, split per env: dev/preview → `nvidia/nemotron-3-ultra-550b-a55b:free`, prod → `anthropic/claude-haiku-4.5` at **high** reasoning effort                 | One model-agnostic API surface with strict privacy routing; free model keeps dev cost at €0, paid prod model gives reliable tool-calling and ZDR-compliant routing for patient-facing chat  |
+| AI                            | **OpenRouter + AI SDK**, split per env: dev/preview → `nvidia/nemotron-3-ultra-550b-a55b:free`, prod → `anthropic/claude-haiku-4.5`; **no reasoning effort** in any environment | One model-agnostic API surface with strict privacy routing; free model keeps dev cost at €0, paid prod model gives reliable tool-calling and ZDR-compliant routing for patient-facing chat  |
 | Hosting                       | **Vercel** (Next.js) + **Supabase EU** (DB/auth/realtime) + **Inngest Cloud** (jobs)                                 | No infrastructure to maintain; all have EU regions                                                                                                                                          |
 | Webhook runtime               | Next.js Route Handler on the **Node runtime** (not Edge)                                                             | Signature verification needs `crypto`; handler just verifies + enqueues and returns 200                                                                                                     |
 | Realtime (live calendar/chat) | **Supabase Realtime** (Postgres changefeeds)                                                                         | No extra infrastructure; scopes naturally to RLS                                                                                                                                            |
@@ -50,7 +50,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 - Supabase Pro ~€25
 - Vercel Hobby €0
 - Inngest free tier €0
-- OpenRouter usage ~€1.7–2.1/PT/month at MVP volume on `claude-haiku-4.5` (high effort); dev is free
+- OpenRouter usage ~€1.7/PT/month at MVP volume on `claude-haiku-4.5` (no reasoning effort); dev is free
 - No dedicated Sentry/PostHog spend in the current MVP plan
 - **Total: ~€45–85/month for 1–3 PTs**, leaving headroom within the €100 budget for Meta conversation fees.
 
@@ -197,10 +197,21 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
   1. `OPENROUTER_MODEL_OVERRIDE` if set (escape hatch for ad-hoc dev testing of paid models against the free baseline).
   2. Otherwise the per-environment table in `lib/billing/plans.ts`, keyed on
      `appEnv()` — never `NODE_ENV`, which is `production` on Vercel Preview too:
-     production → `anthropic/claude-haiku-4.5` + `openai/gpt-5-mini` fallback at
-     `high` effort with ZDR routing; development and preview → a free model, no
-     fallback, same `high` effort, without ZDR.
+     production → `anthropic/claude-haiku-4.5` + `openai/gpt-5-mini` fallback
+     with ZDR routing; development and preview → a free model, no fallback,
+     without ZDR.
 - There is one resolution path, not one per environment: the same table, the same request shape (fallback routing + reasoning effort), only different values. That is what makes production behaviour reproducible in preview and locally.
+- **No environment sets a reasoning effort**, and re-adding one is gated on a
+  matching `maxOutputTokens`. OpenRouter derives the thinking budget from the
+  request's `max_tokens` — `max(min(max_tokens × ratio, 128000), 1024)`, ratio
+  0.2/0.5/0.8 for low/medium/high — and requires `max_tokens` to be strictly
+  higher than that budget. The 1024 floor is the trap: below `max_tokens` 5120
+  every effort level collapses onto it, so `low` is no safer than `high`.
+  Against the engine's `maxOutputTokens: 500` this shipped a 1024-token thinking
+  budget inside a 500-token allowance; every turn on which the model actually
+  thought returned no text and died as `empty_response`, three Inngest attempts
+  deep, leaving the patient with the technical-failure handoff. Raise
+  `maxOutputTokens` in `lib/conversation/engine.ts` past the floor **first**.
 - **Production** uses strict privacy controls: ZDR on, provider data collection denied, parameter-safe routing, and same-model provider fallbacks. Development and preview deliberately run without ZDR — they never touch patient data (local stack / QA fixtures) and the free models publish no ZDR-compliant endpoint. The routing is resolved per environment in `lib/ai/models.ts`; `assertProductionPrivacy` fails the build if production ever loses it.
 - Adding or swapping models is a **code** change (`lib/billing/plans.ts`), deliberately: the per-environment map is reviewable, diffable, and covered by tests, where a per-environment env var was not — a blank one silently resolved development to the paid production config. This table is the seam the config moves to the database behind; keep the shape identical across environments so that move is a data migration. Substantive changes to the routing logic remain documented planning decisions.
 
@@ -221,7 +232,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 **Cost math per PT per month:**
 
-- Production: at MVP volume (~1M tokens/PT/month at 80/20 input/output), `anthropic/claude-haiku-4.5` ($1/$5 per MTok) runs roughly **€1.7/PT/month** with no reasoning, rising to about **€2.1/PT/month** once `high` effort engages. Effort is workload-dependent, not a flat surcharge: a measured simple booking turn produced **0 reasoning tokens** even at `high`, while a deliberately hard scheduling puzzle added ~40% output tokens. Budget envelope is **€5/PT/month**, so a median PT sits comfortably inside it with headroom for chatty ones.
+- Production: at MVP volume (~1M tokens/PT/month at 80/20 input/output), `anthropic/claude-haiku-4.5` ($1/$5 per MTok) runs roughly **€1.7/PT/month** with no reasoning, which is what ships. Enabling `high` effort would raise that to about **€2.1/PT/month** — effort is workload-dependent, not a flat surcharge: a measured simple booking turn produced **0 reasoning tokens** even at `high`, while a deliberately hard scheduling puzzle added ~40% output tokens. That gating is also why the budget misconfiguration above stayed invisible for a while: only the turns that thought failed. Budget envelope is **€5/PT/month**, so a median PT sits comfortably inside it with headroom for chatty ones.
 - Development: **~€0** while the free dev route remains available; `OPENROUTER_MODEL_OVERRIDE` is the escape hatch when iterating against a paid model.
 - Capture token and generation metadata (`tokens_in`, `tokens_out`, `model`, `provider`, `cached_tokens`, `ai_cost_microusd`) on every persisted AI message from day one. OpenRouter usage accounting is summed across all steps in the turn.
 - Persist `reply_to_message_id` on each AI response. A partial unique index guarantees one persisted AI reply per inbound message, allowing Inngest replay to return the existing result.

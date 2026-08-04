@@ -8,6 +8,7 @@ import {
   parseBillingPlanOverrides,
   resolvePlans,
 } from '@/lib/billing/plans';
+import { APP_ENVS } from '@/lib/env/app-env';
 
 describe('PLANS config', () => {
   it('free has the documented limits and no price', () => {
@@ -37,14 +38,18 @@ describe('PLANS config', () => {
       expect(plan.model.production).toEqual({
         primary: 'anthropic/claude-haiku-4.5',
         fallbacks: ['openai/gpt-5-mini'],
-        reasoningEffort: 'high',
       });
       // Development and preview share one free config — no paid fallback, so a
       // rate-limited free endpoint can never spill into billed usage.
       for (const appEnv of ['development', 'preview'] as const) {
         expect(plan.model[appEnv].primary.endsWith(':free')).toBe(true);
         expect(plan.model[appEnv].fallbacks).toEqual([]);
-        expect(plan.model[appEnv].reasoningEffort).toBe('high');
+      }
+      // No environment declares a reasoning effort: the budget OpenRouter
+      // derives from it is floored at 1024 tokens and the engine only allows
+      // 500 output tokens, so thinking would leave nothing for the reply.
+      for (const appEnv of APP_ENVS) {
+        expect(plan.model[appEnv].reasoningEffort).toBeUndefined();
       }
     }
   });
@@ -106,7 +111,6 @@ describe('resolvePlans', () => {
     expect(plans.solo.model.production).toEqual({
       primary: 'anthropic/claude-haiku-4.5',
       fallbacks: ['x/one', 'x/two'],
-      reasoningEffort: 'high',
     });
     // The other environments, and the other plan, are untouched.
     expect(plans.solo.model.preview).toEqual(PLANS.solo.model.preview);

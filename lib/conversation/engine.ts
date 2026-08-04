@@ -206,6 +206,7 @@ export async function runModelTurn(args: {
     provider,
     costMicrousd: Math.round(cost * 1_000_000),
   };
+  const reasoningTokens = result.totalUsage.outputTokenDetails.reasoningTokens ?? 0;
 
   // A confirmable mutation stops the loop, so any effect can only be on the last
   // step — the same step stopOnConfirmedMutation judged.
@@ -218,14 +219,22 @@ export async function runModelTurn(args: {
   });
   // Per-turn cost/usage telemetry for the cost dashboard (Phase 11). ids +
   // counts only — no message content.
+  //
+  // `reasoningTokens` and `finishReason` are here because their absence is what
+  // made a live empty-response outage un-diagnosable from these logs: a thinking
+  // budget that swallows `maxOutputTokens` shows up as exactly this pair —
+  // reasoning tokens at the ceiling and `finishReason: 'length'` — and as
+  // nothing at all without them.
   turnLogger.info('ai.turn_completed', 'AI model turn completed', {
     model: args.modelId,
     provider: metadata.provider,
     tokensIn: metadata.tokensIn,
     tokensOut: metadata.tokensOut,
     cachedTokens: metadata.cachedTokens,
+    reasoningTokens,
     costMicrousd: metadata.costMicrousd,
     steps: result.steps.length,
+    finishReason: result.finishReason,
     durationMs,
     deterministic_confirmation: effects.length > 0,
   });
