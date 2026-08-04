@@ -49,7 +49,7 @@ export type PlanConfig = {
 const SHARED_MODEL: PlanModelConfig = {
   primary: 'anthropic/claude-haiku-4.5',
   fallbacks: ['openai/gpt-5-mini'],
-  reasoningEffort: 'low',
+  reasoningEffort: 'high',
 };
 
 const BASE_PLANS: Record<PlanId, PlanConfig> = {

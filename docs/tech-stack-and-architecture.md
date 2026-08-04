@@ -34,7 +34,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 | ORM                           | **Drizzle**                                                                                                          | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies                                                                                              |
 | Auth (PTs)                    | **Supabase Auth** (email+password, Google OAuth)                                                                     | Integrates with RLS through `auth.uid()`                                                                                                                                                    |
 | Background jobs & scheduling  | **Inngest**                                                                                                          | Delayed jobs (24h reminders), retries, event bus — matches the docs' event-driven principle; generous free tier                                                                             |
-| AI                            | **OpenRouter + AI SDK**, split per env: dev → `nex-agi/nex-n2-pro:free`, prod → `openai/gpt-4.1-mini`                 | One model-agnostic API surface with strict privacy routing; free model keeps dev cost at €0, paid prod model gives reliable tool-calling and ZDR-compliant routing for patient-facing chat  |
+| AI                            | **OpenRouter + AI SDK**, split per env: dev/preview → `nvidia/nemotron-3-ultra-550b-a55b:free`, prod → `anthropic/claude-haiku-4.5` at **high** reasoning effort                 | One model-agnostic API surface with strict privacy routing; free model keeps dev cost at €0, paid prod model gives reliable tool-calling and ZDR-compliant routing for patient-facing chat  |
 | Hosting                       | **Vercel** (Next.js) + **Supabase EU** (DB/auth/realtime) + **Inngest Cloud** (jobs)                                 | No infrastructure to maintain; all have EU regions                                                                                                                                          |
 | Webhook runtime               | Next.js Route Handler on the **Node runtime** (not Edge)                                                             | Signature verification needs `crypto`; handler just verifies + enqueues and returns 200                                                                                                     |
 | Realtime (live calendar/chat) | **Supabase Realtime** (Postgres changefeeds)                                                                         | No extra infrastructure; scopes naturally to RLS                                                                                                                                            |
@@ -50,7 +50,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 - Supabase Pro ~€25
 - Vercel Hobby €0
 - Inngest free tier €0
-- OpenRouter usage ~€1–5/PT/month at MVP volume on `gpt-4.1-mini`; dev is free
+- OpenRouter usage ~€1.7–2.1/PT/month at MVP volume on `claude-haiku-4.5` (high effort); dev is free
 - No dedicated Sentry/PostHog spend in the current MVP plan
 - **Total: ~€45–85/month for 1–3 PTs**, leaving headroom within the €100 budget for Meta conversation fees.
 
@@ -195,8 +195,14 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 - Selection is environment-driven through `lib/ai/models.ts`'s `selectModel()` helper. Engine call sites never reference a model ID directly.
 - `selectModel()` returns, in order of precedence:
   1. `OPENROUTER_MODEL_OVERRIDE` if set (escape hatch for ad-hoc dev testing of paid models against the free baseline).
-  2. `OPENROUTER_PROD_MODEL` (default `openai/gpt-4.1-mini`) when `NODE_ENV === 'production'`.
-  3. `OPENROUTER_DEV_MODEL` (default `nex-agi/nex-n2-pro:free`) otherwise.
+  2. `OPENROUTER_PROD_MODEL` when `appEnv() === 'production'` — keyed on `appEnv()`, never
+     `NODE_ENV`, which is `production` on Vercel Preview too. **Deliberately unset since the
+     2026-08-04 cutover**: an env-selected model returns `reasoningEffort: undefined`, which
+     would silently drop the configured `high`, and it also skips fallback routing.
+  3. `OPENROUTER_DEV_MODEL` (default `nvidia/nemotron-3-ultra-550b-a55b:free`) otherwise,
+     i.e. development *and* preview.
+  4. Nothing set (production today) ⇒ `lib/billing/plans.ts`: `anthropic/claude-haiku-4.5`
+     primary, `openai/gpt-5-mini` fallback, `high` reasoning effort.
 - Each branch validates its env var is set and throws on missing — there is no silent fallback.
 - Every route uses strict privacy controls: ZDR on, provider data collection denied, parameter-safe routing, and same-model provider fallbacks. The free dev model is for synthetic developer iteration only and is not exposed to patient data.
 - Adding or swapping models is an env change, not a code change. Substantive changes to the routing logic remain documented planning decisions.
@@ -218,7 +224,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 **Cost math per PT per month:**
 
-- Production: at MVP volume (~1M tokens/PT/month at 80/20 input/output), `openai/gpt-4.1-mini` runs roughly **€0.50–1/PT/month**. Budget envelope is set at **€5/PT/month** so a chatty PT stays within plan; alerts fire well before that.
+- Production: at MVP volume (~1M tokens/PT/month at 80/20 input/output), `anthropic/claude-haiku-4.5` ($1/$5 per MTok) runs roughly **€1.7/PT/month** with no reasoning, rising to about **€2.1/PT/month** once `high` effort engages. Effort is workload-dependent, not a flat surcharge: a measured simple booking turn produced **0 reasoning tokens** even at `high`, while a deliberately hard scheduling puzzle added ~40% output tokens. Budget envelope is **€5/PT/month**, so a median PT sits comfortably inside it with headroom for chatty ones.
 - Development: **~€0** while the free dev route remains available; `OPENROUTER_MODEL_OVERRIDE` is the escape hatch when iterating against a paid model.
 - Capture token and generation metadata (`tokens_in`, `tokens_out`, `model`, `provider`, `cached_tokens`, `ai_cost_microusd`) on every persisted AI message from day one. OpenRouter usage accounting is summed across all steps in the turn.
 - Persist `reply_to_message_id` on each AI response. A partial unique index guarantees one persisted AI reply per inbound message, allowing Inngest replay to return the existing result.
@@ -239,7 +245,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 
 - **EU residency:** Supabase project in Frankfurt (or another EU region). Vercel defaults to edge distribution but origin functions run in Frankfurt. Inngest supports EU processing. OpenRouter is accepted for MVP without guaranteed EU-only inference on the current plan.
 - **Encryption at rest:** access tokens via pgcrypto; sensitive patient columns via pgcrypto or Supabase Vault. Transport encryption via TLS (automatic).
-- **AI inference and disclosures:** Production AI inference runs on **`openai/gpt-4.1-mini`** via OpenRouter; OpenAI is the production AI sub-processor and its infrastructure is US-based, so cross-border processing is acknowledged in the privacy policy. Production requests default to ZDR + denied provider data collection on the paid route. The free dev route is developer-iteration-only and is not exposed to patient data. OpenRouter does not retain prompt/response content unless logging or product-use opt-ins are enabled, but it does retain request metadata.
+- **AI inference and disclosures:** Production AI inference runs on **`anthropic/claude-haiku-4.5`** via OpenRouter; Anthropic is the production AI sub-processor and its infrastructure is US-based, so cross-border processing is acknowledged in the privacy policy. OpenAI remains disclosed as the configured fallback provider (`lib/billing/plans.ts`). Production requests default to ZDR + denied provider data collection on the paid route. The free dev route is developer-iteration-only and is not exposed to patient data. OpenRouter does not retain prompt/response content unless logging or product-use opt-ins are enabled, but it does retain request metadata.
 - **Retention:** daily Inngest job purges `messages` older than the PT's configured retention window (default 90 days). Aggregate anonymized metrics are kept indefinitely.
 - **Right to erasure:** per-patient cascade delete surfaced in the PWA patient detail view. Deleting a patient removes their patient row, their conversations, their messages, and their appointments (completed and future).
 - **Data export:** a Server Action generates a JSON bundle of a patient's data or a full PT export on request.
@@ -330,7 +336,7 @@ Before any product code is shipped:
    - Define the core functions: `handleInboundMessage`, `sendReminder`, `bootstrapWaConnection`, `purgeExpiredMessages`, `offerResumeAfterPtInactivity`.
 
 5. **OpenRouter**
-   - Create an API key; pin the current runtime guardrail to `nex-agi/nex-n2-pro:free`.
+   - Create an API key; pin the current runtime guardrail to `nvidia/nemotron-3-ultra-550b-a55b:free`.
    - Leave prompt logging and product-use opt-ins disabled; rely on request-level privacy controls in app code.
 
 6. **Observability and analytics**
