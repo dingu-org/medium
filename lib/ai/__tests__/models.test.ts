@@ -50,9 +50,35 @@ describe('selectModelForPlan', () => {
 
   it('uses the development env model outside production', () => {
     expect(
-      selectModelForPlan('free', { OPENROUTER_DEV_MODEL: 'dev/model' }, 'test')
-        .primary,
+      selectModelForPlan(
+        'free',
+        { OPENROUTER_DEV_MODEL: 'dev/model' },
+        'development',
+      ).primary,
     ).toBe('dev/model');
+  });
+
+  // Vercel builds Preview with NODE_ENV=production, so keying on NODE_ENV sent
+  // preview turns to the paid production model. Preview is a development-tier
+  // consumer of the model config.
+  it('uses the development env model in preview, not the production one', () => {
+    expect(
+      selectModelForPlan(
+        'free',
+        { OPENROUTER_DEV_MODEL: 'dev/model', OPENROUTER_PROD_MODEL: 'prod/model' },
+        'preview',
+      ).primary,
+    ).toBe('dev/model');
+  });
+
+  it('derives the environment from the passed env record when not given', () => {
+    expect(
+      selectModelForPlan('free', {
+        APP_ENV: 'production',
+        OPENROUTER_DEV_MODEL: 'dev/model',
+        OPENROUTER_PROD_MODEL: 'prod/model',
+      }).primary,
+    ).toBe('prod/model');
   });
 
   it('ignores blank env values and falls back to the plan config', () => {
