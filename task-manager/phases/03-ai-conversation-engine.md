@@ -1,6 +1,6 @@
 # Phase 3 — AI conversation engine
 
-**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through OpenRouter — `nex-agi/nex-n2-pro:free` in dev and `openai/gpt-4.1-mini` in prod via the env-driven `selectModel()` helper — and emits the model's chosen tool calls to the appointments layer.
+**Goal.** A channel-agnostic conversation engine that runs AI SDK turns through OpenRouter — `nvidia/nemotron-3-ultra-550b-a55b:free` in dev/preview (env-driven) and `anthropic/claude-haiku-4.5` at high reasoning effort in prod (from `lib/billing/plans.ts`, post-cutover) — and emits the model's chosen tool calls to the appointments layer.
 
 **Source.** Tech doc §3 (module boundaries), §8 (AI orchestration); product spec `docs/medium-canvas/documents/ai-conversation-behavior.md`.
 
@@ -97,7 +97,7 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 ### Model routing policy — `lib/ai/models.ts` + `lib/ai/client.ts`
 
 - [x] Engine routes every runtime turn through `selectModel()` — no model ID constants in engine call sites.
-- [x] Production: `openai/gpt-4.1-mini`. Dev: `nex-agi/nex-n2-pro:free`. `OPENROUTER_MODEL_OVERRIDE` wins when set.
+- [x] Production: `anthropic/claude-haiku-4.5` + `openai/gpt-5-mini` fallback at `high` effort, from `plans.ts` (`OPENROUTER_PROD_MODEL` unset). Dev/preview: `nvidia/nemotron-3-ultra-550b-a55b:free`. `OPENROUTER_MODEL_OVERRIDE` wins when set.
 - [x] Keep the selection behind the helper so a future runtime fallback chain can be added without touching the engine call sites.
 - [x] If the resolved model becomes unavailable or inadequate, fail observably; provider fallbacks may serve only the same resolved model under the enforced routing policy.
 

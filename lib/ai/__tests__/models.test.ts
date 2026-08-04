@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { selectModelForPlan } from '../models';
 
 describe('selectModelForPlan', () => {
-  it('returns the plan config (haiku + fallback + low effort) when no env model is set', () => {
+  it('returns the plan config (haiku + fallback + high effort) when no env model is set', () => {
     expect(selectModelForPlan('free', {}, 'production')).toEqual({
       primary: 'anthropic/claude-haiku-4.5',
       fallbacks: ['openai/gpt-5-mini'],
-      reasoningEffort: 'low',
+      reasoningEffort: 'high',
     });
   });
 

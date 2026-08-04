@@ -31,8 +31,12 @@ function resolveEnvModelId(
  * the dev escape hatch and the zero-behavior-change guarantee for this chunk.
  * An env-selected model runs single-model with no reasoning parameter (it may
  * not be a reasoning model), i.e. exactly the pre-C1 request shape. The plan
- * config (haiku-4.5 + gpt-5-mini fallback, low reasoning) goes live at the
- * model cutover, when the env vars are removed.
+ * config (haiku-4.5 + gpt-5-mini fallback, high reasoning) is live in
+ * production as of the 2026-08-04 model cutover — `OPENROUTER_PROD_MODEL` is
+ * deliberately unset there, because an env-selected model carries no reasoning
+ * effort and would silently drop the configured `high`. Development and
+ * preview still resolve `OPENROUTER_DEV_MODEL` (a free model) through the env
+ * path, so they keep the legacy no-reasoning shape.
  */
 export function selectModelForPlan(
   plan: PlanId,

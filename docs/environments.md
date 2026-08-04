@@ -14,7 +14,7 @@ environment is, how configuration is verified, and the runbooks.
 | Inngest        | local Dev Server           | cloud env `preview` (custom)     | cloud env `production`      |
 | Meta           | fake creds (may borrow the test app) | owns the **test app**  | live app, exclusively       |
 | POK            | staging                    | staging                          | production                  |
-| AI model       | `OPENROUTER_DEV_MODEL` (free) | `OPENROUTER_DEV_MODEL` (free) | prod model / plan config    |
+| AI model       | `OPENROUTER_DEV_MODEL` (free) | `OPENROUTER_DEV_MODEL` (free) | `claude-haiku-4.5`, high effort (plans.ts) |
 | Sentry/PostHog | shared (dormant)           | shared                           | shared                      |
 | Push (VAPID)   | throwaway committed pair   | own pair                         | own pair                    |
 

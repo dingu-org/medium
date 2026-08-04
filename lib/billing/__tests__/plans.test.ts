@@ -32,12 +32,12 @@ describe('PLANS config', () => {
     });
   });
 
-  it('both plans share the haiku primary + gpt-5-mini fallback at low effort', () => {
+  it('both plans share the haiku-4.5 primary + gpt-5-mini fallback at high effort', () => {
     for (const plan of [PLANS.free, PLANS.solo]) {
       expect(plan.model).toEqual({
         primary: 'anthropic/claude-haiku-4.5',
         fallbacks: ['openai/gpt-5-mini'],
-        reasoningEffort: 'low',
+        reasoningEffort: 'high',
       });
     }
   });
@@ -99,7 +99,7 @@ describe('resolvePlans', () => {
     expect(plans.solo.model).toEqual({
       primary: 'anthropic/claude-haiku-4.5',
       fallbacks: ['x/one', 'x/two'],
-      reasoningEffort: 'low',
+      reasoningEffort: 'high',
     });
     expect(plans.free.model.fallbacks).toEqual(['openai/gpt-5-mini']);
   });
