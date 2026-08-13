@@ -93,11 +93,35 @@ If this session dies, it fires, reads this file, and continues.
 
 ## Status
 
-**Current wave:** 0 — discovery
-**In flight:** 11-dimension production-readiness audit workflow.
-**Branch:** `prod-readiness` (off `main` at `361189a`)
-**Last checkpoint:** 2026-08-13 12:15 CEST — audit running, ground truth
-established on the failing tests.
+**PAUSED 2026-08-13 12:26 CEST at the operator's request — machine restart.**
+Nothing is running. The dead-man's-switch task is **disabled** so nothing starts
+unattended after the restart. Resume only when the operator says so.
+
+**Current wave:** 0 — discovery, ~90% done
+**Branch:** `prod-readiness` (off `main` at `361189a`), pushed
+**Last checkpoint:** 2026-08-13 12:26 CEST
+
+### To resume after the restart
+
+1. **Check for Notion tools first** (see the Notion section above). A fresh
+   session should finally have them.
+2. **Re-run the two lost audit steps.** The audit workflow was stopped
+   mid-flight; workflows cannot be resumed across sessions. 10 of 11 auditors
+   finished and their output is committed at
+   `task-manager/audits/2026-08-13-production-readiness.md` (readable) and
+   `2026-08-13-raw.json` (machine-readable). Lost and worth redoing:
+   - the **prod-config** auditor (production config, env contract, migration
+     state, security headers, backups, rate limiting, committed secrets), and
+   - the **synthesizer**, which verifies each claim against the code, dedupes
+     across dimensions, ranks blockers, and cuts the waves.
+
+   The script is at `audit-workflow.js` in the run scratchpad; the scratchpad is
+   session-scoped, so it may be gone — the dimension prompts are reconstructable
+   from the report's dimension headings.
+3. **Do not trust the audit findings as-is.** They are unverified single-agent
+   claims. Confirm each against the code before acting, and check it against the
+   decisions log in `progress.md` — several "obvious" issues there were
+   considered and deliberately accepted.
 
 ## Environment facts confirmed this run
 
@@ -125,6 +149,34 @@ established on the failing tests.
 
 Full detail, including reproduction, is in the run scratchpad at
 `verified-findings.md`.
+
+## Audit headlines (unverified — confirm before acting)
+
+38 findings across 10 dimensions; 6 self-rated blocker. The two that most
+deserve confirming first, because they are about patient harm rather than
+tidiness:
+
+- **The conversation cap may silently disable safety escalation.** A patient who
+  trips the billing cap would get the static handoff message instead of the
+  deterministic safety escalation. If true, a commercial limit is suppressing a
+  safety path — the worst failure this product can have.
+  (`lib/inngest/functions/handle-inbound-message.ts`, `lib/billing/cap-handoff.ts`)
+- **A non-text inbound (voice note, photo) may leave the patient in silence and
+  be invisible to the PT.** WhatsApp patients send voice notes constantly, so
+  this would be hit in the first days of real use.
+  (`app/api/webhooks/whatsapp/route.ts`)
+
+Also notable: the exact log-redaction bug behind the 2026-08-05 outage is
+reported as still live (token *counts* redacted as if they were secrets); the
+Embedded Signup client reportedly still sends Meta's **v2** `extras` shape and a
+v2 Login config, which is a bigger migration than the "v3 → v4" note implies;
+the RLS isolation suite only runs under Docker and therefore effectively never;
+and any inbound sender reportedly becomes an AI-processed patient with no
+consent gate.
+
+The security/tenancy auditor found **no** blocker or high-severity issues, which
+is the single most reassuring result in the set — and also the one most worth a
+second opinion, since it is the dimension where a miss is existential.
 
 ## Log
 
