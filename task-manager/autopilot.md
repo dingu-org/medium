@@ -101,6 +101,17 @@ unattended after the restart. Resume only when the operator says so.
 **Branch:** `prod-readiness` (off `main` at `361189a`), pushed
 **Last checkpoint:** 2026-08-13 12:26 CEST
 
+### Durable artifacts (nothing lives in a session scratchpad any more)
+
+| Path | What it is |
+|---|---|
+| `task-manager/autopilot/usage-meter.py` | Rolling-window burn meter. `python3 task-manager/autopilot/usage-meter.py --history`. Parses every local Claude Code transcript, dedupes by message id, prices at API list rates. Reports the current 5h window and the historical peak window (the empirical ceiling). |
+| `task-manager/autopilot/audit-workflow.js` | The 11-dimension audit. Already run; kept so the dimension prompts are reproducible. |
+| `task-manager/autopilot/verify-workflow.js` | **Not yet run.** Adversarial verification of the audit's blocker/high claims + the lost prod-config dimension + an independent security second opinion + the wave plan. Run with `Workflow({scriptPath: 'task-manager/autopilot/verify-workflow.js'})`. |
+| `task-manager/audits/2026-08-13-production-readiness.md` | The 10 completed auditors' full write-ups. Unverified claims. |
+| `task-manager/audits/2026-08-13-raw.json` | Same, machine-readable. |
+| `task-manager/audits/2026-08-13-verified-by-orchestrator.md` | The findings the orchestrator established by actually running the suite. Higher confidence than anything in the audit report. |
+
 ### To resume after the restart
 
 1. **Check for Notion tools first** (see the Notion section above). A fresh
@@ -115,9 +126,10 @@ unattended after the restart. Resume only when the operator says so.
    - the **synthesizer**, which verifies each claim against the code, dedupes
      across dimensions, ranks blockers, and cuts the waves.
 
-   The script is at `audit-workflow.js` in the run scratchpad; the scratchpad is
-   session-scoped, so it may be gone — the dimension prompts are reconstructable
-   from the report's dimension headings.
+   Both are already scripted in
+   `task-manager/autopilot/verify-workflow.js` — just run it. It also
+   adversarially re-checks every blocker/high claim from the first audit before
+   anything acts on them, and ends by producing the ranked wave plan.
 3. **Do not trust the audit findings as-is.** They are unverified single-agent
    claims. Confirm each against the code before acting, and check it against the
    decisions log in `progress.md` — several "obvious" issues there were
