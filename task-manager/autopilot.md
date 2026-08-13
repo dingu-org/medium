@@ -15,10 +15,27 @@ questions and blockers — use it rather than stalling. Do not use it as a
 progress feed; only send when a decision is genuinely needed or something is
 blocked.
 
-**Notion is NOT connected** in these sessions. `task-manager/phases/15-*.md` and
-`16-*.md` point at Notion documents (specs, architecture, task tracker) that
-cannot be read from here. Work from the repo; flag anything that appears to
-exist only in Notion rather than guessing at it.
+**Notion.** The connector IS authorized (`claude mcp list` shows
+`claude.ai Notion — ✔ Connected`), but a session's MCP tool registry is fixed at
+startup, so the session that began before the connector was authorized has no
+Notion tools and cannot acquire them. Re-authenticating mid-session does not
+help; subagents and workflow agents inherit the same registry.
+
+**If you are a fresh session: check for Notion tools first.** Search for
+`notion` — if tools exist, read these before planning anything:
+
+- Phase 16 product decisions — https://app.notion.com/p/39c0e1f4dd108035b7c5cc58ca9d4e66
+- Phase 16 technical architecture — https://app.notion.com/p/39c0e1f4dd1081a7991ee97db98ac4dd
+- Phase 16 designer brief — https://app.notion.com/p/39c0e1f4dd1081998220c26cf4ff7a94
+- Phase 15 spec — https://app.notion.com/p/39b0e1f4dd1081ecb2a6e19cc86f00a1
+- Tasks Tracker rows prefixed `Phase 15 ·` and `Phase 16 ·` (per-task evidence),
+  and any row tagged `[BLOCKED ON YOU]` (external blockers: POK merchant
+  credentials, designer delivery, accountant VAT/fiscalization answers, Meta
+  AI-provider policy re-check, ToS/privacy sign-off).
+
+Gmail and Google Calendar are in the same state — authorized, not registered.
+If Notion tools still do not appear in a fresh session, work from the repo and
+flag what appears to live only in Notion rather than guessing at it.
 
 ## Standing authority (granted 2026-08-13)
 
@@ -77,14 +94,45 @@ If this session dies, it fires, reads this file, and continues.
 ## Status
 
 **Current wave:** 0 — discovery
-**In flight:** production-readiness audit workflow (fan-out finders across
-security, tenancy, billing, reliability, perf, a11y, tests, config, ESU v4).
-**Branch:** `main` (clean at `361189a`)
-**Last checkpoint:** run start — nothing implemented yet.
+**In flight:** 11-dimension production-readiness audit workflow.
+**Branch:** `prod-readiness` (off `main` at `361189a`)
+**Last checkpoint:** 2026-08-13 12:15 CEST — audit running, ground truth
+established on the failing tests.
+
+## Environment facts confirmed this run
+
+- **Docker is running and the local Supabase stack is up**, so
+  `pnpm test:integration` is runnable here. (Local Realtime, Storage, imgproxy,
+  edge-runtime and pooler services are stopped.)
+- **There is no CI.** `.github/` does not exist, and the Husky pre-commit hook
+  runs `pnpm lint` + `pnpm typecheck` only — **no tests**. Nothing automated has
+  ever run this suite.
+
+## Verified findings (established by running the suite, not by an agent)
+
+- **The 8 "pre-existing, unrelated" `sendUpcomingReminderTemplate` failures are
+  a stale date fixture.** The test hardcodes the appointment at
+  `2026-08-01T09:00:00.000Z`; today is later, so the action correctly answers
+  "Nuk ka takim të ardhshëm" and every downstream assertion dies on undefined.
+  They began failing on **2026-08-01**, not at the AI change they were logged
+  against — the manual-reminder path has been unverified since then.
+- **The suite decays with the wall clock.** 27 test files hardcode an absolute
+  date; exactly 1 freezes time. `2026-09-01`, `2026-10-24` and `2026-10-25` are
+  still-armed time bombs.
+- **Integration tests are not isolated from local DB state.** Two consecutive
+  runs on the same commit gave 23 failures / 3 files, then 8 failures / 1 file.
+  A dirty database invents 15 extra failures.
+
+Full detail, including reproduction, is in the run scratchpad at
+`verified-findings.md`.
 
 ## Log
 
 _Newest last. One line per checkpoint._
 
 - 2026-08-13 — Run start. Read trackers, confirmed authority + scope, built the
-  usage meter, armed the resume task. Discovery workflow next.
+  usage meter, armed the resume task, confirmed the Slack channel.
+- 2026-08-13 — Launched the 11-dimension audit. Independently ran the
+  integration suite and root-caused the 8 carried failures (stale fixture, not a
+  product bug), plus the systemic test-decay and DB-isolation problems above.
+  Burn at this checkpoint: ~$110 of the $420 stop threshold.
