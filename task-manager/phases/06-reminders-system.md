@@ -27,7 +27,11 @@
 - [x] Refuse to send if `whatsapp_connections.status != 'active'`; emit `reminder.skipped` with reason.
 - [x] On send: insert/link the `messages` row (`role=ai`, `template_id` set), count it toward rolling tier usage, and update `reminder_jobs.status = sent`.
 
-### Response parsing — `lib/reminders/parse-response.ts`
+### Response parsing — `lib/language/reply-intent.ts`
+
+> Moved out of `lib/reminders/parse-response.ts` on 2026-08-14: the handoff offer
+> reads the same replies, so the affirmative has one shared definition
+> (`isAffirmative`) instead of one per subsystem.
 
 - [x] Match against keyword set per locale:
   - **EN:** confirm | yes | y | ok | sure → CONFIRM

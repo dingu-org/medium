@@ -30,7 +30,7 @@ import type {
   OutboundMessage,
   ReminderTurnContext,
 } from '@/lib/conversation/types';
-import { parseReminderResponse } from './parse-response';
+import { parseReplyIntent } from '@/lib/language/reply-intent';
 
 type ReminderResponseType = 'confirm' | 'cancel' | 'reschedule_requested';
 
@@ -255,7 +255,7 @@ async function optStateSuperseded(args: {
     .limit(OPT_STATE_LOOKAHEAD_MESSAGES);
 
   for (const message of later) {
-    const intent = parseReminderResponse(message.content);
+    const intent = parseReplyIntent(message.content);
     if (intent === 'opt_out' || intent === 'opt_in') {
       return intent !== args.intent;
     }
@@ -501,7 +501,7 @@ async function handleReminderResponseUnlocked(args: {
   const existing = await findExistingReply(args.inbound);
   if (existing) return { kind: 'outbound', outbound: existing };
 
-  const intent = parseReminderResponse(args.inbound.content);
+  const intent = parseReplyIntent(args.inbound.content);
   const candidates = await loadReminderCandidates(args.inbound);
 
   if (intent === 'opt_out') {

@@ -1,4 +1,20 @@
-export type ReminderResponseIntent =
+/**
+ * How a short patient reply is read, for every subsystem that reads one.
+ *
+ * It lives here rather than in `lib/reminders` because two subsystems ask the
+ * patient a yes/no question and both get answered in the same words: an
+ * unanswered reminder ("do you confirm?") and the handoff offer ("reply PO and
+ * I'll pass this on"). While both are outstanding they compete for the same
+ * message, and the rule that settles it is which question was asked most
+ * recently (`resolveInboundClaim` in
+ * lib/inngest/functions/handle-inbound-message.ts). That rule only works if the
+ * two agree on what an affirmative IS. They did not: the offer demanded exact
+ * equality with PO while the reminder accepted 'dakord', 'ok', and 'po' plus one
+ * word, so "po faleminderit" was never weighed at all — the reminder took it,
+ * the appointment was confirmed, and the patient's real question was dropped.
+ * One definition, one place, no spelling technicality deciding the winner.
+ */
+export type ReplyIntent =
   | 'confirm'
   | 'cancel'
   | 'reschedule'
@@ -17,7 +33,7 @@ export type ReminderResponseIntent =
 //     conservative direction (it can only stop messages, never change a
 //     booking), so recognising it costs nothing and the patient can always
 //     write AKTIVIZO to come back.
-const KEYWORDS: Record<ReminderResponseIntent, Set<string>> = {
+const KEYWORDS: Record<ReplyIntent, Set<string>> = {
   confirm: new Set(['konfirmo', 'konfirmoj', 'dakord', 'po', 'ok', 'okay']),
   cancel: new Set(['anulo', 'anuloj', 'jo']),
   reschedule: new Set(['ricakto', 'ricaktoj']),
@@ -55,13 +71,26 @@ const MAX_AMBIGUOUS_MESSAGE_WORDS = 3;
  */
 const MAX_PROGRESSIVE_PARTICLE_WORDS = 2;
 
-/** Message tokens, normalised for keyword lookup. */
+/**
+ * Message tokens, normalised for keyword lookup.
+ *
+ * Decompose first and drop the combining marks, so every way of typing the same
+ * word lands on one token. Albanian keyboards routinely drop 'ë'/'ç' and phone
+ * keyboards rewrite ' into U+2019, and the lookup has to be blind to all of it —
+ * folding carried over from the deleted deterministic detector, whose patterns
+ * were the problem; this normalisation never was. Two hazards it settles:
+ *   • the character class carries no \p{M}, so a decomposed "ë" left as-is would
+ *     lose its diaeresis to the split and break the word in two;
+ *   • both apostrophes fall out for free — nothing but letters and digits
+ *     survives, so "s'ndal" and "s’ndal" tokenise identically.
+ */
 function words(input: string): string[] {
-  // Compose before tokenising: the character class carries no \p{M}, so a
-  // decomposed "ë" would otherwise lose its diaeresis and split in two.
-  return (input.normalize('NFC').match(/[\p{L}\p{N}]+/gu) ?? []).map((word) =>
-    word.toLocaleLowerCase('en-US'),
-  );
+  return (
+    input
+      .normalize('NFD')
+      .replace(/\p{Mn}/gu, '')
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  ).map((word) => word.toLocaleLowerCase('en-US'));
 }
 
 /**
@@ -94,7 +123,7 @@ const INTENT_PRECEDENCE = [
   'confirm',
 ] as const;
 
-function intentOf(word: string): ReminderResponseIntent | null {
+function intentOf(word: string): ReplyIntent | null {
   for (const intent of INTENT_PRECEDENCE) {
     if (KEYWORDS[intent].has(word)) return intent;
   }
@@ -105,7 +134,7 @@ function intentOf(word: string): ReminderResponseIntent | null {
  * An explicit command word ("anulo", "ricakto", "ndal", "aktivizo") — never a
  * particle.
  */
-function explicitIntent(token: string): ReminderResponseIntent | null {
+function explicitIntent(token: string): ReplyIntent | null {
   return AMBIGUOUS_KEYWORDS.has(token) ? null : intentOf(token);
 }
 
@@ -116,7 +145,7 @@ function explicitIntent(token: string): ReminderResponseIntent | null {
  * one is as likely to be talked about as meant. Opt-out and opt-in only ever
  * change who gets a reminder, and each is the other's undo.
  */
-const OUT_OF_POSITION_INTENTS: ReadonlySet<ReminderResponseIntent> = new Set([
+const OUT_OF_POSITION_INTENTS: ReadonlySet<ReplyIntent> = new Set([
   'opt_out',
   'opt_in',
   'reschedule',
@@ -136,9 +165,7 @@ function followsAnswerParticlesOnly(tokens: string[], index: number): boolean {
   return tokens.slice(0, index).every((token) => AMBIGUOUS_KEYWORDS.has(token));
 }
 
-export function parseReminderResponse(
-  input: string,
-): ReminderResponseIntent | null {
+export function parseReplyIntent(input: string): ReplyIntent | null {
   const tokens = stripPoliteness(words(input));
   if (tokens.length === 0) return null;
 
@@ -182,4 +209,19 @@ export function parseReminderResponse(
   // "Jo, nuk dua ta anuloj, thjesht dua ta ndryshoj orën" — which says the
   // opposite — as a cancellation, so everything else goes to the AI turn.
   return explicitIntent(tokens[0]);
+}
+
+/**
+ * Whether this message says yes — the product's only definition of it.
+ *
+ * Deliberately the full parse and not a keyword lookup, because everything that
+ * makes a "yes" *not* a yes lives in the parse: "Ok, anuloj" is a cancellation
+ * wearing an acknowledgement (so it is not affirmative for anyone), and
+ * "Po pyesja për oraret" is the progressive particle heading an ordinary
+ * question. Whatever a subsystem does with an affirmative — confirm a booking,
+ * accept a handoff offer — it has to agree with every other subsystem about
+ * which messages are one, or the message goes to whoever happens to run first.
+ */
+export function isAffirmative(input: string): boolean {
+  return parseReplyIntent(input) === 'confirm';
 }

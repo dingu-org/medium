@@ -7,11 +7,11 @@
  * the question on. Nothing here inspects what the patient asked; the model is
  * the only judge of scope.
  *
- * Acceptance is one word, and only the message immediately after the offer can
- * be it. That bound is the whole point: PO is Albanian for "yes", and it is
- * what a patient types to take a proposed time slot. A looser rule would turn
- * every slot confirmation into a permanent handoff. The bound is enforced by
- * anchoring the offer to the patient message it answered
+ * Acceptance is an affirmative reply, and only the message immediately after
+ * the offer can be it. That bound is the whole point: PO is Albanian for "yes",
+ * and it is what a patient types to take a proposed time slot. A looser rule
+ * would turn every slot confirmation into a permanent handoff. The bound is
+ * enforced by anchoring the offer to the patient message it answered
  * (`conversations.handoff_offer_message_id`) and accepting only when that
  * message is still the one directly before the incoming message — so an offer
  * lapses by itself, with no code path having to remember to clear a flag.
@@ -19,10 +19,15 @@
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type { DB, DBTransaction } from '@/lib/db';
 import { conversations, messages } from '@/lib/db/schema';
+import { isAffirmative } from '@/lib/language/reply-intent';
 import { getServiceClient } from '@/lib/tenancy';
 import type { InboundMessage } from './types';
 
-/** The word the offer asks for, and the only thing that accepts it. */
+/**
+ * The word the offer asks for. Asking for one clear word is the UX; it is not
+ * the acceptance rule — see {@link isHandoffAcceptance}, which takes any
+ * affirmative, because that is what patients send back.
+ */
 export const HANDOFF_ACCEPTANCE_WORD = 'PO';
 
 /** Model marker for the acceptance reply: fixed text, no model round behind it. */
@@ -57,37 +62,38 @@ export function handoffAcceptedMessage(business: string): string {
 }
 
 /**
- * Albanian keyboards routinely drop 'ë'/'ç' and phone keyboards rewrite ' into
- * U+2019, so the comparison runs on a folded copy: diacritics stripped, curly
- * apostrophes flattened to ASCII, whitespace runs collapsed. Carried over from
- * the deleted deterministic detector, whose patterns were the problem — this
- * normalisation never was.
- */
-function fold(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{Mn}/gu, '')
-    .replace(/[‘’ʼ]/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * Whole-message equality, case- and diacritic-insensitive ('po' = 'PO' = 'Pò').
+ * Whether this message accepts the offer — the product's one shared definition
+ * of an affirmative (lib/language/reply-intent.ts), the same one an unanswered
+ * reminder confirms a booking with.
  *
- * Whole-message on purpose. The offer asks for the bare word, and every looser
- * reading costs more than it buys: "po, por a mund ta ndryshoj orën?" is a
- * patient continuing the conversation, and reading a leading "po" out of it
- * would switch the assistant off mid-booking. A message that misses gets normal
- * AI handling, which can offer again — the failure is recoverable in the safe
- * direction only.
+ * Shared because the two are rivals for the same reply. While a reminder and an
+ * offer are both outstanding, whichever question was asked most recently should
+ * win it (`resolveInboundClaim` in
+ * lib/inngest/functions/handle-inbound-message.ts) — but that comparison only
+ * ever runs on a message both could claim. This used to demand exact equality
+ * with PO, so "po faleminderit" was not a message the offer could claim and was
+ * never weighed: the reminder took it, an appointment the patient had not been
+ * asked about was confirmed, and their actual question was silently dropped.
+ * A difference in spelling rules decided it, which is not a rule anyone chose.
+ *
+ * The offer copy still asks for the one bare word, deliberately — telling a
+ * patient exactly what to type is good UX. Also accepting what they actually
+ * type is the fix, not a contradiction.
+ *
+ * The looseness this buys is bounded by the caller, not by the wording:
+ * `handoffOfferOutcome` accepts only the message directly after the offer, so a
+ * bare "ok" reads as an acceptance in exactly the one position where "ok" is
+ * answering the offer. Misreading it there escalates to the PT — recoverable,
+ * and in the direction where a human sees a real question. The old asymmetry
+ * misread in the other direction, and that one mutated a booking.
+ *
+ * Nothing here is a *whole-message* rule any more, but the parse keeps the
+ * guards that mattered: "po, por a mund ta ndryshoj orën?" is too long to be a
+ * bare answer, and "Po pyesja…" is the progressive particle, not a yes. Both
+ * still get a normal AI turn, which can offer again.
  */
 export function isHandoffAcceptance(content: string): boolean {
-  return (
-    fold(content).localeCompare(fold(HANDOFF_ACCEPTANCE_WORD), undefined, {
-      sensitivity: 'base',
-    }) === 0
-  );
+  return isAffirmative(content);
 }
 
 /**
@@ -146,8 +152,8 @@ export async function outstandingHandoffOffer(args: {
  *
  * `accepted` requires both halves: the anchored message is still the patient's
  * most recent one before this inbound (so this is literally the next message),
- * and this message is the acceptance word. Anything else lapses and is handled
- * as an ordinary turn.
+ * and this message is an affirmative. Anything else lapses and is handled as an
+ * ordinary turn.
  */
 export async function handoffOfferOutcome(args: {
   inbound: InboundMessage;

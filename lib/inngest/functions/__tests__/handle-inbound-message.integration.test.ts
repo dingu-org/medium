@@ -758,17 +758,23 @@ describe('handleInboundMessage cores', () => {
   });
 
   /**
-   * The "PO" collision (2026-08-14). `po` is a reminder confirmation
-   * (lib/reminders/parse-response.ts) and it is also the word the handoff offer
-   * asks for — and the reminder handler runs first and returns before the
-   * engine, so with both outstanding a bare PO confirmed an appointment the
-   * patient had not been asked about while their accepted handoff silently
-   * never happened.
+   * The affirmative collision (2026-08-14). A yes confirms an unanswered
+   * reminder and it also accepts the handoff offer — and the reminder handler
+   * runs first and returns before the engine, so with both outstanding a yes
+   * confirmed an appointment the patient had not been asked about while their
+   * accepted handoff silently never happened.
    *
-   * The rule: whichever question was asked most recently wins. Each test mirrors
-   * the Inngest body — precedence gate, then the reminder step, then the engine.
+   * The rule: whichever question was asked most recently wins. It only decides
+   * messages BOTH subsystems could claim, which is why they now read "yes" out
+   * of one shared definition (lib/language/reply-intent.ts). While the offer
+   * demanded exact equality with PO and the reminder accepted 'dakord', 'ok' and
+   * 'po' plus one word, everything in that gap skipped the comparison entirely
+   * and went to the reminder by default — the same bug, one spelling narrower.
+   *
+   * Each test mirrors the Inngest body — precedence gate, then the reminder
+   * step, then the engine.
    */
-  describe('most-recent-question-wins on a bare PO', () => {
+  describe('most-recent-question-wins on an affirmative', () => {
     const usage = {
       inputTokens: {
         total: 20,
@@ -785,6 +791,21 @@ describe('handleInboundMessage cores', () => {
         doGenerate: async () => {
           throw new Error('model should not run');
         },
+      });
+    }
+
+    /** An ordinary conversational turn — what a message neither subsystem
+     * claims has to reach. */
+    function answeringModel(text: string) {
+      return new MockLanguageModelV3({
+        provider: 'openrouter',
+        modelId: 'mock-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text }],
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          usage,
+          warnings: [],
+        }),
       });
     }
 
@@ -1002,6 +1023,136 @@ describe('handleInboundMessage cores', () => {
       expect(job.responseType).toBeNull();
     });
 
+    /**
+     * The measured defect (2026-08-14). With the offer as the newer question by
+     * 85 minutes, "po faleminderit" ("yes, thank you") went to the reminder: the
+     * appointment was confirmed, nothing escalated, and the patient's question
+     * was dropped. Not because precedence decided it — because the offer could
+     * not claim the message at all, so precedence never saw it. Same bug the
+     * timestamp rule was written for, one spelling narrower.
+     */
+    it('escalates on "po faleminderit" when the offer is the newer question', async () => {
+      const { inbound, appointmentId } = await seedCollision({
+        reminderSentMinutesBefore: 90,
+        offerMinutesBefore: 5,
+        content: 'po faleminderit',
+      });
+
+      const model = refusingModel();
+      const { claim, reminder, outbound } = await runBody(inbound, model);
+
+      expect(claim).toBe('handoff_offer');
+      expect(reminder.kind).toBe('none');
+      expect(model.doGenerateCalls).toHaveLength(0);
+      const [stored] = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, outbound.id));
+      expect(stored.model).toBe(HANDOFF_ACCEPTED_MODEL);
+
+      const conversation = await conversationRow();
+      expect(conversation.aiActive).toBe(false);
+      expect(conversation.escalationState).toBe('requested');
+      expect(conversation.handoffOfferMessageId).toBeNull();
+      expect(await escalationEvents()).toEqual([
+        { type: 'conversation.escalated' },
+      ]);
+
+      // The appointment the patient was never asked about is untouched.
+      const [appointment] = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.id, appointmentId!));
+      expect(appointment.status).toBe('pending');
+      const [job] = await db
+        .select()
+        .from(reminderJobs)
+        .where(eq(reminderJobs.appointmentId, appointmentId!));
+      expect(job.responseType).toBeNull();
+    });
+
+    /**
+     * The other half, and why the fix is one shared definition rather than a
+     * wider offer: the same words with the reminder as the newer question still
+     * confirm the appointment. Broadening what the offer can claim only puts the
+     * message in front of the timestamp rule; it does not hand it to the offer.
+     */
+    it('confirms on "po faleminderit" when the reminder is the newer question', async () => {
+      const { inbound, appointmentId } = await seedCollision({
+        reminderSentMinutesBefore: 5,
+        offerMinutesBefore: 90,
+        content: 'po faleminderit',
+      });
+
+      const model = refusingModel();
+      const { claim, reminder, outbound } = await runBody(inbound, model);
+
+      expect(claim).toBe('reminder');
+      expect(reminder.kind).toBe('outbound');
+      expect(model.doGenerateCalls).toHaveLength(0);
+      expect(outbound.content).toContain('u konfirmua');
+
+      const [appointment] = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.id, appointmentId!));
+      expect(appointment.status).toBe('confirmed');
+      const [job] = await db
+        .select()
+        .from(reminderJobs)
+        .where(eq(reminderJobs.appointmentId, appointmentId!));
+      expect(job.responseType).toBe('confirm');
+
+      const conversation = await conversationRow();
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).toBe('idle');
+      expect(conversation.handoffOfferMessageId).toBeNull();
+      expect(await escalationEvents()).toEqual([]);
+    });
+
+    /**
+     * Albanian 'po' is also the progressive particle, so "Po pyesja për oraret"
+     * is "I was asking about the hours" — a question, not a yes. Neither
+     * subsystem may claim it, even with the offer as the newest question: it has
+     * to reach the model as an ordinary turn. This is the guard the shared
+     * definition had to carry across, and the reason the offer cannot simply
+     * accept anything that starts with "po".
+     */
+    it('leaves the progressive particle to the model, claiming it for neither', async () => {
+      const { inbound, appointmentId } = await seedCollision({
+        reminderSentMinutesBefore: 90,
+        offerMinutesBefore: 5,
+        content: 'Po pyesja për oraret',
+      });
+
+      const model = answeringModel('Jemi hapur 9:00–17:00.');
+      const { claim, reminder, outbound } = await runBody(inbound, model);
+
+      // The offer cannot claim it, so there is nothing to weigh and the message
+      // stays on the reminder path — which hands it to the AI turn.
+      expect(claim).toBe('reminder');
+      expect(reminder.kind).toBe('fallback');
+      expect(model.doGenerateCalls).toHaveLength(1);
+      expect(outbound.content).toBe('Jemi hapur 9:00–17:00.');
+
+      const [appointment] = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.id, appointmentId!));
+      expect(appointment.status).toBe('pending');
+      const [job] = await db
+        .select()
+        .from(reminderJobs)
+        .where(eq(reminderJobs.appointmentId, appointmentId!));
+      expect(job.responseType).toBeNull();
+
+      const conversation = await conversationRow();
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).toBe('idle');
+      expect(conversation.handoffOfferMessageId).toBeNull();
+      expect(await escalationEvents()).toEqual([]);
+    });
+
     it('confirms the appointment and lapses the offer when the reminder is the newer question', async () => {
       const { inbound, appointmentId } = await seedCollision({
         reminderSentMinutesBefore: 5,
@@ -1035,6 +1186,48 @@ describe('handleInboundMessage cores', () => {
       expect(conversation.handoffOfferMessageId).toBeNull();
       expect(await escalationEvents()).toEqual([]);
     });
+
+    /**
+     * 'dakord' and 'ok' are everyday Albanian for yes — 'ok' is written far more
+     * often than 'dakord' in texting — and an unanswered reminder has always
+     * confirmed a booking on either. The offer accepted neither, which is the
+     * asymmetry this removes.
+     *
+     * The widening is bounded by the offer's own rule rather than by its
+     * wording: only the message directly after the offer can accept it, so a
+     * casual "ok" is read as acceptance exactly where "ok" is answering the
+     * offer. The cost of being wrong there is an escalation to the PT, who sees
+     * the patient's real question — recoverable, and the safe direction.
+     */
+    it.each(['dakord', 'ok'])(
+      'accepts an outstanding offer on %j',
+      async (content) => {
+        const { inbound } = await seedCollision({
+          offerMinutesBefore: 5,
+          content,
+        });
+
+        const model = refusingModel();
+        const { claim, reminder, outbound } = await runBody(inbound, model);
+
+        expect(claim).toBe('handoff_offer');
+        expect(reminder.kind).toBe('none');
+        expect(model.doGenerateCalls).toHaveLength(0);
+        const [stored] = await db
+          .select()
+          .from(messages)
+          .where(eq(messages.id, outbound.id));
+        expect(stored.model).toBe(HANDOFF_ACCEPTED_MODEL);
+
+        const conversation = await conversationRow();
+        expect(conversation.aiActive).toBe(false);
+        expect(conversation.escalationState).toBe('requested');
+        expect(conversation.handoffOfferMessageId).toBeNull();
+        expect(await escalationEvents()).toEqual([
+          { type: 'conversation.escalated' },
+        ]);
+      },
+    );
 
     it('confirms the reminder on a bare po when no offer is outstanding', async () => {
       const { inbound, appointmentId } = await seedCollision({

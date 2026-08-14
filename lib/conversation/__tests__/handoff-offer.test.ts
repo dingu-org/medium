@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseReplyIntent } from '@/lib/language/reply-intent';
 import {
   businessLabel,
   handoffAcceptedMessage,
@@ -8,27 +9,66 @@ import {
 } from '../handoff-offer';
 
 describe('isHandoffAcceptance', () => {
-  it.each(['PO', 'po', 'Po', 'pO', '  po  ', 'po\n'])(
-    'accepts %j as the offered word',
-    (content) => {
-      expect(isHandoffAcceptance(content)).toBe(true);
-    },
-  );
+  it.each([
+    'PO',
+    'po',
+    'Po',
+    'pO',
+    '  po  ',
+    'po\n',
+    // Punctuation and the everyday variants of yes. This is where the offer
+    // used to disagree with the reminder: it demanded exact equality with PO,
+    // so all of these fell into the gap between the two definitions.
+    'PO.',
+    'Po? ',
+    'ok',
+    'okay',
+    'dakord',
+    'po faleminderit',
+  ])('accepts %j', (content) => {
+    expect(isHandoffAcceptance(content)).toBe(true);
+  });
 
-  // Everything below is why the match is whole-message. 'po' is Albanian for
-  // "yes" and the single most common thing a patient types, so a leading- or
-  // contained-'po' rule would switch the assistant off mid-booking.
+  // 'po' is Albanian for "yes" and the single most common thing a patient
+  // types, including to take a proposed time slot, so the parse still refuses
+  // anything that is not essentially the bare answer — a contained 'po' would
+  // switch the assistant off mid-booking. What bounds the rest is the caller:
+  // only the message directly after the offer can accept it at all.
   it.each([
     'Po, e dua atë orar',
     'po ju lutem',
+    // The progressive particle: "I was asking about the hours" is a question.
     'Po pyesja për orarin',
-    'PO.',
+    'Po pyesja për oraret',
     'jo',
-    'ok',
-    'Po? ',
+    'Ok anuloj',
     '',
   ])('leaves %j to the normal turn', (content) => {
     expect(isHandoffAcceptance(content)).toBe(false);
+  });
+
+  /**
+   * The seam. Both subsystems have to mean the same thing by "yes", or the
+   * most-recent-question-wins rule in `resolveInboundClaim` never sees the
+   * messages that fall between two definitions — which is exactly how
+   * "po faleminderit" confirmed an appointment nobody had asked about while the
+   * patient's real question was dropped.
+   */
+  it.each([
+    'po',
+    'PO.',
+    'dakord',
+    'ok',
+    'okay',
+    'po faleminderit',
+    'Po pyesja për oraret',
+    'Ok anuloj',
+    'anulo',
+    'jo',
+  ])('accepts exactly what the reminder confirms, for %j', (content) => {
+    expect(isHandoffAcceptance(content)).toBe(
+      parseReplyIntent(content) === 'confirm',
+    );
   });
 });
 

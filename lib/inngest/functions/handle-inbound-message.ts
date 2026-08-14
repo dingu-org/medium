@@ -201,9 +201,9 @@ export type InboundClaim = 'reminder' | 'handoff_offer';
 
 /**
  * Two subsystems can claim the same one-word reply, and neither knows about the
- * other: PO is what an unanswered reminder reads as a confirmation
- * (lib/reminders/parse-response.ts) and it is also the word the handoff offer
- * asks for. The reminder handler runs first and returns before the engine, so
+ * other: a yes is what an unanswered reminder reads as a confirmation
+ * (lib/language/reply-intent.ts) and it is also what the handoff offer asks
+ * for. The reminder handler runs first and returns before the engine, so
  * without this gate a bare PO always confirmed the appointment, the escalation
  * never happened, and the patient was answered about something they had not
  * asked about.
@@ -214,10 +214,16 @@ export type InboundClaim = 'reminder' | 'handoff_offer';
  * winner would be wrong about half the time.
  *
  * Only a message both could claim is weighed at all. The offer can claim
- * exactly the messages `handoffOfferOutcome` accepts (the acceptance word, and
- * only as the message directly after the offer); anything else is not an answer
- * to the offer, so the reminder handler keeps it and today's deterministic
+ * exactly the messages `handoffOfferOutcome` accepts (an affirmative, and only
+ * as the message directly after the offer); anything else is not an answer to
+ * the offer, so the reminder handler keeps it and today's deterministic
  * ANULO/RICAKTO paths are untouched.
+ *
+ * Both sides read "affirmative" out of lib/language/reply-intent.ts, and they
+ * have to: while the offer demanded exact equality with PO and the reminder
+ * accepted 'dakord', 'ok' and 'po' plus one word, everything in the gap — "po
+ * faleminderit" — bypassed this comparison entirely and went to whichever
+ * subsystem runs first, which is always the reminder.
  *
  * When the reminder wins the offer lapses here, consistent with the rule that
  * only the immediately-next message can accept: the patient answered the

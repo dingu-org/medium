@@ -1016,6 +1016,84 @@ describe('runTurnCore', () => {
       });
     });
 
+    /**
+     * The offer asks for one word and still should — telling a patient exactly
+     * what to type is good UX — but it accepts what patients actually type,
+     * because the reminder subsystem does and the two have to agree on what a
+     * yes is (lib/language/reply-intent.ts). While the offer demanded exact
+     * equality with PO, any of these arriving with an unanswered reminder
+     * outstanding was taken by the reminder without the precedence rule in
+     * `resolveInboundClaim` ever weighing it.
+     */
+    it.each(['dakord', 'ok', 'Okay.', 'po faleminderit', 'PO.'])(
+      'escalates when the next message is the affirmative %j',
+      async (content) => {
+        await runTurnCore({
+          inboundMessage: inbound,
+          model: offerModel(),
+          modelId: 'requested/model',
+        });
+
+        const accept = await nextInbound(content, 1);
+        const model = refusingModel();
+        const result = await runTurnCore({
+          inboundMessage: accept,
+          model,
+          modelId: 'requested/model',
+        });
+
+        expect(model.doGenerateCalls).toHaveLength(0);
+        expect(result.content).toBe(ACCEPTED);
+
+        const conversation = await conversationRow();
+        expect(conversation.aiActive).toBe(false);
+        expect(conversation.escalationState).toBe('requested');
+        expect(conversation.handoffOfferMessageId).toBeNull();
+        expect(
+          await db
+            .select({ type: events.type })
+            .from(events)
+            .where(eq(events.ptId, ptId)),
+        ).toEqual([{ type: 'conversation.escalated' }]);
+      },
+    );
+
+    /**
+     * The guard the shared definition had to keep. Albanian 'po' is also the
+     * progressive particle, so "Po pyesja për oraret" is "I was asking about the
+     * hours" — an ordinary question that must reach the model, not a yes to an
+     * offer the patient never accepted.
+     */
+    it('leaves the progressive particle to the model', async () => {
+      await runTurnCore({
+        inboundMessage: inbound,
+        model: offerModel(),
+        modelId: 'requested/model',
+      });
+
+      const question = await nextInbound('Po pyesja për oraret', 1);
+      const model = responseModel('Jemi hapur 9:00–17:00.');
+      const result = await runTurnCore({
+        inboundMessage: question,
+        model,
+        modelId: 'requested/model',
+      });
+
+      expect(model.doGenerateCalls).toHaveLength(1);
+      expect(result.content).toBe('Jemi hapur 9:00–17:00.');
+
+      const conversation = await conversationRow();
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).toBe('idle');
+      expect(conversation.handoffOfferMessageId).toBeNull();
+      expect(
+        await db
+          .select({ type: events.type })
+          .from(events)
+          .where(eq(events.ptId, ptId)),
+      ).toEqual([]);
+    });
+
     it('lapses cleanly when the next message is an unrelated question', async () => {
       await runTurnCore({
         inboundMessage: inbound,
