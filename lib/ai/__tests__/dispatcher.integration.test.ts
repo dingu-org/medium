@@ -242,4 +242,31 @@ describe('dispatchTool', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].action).toBe('ai.tool.escalate_to_human');
   });
+
+  // Offering is not escalating. Nothing is handed over until the patient
+  // accepts, so this tool must leave the conversation exactly as it found it —
+  // the engine is what remembers that an offer is outstanding.
+  it('changes no conversation state when the assistant only offers a handoff', async () => {
+    const result = await dispatchTool(
+      'offer_human_handoff',
+      { reason: 'Patient asked something outside scheduling' },
+      ctx(),
+    );
+    expect(result).toEqual({ ok: true, data: { offered: true } });
+
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conversation.aiActive).toBe(true);
+    expect(conversation.escalationState).toBe('idle');
+    expect(conversation.handoffOfferMessageId).toBeNull();
+
+    const rows = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.ptId, ptId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].action).toBe('ai.tool.offer_human_handoff');
+  });
 });

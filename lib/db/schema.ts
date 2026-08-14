@@ -246,6 +246,16 @@ export const conversations = pgTable(
     // When the conversation-cap hard stop sent its one static handoff message
     // (Phase 16 C2). Null = never capped this cycle; reset on renewal.
     limitHandoffAt: tsTz('limit_handoff_at'),
+    // The patient message the assistant answered with its "shall I pass this
+    // to the business?" offer. An anchor, not a flag: the offer is accepted
+    // only by the message that immediately follows this one, and anchoring on
+    // the message itself is what makes that true no matter which code path
+    // handled the messages in between (a globally paused assistant, a capped
+    // conversation, a PT takeover) — none of them has to remember to clear it.
+    // Deliberately not a foreign key, like `messages.source_event_id` and
+    // `messages.template_id`: retention purges messages, and a dangling anchor
+    // is self-correcting (it simply stops matching, which is a lapse).
+    handoffOfferMessageId: uuid('handoff_offer_message_id'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
   (t) => [

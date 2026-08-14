@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "handoff_offer_message_id" uuid;

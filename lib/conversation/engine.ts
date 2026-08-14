@@ -22,6 +22,7 @@ import { selectModelForPlan } from '@/lib/ai/models';
 import { effectiveAssistantIdentity } from '@/lib/billing/entitlements';
 import type { PlanId } from '@/lib/billing/plans';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
+import type { DB, DBTransaction } from '@/lib/db';
 import {
   appointments,
   conversations,
@@ -32,6 +33,14 @@ import {
 import { createLogger, logger, serializeError } from '@/lib/log';
 import { getServiceClient, withAuditLog } from '@/lib/tenancy';
 import { ConversationEngineError } from './errors';
+import {
+  armHandoffOffer,
+  businessLabel,
+  handoffAcceptedMessage,
+  handoffOfferMessage,
+  resolveHandoffOffer,
+  HANDOFF_ACCEPTED_MODEL,
+} from './handoff-offer';
 import type {
   InboundMessage,
   OutboundMessage,
@@ -41,6 +50,10 @@ import { getServices } from '@/lib/services/queries';
 
 const HISTORY_LIMIT = 20;
 const STEP_LIMIT = 5;
+// Tools whose call means the turn touched real state, so a turn that then went
+// speechless has to hand off rather than throw and be retried.
+// `offer_human_handoff` is deliberately absent: offering changes nothing, so a
+// turn that offers and then dies is safe to retry from scratch.
 const MUTATING_TOOLS = new Set<ToolName>([
   'book_appointment',
   'reschedule_appointment',
@@ -92,11 +105,32 @@ const stopOnConfirmedMutation: StopCondition<ConversationTools> = ({
   return latest ? confirmableEffects(latest).length > 0 : false;
 };
 
+/** A successful `offer_human_handoff` call in this step. */
+function offeredHandoff(step: StepResult<ConversationTools>): boolean {
+  return step.toolResults.some((toolResult) => {
+    if (toolResult.toolName !== 'offer_human_handoff') return false;
+    const output = toolResult.output;
+    return Boolean(
+      output && typeof output === 'object' && (output as ToolResult).ok,
+    );
+  });
+}
+
+// Same reasoning as the confirmation above: the offer's wording is fixed, so
+// another round could only produce prose the engine would discard.
+const stopOnHandoffOffer: StopCondition<ConversationTools> = ({ steps }) => {
+  const latest = steps.at(-1);
+  return latest ? offeredHandoff(latest) : false;
+};
+
 type Dispatch = (
   toolName: ToolName,
   input: unknown,
   ctx: ToolExecutionContext,
 ) => Promise<ToolResult>;
+
+/** Reads and writes a caller may need to run inside its own transaction. */
+type Executor = DB | DBTransaction;
 
 type PersistedContext = {
   inbound: InboundMessage;
@@ -109,6 +143,8 @@ type PersistedContext = {
   address: string | null;
   retentionDays: number;
   assistantPaused: boolean;
+  /** Patient message an outstanding handoff offer answered; null when none. */
+  handoffOfferMessageId: string | null;
   // Billing plan state (Phase 16 C1). Pre-wiring only: selected here so the
   // C2/C3 retention/identity gating has the fields; nothing acts on them yet.
   plan: PlanId;
@@ -136,6 +172,9 @@ export type ModelTurnResult =
   | (ModelTurnMetadata & {
       outcome: 'appointment_mutation';
       effect: AppointmentMutationEffect;
+    })
+  | (ModelTurnMetadata & {
+      outcome: 'handoff_offer';
     });
 
 function getOpenRouterStepMetadata(providerMetadata: unknown): {
@@ -175,7 +214,11 @@ export async function runModelTurn(args: {
     system: args.system,
     messages: args.messages,
     tools,
-    stopWhen: [stepCountIs(STEP_LIMIT), stopOnConfirmedMutation],
+    stopWhen: [
+      stepCountIs(STEP_LIMIT),
+      stopOnConfirmedMutation,
+      stopOnHandoffOffer,
+    ],
     temperature: 0.2,
     maxOutputTokens: 500,
     maxRetries: 0,
@@ -199,7 +242,8 @@ export async function runModelTurn(args: {
     provider,
     costMicrousd: Math.round(cost * 1_000_000),
   };
-  const reasoningTokens = result.totalUsage.outputTokenDetails.reasoningTokens ?? 0;
+  const reasoningTokens =
+    result.totalUsage.outputTokenDetails.reasoningTokens ?? 0;
 
   // A confirmable mutation stops the loop, so any effect can only be on the last
   // step — the same step stopOnConfirmedMutation judged.
@@ -253,6 +297,14 @@ export async function runModelTurn(args: {
     };
   }
 
+  // Below the mutation branch (a committed change outranks an offer to answer
+  // something else) and above the text branch, for the same reason the
+  // confirmation is: the offer is one fixed sentence, so any prose the model
+  // wrote beside the tool call is discarded rather than sent alongside it.
+  if (lastStep && offeredHandoff(lastStep)) {
+    return { outcome: 'handoff_offer', ...metadata };
+  }
+
   const text = result.text.trim();
   if (text) {
     return { outcome: 'response', text, ...metadata };
@@ -290,6 +342,7 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       messageCreatedAt: messages.createdAt,
       conversationId: conversations.id,
       conversationAiActive: conversations.aiActive,
+      handoffOfferMessageId: conversations.handoffOfferMessageId,
       patientId: patients.id,
       practiceName: pts.practiceName,
       timezone: pts.timezone,
@@ -339,6 +392,7 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       occurredAt: row.messageCreatedAt,
     },
     conversationAiActive: row.conversationAiActive,
+    handoffOfferMessageId: row.handoffOfferMessageId,
     practiceName: row.practiceName,
     timezone: row.timezone,
     aiName: row.aiName,
@@ -355,9 +409,9 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
 
 async function findExistingReply(
   inbound: InboundMessage,
+  executor?: Executor,
 ): Promise<OutboundMessage | null> {
-  const svc = getServiceClient(inbound.ptId);
-  const [existing] = await svc.db
+  const [existing] = await (executor ?? getServiceClient(inbound.ptId).db)
     .select({
       id: messages.id,
       conversationId: messages.conversationId,
@@ -409,9 +463,11 @@ async function persistReply(args: {
   tokensOut: number;
   cachedTokens: number;
   costMicrousd: number;
+  /** Set to join a caller's transaction (the handoff offer arms itself in one). */
+  executor?: Executor;
 }): Promise<OutboundMessage> {
-  const svc = getServiceClient(args.inbound.ptId);
-  const [inserted] = await svc.db
+  const executor = args.executor ?? getServiceClient(args.inbound.ptId).db;
+  const [inserted] = await executor
     .insert(messages)
     .values({
       ptId: args.inbound.ptId,
@@ -438,7 +494,7 @@ async function persistReply(args: {
 
   if (inserted?.replyToMessageId) return inserted as OutboundMessage;
 
-  const existing = await findExistingReply(args.inbound);
+  const existing = await findExistingReply(args.inbound, executor);
   if (existing) return existing;
   throw new Error('AI reply insert conflicted but no existing reply was found');
 }
@@ -489,6 +545,68 @@ async function escalateToHuman(
     return 'already_human';
   }
   throw new Error(`${failure}: ${result.error.code}`);
+}
+
+/**
+ * Send the one static offer and arm it against this inbound message, in a
+ * single transaction. Order matters more than it looks: an armed offer whose
+ * message never reached the patient would make an ordinary "po" — how a patient
+ * takes a proposed slot — silently escalate a conversation nobody offered
+ * anything to, so the two facts commit together or not at all.
+ *
+ * The wording is deterministic but a billed model round produced it, exactly
+ * like an appointment confirmation, so it carries the round's real metadata.
+ */
+async function persistHandoffOffer(
+  context: PersistedContext,
+  metadata: ModelTurnMetadata & { model: string },
+): Promise<OutboundMessage> {
+  const svc = getServiceClient(context.inbound.ptId);
+  return svc.db.transaction(async (tx) => {
+    const outbound = await persistReply({
+      inbound: context.inbound,
+      content: handoffOfferMessage(businessLabel(context.practiceName)),
+      model: metadata.model,
+      provider: metadata.provider,
+      tokensIn: metadata.tokensIn,
+      tokensOut: metadata.tokensOut,
+      cachedTokens: metadata.cachedTokens,
+      costMicrousd: metadata.costMicrousd,
+      executor: tx,
+    });
+    await armHandoffOffer(tx, context.inbound);
+    return outbound;
+  });
+}
+
+/**
+ * The patient answered the outstanding offer with the acceptance word. Escalate
+ * exactly as `escalate_to_human` does — the assistant is off for this
+ * conversation until the practitioner turns it back on — and confirm in one
+ * fixed sentence, so the patient is not left with silence after saying yes.
+ *
+ * Escalation first, reply second, and not the other way round: a reply that
+ * committed without its escalation would be answered by the idempotency check
+ * on the retry, and the promise it just made would never be kept.
+ */
+async function acceptHandoffOffer(
+  context: PersistedContext,
+): Promise<OutboundMessage> {
+  await escalateToHuman(
+    context,
+    'The patient accepted the offer to pass their question to the practice.',
+    'Handoff-offer escalation failed',
+  );
+  return persistReply({
+    inbound: context.inbound,
+    content: handoffAcceptedMessage(businessLabel(context.practiceName)),
+    model: HANDOFF_ACCEPTED_MODEL,
+    provider: 'internal',
+    tokensIn: 0,
+    tokensOut: 0,
+    cachedTokens: 0,
+    costMicrousd: 0,
+  });
 }
 
 function logAssistantPausedSkip(context: PersistedContext): void {
@@ -550,11 +668,15 @@ async function runFailedTurnHandoff(
     'Failed-turn escalation failed',
   );
 
-  const practiceName =
-    context.practiceName?.trim() || 'the physical therapy practice';
   return persistReply({
     inbound: context.inbound,
-    content: failedTurnHandoffResponse(copy, practiceName),
+    // Was an English 'the physical therapy practice', which was wrong twice
+    // over: it named a discipline in a horizontal product, and it rendered a
+    // stray English noun phrase inside an Albanian sentence.
+    content: failedTurnHandoffResponse(
+      copy,
+      businessLabel(context.practiceName),
+    ),
     model: metadata.model,
     provider: metadata.provider,
     tokensIn: metadata.tokensIn,
@@ -600,6 +722,17 @@ async function runTurnCoreUnlocked(args: {
       'assistant_paused',
       'Assistant is globally paused; no reply generated or sent',
     );
+  }
+
+  // An offer is answered before anything else, and answered exactly once: only
+  // the message directly after it can accept, so a "po" that arrives later — or
+  // one that takes a proposed time slot — falls through to a normal turn.
+  if (context.handoffOfferMessageId) {
+    const resolution = await resolveHandoffOffer({
+      inbound: context.inbound,
+      offerMessageId: context.handoffOfferMessageId,
+    });
+    if (resolution === 'accepted') return acceptHandoffOffer(context);
   }
 
   const history = await loadHistory(context.inbound);
@@ -667,6 +800,10 @@ async function runTurnCoreUnlocked(args: {
       cachedTokens: result.cachedTokens,
       costMicrousd: result.costMicrousd,
     });
+  }
+
+  if (result.outcome === 'handoff_offer') {
+    return persistHandoffOffer(context, { ...result, model: args.modelId });
   }
 
   if (result.outcome === 'handoff_required') {

@@ -161,6 +161,14 @@ async function executeTool(
     };
   }
 
+  // Pure signal, no side effect. The offer changes nothing on its own — the
+  // conversation stays with the AI until the patient accepts — and the state it
+  // does need (which patient message the offer answered) belongs to the engine,
+  // which is the only place that knows it.
+  if (toolName === 'offer_human_handoff') {
+    return { ok: true, data: { offered: true } };
+  }
+
   const escalated = await escalateConversationToHuman(ctx);
   if (!escalated) {
     return {
@@ -180,7 +188,9 @@ function auditTarget(
   input: Record<string, unknown>,
 ): { table: string; targetId?: string } {
   if (toolName === 'get_availability') return { table: 'availability_rules' };
-  if (toolName === 'escalate_to_human') return { table: 'conversations' };
+  if (toolName === 'escalate_to_human' || toolName === 'offer_human_handoff') {
+    return { table: 'conversations' };
+  }
   return {
     table: 'appointments',
     targetId:

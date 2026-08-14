@@ -278,10 +278,73 @@ function phase4BookingModel() {
   });
 }
 
+/** One round: the model declines and offers, and the loop stops there. */
+function offerModel() {
+  return sequenceModel([
+    toolCallStep(
+      'offer-1',
+      'offer_human_handoff',
+      { reason: 'The patient asked something outside scheduling.' },
+      billedMetadata,
+    ),
+  ]);
+}
+
+function refusingModel() {
+  return new MockLanguageModelV3({
+    doGenerate: vi.fn(() => {
+      throw new Error('model should not run');
+    }),
+  });
+}
+
 let ptId = '';
 let patientId = '';
 let conversationId = '';
 let inbound: InboundMessage;
+
+/**
+ * A later patient message in the same conversation. The offsets are minutes
+ * after the fixture's own inbound, so "which message came next" is decided by
+ * the messages themselves and never by the wall clock the suite runs at.
+ */
+async function nextInbound(
+  content: string,
+  minutesAfterInbound: number,
+): Promise<InboundMessage> {
+  const [message] = await db
+    .insert(messages)
+    .values({
+      ptId,
+      conversationId,
+      externalId: `wamid.${Date.now()}.${Math.random()}`,
+      role: 'patient',
+      channel: 'whatsapp',
+      content,
+      createdAt: new Date(
+        inbound.occurredAt.getTime() + minutesAfterInbound * MINUTE,
+      ),
+    })
+    .returning();
+  return {
+    id: message.id,
+    conversationId,
+    ptId,
+    patientId,
+    content: message.content,
+    channel: message.channel,
+    externalId: message.externalId,
+    occurredAt: message.createdAt,
+  };
+}
+
+async function conversationRow() {
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId));
+  return conversation;
+}
 
 beforeAll(async () => {
   const supabase = createServiceClient();
@@ -310,10 +373,7 @@ beforeEach(async () => {
   await db.delete(events).where(eq(events.ptId, ptId));
   await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
   await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
-  await db
-    .update(pts)
-    .set({ assistantPaused: false })
-    .where(eq(pts.id, ptId));
+  await db.update(pts).set({ assistantPaused: false }).where(eq(pts.id, ptId));
   await db.insert(availabilityRules).values({
     ptId,
     weekday: 1,
@@ -830,43 +890,223 @@ describe('runTurnCore', () => {
     'NDIHMË',
     'Kam dhimbje në gjoks',
     'Dua të flas me një person',
-  ])('sends %s to the model instead of pattern-matching it', async (content) => {
-    await db
-      .update(messages)
-      .set({ content })
-      .where(eq(messages.id, inbound.id));
+  ])(
+    'sends %s to the model instead of pattern-matching it',
+    async (content) => {
+      await db
+        .update(messages)
+        .set({ content })
+        .where(eq(messages.id, inbound.id));
 
-    const model = responseModel('Sigurisht, po e shikoj kalendarin.');
-    const result = await runTurnCore({
-      inboundMessage: inbound,
-      model,
-      modelId: 'requested/model',
+      const model = responseModel('Sigurisht, po e shikoj kalendarin.');
+      const result = await runTurnCore({
+        inboundMessage: inbound,
+        model,
+        modelId: 'requested/model',
+      });
+
+      expect(model.doGenerateCalls).toHaveLength(1);
+      expect(result.content).toBe('Sigurisht, po e shikoj kalendarin.');
+
+      // No deterministic escalation: the thread stays with the AI unless the
+      // model itself hands it over.
+      const [conversation] = await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).toBe('idle');
+
+      const [stored] = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, result.id));
+      expect(stored).toMatchObject({ model: 'requested/model' });
+    },
+  );
+
+  // The handoff offer (2026-08-14). The model alone decides a request is out of
+  // scope; the engine answers with one static sentence and remembers which
+  // message it answered, so only the message directly after it can accept.
+  describe('handoff offer', () => {
+    const OFFER =
+      "Mund të ndihmoj vetëm me takimet. Nëse dëshironi t'ia kaloj këtë pyetje Movement Clinic, përgjigjuni me PO.";
+    const ACCEPTED =
+      "Patjetër. Këtë bisedë ia kalova Movement Clinic; do t'ju përgjigjen sapo të jenë të lirë.";
+
+    it('offers to pass the question on when the model declines to answer', async () => {
+      const model = offerModel();
+      const result = await runTurnCore({
+        inboundMessage: inbound,
+        model,
+        modelId: 'requested/model',
+      });
+
+      expect(result.content).toBe(OFFER);
+      expect(model.doGenerateCalls).toHaveLength(1);
+
+      const conversation = await conversationRow();
+      // Armed, but nothing has been handed over yet: the assistant keeps the
+      // conversation until the patient answers the offer.
+      expect(conversation.handoffOfferMessageId).toBe(inbound.id);
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).toBe('idle');
+      expect(
+        await db
+          .select({ type: events.type })
+          .from(events)
+          .where(eq(events.ptId, ptId)),
+      ).toEqual([]);
+
+      // Fixed wording, but a billed round produced it — same as a booking
+      // confirmation, so it must not be stamped as free internal copy.
+      const [stored] = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, result.id));
+      expect(stored).toMatchObject({
+        model: 'requested/model',
+        provider: 'Azure',
+        aiCostMicrousd: 123,
+      });
     });
 
-    expect(model.doGenerateCalls).toHaveLength(1);
-    expect(result.content).toBe('Sigurisht, po e shikoj kalendarin.');
+    it('escalates when the very next message is the acceptance word', async () => {
+      await runTurnCore({
+        inboundMessage: inbound,
+        model: offerModel(),
+        modelId: 'requested/model',
+      });
 
-    // No deterministic escalation: the thread stays with the AI unless the
-    // model itself hands it over.
-    const [conversation] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId));
-    expect(conversation.aiActive).toBe(true);
-    expect(conversation.escalationState).toBe('idle');
+      const accept = await nextInbound('PO', 1);
+      const model = refusingModel();
+      const result = await runTurnCore({
+        inboundMessage: accept,
+        model,
+        modelId: 'requested/model',
+      });
 
-    const [stored] = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.id, result.id));
-    expect(stored).toMatchObject({ model: 'requested/model' });
+      // Deterministic: the acceptance never reaches the model.
+      expect(model.doGenerateCalls).toHaveLength(0);
+      expect(result.content).toBe(ACCEPTED);
+
+      const conversation = await conversationRow();
+      expect(conversation.aiActive).toBe(false);
+      expect(conversation.escalationState).toBe('requested');
+      expect(conversation.handoffOfferMessageId).toBeNull();
+
+      // Same escalation as `escalate_to_human`: one durable event, one push.
+      expect(
+        await db
+          .select({ type: events.type })
+          .from(events)
+          .where(eq(events.ptId, ptId)),
+      ).toEqual([{ type: 'conversation.escalated' }]);
+
+      const [stored] = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, result.id));
+      expect(stored).toMatchObject({
+        model: 'deterministic-handoff-accepted',
+        provider: 'internal',
+        tokensIn: 0,
+        tokensOut: 0,
+        aiCostMicrousd: 0,
+      });
+    });
+
+    it('lapses cleanly when the next message is an unrelated question', async () => {
+      await runTurnCore({
+        inboundMessage: inbound,
+        model: offerModel(),
+        modelId: 'requested/model',
+      });
+
+      const question = await nextInbound('A keni orar të lirë të hënën?', 1);
+      const result = await runTurnCore({
+        inboundMessage: question,
+        model: responseModel('Të hënën kam të lirë në 9:00.'),
+        modelId: 'requested/model',
+      });
+
+      expect(result.content).toBe('Të hënën kam të lirë në 9:00.');
+      const conversation = await conversationRow();
+      expect(conversation.handoffOfferMessageId).toBeNull();
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).toBe('idle');
+    });
+
+    // The whole reason acceptance is scoped to one message: a patient who says
+    // PO later means it about whatever was said last, not about a stale offer.
+    it('does not escalate when the acceptance word arrives one message later', async () => {
+      await runTurnCore({
+        inboundMessage: inbound,
+        model: offerModel(),
+        modelId: 'requested/model',
+      });
+      await runTurnCore({
+        inboundMessage: await nextInbound('A keni orar të lirë të hënën?', 1),
+        model: responseModel('Të hënën kam të lirë në 9:00.'),
+        modelId: 'requested/model',
+      });
+
+      const late = await nextInbound('PO', 2);
+      const model = responseModel('Sigurisht, po e rezervoj atë orar.');
+      const result = await runTurnCore({
+        inboundMessage: late,
+        model,
+        modelId: 'requested/model',
+      });
+
+      expect(model.doGenerateCalls).toHaveLength(1);
+      expect(result.content).toBe('Sigurisht, po e rezervoj atë orar.');
+
+      const conversation = await conversationRow();
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).toBe('idle');
+      expect(
+        await db
+          .select({ type: events.type })
+          .from(events)
+          .where(eq(events.ptId, ptId)),
+      ).toEqual([]);
+    });
+
+    // 'po' is how a patient takes a proposed slot. With no offer outstanding it
+    // is an ordinary message and has to book, not hand the conversation over.
+    it('books a proposed slot on a bare po when no offer is outstanding', async () => {
+      const accept = await nextInbound('po', 1);
+      const result = await runTurnCore({
+        inboundMessage: accept,
+        model: sequenceModel([
+          toolCallStep('book-1', 'book_appointment', {
+            starts_at: mondayAt(9).toISOString(),
+            service_type: 'Vlerësim i parë',
+          }),
+        ]),
+        modelId: 'requested/model',
+        now: BEFORE_MONDAY,
+      });
+
+      expect(result.content).toBe(
+        `Takimi juaj u rezervua për ${tirane(mondayAt(9).toISOString())} (Vlerësim i parë). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`,
+      );
+
+      const conversation = await conversationRow();
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).toBe('idle');
+
+      const [appointment] = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.patientId, patientId));
+      expect(appointment).toMatchObject({ startsAt: mondayAt(9) });
+    });
   });
 
   it('suppresses the reply and never calls the model while the assistant is paused', async () => {
-    await db
-      .update(pts)
-      .set({ assistantPaused: true })
-      .where(eq(pts.id, ptId));
+    await db.update(pts).set({ assistantPaused: true }).where(eq(pts.id, ptId));
     const model = new MockLanguageModelV3({
       doGenerate: vi.fn(() => {
         throw new Error('model should not run');

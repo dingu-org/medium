@@ -193,9 +193,17 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('# Response style');
     expect(prompt).toContain('Never diagnose');
     expect(prompt).toContain('escalate_to_human');
+    // Replaced 2026-08-14 the emergency-triage rule that used to sit here ("If
+    // urgent symptoms are mentioned … Escalate."). Medium books appointments
+    // for barbers and nail salons as well as physiotherapists and is expressly
+    // not designed to handle emergencies, so the prompt no longer singles out
+    // symptoms: everything outside scheduling takes the same route, an offer to
+    // pass the question to the business. Do not add a symptom rule back.
     expect(prompt).toContain(
-      'If urgent symptoms are mentioned, do not continue scheduling in the same turn. Escalate.',
+      'When a request is outside that scope, never guess and never improvise an answer.',
     );
+    expect(prompt).toContain('offer_human_handoff');
+    expect(prompt).not.toMatch(/urgent symptoms|emergency services|ambulance/i);
     expect(prompt).toContain('list_upcoming_appointments');
     expect(prompt).toContain('book_appointment');
     expect(prompt).toContain(
