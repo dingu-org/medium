@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { testNowUtc } from '@/tests/support/clock';
 
 vi.mock('node:fs', () => ({
   readFileSync: () => {
@@ -19,7 +20,7 @@ describe('buildSystemPrompt bundle safety', () => {
       title: null,
       address: null,
       retentionDays: 30,
-      now: new Date('2026-06-15T12:00:00.000Z'),
+      now: testNowUtc(),
     });
 
     expect(prompt).toContain(

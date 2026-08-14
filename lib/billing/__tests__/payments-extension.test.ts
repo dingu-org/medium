@@ -1,46 +1,56 @@
 import { describe, expect, it } from 'vitest';
 import { computeExtendedExpiry } from '@/lib/billing/payments';
+import { testNowUtc } from '@/tests/support/clock';
 
-const NOW = new Date('2026-07-14T12:00:00.000Z');
+// Only the year is derived. The months are the subject: the +1 month and +1 year
+// steps have to be checked against hand-computed calendar answers, and the Jan 31
+// case exists precisely to pin the clamp onto the last day of February.
+const Y = testNowUtc().getUTCFullYear();
+const utc = (year: number, month: number, day: number, hour = 0) =>
+  new Date(Date.UTC(year, month - 1, day, hour));
+/** Day 0 of March is the last day of February — 28 or 29, whichever it is. */
+const lastOfFebruary = new Date(Date.UTC(Y, 2, 0));
+
+const NOW = utc(Y, 7, 14, 12);
 
 describe('computeExtendedExpiry', () => {
   it('extends from now when there is no current expiry (monthly)', () => {
     expect(computeExtendedExpiry(null, 'monthly', NOW).toISOString()).toBe(
-      '2026-08-14T12:00:00.000Z',
+      utc(Y, 8, 14, 12).toISOString(),
     );
   });
 
   it('extends from now when there is no current expiry (yearly)', () => {
     expect(computeExtendedExpiry(null, 'yearly', NOW).toISOString()).toBe(
-      '2027-07-14T12:00:00.000Z',
+      utc(Y + 1, 7, 14, 12).toISOString(),
     );
   });
 
   it('extends from a future expiry so renewing early loses no days (monthly)', () => {
-    const future = new Date('2026-09-01T00:00:00.000Z');
+    const future = utc(Y, 9, 1);
     expect(computeExtendedExpiry(future, 'monthly', NOW).toISOString()).toBe(
-      '2026-10-01T00:00:00.000Z',
+      utc(Y, 10, 1).toISOString(),
     );
   });
 
   it('extends from a future expiry (yearly)', () => {
-    const future = new Date('2026-09-01T00:00:00.000Z');
+    const future = utc(Y, 9, 1);
     expect(computeExtendedExpiry(future, 'yearly', NOW).toISOString()).toBe(
-      '2027-09-01T00:00:00.000Z',
+      utc(Y + 1, 9, 1).toISOString(),
     );
   });
 
   it('extends from now when the current expiry is in the past', () => {
-    const past = new Date('2026-01-01T00:00:00.000Z');
+    const past = utc(Y, 1, 1);
     expect(computeExtendedExpiry(past, 'monthly', NOW).toISOString()).toBe(
-      '2026-08-14T12:00:00.000Z',
+      utc(Y, 8, 14, 12).toISOString(),
     );
   });
 
   it('uses UTC calendar arithmetic and clamps month ends', () => {
-    const jan31 = new Date('2026-01-31T00:00:00.000Z');
+    const jan31 = utc(Y, 1, 31);
     expect(computeExtendedExpiry(null, 'monthly', jan31).toISOString()).toBe(
-      '2026-02-28T00:00:00.000Z',
+      lastOfFebruary.toISOString(),
     );
   });
 });

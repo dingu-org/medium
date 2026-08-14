@@ -14,6 +14,11 @@ import { db } from '@/lib/db';
 import { appointments, patients, pts } from '@/lib/db/schema';
 import { getServices } from '@/lib/services/queries';
 import { createService, deleteService, updateService } from '../actions';
+import { MINUTE, testNow } from '@/tests/support/clock';
+
+// Only the existence of an appointment on the service matters here, never its
+// date — derived so it stays a plausible upcoming booking forever.
+const APPOINTMENT_AT = new Date(testNow().getTime() + 2 * 24 * 60 * MINUTE);
 
 const { getUserMock, redirectMock } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
@@ -161,8 +166,8 @@ describe('deleteService', () => {
     await db.insert(appointments).values({
       ptId,
       patientId: patient.id,
-      startsAt: new Date('2026-08-01T09:00:00Z'),
-      endsAt: new Date('2026-08-01T09:30:00Z'),
+      startsAt: APPOINTMENT_AT,
+      endsAt: new Date(APPOINTMENT_AT.getTime() + 30 * MINUTE),
       // Mixed case proves the lower(btrim(...)) name normalization.
       serviceType: 'seancë VIJUESE',
     });

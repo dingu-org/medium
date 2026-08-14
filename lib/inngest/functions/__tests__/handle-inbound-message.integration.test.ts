@@ -57,6 +57,12 @@ import {
   runReminderFallbackTurn,
   sendInboundReply,
 } from '../handle-inbound-message';
+import { DAY, testNow, zonedTime } from '@/tests/support/clock';
+
+// The booking turn below books against a Monday-only availability rule, so the
+// fixture needs a real Monday — derived, and a week out so the booking is in the
+// future whatever day the suite runs on.
+const MONDAY = new Date(testNow({ weekday: 1 }).getTime() + 7 * DAY);
 
 let ptId = '';
 let connectionId = '';
@@ -533,7 +539,7 @@ describe('handleInboundMessage cores', () => {
       startTime: '09:00:00',
       endTime: '17:00:00',
     });
-    const startsAt = new Date('2026-07-06T07:00:00.000Z');
+    const startsAt = zonedTime(MONDAY, 9);
 
     const context = (await loadInboundJobContext({
       messageId: inboundMessageId,
@@ -556,7 +562,7 @@ describe('handleInboundMessage cores', () => {
               toolCallId: 'book-1',
               toolName: 'book_appointment',
               input: JSON.stringify({
-                starts_at: '2026-07-06T09:00:00+02:00',
+                starts_at: startsAt.toISOString(),
                 service_type: 'Vlerësim i parë',
               }),
             },
@@ -644,7 +650,7 @@ describe('handleInboundMessage cores', () => {
     const reminder = {
       reason: 'unclear_reply' as const,
       appointmentId: '00000000-0000-4000-8000-000000000002',
-      appointmentStartsAt: '2026-07-01T10:00:00.000Z',
+      appointmentStartsAt: zonedTime(MONDAY, 12).toISOString(),
       timezone: 'Europe/Tirane',
       practiceName: 'Move Well',
     };

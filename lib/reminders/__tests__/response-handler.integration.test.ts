@@ -15,6 +15,7 @@ import type { InboundMessage } from '@/lib/conversation/types';
 import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { createServiceClient } from '@/lib/supabase/service';
 import { handleReminderResponse } from '../response-handler';
+import { testNowUtc } from '@/tests/support/clock';
 
 let ptId = '';
 let patientId = '';
@@ -24,7 +25,8 @@ let reminderMessageId = '';
 let startsAt: Date;
 let sequence = 0;
 
-const now = new Date('2026-07-01T08:00:00.000Z');
+// Derived: the reminder cycle only cares about distances from `now`.
+const now = testNowUtc();
 
 beforeAll(async () => {
   const { data, error } = await createServiceClient().auth.admin.createUser({

@@ -9,7 +9,18 @@ import {
   pts,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
+import { DAY, testNow, zonedTime } from '@/tests/support/clock';
 import { getFreeSlots, isSlotBookable } from '../availability';
+
+// Availability rules are stored per weekday as local wall times, so the fixtures
+// need real weekdays — derived, a week out, and resolved through `zonedTime` so
+// they read the same in CET and CEST.
+const MONDAY = new Date(testNow({ weekday: 1 }).getTime() + 7 * DAY);
+const TUESDAY = new Date(MONDAY.getTime() + DAY);
+const SUNDAY = new Date(MONDAY.getTime() - DAY);
+const mondayAt = (hour: number, minute = 0) => zonedTime(MONDAY, hour, minute);
+const tuesdayAt = (hour: number, minute = 0) => zonedTime(TUESDAY, hour, minute);
+const sundayAt = (hour: number, minute = 0) => zonedTime(SUNDAY, hour, minute);
 
 let ptId = '';
 let patientId = '';
@@ -57,22 +68,22 @@ describe('getFreeSlots', () => {
     });
     await db.insert(blockedPeriods).values({
       ptId,
-      startsAt: new Date('2026-07-06T08:00:00.000Z'),
-      endsAt: new Date('2026-07-06T09:00:00.000Z'),
+      startsAt: mondayAt(10),
+      endsAt: mondayAt(11),
       label: 'Admin',
     });
     await db.insert(appointments).values({
       ptId,
       patientId,
-      startsAt: new Date('2026-07-06T09:00:00.000Z'),
-      endsAt: new Date('2026-07-06T10:00:00.000Z'),
+      startsAt: mondayAt(11),
+      endsAt: mondayAt(12),
       status: 'confirmed',
     });
 
     const result = await getFreeSlots({
       ptId,
-      start: new Date('2026-07-06T07:00:00.000Z'),
-      end: new Date('2026-07-06T11:00:00.000Z'),
+      start: mondayAt(9),
+      end: mondayAt(13),
       durationMinutes: 60,
     });
 
@@ -80,12 +91,12 @@ describe('getFreeSlots', () => {
       timezone: 'Europe/Tirane',
       slots: [
         {
-          startsAt: '2026-07-06T07:00:00.000Z',
-          endsAt: '2026-07-06T08:00:00.000Z',
+          startsAt: mondayAt(9).toISOString(),
+          endsAt: mondayAt(10).toISOString(),
         },
         {
-          startsAt: '2026-07-06T10:00:00.000Z',
-          endsAt: '2026-07-06T11:00:00.000Z',
+          startsAt: mondayAt(12).toISOString(),
+          endsAt: mondayAt(13).toISOString(),
         },
       ],
     });
@@ -95,12 +106,29 @@ describe('getFreeSlots', () => {
     await expect(
       getFreeSlots({
         ptId,
-        start: new Date('2026-07-06T07:00:00.000Z'),
-        end: new Date('2026-07-07T07:00:00.000Z'),
+        start: mondayAt(9),
+        end: tuesdayAt(9),
       }),
     ).resolves.toEqual({ timezone: 'Europe/Tirane', slots: [] });
   });
 
+  /*
+   * DELIBERATE EXCEPTION to "no absolute dates in tests" — the next two cases,
+   * and the spring-forward case in `isSlotBookable` below, are the only ones in
+   * the suite that keep literal instants.
+   *
+   * Here the instant IS the subject. 2026-03-29 is the night Europe/Berlin skips
+   * 02:00→03:00 and 2026-10-25 the night it repeats 02:00→03:00; a derived date
+   * would land on an ordinary day and the test would pass while asserting
+   * nothing. These cannot rot either: `getFreeSlots` never reads the wall clock
+   * (the window is a parameter), so the answer is the same on any run date —
+   * verified by running the whole suite under a clock shifted 400 days forward.
+   * The only maintenance they need is a fresh transition date if the year is
+   * ever changed, which is exactly what the comments below name.
+   */
+
+  // 2026-03-29: Europe/Berlin jumps 02:00 → 03:00, so 02:00–03:00 local does
+  // not exist and the first bookable hour of the rule is 03:00 CEST.
   it('skips a nonexistent spring-forward wall time', async () => {
     await db
       .update(pts)
@@ -128,6 +156,8 @@ describe('getFreeSlots', () => {
     ]);
   });
 
+  // 2026-10-25: Europe/Berlin repeats 02:00 → 03:00, so the same wall hour has
+  // two instants and only one of them may be offered.
   it('returns one usable occurrence of a duplicated fall-back wall time', async () => {
     await db
       .update(pts)
@@ -169,14 +199,14 @@ describe('getFreeSlots', () => {
 
     const result = await getFreeSlots({
       ptId,
-      start: new Date('2026-07-06T21:30:00.000Z'),
-      end: new Date('2026-07-07T09:00:00.000Z'),
+      start: mondayAt(23, 30),
+      end: tuesdayAt(11),
     });
 
     expect(result.slots).toEqual([
       {
-        startsAt: '2026-07-07T07:00:00.000Z',
-        endsAt: '2026-07-07T08:00:00.000Z',
+        startsAt: tuesdayAt(9).toISOString(),
+        endsAt: tuesdayAt(10).toISOString(),
       },
     ]);
   });
@@ -191,20 +221,19 @@ describe('getFreeSlots', () => {
 
     const result = await getFreeSlots({
       ptId,
-      start: new Date('2026-07-06T20:00:00.000Z'),
-      end: new Date('2026-07-06T22:00:00.000Z'),
+      start: mondayAt(22),
+      end: tuesdayAt(0),
     });
 
     expect(result.slots).toEqual([
       {
-        startsAt: '2026-07-06T21:00:00.000Z',
-        endsAt: '2026-07-06T22:00:00.000Z',
+        startsAt: mondayAt(23).toISOString(),
+        endsAt: tuesdayAt(0).toISOString(),
       },
     ]);
   });
 });
 
-// Monday 2026-07-06, Tirane is UTC+2 in July.
 const workingMonday = () =>
   db.insert(availabilityRules).values({
     ptId,
@@ -220,8 +249,8 @@ describe('isSlotBookable', () => {
     await expect(
       isSlotBookable({
         ptId,
-        startsAt: new Date('2026-07-06T09:00:00.000Z'), // 11:00
-        endsAt: new Date('2026-07-06T09:45:00.000Z'),
+        startsAt: mondayAt(11),
+        endsAt: mondayAt(11, 45),
       }),
     ).resolves.toBe(true);
   });
@@ -232,8 +261,8 @@ describe('isSlotBookable', () => {
     await expect(
       isSlotBookable({
         ptId,
-        startsAt: new Date('2026-07-06T14:15:00.000Z'), // 16:15
-        endsAt: new Date('2026-07-06T15:00:00.000Z'), // 17:00
+        startsAt: mondayAt(16, 15),
+        endsAt: mondayAt(17), // exactly when the rule ends
       }),
     ).resolves.toBe(true);
   });
@@ -244,8 +273,8 @@ describe('isSlotBookable', () => {
     await expect(
       isSlotBookable({
         ptId,
-        startsAt: new Date('2026-07-06T14:30:00.000Z'), // 16:30
-        endsAt: new Date('2026-07-06T15:15:00.000Z'), // 17:15
+        startsAt: mondayAt(16, 30),
+        endsAt: mondayAt(17, 15), // past the end of the rule
       }),
     ).resolves.toBe(false);
   });
@@ -259,22 +288,24 @@ describe('isSlotBookable', () => {
     await expect(
       isSlotBookable({
         ptId,
-        startsAt: new Date('2026-07-06T09:45:00.000Z'), // 11:45
-        endsAt: new Date('2026-07-06T10:30:00.000Z'), // 12:30
+        startsAt: mondayAt(11, 45),
+        endsAt: mondayAt(12, 30), // spans the seam between the two rules
       }),
     ).resolves.toBe(false);
     await expect(
       isSlotBookable({
         ptId,
-        startsAt: new Date('2026-07-05T09:00:00.000Z'), // Sunday
-        endsAt: new Date('2026-07-05T09:45:00.000Z'),
+        startsAt: sundayAt(11), // Sunday: no rule at all
+        endsAt: sundayAt(11, 45),
       }),
     ).resolves.toBe(false);
   });
 
-  // Europe/Tirane skips 02:00 → 03:00 on the last Sunday of March. A rule whose
-  // edge lands in that gap is still a working day: dropping it would close the
-  // practice from 03:00 to 10:00 on the one Sunday a year the clock jumps.
+  // Europe/Tirane skips 02:00 → 03:00 on the last Sunday of March — 2026-03-29.
+  // A rule whose edge lands in that gap is still a working day: dropping it
+  // would close the practice from 03:00 to 10:00 on the one Sunday a year the
+  // clock jumps. Literal for the same reason as the two cases above: the
+  // transition instant is the subject, and nothing here reads the wall clock.
   it('keeps a rule that starts inside the spring-forward gap', async () => {
     await db.insert(availabilityRules).values({
       ptId,
@@ -304,8 +335,8 @@ describe('isSlotBookable', () => {
     await workingMonday();
     await db.insert(blockedPeriods).values({
       ptId,
-      startsAt: new Date('2026-07-06T09:30:00.000Z'),
-      endsAt: new Date('2026-07-06T10:00:00.000Z'),
+      startsAt: mondayAt(11, 30),
+      endsAt: mondayAt(12),
       label: 'Admin',
     });
     const [appointment] = await db
@@ -313,8 +344,8 @@ describe('isSlotBookable', () => {
       .values({
         ptId,
         patientId,
-        startsAt: new Date('2026-07-06T11:00:00.000Z'),
-        endsAt: new Date('2026-07-06T12:00:00.000Z'),
+        startsAt: mondayAt(13),
+        endsAt: mondayAt(14),
         status: 'confirmed',
       })
       .returning({ id: appointments.id });
@@ -322,22 +353,22 @@ describe('isSlotBookable', () => {
     await expect(
       isSlotBookable({
         ptId,
-        startsAt: new Date('2026-07-06T09:00:00.000Z'),
-        endsAt: new Date('2026-07-06T09:45:00.000Z'),
+        startsAt: mondayAt(11),
+        endsAt: mondayAt(11, 45),
       }),
     ).resolves.toBe(false);
     await expect(
       isSlotBookable({
         ptId,
-        startsAt: new Date('2026-07-06T11:15:00.000Z'),
-        endsAt: new Date('2026-07-06T12:00:00.000Z'),
+        startsAt: mondayAt(13, 15),
+        endsAt: mondayAt(14),
       }),
     ).resolves.toBe(false);
     await expect(
       isSlotBookable({
         ptId,
-        startsAt: new Date('2026-07-06T11:15:00.000Z'),
-        endsAt: new Date('2026-07-06T12:00:00.000Z'),
+        startsAt: mondayAt(13, 15),
+        endsAt: mondayAt(14),
         excludeAppointmentId: appointment.id,
       }),
     ).resolves.toBe(true);

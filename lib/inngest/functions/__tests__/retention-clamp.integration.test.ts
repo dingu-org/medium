@@ -4,9 +4,11 @@ import { db } from '@/lib/db';
 import { pts } from '@/lib/db/schema';
 import { loadRetentionTenants } from '@/lib/inngest/functions/purge-expired-messages';
 import { createServiceClient } from '@/lib/supabase/service';
+import { testNowUtc } from '@/tests/support/clock';
 
 const DAY = 86_400_000;
-const NOW = new Date('2026-06-20T12:00:00.000Z');
+// Derived: the clamp is evaluated as a distance from `now`, never on a date.
+const NOW = testNowUtc();
 let ptId = '';
 
 async function retentionFor(now: Date): Promise<number | undefined> {

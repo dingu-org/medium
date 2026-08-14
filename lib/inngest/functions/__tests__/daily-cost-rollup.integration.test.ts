@@ -20,12 +20,29 @@ import {
   aggregateCostDailyCore,
   aggregateCostDailyWindow,
 } from '../daily-cost-rollup';
+import {
+  DAY as DAY_MS,
+  HOUR,
+  MINUTE,
+  SECOND,
+  testNowUtc,
+} from '@/tests/support/clock';
 
-// Fixed target UTC day, well clear of "now" so in/out-of-window seeding is exact.
-const DAY = new Date('2026-06-15T12:00:00.000Z');
-const inDay = (hhmm: string) => new Date(`2026-06-15T${hhmm}:00.000Z`);
-const NEXT_DAY = new Date('2026-06-16T09:00:00.000Z');
-const PREV_DAY = new Date('2026-06-14T09:00:00.000Z');
+// The rollup buckets by UTC day, so the fixtures need a real one — derived, and
+// set five days back so it stays well clear of "now": anything else in this DB
+// is stamped by Postgres' own `now()`, which lands on today.
+const DAY_START = new Date(testNowUtc({ hour: 0 }).getTime() - 5 * DAY_MS);
+const DAY = new Date(DAY_START.getTime() + 12 * HOUR);
+const NEXT_DAY_START = new Date(DAY_START.getTime() + DAY_MS);
+const NEXT_DAY = new Date(NEXT_DAY_START.getTime() + 9 * HOUR);
+const PREV_DAY = new Date(DAY_START.getTime() - DAY_MS + 9 * HOUR);
+/** The `cost_daily.day` key for the target day. */
+const DAY_KEY = DAY_START.toISOString().slice(0, 10);
+/** A wall time (`hh:mm` or `hh:mm:ss`) inside the target UTC day. */
+const inDay = (hms: string) => {
+  const [h, m, s = 0] = hms.split(':').map(Number);
+  return new Date(DAY_START.getTime() + h * HOUR + m * MINUTE + s * SECOND);
+};
 
 let ptA = '';
 let ptB = '';
@@ -178,7 +195,7 @@ async function rowFor(ptId: string) {
   const [row] = await db
     .select()
     .from(costDaily)
-    .where(and(eq(costDaily.ptId, ptId), eq(costDaily.day, '2026-06-15')));
+    .where(and(eq(costDaily.ptId, ptId), eq(costDaily.day, DAY_KEY)));
   return row;
 }
 
@@ -220,7 +237,7 @@ describe('aggregateCostDailyCore', () => {
     const rows = await db
       .select()
       .from(costDaily)
-      .where(and(eq(costDaily.ptId, ptA), eq(costDaily.day, '2026-06-15')));
+      .where(and(eq(costDaily.ptId, ptA), eq(costDaily.day, DAY_KEY)));
     expect(rows).toHaveLength(1);
     expect(rows[0].aiCostMicrousd).toBe(150);
     expect(rows[0].computedAt.getTime()).toBeGreaterThanOrEqual(
@@ -270,7 +287,7 @@ describe('aggregateCostDailyCore — Meta actual-first cost', () => {
     const [row] = await db
       .select()
       .from(costDaily)
-      .where(and(eq(costDaily.ptId, ptC), eq(costDaily.day, '2026-06-15')));
+      .where(and(eq(costDaily.ptId, ptC), eq(costDaily.day, DAY_KEY)));
     return row;
   }
 
@@ -354,12 +371,12 @@ describe('aggregateCostDailyCore — Meta actual-first cost', () => {
 
   it('buckets by send time: 23:59:59Z counts, the next midnight does not; null sent_at falls back to created_at', async () => {
     await seedStatus({
-      sentAt: new Date('2026-06-15T23:59:59.000Z'),
+      sentAt: inDay('23:59:59'),
       billable: true,
       pricingCategory: 'utility',
     });
     await seedStatus({
-      sentAt: new Date('2026-06-16T00:00:00.000Z'), // next UTC day
+      sentAt: NEXT_DAY_START, // next UTC day
       billable: true,
       pricingCategory: 'utility',
     });
@@ -404,7 +421,7 @@ describe('aggregateCostDailyCore — Meta actual-first cost', () => {
     const after = await db
       .select()
       .from(costDaily)
-      .where(and(eq(costDaily.ptId, ptC), eq(costDaily.day, '2026-06-15')));
+      .where(and(eq(costDaily.ptId, ptC), eq(costDaily.day, DAY_KEY)));
     expect(after).toHaveLength(1); // idempotent upsert, not a duplicate
     expect(after[0].metaCostSource).toBe('actual');
     expect(after[0].metaBillableMessages).toBe(1);

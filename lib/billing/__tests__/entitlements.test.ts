@@ -5,9 +5,12 @@ import {
   resolveEffectivePlan,
   type BillingPt,
 } from '@/lib/billing/entitlements';
+import { testNowUtc } from '@/tests/support/clock';
 
 const DAY_MS = 86_400_000;
-const NOW = new Date('2026-07-13T12:00:00Z');
+// Derived: every fixture below is an offset from NOW, so the absolute date
+// never mattered — only that it stays a stable instant across the file.
+const NOW = testNowUtc();
 
 function pt(overrides: Partial<BillingPt> = {}): BillingPt {
   return {

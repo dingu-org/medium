@@ -9,6 +9,13 @@ import {
   prepareCapHandoff,
 } from '@/lib/billing/cap-handoff';
 import { createServiceClient } from '@/lib/supabase/service';
+import { DAY, HOUR, testNow } from '@/tests/support/clock';
+
+// The handoff is throttled to one per *local day*, so what these instants need
+// is a same-day pair and a next-day one — never a particular calendar date. The
+// PT timezone is UTC here, and a 10:30 anchor keeps the +6h partner inside the
+// same UTC day.
+const DAY_ONE = testNow();
 
 let ptId = '';
 let patientId = '';
@@ -82,8 +89,8 @@ afterAll(async () => {
 
 describe('cap handoff', () => {
   it('sends one static handoff, then skips the rest of that local day', async () => {
-    const day1a = new Date('2026-07-10T09:00:00Z');
-    const day1b = new Date('2026-07-10T15:00:00Z');
+    const day1a = new Date(DAY_ONE.getTime());
+    const day1b = new Date(DAY_ONE.getTime() + 6 * HOUR);
 
     const inbound1 = await seedInbound('Message one');
     const first = await prepareCapHandoff({
@@ -117,19 +124,19 @@ describe('cap handoff', () => {
     await prepareCapHandoff({
       inbound: inbound1,
       timezone: 'UTC',
-      instant: new Date('2026-07-10T09:00:00Z'),
+      instant: DAY_ONE,
     });
     await markCapHandoff({
       ptId,
       conversationId,
-      instant: new Date('2026-07-10T09:00:00Z'),
+      instant: DAY_ONE,
     });
 
     const inbound2 = await seedInbound('Day two');
     const next = await prepareCapHandoff({
       inbound: inbound2,
       timezone: 'UTC',
-      instant: new Date('2026-07-11T09:00:00Z'),
+      instant: new Date(DAY_ONE.getTime() + DAY),
     });
     expect(next.action).toBe('send');
     expect(await countHandoffReplies()).toBe(2);
@@ -140,12 +147,12 @@ describe('cap handoff', () => {
     const a = await prepareCapHandoff({
       inbound,
       timezone: 'UTC',
-      instant: new Date('2026-07-10T09:00:00Z'),
+      instant: DAY_ONE,
     });
     const b = await prepareCapHandoff({
       inbound,
       timezone: 'UTC',
-      instant: new Date('2026-07-10T09:00:00Z'),
+      instant: DAY_ONE,
     });
     if (a.action !== 'send' || b.action !== 'send') {
       throw new Error('expected both sends before mark');

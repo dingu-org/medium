@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPokClient, PokError, PokNotFoundError } from '@/lib/billing/pok/client';
+import { testNowUtc } from '@/tests/support/clock';
 
 const CONFIG = {
   apiBase: 'https://pok.test',
@@ -51,7 +52,9 @@ describe('createPokClient', () => {
 
   it('re-fetches the token after it nears expiry', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-07-14T00:00:00.000Z'));
+    // Any stable instant will do — only the 100s token TTL advanced below is
+    // under test — but it must not be a literal that ages with the calendar.
+    vi.setSystemTime(testNowUtc());
 
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).endsWith('/auth/sdk/login')) {

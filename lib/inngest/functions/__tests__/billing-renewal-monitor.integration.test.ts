@@ -24,6 +24,7 @@ import {
   processRenewalForPt,
 } from '@/lib/inngest/functions/billing-renewal-monitor';
 import { createServiceClient } from '@/lib/supabase/service';
+import { testNowUtc } from '@/tests/support/clock';
 
 const DAY = 86_400_000;
 let ptId = '';
@@ -81,7 +82,7 @@ async function downgradeEvents() {
 
 describe('processRenewalForPt — downgrade money path', () => {
   it('downgrades a past-grace Solo, keeps only the oldest active service, emits once', async () => {
-    const now = new Date('2026-06-20T12:00:00.000Z');
+    const now = testNowUtc();
     const expiresAt = new Date(now.getTime() - 4 * DAY); // past the 3-day grace
     await db
       .update(pts)
@@ -124,7 +125,7 @@ describe('processRenewalForPt — downgrade money path', () => {
   });
 
   it('never downgrades twice — the in-tx re-check is the mutex', async () => {
-    const now = new Date('2026-06-20T12:00:00.000Z');
+    const now = testNowUtc();
     const expiresAt = new Date(now.getTime() - 4 * DAY);
     await db
       .update(pts)
@@ -145,7 +146,7 @@ describe('processRenewalForPt — downgrade money path', () => {
   });
 
   it('skips the downgrade when a renewal landed between scan and write', async () => {
-    const now = new Date('2026-06-20T12:00:00.000Z');
+    const now = testNowUtc();
     const staleExpiry = new Date(now.getTime() - 4 * DAY); // what the scan saw
     // The row was renewed (as applyOrderOutcome does): future expiry, cleared
     // downgrade marker. The stale candidate must NOT trigger a downgrade.
@@ -175,7 +176,7 @@ describe('processRenewalForPt — downgrade money path', () => {
 
 describe('processRenewalForPt — reminders & grace', () => {
   it('fires both reminders and grace, deduped on re-run', async () => {
-    const E = new Date('2026-06-15T12:00:00.000Z');
+    const E = testNowUtc();
     await db
       .update(pts)
       .set({ plan: 'solo', planExpiresAt: E })

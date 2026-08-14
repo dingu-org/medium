@@ -13,7 +13,14 @@ import {
   reminderJobs,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
+import { DAY, testNow, zonedTime } from '@/tests/support/clock';
 import { getTodaySnapshot } from '../queries';
+
+// Practice days, not calendar dates: each test needs "a day" and "the day after"
+// in Europe/Tirane, derived from the clock. The two days are held well apart so
+// the rows one test leaves behind are never inside the other's practice day.
+const DAY_ONE = new Date(testNow().getTime() - 30 * DAY);
+const DAY_TWO = new Date(testNow().getTime() + 10 * DAY);
 
 let ptId = '';
 let patientA = '';
@@ -47,7 +54,7 @@ afterAll(async () => {
 
 describe('getTodaySnapshot', () => {
   it('uses practice-day boundaries and lets escalation win reminder deduplication', async () => {
-    const now = new Date('2026-06-30T08:15:00.000Z'); // 10:15 in Tirane
+    const now = zonedTime(DAY_ONE, 10, 15);
     const [conversation] = await db
       .insert(conversations)
       .values({
@@ -64,16 +71,16 @@ describe('getTodaySnapshot', () => {
         {
           ptId,
           patientId: patientA,
-          startsAt: new Date('2026-06-30T08:00:00.000Z'),
-          endsAt: new Date('2026-06-30T08:45:00.000Z'),
+          startsAt: zonedTime(DAY_ONE, 10),
+          endsAt: zonedTime(DAY_ONE, 10, 45),
           serviceType: 'Vlerësim i parë',
           status: 'confirmed',
         },
         {
           ptId,
           patientId: patientB,
-          startsAt: new Date('2026-06-30T12:00:00.000Z'),
-          endsAt: new Date('2026-06-30T12:30:00.000Z'),
+          startsAt: zonedTime(DAY_ONE, 14),
+          endsAt: zonedTime(DAY_ONE, 14, 30),
           serviceType: 'Seancë vijuese',
         },
       ])
@@ -101,14 +108,14 @@ describe('getTodaySnapshot', () => {
   });
 
   it('names the day of an unanswered reminder for a later appointment', async () => {
-    const now = new Date('2026-08-04T07:00:00.000Z'); // Tuesday 09:00 in Tirane
+    const now = zonedTime(DAY_TWO, 9);
     const [appointment] = await db
       .insert(appointments)
       .values({
         ptId,
         patientId: patientB,
-        startsAt: new Date('2026-08-05T08:00:00.000Z'), // Wednesday 10:00
-        endsAt: new Date('2026-08-05T08:30:00.000Z'),
+        startsAt: zonedTime(new Date(DAY_TWO.getTime() + DAY), 10),
+        endsAt: zonedTime(new Date(DAY_TWO.getTime() + DAY), 10, 30),
         serviceType: 'Seancë vijuese',
         status: 'confirmed',
       })
@@ -116,7 +123,7 @@ describe('getTodaySnapshot', () => {
     await db.insert(reminderJobs).values({
       ptId,
       appointmentId: appointment.id,
-      scheduledFor: new Date('2026-08-04T08:00:00.000Z'),
+      scheduledFor: zonedTime(DAY_TWO, 10),
       status: 'sent',
     });
 
@@ -131,10 +138,10 @@ describe('getTodaySnapshot', () => {
   });
 
   it('week strip counts only rows inside the current ISO week', async () => {
-    // A fixed date far in the past so this test's data can never collide with
-    // stray `createdAt` defaults (real wall-clock time) from other inserts in
-    // this file or test run.
-    const now = new Date('2021-03-10T09:00:00.000Z');
+    // Years in the past so this test's ISO week can never contain a stray
+    // `createdAt` default (real wall-clock time) from another insert in this
+    // file or test run — derived, so it stays years back forever.
+    const now = zonedTime(new Date(testNow().getTime() - 3 * 365 * DAY), 9);
     const zonedNow = new TZDate(now, 'Europe/Tirane');
     const weekStart = new Date(startOfISOWeek(zonedNow).getTime());
     const weekEnd = new Date(endOfISOWeek(zonedNow).getTime());

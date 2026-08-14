@@ -28,6 +28,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { ConversationEngineError } from '../errors';
 import { handoffFailedTurn, runTurnCore } from '../engine';
 import type { InboundMessage } from '../types';
+import { DAY, HOUR, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
 
 type MockGenerateResult = Awaited<
   ReturnType<MockLanguageModelV3['doGenerate']>
@@ -81,6 +82,18 @@ function textStep(text: string): MockGenerateResult {
 const tirane = (isoInstant: string) =>
   formatAppointmentTime(new Date(isoInstant), 'Europe/Tirane');
 
+// Availability here is Monday-only, so the bookable fixtures hang off a derived
+// Monday a week out, and the deliberately-unbookable ones off the Friday after
+// it. `HISTORY_AT` is where the conversation history sits: comfortably in the
+// past, so the ordering assertions do not depend on which day the suite runs.
+const MONDAY = new Date(testNow({ weekday: 1 }).getTime() + 7 * DAY);
+const mondayAt = (hour: number, minute = 0) => zonedTime(MONDAY, hour, minute);
+const fridayAt = (hour: number) =>
+  zonedTime(new Date(MONDAY.getTime() + 4 * DAY), hour);
+const HISTORY_AT = new Date(testNow().getTime() - 30 * DAY);
+/** A turn time a few days before the Monday every booking fixture targets. */
+const BEFORE_MONDAY = new Date(MONDAY.getTime() - 5 * DAY);
+
 function responseModel(text = 'I can help with that.') {
   return new MockLanguageModelV3({
     provider: 'openrouter',
@@ -109,7 +122,7 @@ function mutationThenEmptyModel() {
           toolCallId: 'book-1',
           toolName: 'book_appointment',
           input: JSON.stringify({
-            starts_at: '2026-06-12T10:00:00+02:00',
+            starts_at: fridayAt(10).toISOString(),
             service_type: 'Vlerësim i parë',
           }),
         },
@@ -181,7 +194,7 @@ function bookingResponseModel(options?: {
           toolCallId: 'book-1',
           toolName: 'book_appointment',
           input: JSON.stringify({
-            starts_at: '2026-06-12T10:00:00+02:00',
+            starts_at: fridayAt(10).toISOString(),
             service_type: 'Vlerësim i parë',
           }),
         },
@@ -220,8 +233,8 @@ function phase4BookingModel() {
           toolCallId: 'availability-1',
           toolName: 'get_availability',
           input: JSON.stringify({
-            start: '2026-07-06T09:00:00+02:00',
-            end: '2026-07-06T12:00:00+02:00',
+            start: mondayAt(9).toISOString(),
+            end: mondayAt(12).toISOString(),
           }),
         },
       ],
@@ -236,7 +249,7 @@ function phase4BookingModel() {
           toolCallId: 'book-1',
           toolName: 'book_appointment',
           input: JSON.stringify({
-            starts_at: '2026-07-06T09:00:00+02:00',
+            starts_at: mondayAt(9).toISOString(),
             service_type: 'Vlerësim i parë',
           }),
         },
@@ -330,7 +343,7 @@ beforeEach(async () => {
       role: 'patient',
       channel: 'whatsapp',
       content: 'Earlier patient message',
-      createdAt: new Date('2026-06-10T08:00:00.000Z'),
+      createdAt: HISTORY_AT,
     },
     {
       id: '00000000-0000-4000-8000-000000000002',
@@ -339,7 +352,7 @@ beforeEach(async () => {
       role: 'ai',
       channel: 'whatsapp',
       content: 'Earlier assistant reply',
-      createdAt: new Date('2026-06-10T08:00:00.000Z'),
+      createdAt: HISTORY_AT,
     },
   ]);
 
@@ -352,7 +365,7 @@ beforeEach(async () => {
       role: 'patient',
       channel: 'whatsapp',
       content: 'I need an appointment next week',
-      createdAt: new Date('2026-06-10T08:02:00.000Z'),
+      createdAt: new Date(HISTORY_AT.getTime() + 2 * MINUTE),
     })
     .returning();
 
@@ -385,7 +398,7 @@ describe('runTurnCore', () => {
       inboundMessage: inbound,
       model,
       modelId: 'requested/model',
-      now: new Date('2026-06-10T10:00:00.000Z'),
+      now: new Date(HISTORY_AT.getTime() + 2 * HOUR),
     });
 
     expect(result.replyToMessageId).toBe(inbound.id);
@@ -462,7 +475,7 @@ describe('runTurnCore', () => {
         effect: {
           kind: 'booked',
           appointmentId: '00000000-0000-4000-8000-00000000aaaa',
-          startsAt: '2026-06-12T08:00:00.000Z',
+          startsAt: fridayAt(10).toISOString(),
           serviceType: 'Vlerësim i parë',
         },
       }),
@@ -488,7 +501,7 @@ describe('runTurnCore', () => {
     const [firstReply, secondReply] = await Promise.all([first, second]);
     expect(secondReply).toEqual(firstReply);
     expect(firstReply.content).toBe(
-      `Takimi juaj u rezervua për ${tirane('2026-06-12T08:00:00.000Z')} (Vlerësim i parë). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`,
+      `Takimi juaj u rezervua për ${tirane(fridayAt(10).toISOString())} (Vlerësim i parë). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`,
     );
     // The booking stops the loop, so the second round the fixture holds is never
     // requested.
@@ -516,11 +529,11 @@ describe('runTurnCore', () => {
       inboundMessage: inbound,
       model,
       modelId: 'requested/model',
-      now: new Date('2026-07-01T10:00:00.000Z'),
+      now: BEFORE_MONDAY,
     });
 
     expect(result.content).toBe(
-      `Takimi juaj u rezervua për ${tirane('2026-07-06T07:00:00.000Z')} (Vlerësim i parë). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`,
+      `Takimi juaj u rezervua për ${tirane(mondayAt(9).toISOString())} (Vlerësim i parë). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`,
     );
     // The fixture still holds a third round whose text names the same booking in
     // the model's own words. It is never requested, and would be discarded if it
@@ -537,20 +550,20 @@ describe('runTurnCore', () => {
       patientId,
       serviceType: 'Vlerësim i parë',
       status: 'pending',
-      startsAt: new Date('2026-07-06T07:00:00.000Z'),
-      endsAt: new Date('2026-07-06T07:45:00.000Z'),
+      startsAt: mondayAt(9),
+      endsAt: mondayAt(9, 45),
     });
   });
 
   it('quotes the cancelled appointment own start, not the turn time', async () => {
-    const startsAt = new Date('2026-07-06T07:00:00.000Z');
+    const startsAt = mondayAt(9);
     const [appointment] = await db
       .insert(appointments)
       .values({
         ptId,
         patientId,
         startsAt,
-        endsAt: new Date('2026-07-06T07:45:00.000Z'),
+        endsAt: mondayAt(9, 45),
         serviceType: 'Vlerësim i parë',
       })
       .returning({ id: appointments.id });
@@ -577,8 +590,8 @@ describe('runTurnCore', () => {
       .values({
         ptId,
         patientId,
-        startsAt: new Date('2026-07-06T07:00:00.000Z'),
-        endsAt: new Date('2026-07-06T07:45:00.000Z'),
+        startsAt: mondayAt(9),
+        endsAt: mondayAt(9, 45),
         serviceType: 'Vlerësim i parë',
       })
       .returning({ id: appointments.id });
@@ -588,7 +601,7 @@ describe('runTurnCore', () => {
       model: sequenceModel([
         toolCallStep('reschedule-1', 'reschedule_appointment', {
           appointment_id: appointment.id,
-          new_starts_at: '2026-07-06T11:00:00+02:00',
+          new_starts_at: mondayAt(11).toISOString(),
         }),
         textStep('E ricaktova takimin tuaj.'),
       ]),
@@ -596,9 +609,9 @@ describe('runTurnCore', () => {
     });
 
     expect(result.content).toBe(
-      `Takimi juaj u ricaktua për ${tirane('2026-07-06T09:00:00.000Z')} (Vlerësim i parë). Nëse doni ta ndryshoni sërish ose ta anuloni, më shkruani këtu.`,
+      `Takimi juaj u ricaktua për ${tirane(mondayAt(11).toISOString())} (Vlerësim i parë). Nëse doni ta ndryshoni sërish ose ta anuloni, më shkruani këtu.`,
     );
-    expect(result.content).not.toContain(tirane('2026-07-06T07:00:00.000Z'));
+    expect(result.content).not.toContain(tirane(mondayAt(9).toISOString()));
   });
 
   // The wording is deterministic but the round that produced it was billed.
@@ -612,7 +625,7 @@ describe('runTurnCore', () => {
           'book-1',
           'book_appointment',
           {
-            starts_at: '2026-07-06T09:00:00+02:00',
+            starts_at: mondayAt(9).toISOString(),
             service_type: 'Vlerësim i parë',
           },
           billedMetadata,
@@ -638,8 +651,8 @@ describe('runTurnCore', () => {
   it('lets the model answer in its own words when the turn changes nothing', async () => {
     const model = sequenceModel([
       toolCallStep('availability-1', 'get_availability', {
-        start: '2026-07-06T09:00:00+02:00',
-        end: '2026-07-06T12:00:00+02:00',
+        start: mondayAt(9).toISOString(),
+        end: mondayAt(12).toISOString(),
       }),
       textStep('Të hënën kam të lirë në 9:00 dhe në 10:00.'),
     ]);
@@ -648,7 +661,7 @@ describe('runTurnCore', () => {
       inboundMessage: inbound,
       model,
       modelId: 'requested/model',
-      now: new Date('2026-07-01T10:00:00.000Z'),
+      now: BEFORE_MONDAY,
     });
 
     expect(result.content).toBe('Të hënën kam të lirë në 9:00 dhe në 10:00.');
@@ -819,10 +832,10 @@ describe('runTurnCore', () => {
     await db.insert(appointments).values({
       ptId,
       patientId,
-      startsAt: new Date('2026-06-15T07:00:00.000Z'),
-      endsAt: new Date('2026-06-15T07:45:00.000Z'),
+      startsAt: mondayAt(9),
+      endsAt: mondayAt(9, 45),
       serviceType: 'Vlerësim i parë',
-      createdAt: new Date('2026-06-10T08:03:00.000Z'),
+      createdAt: new Date(HISTORY_AT.getTime() + 3 * MINUTE),
     });
 
     const result = await handoffFailedTurn({ inboundMessage: inbound });
@@ -835,10 +848,10 @@ describe('runTurnCore', () => {
     await db.insert(appointments).values({
       ptId,
       patientId,
-      startsAt: new Date('2026-06-15T07:00:00.000Z'),
-      endsAt: new Date('2026-06-15T07:45:00.000Z'),
+      startsAt: mondayAt(9),
+      endsAt: mondayAt(9, 45),
       serviceType: 'Vlerësim i parë',
-      createdAt: new Date('2026-06-10T08:01:00.000Z'),
+      createdAt: new Date(HISTORY_AT.getTime() + MINUTE),
     });
 
     const result = await handoffFailedTurn({ inboundMessage: inbound });

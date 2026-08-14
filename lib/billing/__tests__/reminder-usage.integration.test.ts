@@ -24,12 +24,19 @@ import {
 import { runBillingUsageMonitor } from '@/lib/inngest/functions/billing-usage-monitor';
 import { getPlan } from '@/lib/billing/plans';
 import { createServiceClient } from '@/lib/supabase/service';
+import { DAY, testNow } from '@/tests/support/clock';
 
 const FREE_REMINDERS = getPlan('free').remindersPerMonth;
-// Fixed clock so month bounds are deterministic (PT timezone is UTC in setup).
-const NOW = new Date('2026-07-15T12:00:00Z');
-const IN_MONTH = new Date('2026-07-10T10:00:00Z');
-const PRIOR_MONTH = new Date('2026-06-20T10:00:00Z');
+// Derived, not written down: every quota window here is a calendar month, and a
+// literal month stops matching the month the DB defaults land in the moment the
+// wall clock moves past it. Pinning to the 15th keeps "this month" and "last
+// month" unambiguous whatever the month's length (PT timezone is UTC in setup).
+const NOW = testNow({ dayOfMonth: 15 });
+const MONTH_KEY = NOW.toISOString().slice(0, 7);
+const IN_MONTH = new Date(NOW.getTime() - 5 * DAY);
+// 25 days back from the 15th lands on the 18th–21st of the previous month for
+// every month length, so this is always genuinely last month.
+const PRIOR_MONTH = new Date(NOW.getTime() - 25 * DAY);
 // Sent-but-unconfirmed only holds a quota slot for an hour after the send.
 const JUST_SENT = new Date(NOW.getTime() - 5 * 60_000);
 
@@ -180,7 +187,7 @@ describe('getReminderUsage', () => {
     expect(usage.used).toBe(3);
     expect(usage.limit).toBe(FREE_REMINDERS);
     expect(usage.remaining).toBe(FREE_REMINDERS - 3);
-    expect(usage.monthKey).toBe('2026-07');
+    expect(usage.monthKey).toBe(MONTH_KEY);
   });
 
   it('keeps counting an overnight send Meta has not confirmed yet', async () => {
@@ -336,7 +343,7 @@ describe('emitReminderLimitReachedOnce', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].payload).toMatchObject({
       kind: 'reminders',
-      monthKey: '2026-07',
+      monthKey: MONTH_KEY,
       limit: FREE_REMINDERS,
     });
   });
@@ -344,33 +351,34 @@ describe('emitReminderLimitReachedOnce', () => {
 
 describe('countScheduledRemindersInMonth', () => {
   it('counts queued reminders for active appointments before month end only', async () => {
-    // upcoming, in-window.
+    // upcoming, in-window. NOW is the 15th, so +5/+10 days is still this month
+    // for every month length and +20 days is reliably the next one.
     await seedReminderJob({
       status: 'scheduled',
-      startsAt: new Date('2026-07-20T09:00:00Z'),
+      startsAt: new Date(NOW.getTime() + 5 * DAY),
       apptStatus: 'confirmed',
     });
     await seedReminderJob({
       status: 'requeued',
-      startsAt: new Date('2026-07-25T09:00:00Z'),
+      startsAt: new Date(NOW.getTime() + 10 * DAY),
       apptStatus: 'pending',
     });
     // next month — excluded.
     await seedReminderJob({
       status: 'scheduled',
-      startsAt: new Date('2026-08-02T09:00:00Z'),
+      startsAt: new Date(NOW.getTime() + 20 * DAY),
       apptStatus: 'confirmed',
     });
     // cancelled appointment — excluded.
     await seedReminderJob({
       status: 'scheduled',
-      startsAt: new Date('2026-07-22T09:00:00Z'),
+      startsAt: new Date(NOW.getTime() + 7 * DAY),
       apptStatus: 'cancelled',
     });
     // already sent — not "scheduled" — excluded.
     await seedReminderJob({
       status: 'sent',
-      startsAt: new Date('2026-07-23T09:00:00Z'),
+      startsAt: new Date(NOW.getTime() + 8 * DAY),
       apptStatus: 'confirmed',
     });
 
@@ -398,7 +406,7 @@ describe('billing-usage-monitor (predictive reminder warning)', () => {
     for (let i = 0; i < 5; i += 1) {
       await seedReminderJob({
         status: 'scheduled',
-        startsAt: new Date(`2026-07-2${i}T09:00:00Z`),
+        startsAt: new Date(NOW.getTime() + (5 + i) * DAY),
         apptStatus: 'confirmed',
       });
     }
@@ -415,7 +423,7 @@ describe('billing-usage-monitor (predictive reminder warning)', () => {
       kind: 'reminders_predictive',
       remaining: 2,
       upcoming: 5,
-      monthKey: '2026-07',
+      monthKey: MONTH_KEY,
     });
   });
 
@@ -427,7 +435,7 @@ describe('billing-usage-monitor (predictive reminder warning)', () => {
     // upcoming = 1 (<= remaining 2).
     await seedReminderJob({
       status: 'scheduled',
-      startsAt: new Date('2026-07-20T09:00:00Z'),
+      startsAt: new Date(NOW.getTime() + 5 * DAY),
       apptStatus: 'confirmed',
     });
 
@@ -445,7 +453,7 @@ describe('emitReminderPredictiveWarningOnce', () => {
   it('carries used/limit/remaining/upcoming in the payload', async () => {
     await emitReminderPredictiveWarningOnce({
       ptId,
-      monthKey: '2026-07',
+      monthKey: MONTH_KEY,
       used: 8,
       limit: FREE_REMINDERS,
       remaining: 2,

@@ -28,11 +28,18 @@ import { getUnreadChatCount } from '@/lib/chat/queries';
 import { getChatListSnapshot } from '@/lib/pwa/read-models';
 import { REMINDER_TEMPLATE } from '@/lib/inngest/functions/bootstrap-wa-connection';
 import { loadReminderAttempt } from '@/lib/inngest/functions/send-reminder';
+import { DAY, MINUTE, freezeClockForFile } from '@/tests/support/clock';
 import {
   markConversationRead,
   sendUpcomingReminderTemplate,
   setConversationClosed,
 } from '../actions';
+
+// `sendUpcomingReminderTemplate` only ever names the NEXT appointment, so every
+// fixture here hangs off a frozen instant instead of a written-down date. The
+// literals this replaces (2026-08-01/02) went into the past on 2026-08-01 and
+// left the whole manual-reminder path red — and unverified — for twelve days.
+const now = freezeClockForFile();
 
 const authState = vi.hoisted(() => ({ userId: '' as string | null }));
 const { errorSpy, redirectMock, sendTemplateMock } = vi.hoisted(() => ({
@@ -91,12 +98,22 @@ let patientId = '';
 let conversationId = '';
 let olderId = '';
 let newerId = '';
-const older = new Date('2026-06-30T18:00:00.000Z');
-const newer = new Date('2026-06-30T20:11:27.000Z');
+// Comfortably behind the frozen clock AND behind Postgres' own `now()`: one
+// test inserts a message on the column default, and these two have to stay
+// older than it for the unread watermark assertions to mean anything.
+const older = new Date(now.getTime() - 8 * DAY);
+const newer = new Date(now.getTime() - 7 * DAY);
+// The manual reminder targets the next upcoming appointment, so it must sit in
+// the future of the frozen clock; the second one belongs to a second patient in
+// the cross-conversation quota race.
+const appointmentAt = new Date(now.getTime() + 2 * DAY);
+const otherAppointmentAt = new Date(now.getTime() + 3 * DAY);
 
 beforeAll(async () => {
   const { data, error } = await createServiceClient().auth.admin.createUser({
-    email: `chat-read-${Date.now()}@example.com`,
+    // Frozen `Date.now()` is a constant, so uniqueness has to come from
+    // randomness, not from the clock.
+    email: `chat-read-${randomUUID()}@example.com`,
     password: 'chat-read-pass-1234',
     email_confirm: true,
   });
@@ -324,8 +341,8 @@ describe('sendUpcomingReminderTemplate', () => {
 
     await db.insert(whatsappConnections).values({
       ptId,
-      phoneNumberId: `PNI_${Date.now()}`,
-      wabaId: `WABA_${Date.now()}`,
+      phoneNumberId: `PNI_${randomUUID()}`,
+      wabaId: `WABA_${randomUUID()}`,
       status: 'active',
     });
     const [appointment] = await db
@@ -333,8 +350,8 @@ describe('sendUpcomingReminderTemplate', () => {
       .values({
         ptId,
         patientId,
-        startsAt: new Date('2026-08-01T09:00:00.000Z'),
-        endsAt: new Date('2026-08-01T10:00:00.000Z'),
+        startsAt: appointmentAt,
+        endsAt: new Date(appointmentAt.getTime() + 60 * MINUTE),
         status: 'confirmed',
       })
       .returning({ id: appointments.id });
@@ -365,8 +382,8 @@ describe('sendUpcomingReminderTemplate', () => {
         .values({
           ptId,
           patientId,
-          startsAt: new Date(`2026-01-0${(index % 9) + 1}T09:00:00.000Z`),
-          endsAt: new Date(`2026-01-0${(index % 9) + 1}T10:00:00.000Z`),
+          startsAt: new Date(now.getTime() - (index + 1) * DAY),
+          endsAt: new Date(now.getTime() - (index + 1) * DAY + 60 * MINUTE),
           status: 'completed',
         })
         .returning({ id: appointments.id });
@@ -381,7 +398,7 @@ describe('sendUpcomingReminderTemplate', () => {
       await db.insert(reminderDeliveries).values({
         ptId,
         appointmentId: past.id,
-        externalId: `wamid.seeded-${index}-${Date.now()}`,
+        externalId: `wamid.seeded-${index}-${randomUUID()}`,
         deliveredAt: now,
       });
     }
@@ -431,10 +448,7 @@ describe('sendUpcomingReminderTemplate', () => {
     await sendUpcomingReminderTemplate(conversationId);
 
     const variables = sendTemplateMock.mock.calls[0][4] as string[];
-    const expected = formatAppointmentTime(
-      new Date('2026-08-01T09:00:00.000Z'),
-      pt.timezone,
-    );
+    const expected = formatAppointmentTime(appointmentAt, pt.timezone);
     // Guard the guard: a formatter that returned '' would make this tautological.
     expect(expected).toMatch(/\d/);
     expect(variables.at(-1)).toBe(expected);
@@ -518,7 +532,8 @@ describe('sendUpcomingReminderTemplate', () => {
   });
 
   it('stamps the manual send onto a still-scheduled automated job without making the pending run stale', async () => {
-    const scheduledFor = new Date('2026-07-31T09:00:00.000Z');
+    // Where the automated job would have been armed: 24h before the booking.
+    const scheduledFor = new Date(appointmentAt.getTime() - DAY);
     await db.insert(reminderJobs).values({
       ptId,
       appointmentId,
@@ -667,8 +682,8 @@ describe('sendUpcomingReminderTemplate', () => {
     await db.insert(appointments).values({
       ptId,
       patientId: otherPatient.id,
-      startsAt: new Date('2026-08-02T09:00:00.000Z'),
-      endsAt: new Date('2026-08-02T10:00:00.000Z'),
+      startsAt: otherAppointmentAt,
+      endsAt: new Date(otherAppointmentAt.getTime() + 60 * MINUTE),
       status: 'confirmed',
     });
 

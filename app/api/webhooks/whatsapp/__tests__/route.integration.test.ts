@@ -26,6 +26,7 @@ import {
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
 import { GET, POST } from '../route';
+import { DAY, testNowUtc } from '@/tests/support/clock';
 
 const PHONE_NUMBER_ID = `PNI_${Date.now()}`;
 const WA_ID = '447700900000';
@@ -35,6 +36,13 @@ const APP_SECRET = process.env.META_APP_SECRET!;
 let ptId = '';
 let externalIdCounter = 0;
 const nextExternalId = () => `wamid.${Date.now()}-${++externalIdCounter}`;
+
+// Two reminder cycles on one appointment: the second delivery must land after
+// the first, and that ordering is the whole point — the calendar dates never
+// were. Derived, and on a whole second because Meta reports Unix seconds.
+const SECOND_DELIVERY = testNowUtc();
+const SECOND_DELIVERY_TS = String(Math.floor(SECOND_DELIVERY.getTime() / 1000));
+const FIRST_DELIVERY = new Date(SECOND_DELIVERY.getTime() - DAY);
 
 function sign(body: string): string {
   return (
@@ -1461,7 +1469,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
 
   it('stamps the delivery of a second cycle over the previous one', async () => {
     const firstWamid = nextExternalId();
-    const firstDelivery = new Date('2023-11-14T22:13:20.000Z');
+    const firstDelivery = FIRST_DELIVERY;
     const { reminderJobId, conversationId } = await seedReminderForWamid({
       wamid: firstWamid,
       deliveredAt: firstDelivery,
@@ -1471,7 +1479,11 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
     await POST(
       makePost(
         buildStatusesPayload([
-          { id: secondWamid, status: 'delivered', timestamp: '1800000000' },
+          {
+            id: secondWamid,
+            status: 'delivered',
+            timestamp: SECOND_DELIVERY_TS,
+          },
         ]),
       ),
     );
@@ -1482,7 +1494,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
       .select({ deliveredAt: reminderJobs.deliveredAt })
       .from(reminderJobs)
       .where(eq(reminderJobs.id, reminderJobId));
-    expect(job.deliveredAt?.getTime()).toBe(1_800_000_000_000);
+    expect(job.deliveredAt?.getTime()).toBe(SECOND_DELIVERY.getTime());
 
     // The job scalar can only hold the later cycle, so the count comes from a
     // row per delivered wamid — both billed templates, one appointment.
@@ -1501,7 +1513,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
     const { appointmentId, reminderJobId, conversationId } =
       await seedReminderForWamid({
         wamid: firstWamid,
-        deliveredAt: new Date('2023-11-14T22:13:20.000Z'),
+        deliveredAt: FIRST_DELIVERY,
       });
     const secondWamid = await rearmOntoSecondCycle(reminderJobId, conversationId);
 

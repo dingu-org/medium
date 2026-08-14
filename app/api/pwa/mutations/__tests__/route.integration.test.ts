@@ -28,6 +28,13 @@ import {
 } from '@/lib/db/schema';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
+import { TZDate } from '@date-fns/tz';
+import {
+  DAY,
+  TEST_TIMEZONE,
+  testNow,
+  zonedTime,
+} from '@/tests/support/clock';
 
 const { getUserMock, sendFreeFormMock } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
@@ -84,6 +91,15 @@ async function seedConversation(ownerPtId: string) {
   return { patientId: patient.id, conversationId: conversation.id };
 }
 
+// Bookings need real, upcoming days — derived, and spread apart so the two
+// manual-booking cases never share a day with the seeded appointment.
+const BOOKING_DAY = new Date(testNow().getTime() + 2 * DAY);
+const BOOK_ONE = new Date(testNow().getTime() + 3 * DAY);
+const BOOK_TWO = new Date(testNow().getTime() + 5 * DAY);
+/** The `yyyy-MM-dd` the PWA form posts, in the PT's own timezone. */
+const dateKey = (day: Date) =>
+  new TZDate(day.getTime(), TEST_TIMEZONE).toISOString().slice(0, 10);
+
 async function seedConnection(ownerPtId: string) {
   await db.insert(whatsappConnections).values({
     ptId: ownerPtId,
@@ -100,8 +116,8 @@ async function seedAppointment(ownerPtId: string) {
     .values({
       ptId: ownerPtId,
       patientId,
-      startsAt: new Date('2026-07-10T09:00:00.000Z'),
-      endsAt: new Date('2026-07-10T10:00:00.000Z'),
+      startsAt: zonedTime(BOOKING_DAY, 11),
+      endsAt: zonedTime(BOOKING_DAY, 12),
       status: 'pending',
     })
     .returning({ id: appointments.id });
@@ -696,7 +712,7 @@ describe('PWA appointment mutation API', () => {
       clientMutationId,
       action: 'manual_book',
       patientId,
-      date: '2026-07-11',
+      date: dateKey(BOOK_ONE),
       time: '10:30',
       serviceType: 'Offline booking',
     };
@@ -901,7 +917,7 @@ describe('PWA appointment mutation API', () => {
         clientMutationId,
         action: 'manual_book',
         newPatient: { name: 'Agim Prior', phone },
-        date: '2026-07-13',
+        date: dateKey(BOOK_TWO),
         time: '09:00',
         serviceType: 'Recovered booking',
       }),
