@@ -191,7 +191,6 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('# Scope and safety');
     expect(prompt).toContain('# Tool rules');
     expect(prompt).toContain('# Response style');
-    expect(prompt).toContain('Never diagnose');
     expect(prompt).toContain('escalate_to_human');
     // Replaced 2026-08-14 the emergency-triage rule that used to sit here ("If
     // urgent symptoms are mentioned … Escalate."). Medium books appointments
@@ -210,6 +209,45 @@ describe('buildSystemPrompt', () => {
       'Do not expose internal IDs, tool names, schemas, validation errors, or implementation details.',
     );
     expect(prompt).toContain('Prefer one to three short sentences.');
+  });
+
+  // The scope section used to forbid discussing "legal or billing matters" two
+  // bullets above the one that scopes the assistant to answering about prices.
+  // "Sa kushton?" is the commonest question a nail salon gets, so quoting a
+  // configured price is now explicitly in scope and only disputes are out.
+  it('puts quoting a configured price in scope and only disputes out', () => {
+    const prompt = buildSystemPrompt(baseContext);
+
+    expect(prompt).toContain('Prices are inside that scope.');
+    expect(prompt).toContain(
+      'quote the price listed for\n  it in the practice context, exactly as written.',
+    );
+    expect(prompt).toContain(
+      'a refund, a discount, a dispute, or any legal\n  question — are outside it.',
+    );
+    // Nothing may tell the model to keep off prices or billing wholesale: that
+    // is what made it refuse the question it is scoped to answer.
+    expect(prompt).not.toMatch(/discuss legal or billing matters/i);
+    expect(prompt).not.toMatch(/never[^.]{0,80}\bbilling\b/i);
+  });
+
+  // Medium books for barbers and nail salons as well as physiotherapists, so
+  // the scope rules may not be shaped like a clinic's. Deleted 2026-08-14 with
+  // the deterministic safety detection: diagnosis, symptom, medical-history and
+  // insurance bullets. Everything off-scope takes the one uniform route, the
+  // handoff offer, which the model decides for itself. Do not add them back.
+  it('states scope in vertical-neutral terms', () => {
+    const prompt = buildSystemPrompt(baseContext);
+    const scope = prompt.slice(
+      prompt.indexOf('# Scope and safety'),
+      prompt.indexOf('# Tool rules'),
+    );
+
+    expect(scope).not.toMatch(
+      /diagnos|symptom|medical|clinical|insurance|emergency|therap/i,
+    );
+    expect(scope).toContain('You handle exactly four things');
+    expect(scope).toContain('there is no list of topics to match against');
   });
 
   it('renders practice context and services after the language rules', () => {
