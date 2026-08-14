@@ -211,6 +211,13 @@
       "when": 1786721450302,
       "tag": "0029_handoff_offer_anchor",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786722976366,
+      "tag": "0030_non_text_notice",
+      "breakpoints": true
     }
   ]
 }

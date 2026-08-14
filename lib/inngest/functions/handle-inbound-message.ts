@@ -11,10 +11,18 @@ import {
 } from '@/lib/db/schema';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
 import { resolveEffectivePlan } from '@/lib/billing/entitlements';
-import { markCapHandoff, prepareCapHandoff } from '@/lib/billing/cap-handoff';
+import {
+  handOffCappedConversation,
+  markCapHandoff,
+  prepareCapHandoff,
+} from '@/lib/billing/cap-handoff';
 import type { PlanId } from '@/lib/billing/plans';
 import { checkAndRecordConversation } from '@/lib/billing/usage';
 import { ConversationEngineError } from '@/lib/conversation/errors';
+import {
+  markNonTextNotice,
+  prepareNonTextNotice,
+} from '@/lib/conversation/non-text';
 import type {
   InboundMessage,
   OutboundMessage,
@@ -50,6 +58,8 @@ export type InboundJobContext = {
   plan: PlanId;
   /** PT timezone — the calendar boundary for conversation-day metering (C2). */
   timezone: string;
+  /** Names the business in the deterministic non-text notice's handoff offer. */
+  practiceName: string | null;
   connectionId: string | null;
   recipient: string | null;
 };
@@ -84,6 +94,7 @@ export async function loadInboundJobContext(args: {
       planLifetime: pts.planLifetime,
       planExpiresAt: pts.planExpiresAt,
       timezone: pts.timezone,
+      practiceName: pts.practiceName,
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -173,6 +184,7 @@ export async function loadInboundJobContext(args: {
       new Date(),
     ),
     timezone: row.timezone,
+    practiceName: row.practiceName,
     connectionId: connection?.id ?? null,
     recipient: row.waId,
   };
@@ -383,14 +395,20 @@ export const handleInboundMessage = inngest.createFunction(
       return { skipped: 'delivery_context_missing' };
     }
 
+    // A body the assistant cannot read: the stored content is our own
+    // placeholder, so there is nothing here that could be a reminder answer
+    // (those are typed words) and nothing worth a keyword lookup.
+    //
     // Globally paused ⇒ no automated reminder mutation or confirmation reply
     // either; the inbound routes through the engine, which skips it as
     // `assistant_paused` (the single logging/skip choke point).
-    const reminder: ReminderHandlingResult = context.assistantPaused
-      ? { kind: 'none' }
-      : await step.run('handle-reminder-response', () =>
-          handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
-        );
+    const nonText = event.data.nonText === true;
+    const reminder: ReminderHandlingResult =
+      context.assistantPaused || nonText
+        ? { kind: 'none' }
+        : await step.run('handle-reminder-response', () =>
+            handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
+          );
     if (reminder.kind === 'outbound') {
       const delivery = await step.run('send-reminder-response', () =>
         sendInboundReply({
@@ -444,6 +462,75 @@ export const handleInboundMessage = inngest.createFunction(
       return { skipped: 'conversation_inactive' };
     }
 
+    // The assistant cannot read this body, and it never becomes an AI turn:
+    // handing our own `[mesazh zanor]` placeholder to the model would have it
+    // invent what the voice note said. One fixed notice per conversation per
+    // day instead, carrying the same handoff offer as any out-of-scope
+    // question. Placed after the takeover check above (a PT already handling
+    // the thread gets the nudge, not an assistant talking over them) and before
+    // the cap gate (no model round happened, so nothing is metered).
+    if (nonText) {
+      // The engine is the single skip choke point for text; this branch never
+      // reaches it, so it owns the same line for a globally paused assistant.
+      if (context.assistantPaused) {
+        log.info(
+          'inbound.non_text',
+          'Non-text message stored; assistant globally paused',
+          { message_id: event.data.messageId },
+        );
+        return { skipped: 'assistant_paused' };
+      }
+
+      const notice = await step.run('prepare-non-text-notice', () =>
+        prepareNonTextNotice({
+          inbound: hydrateInbound(context.inbound),
+          practiceName: context.practiceName,
+          timezone: context.timezone,
+          instant: new Date(context.inbound.occurredAt),
+        }),
+      );
+      if (notice.action === 'skip') {
+        log.info(
+          'inbound.non_text',
+          'Non-text message stored; notice already sent today',
+          { message_id: event.data.messageId },
+        );
+        return { nonText: true, noticeSent: false };
+      }
+
+      const delivery = await step.run('send-non-text-notice', () =>
+        sendInboundReply({
+          outbound: notice.outbound,
+          connectionId: context.connectionId!,
+          recipient: context.recipient!,
+        }),
+      );
+      await step.run('persist-non-text-notice-delivery', () =>
+        persistInboundReplyDelivery({
+          outboundId: notice.outbound.id,
+          messageId: delivery.messageId,
+        }),
+      );
+      await step.run('mark-non-text-notice', () =>
+        markNonTextNotice({
+          ptId: context.inbound.ptId,
+          conversationId: context.inbound.conversationId,
+          instant: new Date(context.inbound.occurredAt),
+        }),
+      );
+
+      log.info('inbound.non_text', 'Non-text message stored; notice sent', {
+        message_id: event.data.messageId,
+        wa_message_id: delivery.messageId,
+      });
+      return {
+        nonText: true,
+        noticeSent: true,
+        outboundMessageId: notice.outbound.id,
+        externalId: delivery.messageId,
+      };
+    }
+
     // Meter the conversation-day and enforce the monthly cap. Paused
     // conversations skip the gate (not counted) — the engine self-skips as
     // `assistant_paused` before any model call. The metering instant is the
@@ -464,6 +551,21 @@ export const handleInboundMessage = inngest.createFunction(
       );
 
       if (gate.status === 'at_cap') {
+        // The assistant is out of conversations for the month, so this patient
+        // needs a person — no offer to make, nothing to ask. Hand the thread
+        // over and push before the patient's holding message: whatever happens
+        // to the send, the PT knows someone is waiting. This is also what keeps
+        // the 2nd..Nth message of a capped day visible — they take the
+        // manual-handling path above instead of hitting the throttled handoff.
+        await step.run('hand-off-capped-conversation', () =>
+          handOffCappedConversation({
+            ptId: context.inbound.ptId,
+            conversationId: context.inbound.conversationId,
+            patientId: context.inbound.patientId,
+            traceId: event.data.traceId,
+          }),
+        );
+
         const prep = await step.run('prepare-cap-handoff', () =>
           prepareCapHandoff({
             inbound: hydrateInbound(context.inbound),

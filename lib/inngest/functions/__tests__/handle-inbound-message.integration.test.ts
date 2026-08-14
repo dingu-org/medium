@@ -35,6 +35,7 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
+import { handOffCappedConversation } from '@/lib/billing/cap-handoff';
 import { runTurnCore } from '@/lib/conversation/engine';
 import { ConversationEngineError } from '@/lib/conversation/errors';
 import { formatAppointmentTime } from '@/lib/format/appointment-time';
@@ -236,6 +237,36 @@ describe('handleInboundMessage cores', () => {
 
     const context = await loadInboundJobContext({
       messageId: inboundMessageId,
+      ptId,
+      conversationId,
+    });
+
+    expect(context?.aiActive).toBe(false);
+    expect(context?.manualHandling).toBe(true);
+  });
+
+  // The 2nd..Nth message of a capped day. The gate compensates its day-fact
+  // away for a turned-away patient, so each later message hits the cap afresh
+  // and the once-a-day handoff throttle skips — which used to be silence for
+  // everyone. Owning the thread is what turns those messages into the
+  // manual-reply nudge instead.
+  it('flags manual handling for the messages that follow a cap handoff', async () => {
+    await handOffCappedConversation({ ptId, conversationId, patientId });
+
+    const [second] = await db
+      .insert(messages)
+      .values({
+        ptId,
+        conversationId,
+        externalId: `wamid.IN.CAP.${Date.now()}.${++sequence}`,
+        role: 'patient',
+        channel: 'whatsapp',
+        content: 'Jam ende duke pritur',
+      })
+      .returning({ id: messages.id });
+
+    const context = await loadInboundJobContext({
+      messageId: second.id,
       ptId,
       conversationId,
     });

@@ -1,10 +1,26 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { conversations, messages, patients, pts } from '@/lib/db/schema';
 import type { InboundMessage } from '@/lib/conversation/types';
+
+const sendPush = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/notifications/push', () => ({
+  sendPush,
+  vapidPublicKey: 'test-key',
+}));
+
 import {
   CAP_HANDOFF_MODEL,
+  handOffCappedConversation,
   markCapHandoff,
   prepareCapHandoff,
 } from '@/lib/billing/cap-handoff';
@@ -81,6 +97,9 @@ beforeEach(async () => {
     .values({ ptId, patientId, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   conversationId = conversation.id;
+
+  sendPush.mockReset();
+  sendPush.mockResolvedValue({ sent: 1, removed: 0 });
 });
 
 afterAll(async () => {
@@ -159,5 +178,88 @@ describe('cap handoff', () => {
     }
     expect(b.outbound.id).toBe(a.outbound.id);
     expect(await countHandoffReplies()).toBe(1);
+  });
+});
+
+describe('cap handoff — telling the professional', () => {
+  async function readConversation() {
+    const [row] = await db
+      .select({
+        aiActive: conversations.aiActive,
+        escalationState: conversations.escalationState,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    return row;
+  }
+
+  it('hands the thread to the professional and pushes that a patient is waiting', async () => {
+    const result = await handOffCappedConversation({
+      ptId,
+      conversationId,
+      patientId,
+    });
+
+    expect(result.flagged).toBe(true);
+    // The thread stops looking AI-handled: it is human-owned in exactly the
+    // sense the inbox, the chat banner and the Today list already read.
+    expect(await readConversation()).toEqual({
+      aiActive: false,
+      escalationState: 'requested',
+    });
+
+    expect(sendPush).toHaveBeenCalledTimes(1);
+    const [pushedPtId, payload] = sendPush.mock.calls[0];
+    expect(pushedPtId).toBe(ptId);
+    expect(payload).toMatchObject({
+      url: `/chat/${conversationId}`,
+      tag: `conversation-${conversationId}-reply`,
+    });
+    // "A patient wrote", not "a patient asked to speak with you": at the cap
+    // the patient asked for nothing.
+    expect(payload.title).toBe('Mesazh i ri');
+  });
+
+  // The gate compensates its day-fact away when it turns a patient away, so
+  // every later message that day hits the cap afresh and the once-a-day handoff
+  // throttle returns `skip`. That used to mean silence for everyone; the flag is
+  // what keeps the professional seeing a waiting patient.
+  it('leaves the professional owning the thread for the rest of a capped day', async () => {
+    const first = await seedInbound('Message one');
+    await prepareCapHandoff({
+      inbound: first,
+      timezone: 'UTC',
+      instant: DAY_ONE,
+    });
+    await handOffCappedConversation({ ptId, conversationId, patientId });
+    await markCapHandoff({ ptId, conversationId, instant: DAY_ONE });
+
+    const second = await seedInbound('Message two, same day');
+    const repeat = await prepareCapHandoff({
+      inbound: second,
+      timezone: 'UTC',
+      instant: new Date(DAY_ONE.getTime() + HOUR),
+    });
+
+    expect(repeat).toMatchObject({ action: 'skip' });
+    expect(await countHandoffReplies()).toBe(1);
+    expect(await readConversation()).toEqual({
+      aiActive: false,
+      escalationState: 'requested',
+    });
+  });
+
+  it('is a no-op flag once the thread is already human-owned, and still pushes', async () => {
+    await handOffCappedConversation({ ptId, conversationId, patientId });
+    const again = await handOffCappedConversation({
+      ptId,
+      conversationId,
+      patientId,
+    });
+
+    expect(again.flagged).toBe(false);
+    // A patient is waiting either way, and the per-conversation push tag
+    // collapses the burst on the device.
+    expect(sendPush).toHaveBeenCalledTimes(2);
   });
 });

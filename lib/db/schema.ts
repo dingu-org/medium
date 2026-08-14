@@ -246,6 +246,11 @@ export const conversations = pgTable(
     // When the conversation-cap hard stop sent its one static handoff message
     // (Phase 16 C2). Null = never capped this cycle; reset on renewal.
     limitHandoffAt: tsTz('limit_handoff_at'),
+    // When the assistant last told this patient it can only read text messages
+    // (lib/conversation/non-text.ts). Same shape and same purpose as
+    // `limit_handoff_at`: one such reply per conversation per local day, so a
+    // burst of voice notes is answered once.
+    nonTextNoticeAt: tsTz('non_text_notice_at'),
     // The patient message the assistant answered with its "shall I pass this
     // to the business?" offer. An anchor, not a flag: the offer is accepted
     // only by the message that immediately follows this one, and anchoring on
