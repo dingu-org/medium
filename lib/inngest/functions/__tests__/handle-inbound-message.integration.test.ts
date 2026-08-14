@@ -64,6 +64,7 @@ import {
   runInboundTurn,
   runReminderFallbackTurn,
   sendInboundReply,
+  type InboundClaim,
 } from '../handle-inbound-message';
 import { DAY, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
 
@@ -1089,6 +1090,52 @@ describe('handleInboundMessage cores', () => {
         .where(eq(appointments.patientId, patientId));
       expect(appointment.startsAt).toEqual(startsAt);
       expect(await escalationEvents()).toEqual([]);
+    });
+
+    /**
+     * Two questions asked in the same millisecond. `resolveInboundClaim`
+     * compares with a strict `>`, so a tie is not a tie-break at all: the
+     * reminder keeps the message, every time. Pinned because the comparison is
+     * the whole rule — flipping it to `>=` would silently move an exactly-tied
+     * turn from a confirmation to an escalation, and nothing else would notice.
+     *
+     * Reachable in practice despite the odds: Postgres stores these to the
+     * microsecond but a JS `Date` truncates to the millisecond, so an offer made
+     * up to 999µs after a reminder was sent still compares equal here.
+     *
+     * Run repeatedly against fresh fixtures: one pass could not tell a fixed
+     * rule from a coin flip.
+     */
+    it('breaks an exact timestamp tie deterministically, in the reminder’s favour', async () => {
+      const claims: InboundClaim[] = [];
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        // The seed books a fresh appointment each pass and they would overlap.
+        await db.delete(appointments).where(eq(appointments.ptId, ptId));
+        const { inbound, appointmentId } = await seedCollision({
+          reminderSentMinutesBefore: 30,
+          offerMinutesBefore: 30,
+        });
+
+        // Assert the tie is real rather than assuming the fixture produced one:
+        // both offsets are the same distance from the same instant.
+        const [conversation] = await db
+          .select({ anchor: conversations.handoffOfferMessageId })
+          .from(conversations)
+          .where(eq(conversations.id, conversationId));
+        const [anchor] = await db
+          .select({ createdAt: messages.createdAt })
+          .from(messages)
+          .where(eq(messages.id, conversation.anchor!));
+        const [job] = await db
+          .select({ sentAt: reminderJobs.sentAt })
+          .from(reminderJobs)
+          .where(eq(reminderJobs.appointmentId, appointmentId!));
+        expect(anchor.createdAt.getTime()).toBe(job.sentAt!.getTime());
+
+        claims.push(await resolveInboundClaim(inbound));
+      }
+
+      expect(claims).toEqual(['reminder', 'reminder', 'reminder']);
     });
   });
 });

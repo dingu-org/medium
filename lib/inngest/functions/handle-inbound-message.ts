@@ -243,6 +243,13 @@ export async function resolveInboundClaim(
 
   const reminderSentAt = await pendingReminderSentAt(inbound);
   if (!reminderSentAt) return 'handoff_offer';
+  // Strictly newer, so an exact tie goes to the reminder rather than being
+  // decided by whichever row the comparison happened to see first. Not just
+  // theory: Postgres keeps these to the microsecond but a JS `Date` truncates to
+  // the millisecond, so an offer made within 999µs of the reminder ties here.
+  // The reminder is the safer side of that coin — confirming an appointment the
+  // patient does hold is recoverable, and the offer is re-made the moment they
+  // ask again.
   if (offer.offeredAt.getTime() > reminderSentAt.getTime()) {
     return 'handoff_offer';
   }
