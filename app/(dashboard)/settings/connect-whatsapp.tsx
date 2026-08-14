@@ -9,6 +9,11 @@ import { AppBanner } from '@/components/ui/app-banner';
 import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
 import { t } from '@/lib/i18n';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
+import {
+  postableMode,
+  readSignupMessage,
+  type SignupSession,
+} from './whatsapp-signup';
 
 type Props = {
   appId: string;
@@ -112,9 +117,10 @@ export function ConnectWhatsApp({
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<WaStatus | null>(null);
   const online = useOnlineStatus();
-  // Meta delivers phone_number_id + waba_id via a postMessage during the popup,
-  // separately from the FB.login auth code — capture it here.
-  const sessionInfo = useRef<{ phoneNumberId?: string; wabaId?: string }>({});
+  // Meta delivers the finish event + phone_number_id + waba_id via a postMessage
+  // during the popup, separately from the FB.login auth code — capture it here.
+  // The event name is what says which mode the PT actually onboarded in.
+  const sessionInfo = useRef<SignupSession>({});
   // Honest cancel scope: we cannot force-close Meta's browser-owned popup, but
   // cancel discards the pending result (and aborts an in-flight POST). If the
   // server persisted before the abort landed, the DB is the source of truth —
@@ -124,26 +130,8 @@ export function ConnectWhatsApp({
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
-      if (!event.origin.endsWith('facebook.com')) return;
-      let data: {
-        type?: string;
-        event?: string;
-        data?: Record<string, unknown>;
-      };
-      try {
-        data =
-          typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-      } catch {
-        return; // non-JSON message — ignore
-      }
-      if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
-      // FINISH carries phone_number_id + waba_id; FINISH_ONLY_WABA omits the number.
-      if (typeof data.event === 'string' && data.event.startsWith('FINISH')) {
-        sessionInfo.current = {
-          phoneNumberId: data.data?.phone_number_id as string | undefined,
-          wabaId: data.data?.waba_id as string | undefined,
-        };
-      }
+      const session = readSignupMessage(event);
+      if (session) sessionInfo.current = session;
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -181,11 +169,13 @@ export function ConnectWhatsApp({
           config_id: configId,
           response_type: 'code',
           override_default_response_type: true,
-          extras: {
-            setup: {},
-            featureType: 'whatsapp_business_app_onboarding',
-            sessionInfoVersion: '3',
-          },
+          // Embedded Signup v4: `extras` is purposely empty. The flow version and
+          // the coexistence intent now live in the Facebook Login for Business
+          // configuration behind `configId` — the operator ticked "WhatsApp
+          // Business app user onboarding" there on 2026-08-14 — so the v3-era
+          // `featureType` / `sessionInfoVersion` keys are gone.
+          // See docs/whatsapp/embedded-signup-v4-setup.md.
+          extras: { setup: {} },
         });
       });
 
@@ -196,7 +186,8 @@ export function ConnectWhatsApp({
 
       const code = loginResp.authResponse?.code;
       const { phoneNumberId, wabaId } = sessionInfo.current;
-      if (!code || !wabaId) {
+      const mode = postableMode(sessionInfo.current);
+      if (!code || !mode) {
         setStatus({
           tone: 'warning',
           title: t.settings.whatsappIncompleteTitle,
@@ -212,12 +203,7 @@ export function ConnectWhatsApp({
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',
         signal: abortRef.current.signal,
-        body: JSON.stringify({
-          code,
-          phoneNumberId,
-          wabaId,
-          mode: 'coexistence',
-        }),
+        body: JSON.stringify({ code, phoneNumberId, wabaId, mode }),
       });
 
       if (res.ok) {
