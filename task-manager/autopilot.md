@@ -135,6 +135,18 @@ unattended after the restart. Resume only when the operator says so.
    decisions log in `progress.md` — several "obvious" issues there were
    considered and deliberately accepted.
 
+## Subagent model policy
+
+Set by the operator; applies to every workflow this run spawns.
+
+| Agent role | Model | Effort |
+|---|---|---|
+| **Planning** — plans, designs, research, architecture, audits, synthesis | **`fable`** | `max` |
+| **Implementation** — writing or changing code | `opus` | `xhigh` |
+| Verification / adversarial review | `opus` | `xhigh` |
+
+The main session orchestrates only: it does not plan or write code inline.
+
 ## Environment facts confirmed this run
 
 - **Docker is running and the local Supabase stack is up**, so
