@@ -64,6 +64,28 @@ Reproduce by running `pnpm seed:qa` and then the integration suite.
 **Note:** memory says integration tests wipe `auth.users`, so a reseed is needed
 after a run for signed-in browser QA.
 
+### RESOLVED 2026-08-14 — with a correction to the diagnosis above
+
+The finding was real; its stated cause was not. **`seed:qa` residue cannot reach
+a test**: `tests/setup/global.ts` deletes `auth.users`, and that cascades to
+every tenant table (measured — the only survivor is `erasure_archive`, which is
+FK-free by design). The prescribed reproduction, `pnpm seed:qa` then the suite,
+is therefore green with no changes at all, which is why the "2 extra files"
+could not be found that way. The 3-vs-1 difference in the runs above is not
+attributable to the seed data.
+
+What genuinely depends on ambient state is narrower and sharper: tests that
+assert on a **cross-tenant** production query — the admin funnel, the outbox
+publisher, the token-expiry claim — which scan the whole table on the
+RLS-bypassing owner connection, so their result includes every other tenant's
+rows. Found by running the suite with `globalSetup` removed against a
+deliberately adversarial "ghost tenant": **5 files, 6 tests**, listed in the
+2026-08-14 entry in `progress.md`. Fixed via `tests/support/isolation.ts`
+(`excludeForeignRows` / `deltaOf`), plus two adjacent leftover-state bugs: the
+never-cleared `erasure_archive`, and the paged `listUsers` lookup in both seed
+scripts. The suite now passes 608/608 with **no database wipe at all** on top of
+that residue.
+
 ## VF-4 — There is no CI, so nothing runs the suite but a human
 
 `.github/` does not exist in this repo. Combined with VF-2 and VF-3, the test

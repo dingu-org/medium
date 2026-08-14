@@ -19,6 +19,7 @@ import {
 } from '@/lib/events/outbox';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
+import { excludeForeignRows } from '@/tests/support/isolation';
 
 let ptId = '';
 
@@ -40,6 +41,10 @@ afterAll(async () => {
 beforeEach(async () => {
   await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
   await db.delete(events).where(eq(events.ptId, ptId));
+  // The tallies below are absolute (`claimed: 2`), and the publisher claims
+  // across every tenant, so any other suite's still-due row would be counted
+  // here. Park the foreign rows as published so the scan only sees this file's.
+  await excludeForeignRows(eventOutbox, ptId, { publishedAt: new Date() });
   vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });

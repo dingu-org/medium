@@ -15,8 +15,13 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
-import { getAdminMetrics, getBillingMetrics } from '@/lib/metrics/admin';
+import {
+  type FunnelWindow,
+  getAdminMetrics,
+  getBillingMetrics,
+} from '@/lib/metrics/admin';
 import { DAY, HOUR, testNowUtc } from '@/tests/support/clock';
+import { deltaOf } from '@/tests/support/isolation';
 
 // Fixed evaluation instant, derived rather than written down: every funnel and
 // billing window here is measured backwards from `now`, so what the fixtures
@@ -248,16 +253,25 @@ async function seedBillingEvent(args: {
 
 let ptY: Pt;
 let ptWeek: Pt;
-// The onboarding cohort counts ALL PTs (no time filter), so other suites' PTs
-// can coexist in the row count. Capture a baseline before seeding and assert on
-// the delta rather than an absolute total.
+// `getAdminMetrics` is cross-tenant by design, so every count it returns
+// includes whatever else is already in the local database — other suites' PTs,
+// or a leftover `seed:qa` practitioner who also signed up "today". Capture a
+// baseline before seeding and assert on the delta rather than an absolute
+// total. The cohort has no time filter at all; the funnel windows do, but
+// "yesterday" and "the last 7 days" are exactly where a fresh leftover tenant
+// lands, so they need the same treatment.
 let cohortBaseline: { totalPts: number; connectedWithin24h: number };
+let funnelBaseline: { yesterday: FunnelWindow; sevenDay: FunnelWindow };
 
 beforeAll(async () => {
   const base = await getAdminMetrics(NOW);
   cohortBaseline = {
     totalPts: base.cohort.totalPts,
     connectedWithin24h: base.cohort.connectedWithin24h,
+  };
+  funnelBaseline = {
+    yesterday: base.funnelYesterday,
+    sevenDay: base.funnel7d,
   };
 
   // pt_y — full funnel, all inside "yesterday" (06-14).
@@ -361,13 +375,16 @@ afterAll(async () => {
 describe('getAdminMetrics', () => {
   it('computes the yesterday + 7d funnel windows', async () => {
     const m = await getAdminMetrics(NOW);
-    expect(m.funnelYesterday).toEqual({
+    // pt_y contributes the whole funnel inside "yesterday"; pt_week adds a
+    // second of each inside the 7d window. pt_boundary's first message predates
+    // both windows and pt_slow never connects, so neither may show up here.
+    expect(deltaOf(m.funnelYesterday, funnelBaseline.yesterday)).toEqual({
       signups: 1,
       whatsappConnections: 1,
       ptsWithFirstMessage: 1,
       ptsWithFirstBooking: 1,
     });
-    expect(m.funnel7d).toEqual({
+    expect(deltaOf(m.funnel7d, funnelBaseline.sevenDay)).toEqual({
       signups: 2,
       whatsappConnections: 2,
       ptsWithFirstMessage: 2,

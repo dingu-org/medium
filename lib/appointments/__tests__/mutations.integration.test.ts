@@ -28,6 +28,7 @@ import { AppointmentError } from '../errors';
 import { rescheduleAppointment } from '../reschedule';
 import { transitionAppointment } from '../state';
 import { DAY, testNow, zonedTime } from '@/tests/support/clock';
+import { excludeForeignRows } from '@/tests/support/isolation';
 
 let ptId = '';
 let patientId = '';
@@ -59,6 +60,10 @@ beforeEach(async () => {
   await db.delete(patients).where(eq(patients.ptId, ptId));
   await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
   await db.delete(events).where(eq(events.ptId, ptId));
+  // `publishDueOutboxEvents` scans the whole table, so the tally it returns
+  // counts every tenant's due row, not just this suite's. Park the foreign ones
+  // as already published so the claim below can only find what this test wrote.
+  await excludeForeignRows(eventOutbox, ptId, { publishedAt: new Date() });
   await db
     .update(pts)
     .set({ timezone: 'Europe/Tirane' })
