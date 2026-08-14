@@ -100,8 +100,8 @@ If this session dies, it fires, reads this file, and continues.
 **Branch:** `prod-readiness` (off `main` at `361189a`), pushed
 **Last checkpoint:** 2026-08-14
 
-Landed and independently verified — lint 0, typecheck 0, unit 68 files / 643
-tests, integration 65 files / 635 tests, build clean:
+Landed and independently verified — lint 0, typecheck 0, unit 68 files / 682
+tests, integration 65 files / 653 tests, build clean:
 
 | Commit | What |
 |---|---|
@@ -113,27 +113,34 @@ tests, integration 65 files / 635 tests, build clean:
 | `94cf336` | Deleted deterministic escalation detection and the keyword setting |
 | `4dcb904` | The AI-decided handoff offer |
 | `e585b7a` | Non-text inbound messages + notify the professional at the cap |
+| `794d61b` | Prices in scope; the assistant's scope made vertical-neutral |
+| `c1fc1d8` | Most-recent-question-wins for a bare `PO` |
+| `6e45eab` | Escalate before disarming an accepted handoff offer |
+| `73e4ee7` | The precedence tie pinned to the reminder |
+| `1ba5282` | One shared definition of an affirmative (`lib/language/reply-intent.ts`) |
 
 ### Open, needing the operator
 
-- **The "PO" collision.** The reminder parser also reads `PO` as *confirm my
-  appointment*. With both a reminder and a handoff offer outstanding, `PO`
-  confirms the appointment, the escalation silently never happens, and the
-  anchor stays armed. Proved end to end by the verifier. Which subsystem wins is
-  a product call — recommendation on the table is *whichever question was asked
-  most recently*. **Do not implement until answered.**
 - Make the CI workflow a **required status check** on `main` and `preview`
   (repo admin only). Until then the gate reports but blocks nothing.
 - Claim the `ADMIN_EMAILS` address in production Supabase.
 - Live phone test for Embedded Signup v4, then repoint and redeploy each env.
 
-### Known defects queued for the orchestrator to fix
+### Answered and shipped (was: open / queued)
 
-- The handoff anchor is cleared **before** the escalation, non-transactionally —
-  a crash between the two loses the offer permanently.
-- `lib/ai/prompts/scheduling-assistant.ts` forbids discussing billing while the
-  new scope bullet promises prices. For a salon `sa kushton?` is the commonest
-  question of all.
+- **The "PO" collision** — answered 2026-08-14: *whichever question was asked
+  most recently wins*. Implemented as `resolveInboundClaim` (`c1fc1d8`), the
+  strict-`>` tie pinned to the reminder (`73e4ee7`), and the two subsystems made
+  to agree on what an affirmative is (`1ba5282`, `lib/language/reply-intent.ts`).
+  Two accepted debts are recorded with the decisions-log entry in
+  `progress.md`: a PT takeover now suppresses the reminder confirmation it used
+  to produce, and the collision tests mirror the Inngest body rather than
+  executing it.
+- The handoff anchor cleared before the escalation — fixed `6e45eab`: escalate
+  first, then clear inside the reply's transaction.
+- Prices vs. the billing ban in `lib/ai/prompts/scheduling-assistant.ts` — fixed
+  `794d61b`: quoting a configured price is explicitly in scope; only
+  bills/payments/refunds/disputes stay out.
 
 ### Durable artifacts (nothing lives in a session scratchpad any more)
 
