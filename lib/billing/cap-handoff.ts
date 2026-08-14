@@ -5,9 +5,8 @@
  * PT's inbox and manual chat are never blocked; only the automated AI reply is.
  *
  * `deterministic-cap-handoff` joins the existing deterministic model markers
- * (`deterministic-reminder-response`, `deterministic-safety`,
- * `deterministic-failure-handoff`); C4 will centralize that allowlist for cost
- * queries. This message carries no plan/limit/AI language — that lives on the
+ * (`deterministic-reminder-response`, `deterministic-failure-handoff`); C4 will
+ * centralize that allowlist for cost queries. This message carries no plan/limit/AI language — that lives on the
  * PT-facing surfaces (push, bell, chat banner), not in the patient's chat.
  */
 import { and, eq } from 'drizzle-orm';

@@ -97,7 +97,6 @@ async function readPt() {
       notificationPrefs: pts.notificationPrefs,
       aiName: pts.aiName,
       aiGreeting: pts.aiGreeting,
-      aiEscalationKeyword: pts.aiEscalationKeyword,
     })
     .from(pts)
     .where(eq(pts.id, ptId))
@@ -234,11 +233,10 @@ describe('updateProfile', () => {
 // assert only against values set in-test, never the initial column state.
 describe('updateAssistantIdentity', () => {
   it('partial update leaves sibling fields intact', async () => {
-    // Seed all three via one full submit.
+    // Seed both via one full submit.
     const seed = new FormData();
     seed.set('aiName', 'Medium');
     seed.set('aiGreeting', 'Përshëndetje nga Fizioterapi Hoxha.');
-    seed.set('aiEscalationKeyword', 'NDIHMË');
     await updateAssistantIdentity(initialState, seed);
 
     // Submit ONLY aiName.
@@ -250,7 +248,6 @@ describe('updateAssistantIdentity', () => {
     const row = await readPt();
     expect(row.aiName).toBe('Mia');
     expect(row.aiGreeting).toBe('Përshëndetje nga Fizioterapi Hoxha.'); // untouched
-    expect(row.aiEscalationKeyword).toBe('NDIHMË'); // untouched
   });
 
   it('clears a present-but-blank field to null', async () => {

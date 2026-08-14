@@ -67,8 +67,6 @@ export function effectiveRetentionDays(pt: BillingPt, now: Date): number {
 /**
  * The assistant identity that applies: plans without custom identity get
  * nulls, which the prompt layer resolves to its default assistant persona.
- * The escalation keyword is deliberately NOT part of this — safety escalation
- * is never plan-gated.
  */
 export function effectiveAssistantIdentity(
   pt: BillingPt,

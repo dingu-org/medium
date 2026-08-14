@@ -28,7 +28,6 @@ export type SettingsState = {
     timezone?: string[];
     aiName?: string[];
     aiGreeting?: string[];
-    aiEscalationKeyword?: string[];
     retentionDays?: string[];
   } | null;
 };

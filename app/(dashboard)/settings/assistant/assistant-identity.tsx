@@ -19,12 +19,11 @@ import { cn } from '@/lib/utils';
 import type { SettingsState } from '../constants';
 import { updateAssistantIdentity } from './actions';
 
-type Field = 'name' | 'greeting' | 'keyword';
+type Field = 'name' | 'greeting';
 
 type Values = {
   aiName: string;
   aiGreeting: string;
-  aiEscalationKeyword: string;
 };
 
 const initialState: SettingsState = {
@@ -50,14 +49,6 @@ const FIELD_CONFIG = {
     placeholder: t.settings.aiGreetingPlaceholder,
     valueOf: (v: Values) => v.aiGreeting,
   },
-  keyword: {
-    name: 'aiEscalationKeyword',
-    title: t.settings.assistantKeywordRow,
-    help: t.settings.aiEscalationHint,
-    multiline: false,
-    placeholder: t.ops.help,
-    valueOf: (v: Values) => v.aiEscalationKeyword,
-  },
 } as const;
 
 function LockHint() {
@@ -72,23 +63,19 @@ function LockHint() {
 export function AssistantIdentity({
   aiName,
   aiGreeting,
-  aiEscalationKeyword,
   customAssistantIdentity,
 }: {
   aiName: string;
   aiGreeting: string;
-  aiEscalationKeyword: string;
   customAssistantIdentity: boolean;
 }) {
   const online = useOnlineStatus();
   const [editing, setEditing] = useState<Field | null>(null);
 
-  // On Free the name/greeting are plan-locked (shown, not editable). The
-  // escalation keyword is NEVER gated — safety routing works on every plan.
+  // On Free the name/greeting are plan-locked (shown, not editable).
   const locked = !customAssistantIdentity;
   const open = (field: Field) => () => setEditing(field);
-  const editable = (field: Field) =>
-    online && (field === 'keyword' || !locked);
+  const editable = () => online && !locked;
 
   return (
     <>
@@ -102,21 +89,14 @@ export function AssistantIdentity({
           titleWeight="medium"
           value={locked ? undefined : aiName || t.settings.assistantValueUnset}
           accessory={locked ? <LockHint /> : undefined}
-          onClick={editable('name') ? open('name') : undefined}
+          onClick={editable() ? open('name') : undefined}
         />
         <GroupedListRow
           title={t.settings.assistantGreetingRow}
           titleWeight="medium"
           description={aiGreeting || t.settings.assistantValueUnset}
           accessory={locked ? <LockHint /> : undefined}
-          onClick={editable('greeting') ? open('greeting') : undefined}
-        />
-        <GroupedListRow
-          title={t.settings.assistantKeywordRow}
-          titleWeight="medium"
-          value={aiEscalationKeyword || t.ops.help}
-          valueMono
-          onClick={editable('keyword') ? open('keyword') : undefined}
+          onClick={editable() ? open('greeting') : undefined}
         />
       </GroupedList>
 
@@ -135,7 +115,7 @@ export function AssistantIdentity({
         field={editing}
         open={editing !== null}
         online={online}
-        values={{ aiName, aiGreeting, aiEscalationKeyword }}
+        values={{ aiName, aiGreeting }}
         onOpenChange={(o) => !o && setEditing(null)}
       />
     </>

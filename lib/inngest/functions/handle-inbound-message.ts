@@ -445,11 +445,10 @@ export const handleInboundMessage = inngest.createFunction(
     }
 
     // Meter the conversation-day and enforce the monthly cap. Paused
-    // conversations skip the gate (not counted) — the engine still runs so
-    // safety-escalation-while-paused works, then self-skips as
-    // `assistant_paused`. The metering instant is the patient message's own
-    // timestamp (not wall-clock) so Inngest retries land on the same billing
-    // day and month.
+    // conversations skip the gate (not counted) — the engine self-skips as
+    // `assistant_paused` before any model call. The metering instant is the
+    // patient message's own timestamp (not wall-clock) so Inngest retries land
+    // on the same billing day and month.
     if (!context.assistantPaused) {
       const gate = await step.run('check-conversation-cap', () =>
         checkAndRecordConversation({

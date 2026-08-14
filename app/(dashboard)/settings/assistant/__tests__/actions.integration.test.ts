@@ -54,7 +54,7 @@ async function identity() {
   const [row] = await db
     .select({
       aiName: pts.aiName,
-      aiEscalationKeyword: pts.aiEscalationKeyword,
+      aiGreeting: pts.aiGreeting,
     })
     .from(pts)
     .where(eq(pts.id, ptId));
@@ -84,7 +84,6 @@ beforeEach(async () => {
       planLifetime: false,
       aiName: null,
       aiGreeting: null,
-      aiEscalationKeyword: null,
     })
     .where(eq(pts.id, ptId));
 });
@@ -98,13 +97,16 @@ describe('updateAssistantIdentity plan gate', () => {
     expect((await identity()).aiName).toBeNull();
   });
 
-  it('always allows the escalation keyword (safety is never plan-gated)', async () => {
+  it('rejects a custom greeting on Free without writing', async () => {
     const result = await updateAssistantIdentity(
       INITIAL,
-      form({ aiEscalationKeyword: 'urgjent' }),
+      form({ aiGreeting: 'Përshëndetje!' }),
     );
-    expect(result).toMatchObject({ success: true });
-    expect((await identity()).aiEscalationKeyword).toBe('urgjent');
+    expect(result).toMatchObject({
+      error: t.billing.gateIdentity,
+      success: false,
+    });
+    expect((await identity()).aiGreeting).toBeNull();
   });
 
   it('allows a custom name on an effective Solo plan', async () => {

@@ -79,7 +79,6 @@ export const settings = {
   // assistant is required to use with patients.
   aiGreetingPlaceholder:
     'Përshëndetje! Faleminderit që na shkruat. Si mund t’ju ndihmojmë?',
-  aiEscalationHint: 'Kur pacienti dërgon këtë fjalë, AI ia kalon bisedën ty.',
 
   // Account & data screen (Phase 15 · task 12)
   accountSection: 'Llogaria',
@@ -217,9 +216,8 @@ export const settings = {
   // Assistant identity (Asistenti screen — Identiteti group)
   assistantIdentityGroup: 'Identiteti',
   assistantIdentityFooter:
-    'Kur pacienti shkruan NDIHMË — ose Medium nuk kupton — biseda kalon te ti automatikisht.',
+    'Kur klienti kërkon të flasë me ty — ose Medium nuk kupton — biseda kalon te ti automatikisht.',
   assistantGreetingRow: 'Prezantimi',
-  assistantKeywordRow: 'Fjala e ndihmës',
   assistantValueUnset: 'Pa vendosur',
   assistantNameHelp: 'Emri me të cilin Medium u prezantohet pacientëve.',
   assistantGreetingHelp:

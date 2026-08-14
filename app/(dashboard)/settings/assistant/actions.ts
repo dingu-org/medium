@@ -42,8 +42,8 @@ export const setAssistantPaused = instrumentedAction(
 const emptyToUndefined = (v: unknown) =>
   typeof v === 'string' && v.trim() === '' ? undefined : v;
 
-// All three fields are interpolated into the system prompt, so they are stripped
-// of line breaks, control codes and the greeting fence marker before storage: a
+// Both fields are interpolated into the system prompt, so they are stripped of
+// line breaks, control codes and the greeting fence marker before storage: a
 // stored newline renders as its own authoritative context bullet, and a stored
 // marker closes the fence the greeting is quoted inside (lib/ai/prompt.ts).
 const promptSafe = (v: unknown) =>
@@ -52,7 +52,6 @@ const promptSafe = (v: unknown) =>
 const identitySchema = z.object({
   aiName: z.preprocess(promptSafe, z.string().max(60).optional()),
   aiGreeting: z.preprocess(promptSafe, z.string().max(1000).optional()),
-  aiEscalationKeyword: z.preprocess(promptSafe, z.string().max(40).optional()),
 });
 
 async function updateAssistantIdentityImpl(
@@ -64,7 +63,6 @@ async function updateAssistantIdentityImpl(
   const parsed = identitySchema.safeParse({
     aiName: formData.get('aiName') ?? undefined,
     aiGreeting: formData.get('aiGreeting') ?? undefined,
-    aiEscalationKeyword: formData.get('aiEscalationKeyword') ?? undefined,
   });
   if (!parsed.success) {
     return {
@@ -74,11 +72,9 @@ async function updateAssistantIdentityImpl(
     };
   }
 
-  // Plan gate: custom name/greeting are Solo-only. The escalation keyword is
-  // EXEMPT — safety routing is never plan-gated. Reject a name/greeting write on
-  // Free with an upgrade prompt (the UI also locks those rows).
-  const writesIdentity =
-    formData.has('aiName') || formData.has('aiGreeting');
+  // Plan gate: custom name/greeting are Solo-only. Reject a name/greeting write
+  // on Free with an upgrade prompt (the UI also locks those rows).
+  const writesIdentity = formData.has('aiName') || formData.has('aiGreeting');
   if (writesIdentity) {
     const plan = await loadEffectivePlan(ptId);
     if (!getPlan(plan).customAssistantIdentity) {
@@ -94,9 +90,6 @@ async function updateAssistantIdentityImpl(
       ...(formData.has('aiName') ? { aiName: parsed.data.aiName ?? null } : {}),
       ...(formData.has('aiGreeting')
         ? { aiGreeting: parsed.data.aiGreeting ?? null }
-        : {}),
-      ...(formData.has('aiEscalationKeyword')
-        ? { aiEscalationKeyword: parsed.data.aiEscalationKeyword ?? null }
         : {}),
     })
     .where(eq(pts.id, ptId));

@@ -301,7 +301,6 @@ beforeAll(async () => {
       timezone: 'Europe/Tirane',
       aiName: 'Mia',
       aiGreeting: 'Welcome to Movement Clinic.',
-      aiEscalationKeyword: 'HUMAN',
     })
     .where(eq(pts.id, ptId));
 });
@@ -726,45 +725,6 @@ describe('runTurnCore', () => {
     expect(eventRows).toEqual([{ type: 'conversation.escalated' }]);
   });
 
-  it('replies to a safety escalation on an already human-owned conversation', async () => {
-    await db
-      .update(messages)
-      .set({ content: 'HELP' })
-      .where(eq(messages.id, inbound.id));
-    await db
-      .update(conversations)
-      .set({ aiActive: false, escalationState: 'requested' })
-      .where(eq(conversations.id, conversationId));
-    const model = new MockLanguageModelV3({
-      doGenerate: vi.fn(() => {
-        throw new Error('model should not run');
-      }),
-    });
-
-    const result = await runTurnCore({
-      inboundMessage: inbound,
-      model,
-      modelId: 'requested/model',
-      allowInactive: true,
-    });
-
-    expect(result.content).toContain('Këtë bisedë ia kalova Movement Clinic');
-    expect(model.doGenerateCalls).toHaveLength(0);
-    // The no-op escalate emits no conversation.escalated, so the manual-reply
-    // nudge is the PT's only signal that an urgent message landed on the thread
-    // they own — the dispatch records itself as `push.dispatched`.
-    const eventRows = await db
-      .select({ type: events.type, payload: events.payload })
-      .from(events)
-      .where(eq(events.ptId, ptId));
-    expect(eventRows).toMatchObject([
-      {
-        type: 'push.dispatched',
-        payload: { sourceEvent: 'conversation.needs_reply' },
-      },
-    ]);
-  });
-
   it('hands off with neutral wording on an already human-owned conversation', async () => {
     await db
       .update(conversations)
@@ -800,10 +760,10 @@ describe('runTurnCore', () => {
     });
   });
 
-  // A safety-classified message only reaches the failure handoff when the
-  // escalation dispatch itself threw, and the generic technical copy would drop
-  // the "contact emergency services" line for an urgent one.
-  it('keeps the emergency wording when a safety message reaches the failure handoff', async () => {
+  // Nothing pattern-matches the patient's words any more (2026-08-14): the
+  // message content is irrelevant to the failed-turn handoff, which always
+  // escalates and always sends the same neutral technical copy.
+  it('uses the neutral copy whatever the dead turn was about', async () => {
     await db
       .update(messages)
       .set({ content: 'Kam dhimbje në gjoks' })
@@ -811,8 +771,7 @@ describe('runTurnCore', () => {
 
     const result = await handoffFailedTurn({ inboundMessage: inbound });
 
-    expect(result.content).toContain('shërbimet vendore të urgjencës');
-    expect(result.content).not.toContain('problem teknik');
+    expect(result.content).toContain('Kam një problem teknik');
 
     const [conversation] = await db
       .select()
@@ -825,7 +784,7 @@ describe('runTurnCore', () => {
       .select()
       .from(messages)
       .where(eq(messages.id, result.id));
-    expect(stored).toMatchObject({ model: 'deterministic-safety' });
+    expect(stored).toMatchObject({ model: 'deterministic-failure-handoff' });
   });
 
   it('uses the booking wording when the dead turn left a booking behind', async () => {
@@ -860,51 +819,47 @@ describe('runTurnCore', () => {
     expect(result.content).not.toContain('rezervimit');
   });
 
-  it('bypasses the model for a safety escalation and disables AI', async () => {
+  // DELIBERATE, 2026-08-14: nothing pattern-matches the inbound message before
+  // the model runs. Medium is a horizontal appointment-booking product (barbers,
+  // nail salons, physios), not a medical one, so it does not classify symptoms —
+  // it books appointments. Escalation is the model's `escalate_to_human` call
+  // plus the failed-turn handoff, and this test exists so the old detector is
+  // not "restored" as an accidental safety regression. See the decisions log.
+  it.each([
+    'HELP',
+    'NDIHMË',
+    'Kam dhimbje në gjoks',
+    'Dua të flas me një person',
+  ])('sends %s to the model instead of pattern-matching it', async (content) => {
     await db
       .update(messages)
-      .set({ content: 'HELP' })
+      .set({ content })
       .where(eq(messages.id, inbound.id));
-    const model = new MockLanguageModelV3({
-      doGenerate: vi.fn(() => {
-        throw new Error('model should not run');
-      }),
-    });
 
+    const model = responseModel('Sigurisht, po e shikoj kalendarin.');
     const result = await runTurnCore({
-      inboundMessage: { ...inbound, content: 'tampered input is ignored' },
+      inboundMessage: inbound,
       model,
       modelId: 'requested/model',
     });
-    expect(result.content).toContain(
-      'Këtë bisedë ia kalova Movement Clinic',
-    );
-    expect(model.doGenerateCalls).toHaveLength(0);
 
+    expect(model.doGenerateCalls).toHaveLength(1);
+    expect(result.content).toBe('Sigurisht, po e shikoj kalendarin.');
+
+    // No deterministic escalation: the thread stays with the AI unless the
+    // model itself hands it over.
     const [conversation] = await db
       .select()
       .from(conversations)
       .where(eq(conversations.id, conversationId));
-    expect(conversation.aiActive).toBe(false);
-    expect(conversation.escalationState).toBe('requested');
+    expect(conversation.aiActive).toBe(true);
+    expect(conversation.escalationState).toBe('idle');
 
     const [stored] = await db
       .select()
       .from(messages)
       .where(eq(messages.id, result.id));
-    expect(stored).toMatchObject({
-      model: 'deterministic-safety',
-      provider: 'internal',
-      aiCostMicrousd: 0,
-    });
-
-    const audits = await db
-      .select()
-      .from(auditLog)
-      .where(eq(auditLog.ptId, ptId));
-    expect(
-      audits.some((row) => row.action === 'ai.tool.escalate_to_human'),
-    ).toBe(true);
+    expect(stored).toMatchObject({ model: 'requested/model' });
   });
 
   it('suppresses the reply and never calls the model while the assistant is paused', async () => {
@@ -928,65 +883,6 @@ describe('runTurnCore', () => {
       code: 'assistant_paused',
     } satisfies Partial<ConversationEngineError>);
     expect(model.doGenerateCalls).toHaveLength(0);
-
-    const replies = await db
-      .select()
-      .from(messages)
-      .where(
-        and(eq(messages.role, 'ai'), eq(messages.replyToMessageId, inbound.id)),
-      );
-    expect(replies).toHaveLength(0);
-  });
-
-  it('escalates and notifies the PT while paused without a patient reply', async () => {
-    await db
-      .update(messages)
-      .set({ content: 'HELP' })
-      .where(eq(messages.id, inbound.id));
-    await db
-      .update(pts)
-      .set({ assistantPaused: true })
-      .where(eq(pts.id, ptId));
-    const model = new MockLanguageModelV3({
-      doGenerate: vi.fn(() => {
-        throw new Error('model should not run');
-      }),
-    });
-
-    await expect(
-      runTurnCore({
-        inboundMessage: inbound,
-        model,
-        modelId: 'requested/model',
-      }),
-    ).rejects.toMatchObject({
-      code: 'assistant_paused',
-    } satisfies Partial<ConversationEngineError>);
-    expect(model.doGenerateCalls).toHaveLength(0);
-
-    const [conversation] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId));
-    expect(conversation.aiActive).toBe(false);
-    expect(conversation.escalationState).toBe('requested');
-
-    const eventRows = await db
-      .select({ type: events.type })
-      .from(events)
-      .where(eq(events.ptId, ptId));
-    expect(eventRows).toEqual([{ type: 'conversation.escalated' }]);
-    expect(inngest.send).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'conversation.escalated' }),
-    );
-
-    const audits = await db
-      .select()
-      .from(auditLog)
-      .where(eq(auditLog.ptId, ptId));
-    expect(
-      audits.some((row) => row.action === 'ai.tool.escalate_to_human'),
-    ).toBe(true);
 
     const replies = await db
       .select()

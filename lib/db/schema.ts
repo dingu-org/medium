@@ -101,11 +101,9 @@ export const pts = pgTable('pts', {
   timezone: text('timezone').notNull().default('Europe/Berlin'),
   aiName: text('ai_name'),
   aiGreeting: text('ai_greeting'),
-  aiEscalationKeyword: text('ai_escalation_keyword'),
   // Global assistant kill-switch (Phase 15). When true the dispatcher generates
-  // and sends NO AI reply to inbound patient messages; keyword-escalation
-  // detection + PT notifications + appointment reminders still run. Wired to the
-  // dispatcher in a later Phase 15 task.
+  // and sends NO AI reply to inbound patient messages; PT notifications +
+  // appointment reminders still run.
   assistantPaused: boolean('assistant_paused').notNull().default(false),
   servicesConfiguredAt: tsTz('services_configured_at'),
   retentionDays: integer('retention_days').notNull().default(90),

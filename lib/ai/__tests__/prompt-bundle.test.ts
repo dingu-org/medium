@@ -16,7 +16,6 @@ describe('buildSystemPrompt bundle safety', () => {
       timezone: 'Europe/Tirane',
       aiName: null,
       aiGreeting: null,
-      escalationKeyword: null,
       title: null,
       address: null,
       retentionDays: 30,
