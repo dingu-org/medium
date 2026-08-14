@@ -112,15 +112,44 @@ export async function armHandoffOffer(
 }
 
 /**
- * Resolve an outstanding offer against this inbound message, and disarm it
- * either way.
+ * The offer currently armed on this conversation, with the instant it was made:
+ * the `created_at` of the patient message it answered, which is the message the
+ * anchor points at. Null when nothing is outstanding.
+ *
+ * The timestamp exists so an outstanding offer can be weighed against another
+ * question the patient may be answering instead — see `resolveInboundClaim` in
+ * lib/inngest/functions/handle-inbound-message.ts.
+ */
+export async function outstandingHandoffOffer(args: {
+  ptId: string;
+  conversationId: string;
+}): Promise<{ messageId: string; offeredAt: Date } | null> {
+  const svc = getServiceClient(args.ptId);
+  const [row] = await svc.db
+    .select({ messageId: messages.id, offeredAt: messages.createdAt })
+    .from(conversations)
+    .innerJoin(messages, eq(messages.id, conversations.handoffOfferMessageId))
+    .where(
+      and(
+        eq(conversations.id, args.conversationId),
+        eq(conversations.ptId, args.ptId),
+      ),
+    )
+    .limit(1);
+
+  return row ?? null;
+}
+
+/**
+ * Whether the outstanding offer claims this inbound message — a read, with no
+ * side effect, so a caller can weigh the answer before anything acts on it.
  *
  * `accepted` requires both halves: the anchored message is still the patient's
  * most recent one before this inbound (so this is literally the next message),
  * and this message is the acceptance word. Anything else lapses and is handled
  * as an ordinary turn.
  */
-export async function resolveHandoffOffer(args: {
+export async function handoffOfferOutcome(args: {
   inbound: InboundMessage;
   offerMessageId: string;
 }): Promise<'accepted' | 'lapsed'> {
@@ -141,8 +170,20 @@ export async function resolveHandoffOffer(args: {
     .limit(1);
 
   const isNextMessage = previous?.id === args.offerMessageId;
-  const accepted = isNextMessage && isHandoffAcceptance(args.inbound.content);
+  return isNextMessage && isHandoffAcceptance(args.inbound.content)
+    ? 'accepted'
+    : 'lapsed';
+}
 
+/**
+ * Disarm the offer. Guarded on the anchor still being the one that was read, so
+ * a clear can never discard an offer armed after that read.
+ */
+export async function clearHandoffOffer(args: {
+  inbound: InboundMessage;
+  offerMessageId: string;
+}): Promise<void> {
+  const svc = getServiceClient(args.inbound.ptId);
   await svc.db
     .update(conversations)
     .set({ handoffOfferMessageId: null })
@@ -153,6 +194,17 @@ export async function resolveHandoffOffer(args: {
         eq(conversations.handoffOfferMessageId, args.offerMessageId),
       ),
     );
+}
 
-  return accepted ? 'accepted' : 'lapsed';
+/**
+ * Resolve an outstanding offer against this inbound message, and disarm it
+ * either way.
+ */
+export async function resolveHandoffOffer(args: {
+  inbound: InboundMessage;
+  offerMessageId: string;
+}): Promise<'accepted' | 'lapsed'> {
+  const outcome = await handoffOfferOutcome(args);
+  await clearHandoffOffer(args);
+  return outcome;
 }

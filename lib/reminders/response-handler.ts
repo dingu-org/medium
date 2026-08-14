@@ -50,6 +50,8 @@ type ReminderCandidate = {
   appointmentId: string;
   startsAt: Date;
   endsAt: Date;
+  /** When the reminder went out — the instant the patient is answering. */
+  sentAt: Date | null;
   responseType:
     | 'confirm'
     | 'cancel'
@@ -142,6 +144,7 @@ async function loadReminderCandidates(
       appointmentId: appointments.id,
       startsAt: appointments.startsAt,
       endsAt: appointments.endsAt,
+      sentAt: reminderJobs.sentAt,
       responseType: reminderJobs.responseType,
       responseMessageId: reminderJobs.responseMessageId,
       timezone: pts.timezone,
@@ -470,6 +473,25 @@ function chooseCandidate(args: {
     };
   }
   return { kind: 'none' };
+}
+
+/**
+ * When the reminder this message would be answering was sent, or null when no
+ * reminder is waiting on an answer from it.
+ *
+ * Deliberately resolved through the very same candidate {@link
+ * handleReminderResponse} would act on, so the two can never disagree about
+ * which reminder is in play. An ambiguous set (several unanswered reminders)
+ * reports null on purpose: the handler does not claim those messages either —
+ * it hands them to the AI turn — so there is no deterministic claim to weigh
+ * against anything else.
+ */
+export async function pendingReminderSentAt(
+  inbound: InboundMessage,
+): Promise<Date | null> {
+  const candidates = await loadReminderCandidates(inbound);
+  const choice = chooseCandidate({ inboundId: inbound.id, candidates });
+  return choice.kind === 'candidate' ? choice.candidate.sentAt : null;
 }
 
 async function handleReminderResponseUnlocked(args: {

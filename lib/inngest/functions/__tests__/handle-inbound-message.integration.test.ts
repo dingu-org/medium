@@ -38,6 +38,12 @@ import { encryptToken } from '@/lib/db/crypto';
 import { handOffCappedConversation } from '@/lib/billing/cap-handoff';
 import { runTurnCore } from '@/lib/conversation/engine';
 import { ConversationEngineError } from '@/lib/conversation/errors';
+import {
+  businessLabel,
+  handoffOfferMessage,
+  HANDOFF_ACCEPTED_MODEL,
+} from '@/lib/conversation/handoff-offer';
+import type { InboundMessage } from '@/lib/conversation/types';
 import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { getNotificationData } from '@/lib/notifications/query';
 import {
@@ -54,11 +60,12 @@ import {
   loadInboundJobContext,
   persistInboundReplyDelivery,
   recordConversationFailure,
+  resolveInboundClaim,
   runInboundTurn,
   runReminderFallbackTurn,
   sendInboundReply,
 } from '../handle-inbound-message';
-import { DAY, testNow, zonedTime } from '@/tests/support/clock';
+import { DAY, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
 
 // The booking turn below books against a Monday-only availability rule, so the
 // fixture needs a real Monday — derived, and a week out so the booking is in the
@@ -747,5 +754,341 @@ describe('handleInboundMessage cores', () => {
         href: '/chat',
       }),
     ]);
+  });
+
+  /**
+   * The "PO" collision (2026-08-14). `po` is a reminder confirmation
+   * (lib/reminders/parse-response.ts) and it is also the word the handoff offer
+   * asks for — and the reminder handler runs first and returns before the
+   * engine, so with both outstanding a bare PO confirmed an appointment the
+   * patient had not been asked about while their accepted handoff silently
+   * never happened.
+   *
+   * The rule: whichever question was asked most recently wins. Each test mirrors
+   * the Inngest body — precedence gate, then the reminder step, then the engine.
+   */
+  describe('most-recent-question-wins on a bare PO', () => {
+    const usage = {
+      inputTokens: {
+        total: 20,
+        noCache: 20,
+        cacheRead: undefined,
+        cacheWrite: undefined,
+      },
+      outputTokens: { total: 6, text: 6, reasoning: undefined },
+    };
+
+    /** Both deterministic paths answer without a model; running it is failure. */
+    function refusingModel() {
+      return new MockLanguageModelV3({
+        doGenerate: async () => {
+          throw new Error('model should not run');
+        },
+      });
+    }
+
+    function bookingModel(startsAt: Date) {
+      return new MockLanguageModelV3({
+        provider: 'openrouter',
+        modelId: 'mock-model',
+        doGenerate: async () => ({
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'book-1',
+              toolName: 'book_appointment',
+              input: JSON.stringify({
+                starts_at: startsAt.toISOString(),
+                service_type: 'Vlerësim i parë',
+              }),
+            },
+          ],
+          finishReason: { unified: 'tool-calls' as const, raw: undefined },
+          usage,
+          warnings: [],
+        }),
+      });
+    }
+
+    /**
+     * Arms the collision. Both offsets are minutes *before* the inbound message,
+     * so which question was asked last is fixed by the fixture and never by the
+     * wall clock the suite happens to run at. Omit either one to leave that
+     * subsystem with nothing outstanding.
+     */
+    async function seedCollision(options: {
+      reminderSentMinutesBefore?: number;
+      offerMinutesBefore?: number;
+      content?: string;
+    }): Promise<{ inbound: InboundMessage; appointmentId: string | null }> {
+      await db.delete(events).where(eq(events.ptId, ptId));
+      const at = new Date();
+      await db
+        .update(messages)
+        .set({ content: options.content ?? 'PO', createdAt: at })
+        .where(eq(messages.id, inboundMessageId));
+
+      if (options.offerMinutesBefore !== undefined) {
+        const offeredAt = new Date(
+          at.getTime() - options.offerMinutesBefore * MINUTE,
+        );
+        // The out-of-scope question the offer answered — the message the anchor
+        // points at, and whose timestamp dates the offer.
+        const [anchor] = await db
+          .insert(messages)
+          .values({
+            ptId,
+            conversationId,
+            externalId: `wamid.ASK.${Date.now()}.${++sequence}`,
+            role: 'patient',
+            channel: 'whatsapp',
+            content: 'A bëni edhe masazh sportiv?',
+            createdAt: offeredAt,
+          })
+          .returning({ id: messages.id });
+        await db.insert(messages).values({
+          ptId,
+          conversationId,
+          replyToMessageId: anchor.id,
+          role: 'ai',
+          channel: 'whatsapp',
+          content: handoffOfferMessage(businessLabel(null)),
+          model: 'requested/model',
+          provider: 'Azure',
+          createdAt: new Date(offeredAt.getTime() + 1000),
+        });
+        await db
+          .update(conversations)
+          .set({ handoffOfferMessageId: anchor.id })
+          .where(eq(conversations.id, conversationId));
+      }
+
+      let appointmentId: string | null = null;
+      if (options.reminderSentMinutesBefore !== undefined) {
+        const sentAt = new Date(
+          at.getTime() - options.reminderSentMinutesBefore * MINUTE,
+        );
+        const startsAt = addHours(at, 30);
+        const [appointment] = await db
+          .insert(appointments)
+          .values({
+            ptId,
+            patientId,
+            startsAt,
+            endsAt: addHours(startsAt, 1),
+            status: 'pending',
+            serviceType: 'Treatment',
+          })
+          .returning({ id: appointments.id });
+        appointmentId = appointment.id;
+        const [reminderMessage] = await db
+          .insert(messages)
+          .values({
+            ptId,
+            conversationId,
+            externalId: `wamid.REM.${Date.now()}.${++sequence}`,
+            role: 'ai',
+            channel: 'whatsapp',
+            content: 'Kujtesë: keni takim nesër.',
+            model: 'deterministic-reminder',
+            provider: 'internal',
+            createdAt: sentAt,
+          })
+          .returning({ id: messages.id });
+        await db.insert(reminderJobs).values({
+          ptId,
+          appointmentId: appointment.id,
+          scheduledFor: subHours(startsAt, 24),
+          inngestRunId: `run-collision-${++sequence}`,
+          status: 'sent',
+          sentAt,
+          messageId: reminderMessage.id,
+        });
+      }
+
+      const context = (await loadInboundJobContext({
+        messageId: inboundMessageId,
+        ptId,
+        conversationId,
+      }))!;
+      return {
+        inbound: {
+          ...context.inbound,
+          occurredAt: new Date(context.inbound.occurredAt),
+        },
+        appointmentId,
+      };
+    }
+
+    /** Precedence gate, reminder step, engine — in the Inngest body's order. */
+    async function runBody(
+      inbound: InboundMessage,
+      model: MockLanguageModelV3,
+    ) {
+      const claim = await resolveInboundClaim(inbound);
+      const reminder: ReminderHandlingResult =
+        claim === 'reminder'
+          ? await handleReminderResponse({ inbound })
+          : { kind: 'none' };
+      const outbound =
+        reminder.kind === 'outbound'
+          ? reminder.outbound
+          : await runTurnCore({
+              inboundMessage: inbound,
+              model,
+              modelId: 'requested/model',
+            });
+      return { claim, reminder, outbound };
+    }
+
+    async function conversationRow() {
+      const [conversation] = await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      return conversation;
+    }
+
+    async function escalationEvents() {
+      return db
+        .select({ type: events.type })
+        .from(events)
+        .where(
+          and(
+            eq(events.ptId, ptId),
+            eq(events.type, 'conversation.escalated'),
+          ),
+        );
+    }
+
+    it('escalates instead of confirming when the offer is the newer question', async () => {
+      const { inbound, appointmentId } = await seedCollision({
+        reminderSentMinutesBefore: 90,
+        offerMinutesBefore: 5,
+      });
+
+      const model = refusingModel();
+      const { claim, reminder, outbound } = await runBody(inbound, model);
+
+      expect(claim).toBe('handoff_offer');
+      expect(reminder.kind).toBe('none');
+      // Deterministic on both sides: no model round produced this reply.
+      expect(model.doGenerateCalls).toHaveLength(0);
+      const [stored] = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, outbound.id));
+      expect(stored.model).toBe(HANDOFF_ACCEPTED_MODEL);
+
+      const conversation = await conversationRow();
+      expect(conversation.aiActive).toBe(false);
+      expect(conversation.escalationState).toBe('requested');
+      expect(conversation.handoffOfferMessageId).toBeNull();
+      expect(await escalationEvents()).toEqual([
+        { type: 'conversation.escalated' },
+      ]);
+
+      // The appointment the patient was never asked about is untouched.
+      const [appointment] = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.id, appointmentId!));
+      expect(appointment.status).toBe('pending');
+      const [job] = await db
+        .select()
+        .from(reminderJobs)
+        .where(eq(reminderJobs.appointmentId, appointmentId!));
+      expect(job.responseType).toBeNull();
+    });
+
+    it('confirms the appointment and lapses the offer when the reminder is the newer question', async () => {
+      const { inbound, appointmentId } = await seedCollision({
+        reminderSentMinutesBefore: 5,
+        offerMinutesBefore: 90,
+      });
+
+      const model = refusingModel();
+      const { claim, reminder, outbound } = await runBody(inbound, model);
+
+      expect(claim).toBe('reminder');
+      expect(reminder.kind).toBe('outbound');
+      expect(model.doGenerateCalls).toHaveLength(0);
+      expect(outbound.content).toContain('u konfirmua');
+
+      const [appointment] = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.id, appointmentId!));
+      expect(appointment.status).toBe('confirmed');
+      const [job] = await db
+        .select()
+        .from(reminderJobs)
+        .where(eq(reminderJobs.appointmentId, appointmentId!));
+      expect(job.responseType).toBe('confirm');
+
+      const conversation = await conversationRow();
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).toBe('idle');
+      // The patient answered the reminder, not the offer, so the offer lapses
+      // here rather than staying armed against a later, unrelated message.
+      expect(conversation.handoffOfferMessageId).toBeNull();
+      expect(await escalationEvents()).toEqual([]);
+    });
+
+    it('confirms the reminder on a bare po when no offer is outstanding', async () => {
+      const { inbound, appointmentId } = await seedCollision({
+        reminderSentMinutesBefore: 5,
+        content: 'po',
+      });
+
+      const model = refusingModel();
+      const { claim, reminder, outbound } = await runBody(inbound, model);
+
+      expect(claim).toBe('reminder');
+      expect(reminder.kind).toBe('outbound');
+      expect(model.doGenerateCalls).toHaveLength(0);
+      expect(outbound.content).toContain('u konfirmua');
+
+      const [appointment] = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.id, appointmentId!));
+      expect(appointment.status).toBe('confirmed');
+      expect(await escalationEvents()).toEqual([]);
+    });
+
+    it('still books a proposed slot on a bare po with neither a reminder nor an offer', async () => {
+      await db
+        .update(pts)
+        .set({ timezone: 'Europe/Tirane' })
+        .where(eq(pts.id, ptId));
+      await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
+      await db.insert(availabilityRules).values({
+        ptId,
+        weekday: 1,
+        startTime: '09:00:00',
+        endTime: '17:00:00',
+      });
+      const startsAt = zonedTime(MONDAY, 9);
+      const { inbound } = await seedCollision({ content: 'po' });
+
+      const { claim, reminder, outbound } = await runBody(
+        inbound,
+        bookingModel(startsAt),
+      );
+
+      expect(claim).toBe('reminder');
+      expect(reminder.kind).toBe('none');
+      expect(outbound.content).toContain(
+        formatAppointmentTime(startsAt, 'Europe/Tirane'),
+      );
+
+      const [appointment] = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.patientId, patientId));
+      expect(appointment.startsAt).toEqual(startsAt);
+      expect(await escalationEvents()).toEqual([]);
+    });
   });
 });

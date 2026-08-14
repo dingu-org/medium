@@ -20,6 +20,11 @@ import type { PlanId } from '@/lib/billing/plans';
 import { checkAndRecordConversation } from '@/lib/billing/usage';
 import { ConversationEngineError } from '@/lib/conversation/errors';
 import {
+  clearHandoffOffer,
+  handoffOfferOutcome,
+  outstandingHandoffOffer,
+} from '@/lib/conversation/handoff-offer';
+import {
   markNonTextNotice,
   prepareNonTextNotice,
 } from '@/lib/conversation/non-text';
@@ -34,6 +39,7 @@ import { createLogger } from '@/lib/log';
 import { dispatchPushForEvent } from '@/lib/notifications/push-dispatch';
 import {
   handleReminderResponse,
+  pendingReminderSentAt,
   type ReminderHandlingResult,
 } from '@/lib/reminders/response-handler';
 import { inngest } from '../client';
@@ -188,6 +194,61 @@ export async function loadInboundJobContext(args: {
     connectionId: connection?.id ?? null,
     recipient: row.waId,
   };
+}
+
+/** Which outstanding question this message is taken to answer. */
+export type InboundClaim = 'reminder' | 'handoff_offer';
+
+/**
+ * Two subsystems can claim the same one-word reply, and neither knows about the
+ * other: PO is what an unanswered reminder reads as a confirmation
+ * (lib/reminders/parse-response.ts) and it is also the word the handoff offer
+ * asks for. The reminder handler runs first and returns before the engine, so
+ * without this gate a bare PO always confirmed the appointment, the escalation
+ * never happened, and the patient was answered about something they had not
+ * asked about.
+ *
+ * The owner's rule (2026-08-14): whichever question was asked most recently
+ * wins, because both orderings genuinely occur — a scheduled reminder can land
+ * after an offer, and an offer can be made after a reminder — so any fixed
+ * winner would be wrong about half the time.
+ *
+ * Only a message both could claim is weighed at all. The offer can claim
+ * exactly the messages `handoffOfferOutcome` accepts (the acceptance word, and
+ * only as the message directly after the offer); anything else is not an answer
+ * to the offer, so the reminder handler keeps it and today's deterministic
+ * ANULO/RICAKTO paths are untouched.
+ *
+ * When the reminder wins the offer lapses here, consistent with the rule that
+ * only the immediately-next message can accept: the patient answered the
+ * reminder, not the offer, so the anchor is cleared rather than left armed
+ * against some later, unrelated message.
+ */
+export async function resolveInboundClaim(
+  inbound: InboundMessage,
+): Promise<InboundClaim> {
+  const offer = await outstandingHandoffOffer({
+    ptId: inbound.ptId,
+    conversationId: inbound.conversationId,
+  });
+  if (!offer) return 'reminder';
+
+  const outcome = await handoffOfferOutcome({
+    inbound,
+    offerMessageId: offer.messageId,
+  });
+  // Not an acceptance: the offer cannot claim this message, so there is nothing
+  // to weigh. It lapses in the engine as it always has.
+  if (outcome !== 'accepted') return 'reminder';
+
+  const reminderSentAt = await pendingReminderSentAt(inbound);
+  if (!reminderSentAt) return 'handoff_offer';
+  if (offer.offeredAt.getTime() > reminderSentAt.getTime()) {
+    return 'handoff_offer';
+  }
+
+  await clearHandoffOffer({ inbound, offerMessageId: offer.messageId });
+  return 'reminder';
 }
 
 export async function runInboundTurn(
@@ -403,12 +464,22 @@ export const handleInboundMessage = inngest.createFunction(
     // either; the inbound routes through the engine, which skips it as
     // `assistant_paused` (the single logging/skip choke point).
     const nonText = event.data.nonText === true;
+    const deterministicReminders = !(context.assistantPaused || nonText);
+    // Ahead of the reminder step, never inside it: the handler returns an
+    // outbound and ends the run, so once it has claimed the message the engine
+    // — and with it the acceptance of an outstanding handoff offer — is already
+    // unreachable.
+    const claim: InboundClaim = deterministicReminders
+      ? await step.run('resolve-turn-precedence', () =>
+          resolveInboundClaim(hydrateInbound(context.inbound)),
+        )
+      : 'reminder';
     const reminder: ReminderHandlingResult =
-      context.assistantPaused || nonText
-        ? { kind: 'none' }
-        : await step.run('handle-reminder-response', () =>
+      deterministicReminders && claim === 'reminder'
+        ? await step.run('handle-reminder-response', () =>
             handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
-          );
+          )
+        : { kind: 'none' };
     if (reminder.kind === 'outbound') {
       const delivery = await step.run('send-reminder-response', () =>
         sendInboundReply({
