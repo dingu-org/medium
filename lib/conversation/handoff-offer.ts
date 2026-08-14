@@ -17,7 +17,7 @@
  * lapses by itself, with no code path having to remember to clear a flag.
  */
 import { and, desc, eq, lt } from 'drizzle-orm';
-import type { DBTransaction } from '@/lib/db';
+import type { DB, DBTransaction } from '@/lib/db';
 import { conversations, messages } from '@/lib/db/schema';
 import { getServiceClient } from '@/lib/tenancy';
 import type { InboundMessage } from './types';
@@ -178,13 +178,18 @@ export async function handoffOfferOutcome(args: {
 /**
  * Disarm the offer. Guarded on the anchor still being the one that was read, so
  * a clear can never discard an offer armed after that read.
+ *
+ * Takes an executor because the accepted case has to clear the anchor in the
+ * same transaction as the reply it sends: clearing on its own would let a crash
+ * before the reply drop the acceptance on the retry.
  */
 export async function clearHandoffOffer(args: {
   inbound: InboundMessage;
   offerMessageId: string;
+  executor?: DB | DBTransaction;
 }): Promise<void> {
-  const svc = getServiceClient(args.inbound.ptId);
-  await svc.db
+  const executor = args.executor ?? getServiceClient(args.inbound.ptId).db;
+  await executor
     .update(conversations)
     .set({ handoffOfferMessageId: null })
     .where(
@@ -194,17 +199,4 @@ export async function clearHandoffOffer(args: {
         eq(conversations.handoffOfferMessageId, args.offerMessageId),
       ),
     );
-}
-
-/**
- * Resolve an outstanding offer against this inbound message, and disarm it
- * either way.
- */
-export async function resolveHandoffOffer(args: {
-  inbound: InboundMessage;
-  offerMessageId: string;
-}): Promise<'accepted' | 'lapsed'> {
-  const outcome = await handoffOfferOutcome(args);
-  await clearHandoffOffer(args);
-  return outcome;
 }

@@ -1073,6 +1073,152 @@ describe('runTurnCore', () => {
       ).toEqual([]);
     });
 
+    /**
+     * The anchor is the only record that an acceptance is owed, so nothing may
+     * consume it before the escalation is durable — it used to be cleared
+     * first, in its own statement, and a crash in between lost the accepted
+     * handoff for good: the retry found no anchor and ran an ordinary turn.
+     *
+     * The crash here is the escalation's own transaction failing, which is the
+     * widest version of the window: everything between reading the anchor and
+     * finishing the escalation is inside it.
+     */
+    it('still escalates on the retry when the escalation dies mid-acceptance', async () => {
+      await runTurnCore({
+        inboundMessage: inbound,
+        model: offerModel(),
+        modelId: 'requested/model',
+      });
+      const accept = await nextInbound('PO', 1);
+
+      // The escalation's is the first transaction the acceptance opens.
+      const txSpy = vi
+        .spyOn(db, 'transaction')
+        .mockRejectedValueOnce(new Error('escalation transaction died'));
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const crashed = refusingModel();
+      await expect(
+        runTurnCore({
+          inboundMessage: accept,
+          model: crashed,
+          modelId: 'requested/model',
+        }),
+      ).rejects.toThrow('Handoff-offer escalation failed');
+      txSpy.mockRestore();
+
+      // Nothing was consumed: the retry sees exactly what this attempt saw.
+      const afterCrash = await conversationRow();
+      expect(afterCrash.handoffOfferMessageId).toBe(inbound.id);
+      expect(afterCrash.aiActive).toBe(true);
+      expect(afterCrash.escalationState).toBe('idle');
+      expect(
+        await db
+          .select({ type: events.type })
+          .from(events)
+          .where(eq(events.ptId, ptId)),
+      ).toEqual([]);
+
+      const retried = refusingModel();
+      const result = await runTurnCore({
+        inboundMessage: accept,
+        model: retried,
+        modelId: 'requested/model',
+      });
+
+      expect(result.content).toBe(ACCEPTED);
+      // Never an ordinary turn: the acceptance is still deterministic.
+      expect(crashed.doGenerateCalls).toHaveLength(0);
+      expect(retried.doGenerateCalls).toHaveLength(0);
+
+      const settled = await conversationRow();
+      expect(settled.aiActive).toBe(false);
+      expect(settled.escalationState).toBe('requested');
+      expect(settled.handoffOfferMessageId).toBeNull();
+      // Escalating twice is harmless — the second call finds the conversation
+      // already human-owned — but it must not double-notify the PT.
+      expect(
+        await db
+          .select({ type: events.type })
+          .from(events)
+          .where(eq(events.ptId, ptId)),
+      ).toEqual([{ type: 'conversation.escalated' }]);
+    });
+
+    /**
+     * The other half of the window: the escalation committed and the reply that
+     * confirms it did not. The anchor rides in the reply's transaction, so it
+     * rolls back with it — no state may claim the acceptance completed, and the
+     * conversation must not fall back to an ordinary AI turn once a human owns
+     * it.
+     */
+    it('keeps the escalation and the anchor consistent when the accepted reply fails', async () => {
+      await runTurnCore({
+        inboundMessage: inbound,
+        model: offerModel(),
+        modelId: 'requested/model',
+      });
+      const accept = await nextInbound('PO', 1);
+
+      const realTransaction = db.transaction.bind(db) as typeof db.transaction;
+      let transactions = 0;
+      const txSpy = vi.spyOn(db, 'transaction').mockImplementation(((
+        ...args: Parameters<typeof db.transaction>
+      ) => {
+        transactions += 1;
+        // 1 = the escalation (let it commit), 2 = the anchor clear + reply.
+        return transactions === 2
+          ? Promise.reject(new Error('reply transaction died'))
+          : realTransaction(...args);
+      }) as typeof db.transaction);
+
+      await expect(
+        runTurnCore({
+          inboundMessage: accept,
+          model: refusingModel(),
+          modelId: 'requested/model',
+        }),
+      ).rejects.toThrow('reply transaction died');
+      txSpy.mockRestore();
+
+      const afterCrash = await conversationRow();
+      // The escalation is durable — the promise is kept by a person either way.
+      expect(afterCrash.aiActive).toBe(false);
+      expect(afterCrash.escalationState).toBe('requested');
+      // …and the acceptance is still recorded as owed rather than half-done.
+      expect(afterCrash.handoffOfferMessageId).toBe(inbound.id);
+      expect(
+        await db
+          .select({ id: messages.id })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.role, 'ai'),
+              eq(messages.replyToMessageId, accept.id),
+            ),
+          ),
+      ).toEqual([]);
+
+      // The retry hands the thread to the human who now owns it instead of
+      // answering as if nothing had been escalated.
+      const retried = refusingModel();
+      await expect(
+        runTurnCore({
+          inboundMessage: accept,
+          model: retried,
+          modelId: 'requested/model',
+        }),
+      ).rejects.toMatchObject({
+        code: 'conversation_inactive',
+      } satisfies Partial<ConversationEngineError>);
+      expect(retried.doGenerateCalls).toHaveLength(0);
+      expect(
+        await db
+          .select({ type: events.type })
+          .from(events)
+          .where(eq(events.ptId, ptId)),
+      ).toEqual([{ type: 'conversation.escalated' }]);
+    });
+
     // 'po' is how a patient takes a proposed slot. With no offer outstanding it
     // is an ordinary message and has to book, not hand the conversation over.
     it('books a proposed slot on a bare po when no offer is outstanding', async () => {

@@ -36,9 +36,10 @@ import { ConversationEngineError } from './errors';
 import {
   armHandoffOffer,
   businessLabel,
+  clearHandoffOffer,
   handoffAcceptedMessage,
   handoffOfferMessage,
-  resolveHandoffOffer,
+  handoffOfferOutcome,
   HANDOFF_ACCEPTED_MODEL,
 } from './handoff-offer';
 import type {
@@ -585,27 +586,46 @@ async function persistHandoffOffer(
  * conversation until the practitioner turns it back on — and confirm in one
  * fixed sentence, so the patient is not left with silence after saying yes.
  *
- * Escalation first, reply second, and not the other way round: a reply that
- * committed without its escalation would be answered by the idempotency check
- * on the retry, and the promise it just made would never be kept.
+ * Nothing here may run before the escalation, and that includes disarming the
+ * offer. The anchor is the only record that an acceptance is owed: clearing it
+ * first — as this path used to, in its own statement — meant a crash before the
+ * escalation left a retry with no anchor to read, so it fell through to an
+ * ordinary turn and the handoff the patient had accepted never happened. With
+ * the escalation durable first, a crash anywhere after it still leaves the
+ * anchor armed, and the retry escalates again (idempotently: the second
+ * `escalate_to_human` finds the conversation already human-owned).
+ *
+ * The clear then rides in the reply's transaction rather than standing alone,
+ * so the last remaining gap — anchor gone, promise unsent — cannot open either:
+ * both commit or neither does, and a retry re-runs the whole acceptance.
  */
 async function acceptHandoffOffer(
   context: PersistedContext,
+  offerMessageId: string,
 ): Promise<OutboundMessage> {
   await escalateToHuman(
     context,
     'The patient accepted the offer to pass their question to the practice.',
     'Handoff-offer escalation failed',
   );
-  return persistReply({
-    inbound: context.inbound,
-    content: handoffAcceptedMessage(businessLabel(context.practiceName)),
-    model: HANDOFF_ACCEPTED_MODEL,
-    provider: 'internal',
-    tokensIn: 0,
-    tokensOut: 0,
-    cachedTokens: 0,
-    costMicrousd: 0,
+  const svc = getServiceClient(context.inbound.ptId);
+  return svc.db.transaction(async (tx) => {
+    await clearHandoffOffer({
+      inbound: context.inbound,
+      offerMessageId,
+      executor: tx,
+    });
+    return persistReply({
+      inbound: context.inbound,
+      content: handoffAcceptedMessage(businessLabel(context.practiceName)),
+      model: HANDOFF_ACCEPTED_MODEL,
+      provider: 'internal',
+      tokensIn: 0,
+      tokensOut: 0,
+      cachedTokens: 0,
+      costMicrousd: 0,
+      executor: tx,
+    });
   });
 }
 
@@ -727,12 +747,22 @@ async function runTurnCoreUnlocked(args: {
   // An offer is answered before anything else, and answered exactly once: only
   // the message directly after it can accept, so a "po" that arrives later — or
   // one that takes a proposed time slot — falls through to a normal turn.
+  //
+  // Reading the anchor is separate from clearing it: an acceptance disarms the
+  // offer inside `acceptHandoffOffer`, after the escalation is durable. Only a
+  // lapse clears it here, where there is nothing left to lose.
   if (context.handoffOfferMessageId) {
-    const resolution = await resolveHandoffOffer({
+    const outcome = await handoffOfferOutcome({
       inbound: context.inbound,
       offerMessageId: context.handoffOfferMessageId,
     });
-    if (resolution === 'accepted') return acceptHandoffOffer(context);
+    if (outcome === 'accepted') {
+      return acceptHandoffOffer(context, context.handoffOfferMessageId);
+    }
+    await clearHandoffOffer({
+      inbound: context.inbound,
+      offerMessageId: context.handoffOfferMessageId,
+    });
   }
 
   const history = await loadHistory(context.inbound);
