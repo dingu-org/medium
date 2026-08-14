@@ -65,7 +65,7 @@ Plan is **Max 5x**. There is no readable limit meter, so burn is estimated from
 the local transcripts at API list prices:
 
 ```bash
-python3 /private/tmp/claude-501/-Users-kd-Projects-personal-medium/de0c6afd-a23a-4c6f-9da9-f9335f2650c6/scratchpad/usage_meter.py --history
+python3 task-manager/autopilot/usage-meter.py --history
 ```
 
 - Ceiling estimate: **$459** — the largest 5-hour-window burn ever recorded on
@@ -93,13 +93,47 @@ If this session dies, it fires, reads this file, and continues.
 
 ## Status
 
-**PAUSED 2026-08-13 12:26 CEST at the operator's request — machine restart.**
-Nothing is running. The dead-man's-switch task is **disabled** so nothing starts
-unattended after the restart. Resume only when the operator says so.
+**Wave 1 is complete and verified.** The dead-man's-switch task is currently
+**disabled**; re-arm it before any unattended stretch.
 
-**Current wave:** 0 — discovery, ~90% done
+**Current wave:** 1 — complete; Wave 2 (security, tenancy, GDPR) not started
 **Branch:** `prod-readiness` (off `main` at `361189a`), pushed
-**Last checkpoint:** 2026-08-13 12:26 CEST
+**Last checkpoint:** 2026-08-14
+
+Landed and independently verified — lint 0, typecheck 0, unit 68 files / 643
+tests, integration 65 files / 635 tests, build clean:
+
+| Commit | What |
+|---|---|
+| `22634cb` | POK `getOrder` 404-vs-error unit test |
+| `d93ef43` | Every test fixture date derived from a clock, not hard-coded |
+| `89188e7` | Integration suite made independent of local DB state |
+| `8fdb66a` | CI gate (`.github/workflows/ci.yml`) |
+| `5777b0a` | Embedded Signup v4 + exact-origin check |
+| `94cf336` | Deleted deterministic escalation detection and the keyword setting |
+| `4dcb904` | The AI-decided handoff offer |
+| `e585b7a` | Non-text inbound messages + notify the professional at the cap |
+
+### Open, needing the operator
+
+- **The "PO" collision.** The reminder parser also reads `PO` as *confirm my
+  appointment*. With both a reminder and a handoff offer outstanding, `PO`
+  confirms the appointment, the escalation silently never happens, and the
+  anchor stays armed. Proved end to end by the verifier. Which subsystem wins is
+  a product call — recommendation on the table is *whichever question was asked
+  most recently*. **Do not implement until answered.**
+- Make the CI workflow a **required status check** on `main` and `preview`
+  (repo admin only). Until then the gate reports but blocks nothing.
+- Claim the `ADMIN_EMAILS` address in production Supabase.
+- Live phone test for Embedded Signup v4, then repoint and redeploy each env.
+
+### Known defects queued for the orchestrator to fix
+
+- The handoff anchor is cleared **before** the escalation, non-transactionally —
+  a crash between the two loses the offer permanently.
+- `lib/ai/prompts/scheduling-assistant.ts` forbids discussing billing while the
+  new scope bullet promises prices. For a salon `sa kushton?` is the commonest
+  question of all.
 
 ### Durable artifacts (nothing lives in a session scratchpad any more)
 
@@ -107,33 +141,10 @@ unattended after the restart. Resume only when the operator says so.
 |---|---|
 | `task-manager/autopilot/usage-meter.py` | Rolling-window burn meter. `python3 task-manager/autopilot/usage-meter.py --history`. Parses every local Claude Code transcript, dedupes by message id, prices at API list rates. Reports the current 5h window and the historical peak window (the empirical ceiling). |
 | `task-manager/autopilot/audit-workflow.js` | The 11-dimension audit. Already run; kept so the dimension prompts are reproducible. |
-| `task-manager/autopilot/verify-workflow.js` | **Not yet run.** Adversarial verification of the audit's blocker/high claims + the lost prod-config dimension + an independent security second opinion + the wave plan. Run with `Workflow({scriptPath: 'task-manager/autopilot/verify-workflow.js'})`. |
-| `task-manager/audits/2026-08-13-production-readiness.md` | The 10 completed auditors' full write-ups. Unverified claims. |
-| `task-manager/audits/2026-08-13-raw.json` | Same, machine-readable. |
-| `task-manager/audits/2026-08-13-verified-by-orchestrator.md` | The findings the orchestrator established by actually running the suite. Higher confidence than anything in the audit report. |
-
-### To resume after the restart
-
-1. **Check for Notion tools first** (see the Notion section above). A fresh
-   session should finally have them.
-2. **Re-run the two lost audit steps.** The audit workflow was stopped
-   mid-flight; workflows cannot be resumed across sessions. 10 of 11 auditors
-   finished and their output is committed at
-   `task-manager/audits/2026-08-13-production-readiness.md` (readable) and
-   `2026-08-13-raw.json` (machine-readable). Lost and worth redoing:
-   - the **prod-config** auditor (production config, env contract, migration
-     state, security headers, backups, rate limiting, committed secrets), and
-   - the **synthesizer**, which verifies each claim against the code, dedupes
-     across dimensions, ranks blockers, and cuts the waves.
-
-   Both are already scripted in
-   `task-manager/autopilot/verify-workflow.js` — just run it. It also
-   adversarially re-checks every blocker/high claim from the first audit before
-   anything acts on them, and ends by producing the ranked wave plan.
-3. **Do not trust the audit findings as-is.** They are unverified single-agent
-   claims. Confirm each against the code before acting, and check it against the
-   decisions log in `progress.md` — several "obvious" issues there were
-   considered and deliberately accepted.
+| `task-manager/autopilot/verify-workflow.js` | Adversarial verification of the audit's claims, the prod-config dimension, an independent security second opinion, and the wave plan. Already run. |
+| `task-manager/autopilot/wave1-tests-workflow.js` | Wave 1 Track A — test repair, DB isolation, CI. Already run. |
+| `task-manager/autopilot/wave1-tracks-bc-workflow.js` | Wave 1 Tracks B/C — escalation redesign, Embedded Signup v4. Already run. |
+| `../medium-audits/` | **Outside the repo, deliberately.** All audit and verification findings. See the section above. |
 
 ## Subagent model policy
 
@@ -174,33 +185,33 @@ The main session orchestrates only: it does not plan or write code inline.
 Full detail, including reproduction, is in the run scratchpad at
 `verified-findings.md`.
 
-## Audit headlines (unverified — confirm before acting)
+## Audit and verification findings — kept OUT of this repository
 
-38 findings across 10 dimensions; 6 self-rated blocker. The two that most
-deserve confirming first, because they are about patient harm rather than
-tidiness:
+**This repository is public.** Detailed findings name unfixed weaknesses with
+file paths, line numbers and reproduction steps, which is a working guide for
+anyone who reads them before the fixes land. They are therefore not committed
+here.
 
-- **The conversation cap may silently disable safety escalation.** A patient who
-  trips the billing cap would get the static handoff message instead of the
-  deterministic safety escalation. If true, a commercial limit is suppressing a
-  safety path — the worst failure this product can have.
-  (`lib/inngest/functions/handle-inbound-message.ts`, `lib/billing/cap-handoff.ts`)
-- **A non-text inbound (voice note, photo) may leave the patient in silence and
-  be invisible to the PT.** WhatsApp patients send voice notes constantly, so
-  this would be hit in the first days of real use.
-  (`app/api/webhooks/whatsapp/route.ts`)
+They live outside the checkout, at `../medium-audits/` relative to the repo
+root (`/Users/kd/Projects/personal/medium-audits`), and belong in Notion as the
+durable home:
 
-Also notable: the exact log-redaction bug behind the 2026-08-05 outage is
-reported as still live (token *counts* redacted as if they were secrets); the
-Embedded Signup client reportedly still sends Meta's **v2** `extras` shape and a
-v2 Login config, which is a bigger migration than the "v3 → v4" note implies;
-the RLS isolation suite only runs under Docker and therefore effectively never;
-and any inbound sender reportedly becomes an AI-processed patient with no
-consent gate.
+| File | What it holds |
+|---|---|
+| `2026-08-13-production-readiness.md` | 38 raw, unverified findings across 10 dimensions |
+| `2026-08-13-raw.json` | the same, machine-readable |
+| `2026-08-13-verification.md` | the adversarial re-check, the ranked wave plan, and the operator action list |
+| `2026-08-13-verification-raw.json` | the same, machine-readable |
+| `2026-08-13-verified-by-orchestrator.md` | findings established by running the suite directly |
 
-The security/tenancy auditor found **no** blocker or high-severity issues, which
-is the single most reassuring result in the set — and also the one most worth a
-second opinion, since it is the dimension where a miss is existential.
+`task-manager/audits/` is gitignored so this cannot recur by accident. If a
+future run produces findings, write them there or to Notion — never to a
+tracked path.
+
+Note for honesty: these files **were** committed and pushed publicly between
+2026-08-13 and 2026-08-14 (commits `15755e2` and `b16b7bf`). Removing them stops
+further indexing but does not un-publish them; the content should be treated as
+disclosed until the underlying issues are fixed.
 
 ## Log
 

@@ -52,3 +52,6 @@ next-env.d.ts
 # ua
 .ua/.trash*
 .ua/temp*
+
+# Audit findings name unfixed weaknesses; this repo is public. Keep them out.
+task-manager/audits/
