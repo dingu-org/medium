@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createPokClient } from '@/lib/billing/pok/client';
+import { createPokClient, PokError, PokNotFoundError } from '@/lib/billing/pok/client';
 
 const CONFIG = {
   apiBase: 'https://pok.test',
@@ -93,6 +93,68 @@ describe('createPokClient', () => {
     expect(order.isCaptured).toBe(true);
     expect(fetchMock.mock.calls.filter(isLoginCall)).toHaveLength(2);
     expect(orderCalls).toBe(2);
+  });
+
+  it('rejects a 404 order lookup with PokNotFoundError', async () => {
+    // Money correctness: a 404 is POK saying "this id is not an order of mine" —
+    // a terminal answer reconcile may act on. It must NOT be collapsed into the
+    // generic !res.ok error, which callers treat as a transient POK failure.
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/auth/sdk/login')) return jsonResponse(200, loginBody('tok'));
+      return jsonResponse(404, { message: 'not found', errorCode: 'ORDER_NOT_FOUND' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createPokClient(CONFIG);
+    const error = await client.getOrder('ord1').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(PokNotFoundError);
+    expect((error as PokNotFoundError).status).toBe(404);
+    expect((error as PokNotFoundError).pokErrorCode).toBe('ORDER_NOT_FOUND');
+  });
+
+  it('rejects a 500 order lookup with a plain PokError, not PokNotFoundError', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/auth/sdk/login')) return jsonResponse(200, loginBody('tok'));
+      return jsonResponse(500, { message: 'upstream exploded' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createPokClient(CONFIG);
+    const error = await client.getOrder('ord1').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(PokError);
+    // A degraded POK is retryable; treating it as "order gone" would be wrong.
+    expect(error).not.toBeInstanceOf(PokNotFoundError);
+    expect((error as PokError).status).toBe(500);
+  });
+
+  it('returns the parsed order on a 200', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/auth/sdk/login')) return jsonResponse(200, loginBody('tok'));
+      return jsonResponse(200, {
+        data: {
+          sdkOrder: {
+            id: 'ord1',
+            isCaptured: true,
+            // POK stringifies numbers; the schema coerces.
+            amount: '2500',
+            currencyCode: 'ALL',
+          },
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createPokClient(CONFIG);
+    const order = await client.getOrder('ord1');
+
+    expect(order).toMatchObject({
+      id: 'ord1',
+      isCaptured: true,
+      amount: 2500,
+      currencyCode: 'ALL',
+    });
   });
 
   it('gives up on a POK request that never answers', async () => {
