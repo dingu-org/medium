@@ -24,8 +24,10 @@ import {
   whatsappContacts,
 } from '@/lib/db/schema';
 import { inngest } from '@/lib/inngest/client';
+import { getChatListSnapshot } from '@/lib/pwa/read-models';
 import { createServiceClient } from '@/lib/supabase/service';
 import { GET, POST } from '../route';
+import { DAY, testNowUtc } from '@/tests/support/clock';
 
 const PHONE_NUMBER_ID = `PNI_${Date.now()}`;
 const WA_ID = '447700900000';
@@ -35,6 +37,13 @@ const APP_SECRET = process.env.META_APP_SECRET!;
 let ptId = '';
 let externalIdCounter = 0;
 const nextExternalId = () => `wamid.${Date.now()}-${++externalIdCounter}`;
+
+// Two reminder cycles on one appointment: the second delivery must land after
+// the first, and that ordering is the whole point — the calendar dates never
+// were. Derived, and on a whole second because Meta reports Unix seconds.
+const SECOND_DELIVERY = testNowUtc();
+const SECOND_DELIVERY_TS = String(Math.floor(SECOND_DELIVERY.getTime() / 1000));
+const FIRST_DELIVERY = new Date(SECOND_DELIVERY.getTime() - DAY);
 
 function sign(body: string): string {
   return (
@@ -50,6 +59,8 @@ type PayloadOpts = {
   /** Epoch-seconds string, as Meta sends it. */
   timestamp?: string;
   text?: string;
+  /** Caption on a media message — WhatsApp never puts it in `text`. */
+  caption?: string;
 };
 
 /** Epoch seconds, for an inbound that Meta is delivering right now. */
@@ -65,6 +76,9 @@ function buildPayload(opts: PayloadOpts = {}) {
   };
   if (type === 'text') {
     msg.text = { body: opts.text ?? 'hello world' };
+  }
+  if (opts.caption) {
+    msg[type] = { id: 'MEDIA_ID', caption: opts.caption };
   }
   return {
     object: 'whatsapp_business_account',
@@ -581,13 +595,14 @@ describe('POST /api/webhooks/whatsapp — unknown phone_number_id', () => {
 });
 
 describe('POST /api/webhooks/whatsapp — non-text message type', () => {
-  it('does not persist the body but still stamps the 24h service window', async () => {
-    const sendSpy = vi
-      .spyOn(inngest, 'send')
-      .mockResolvedValue({ ids: [] } as never);
+  // A dropped voice note is invisible three times over: no unread badge, no
+  // chat-list preview, no realtime refresh — all three read the `messages` row,
+  // so persisting a placeholder is what makes the PT see it at all.
+  it('persists a placeholder that reaches the chat list and the unread badge', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
     const timestamp = nowSeconds();
     const res = await POST(
-      makePost(buildPayload({ messageType: 'image', timestamp })),
+      makePost(buildPayload({ messageType: 'audio', timestamp })),
     );
     expect(res.status).toBe(200);
 
@@ -595,8 +610,22 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
       .select()
       .from(messages)
       .where(eq(messages.ptId, ptId));
-    expect(rows).toHaveLength(0);
-    expect(sendSpy).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].role).toBe('patient');
+    expect(rows[0].content).toBe('[mesazh zanor]');
+
+    const [row] = await getChatListSnapshot(ptId);
+    expect(row.last_content).toBe('[mesazh zanor]');
+    expect(row.unread_count).toBe(1);
+
+    // The job has to know the stored content is our placeholder and not the
+    // patient's words, or the model would be asked to answer a voice note it
+    // cannot hear.
+    const [received] = await db
+      .select()
+      .from(events)
+      .where(and(eq(events.ptId, ptId), eq(events.type, 'message.received')));
+    expect(received.payload).toMatchObject({ nonText: true });
 
     const ps = await db
       .select()
@@ -612,6 +641,61 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
     // The window belongs to the inbound, not to the moment Meta happened to
     // deliver it to us.
     expect(cs[0].lastInboundAt?.getTime()).toBe(Number(timestamp) * 1000);
+  });
+
+  it('moves the preview and the unread count on an existing conversation', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    await POST(makePost(buildPayload({ text: 'a kam takim nesër?' })));
+    const [beforeMedia] = await getChatListSnapshot(ptId);
+    expect(beforeMedia.last_content).toBe('a kam takim nesër?');
+    expect(beforeMedia.unread_count).toBe(1);
+
+    await POST(
+      makePost(buildPayload({ messageType: 'image', timestamp: nowSeconds() })),
+    );
+
+    const [afterMedia] = await getChatListSnapshot(ptId);
+    expect(afterMedia.last_content).toBe('[foto]');
+    expect(afterMedia.unread_count).toBe(2);
+  });
+
+  // A caption IS text the patient typed, carried on the media object and never
+  // in `text` — dropping the message dropped their words with it.
+  it('keeps the caption the patient typed alongside the placeholder', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    await POST(
+      makePost(
+        buildPayload({
+          messageType: 'image',
+          timestamp: nowSeconds(),
+          caption: 'a mund të vij të mërkurën?',
+        }),
+      ),
+    );
+
+    const [row] = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    expect(row.content).toBe('[foto] a mund të vij të mërkurën?');
+  });
+
+  it('dedupes a redelivered media message on its external id', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const payload = buildPayload({
+      messageType: 'audio',
+      timestamp: nowSeconds(),
+    });
+    await POST(makePost(payload));
+    await POST(makePost(payload));
+
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.ptId, ptId));
+    expect(rows).toHaveLength(1);
+    const received = await db
+      .select()
+      .from(events)
+      .where(and(eq(events.ptId, ptId), eq(events.type, 'message.received')));
+    expect(received).toHaveLength(1);
   });
 
   it('does not extend the 24h window from a redelivered old media inbound', async () => {
@@ -1461,7 +1545,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
 
   it('stamps the delivery of a second cycle over the previous one', async () => {
     const firstWamid = nextExternalId();
-    const firstDelivery = new Date('2023-11-14T22:13:20.000Z');
+    const firstDelivery = FIRST_DELIVERY;
     const { reminderJobId, conversationId } = await seedReminderForWamid({
       wamid: firstWamid,
       deliveredAt: firstDelivery,
@@ -1471,7 +1555,11 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
     await POST(
       makePost(
         buildStatusesPayload([
-          { id: secondWamid, status: 'delivered', timestamp: '1800000000' },
+          {
+            id: secondWamid,
+            status: 'delivered',
+            timestamp: SECOND_DELIVERY_TS,
+          },
         ]),
       ),
     );
@@ -1482,7 +1570,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
       .select({ deliveredAt: reminderJobs.deliveredAt })
       .from(reminderJobs)
       .where(eq(reminderJobs.id, reminderJobId));
-    expect(job.deliveredAt?.getTime()).toBe(1_800_000_000_000);
+    expect(job.deliveredAt?.getTime()).toBe(SECOND_DELIVERY.getTime());
 
     // The job scalar can only hold the later cycle, so the count comes from a
     // row per delivered wamid — both billed templates, one appointment.
@@ -1501,7 +1589,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
     const { appointmentId, reminderJobId, conversationId } =
       await seedReminderForWamid({
         wamid: firstWamid,
-        deliveredAt: new Date('2023-11-14T22:13:20.000Z'),
+        deliveredAt: FIRST_DELIVERY,
       });
     const secondWamid = await rearmOntoSecondCycle(reminderJobId, conversationId);
 

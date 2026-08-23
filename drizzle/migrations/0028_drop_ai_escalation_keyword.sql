@@ -1,0 +1,1 @@
+ALTER TABLE "pts" DROP COLUMN "ai_escalation_keyword";

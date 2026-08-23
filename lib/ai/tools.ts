@@ -35,6 +35,9 @@ export const toolSchemas = {
   escalate_to_human: z.object({
     reason: z.string().trim().min(1).max(500),
   }),
+  offer_human_handoff: z.object({
+    reason: z.string().trim().min(1).max(500),
+  }),
 } as const;
 
 export type ToolName = keyof typeof toolSchemas;
@@ -130,6 +133,16 @@ export function createConversationTools(
         'Hand the conversation to the PT when the patient requests a human or scheduling cannot be resolved safely.',
       inputSchema: dispatchableSchema(toolSchemas.escalate_to_human),
       execute: (input) => dispatch('escalate_to_human', input, ctx),
+    }),
+    // Offering is not escalating: nothing is handed over until the patient
+    // answers the offer, so this tool changes no conversation state. The engine
+    // reads the successful call, sends its own fixed sentence, and remembers
+    // that the offer is outstanding.
+    offer_human_handoff: tool({
+      description:
+        'Offer to pass a question you cannot answer to the business. Use it for anything outside booking, rescheduling, cancelling, or the practice details you were given, instead of guessing an answer.',
+      inputSchema: dispatchableSchema(toolSchemas.offer_human_handoff),
+      execute: (input) => dispatch('offer_human_handoff', input, ctx),
     }),
   };
 }

@@ -11,10 +11,23 @@ import {
 } from '@/lib/db/schema';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
 import { resolveEffectivePlan } from '@/lib/billing/entitlements';
-import { markCapHandoff, prepareCapHandoff } from '@/lib/billing/cap-handoff';
+import {
+  handOffCappedConversation,
+  markCapHandoff,
+  prepareCapHandoff,
+} from '@/lib/billing/cap-handoff';
 import type { PlanId } from '@/lib/billing/plans';
 import { checkAndRecordConversation } from '@/lib/billing/usage';
 import { ConversationEngineError } from '@/lib/conversation/errors';
+import {
+  clearHandoffOffer,
+  handoffOfferOutcome,
+  outstandingHandoffOffer,
+} from '@/lib/conversation/handoff-offer';
+import {
+  markNonTextNotice,
+  prepareNonTextNotice,
+} from '@/lib/conversation/non-text';
 import type {
   InboundMessage,
   OutboundMessage,
@@ -26,6 +39,7 @@ import { createLogger } from '@/lib/log';
 import { dispatchPushForEvent } from '@/lib/notifications/push-dispatch';
 import {
   handleReminderResponse,
+  pendingReminderSentAt,
   type ReminderHandlingResult,
 } from '@/lib/reminders/response-handler';
 import { inngest } from '../client';
@@ -50,6 +64,8 @@ export type InboundJobContext = {
   plan: PlanId;
   /** PT timezone — the calendar boundary for conversation-day metering (C2). */
   timezone: string;
+  /** Names the business in the deterministic non-text notice's handoff offer. */
+  practiceName: string | null;
   connectionId: string | null;
   recipient: string | null;
 };
@@ -84,6 +100,7 @@ export async function loadInboundJobContext(args: {
       planLifetime: pts.planLifetime,
       planExpiresAt: pts.planExpiresAt,
       timezone: pts.timezone,
+      practiceName: pts.practiceName,
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -173,9 +190,78 @@ export async function loadInboundJobContext(args: {
       new Date(),
     ),
     timezone: row.timezone,
+    practiceName: row.practiceName,
     connectionId: connection?.id ?? null,
     recipient: row.waId,
   };
+}
+
+/** Which outstanding question this message is taken to answer. */
+export type InboundClaim = 'reminder' | 'handoff_offer';
+
+/**
+ * Two subsystems can claim the same one-word reply, and neither knows about the
+ * other: a yes is what an unanswered reminder reads as a confirmation
+ * (lib/language/reply-intent.ts) and it is also what the handoff offer asks
+ * for. The reminder handler runs first and returns before the engine, so
+ * without this gate a bare PO always confirmed the appointment, the escalation
+ * never happened, and the patient was answered about something they had not
+ * asked about.
+ *
+ * The owner's rule (2026-08-14): whichever question was asked most recently
+ * wins, because both orderings genuinely occur — a scheduled reminder can land
+ * after an offer, and an offer can be made after a reminder — so any fixed
+ * winner would be wrong about half the time.
+ *
+ * Only a message both could claim is weighed at all. The offer can claim
+ * exactly the messages `handoffOfferOutcome` accepts (an affirmative, and only
+ * as the message directly after the offer); anything else is not an answer to
+ * the offer, so the reminder handler keeps it and today's deterministic
+ * ANULO/RICAKTO paths are untouched.
+ *
+ * Both sides read "affirmative" out of lib/language/reply-intent.ts, and they
+ * have to: while the offer demanded exact equality with PO and the reminder
+ * accepted 'dakord', 'ok' and 'po' plus one word, everything in the gap — "po
+ * faleminderit" — bypassed this comparison entirely and went to whichever
+ * subsystem runs first, which is always the reminder.
+ *
+ * When the reminder wins the offer lapses here, consistent with the rule that
+ * only the immediately-next message can accept: the patient answered the
+ * reminder, not the offer, so the anchor is cleared rather than left armed
+ * against some later, unrelated message.
+ */
+export async function resolveInboundClaim(
+  inbound: InboundMessage,
+): Promise<InboundClaim> {
+  const offer = await outstandingHandoffOffer({
+    ptId: inbound.ptId,
+    conversationId: inbound.conversationId,
+  });
+  if (!offer) return 'reminder';
+
+  const outcome = await handoffOfferOutcome({
+    inbound,
+    offerMessageId: offer.messageId,
+  });
+  // Not an acceptance: the offer cannot claim this message, so there is nothing
+  // to weigh. It lapses in the engine as it always has.
+  if (outcome !== 'accepted') return 'reminder';
+
+  const reminderSentAt = await pendingReminderSentAt(inbound);
+  if (!reminderSentAt) return 'handoff_offer';
+  // Strictly newer, so an exact tie goes to the reminder rather than being
+  // decided by whichever row the comparison happened to see first. Not just
+  // theory: Postgres keeps these to the microsecond but a JS `Date` truncates to
+  // the millisecond, so an offer made within 999µs of the reminder ties here.
+  // The reminder is the safer side of that coin — confirming an appointment the
+  // patient does hold is recoverable, and the offer is re-made the moment they
+  // ask again.
+  if (offer.offeredAt.getTime() > reminderSentAt.getTime()) {
+    return 'handoff_offer';
+  }
+
+  await clearHandoffOffer({ inbound, offerMessageId: offer.messageId });
+  return 'reminder';
 }
 
 export async function runInboundTurn(
@@ -383,14 +469,30 @@ export const handleInboundMessage = inngest.createFunction(
       return { skipped: 'delivery_context_missing' };
     }
 
+    // A body the assistant cannot read: the stored content is our own
+    // placeholder, so there is nothing here that could be a reminder answer
+    // (those are typed words) and nothing worth a keyword lookup.
+    //
     // Globally paused ⇒ no automated reminder mutation or confirmation reply
     // either; the inbound routes through the engine, which skips it as
     // `assistant_paused` (the single logging/skip choke point).
-    const reminder: ReminderHandlingResult = context.assistantPaused
-      ? { kind: 'none' }
-      : await step.run('handle-reminder-response', () =>
-          handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
-        );
+    const nonText = event.data.nonText === true;
+    const deterministicReminders = !(context.assistantPaused || nonText);
+    // Ahead of the reminder step, never inside it: the handler returns an
+    // outbound and ends the run, so once it has claimed the message the engine
+    // — and with it the acceptance of an outstanding handoff offer — is already
+    // unreachable.
+    const claim: InboundClaim = deterministicReminders
+      ? await step.run('resolve-turn-precedence', () =>
+          resolveInboundClaim(hydrateInbound(context.inbound)),
+        )
+      : 'reminder';
+    const reminder: ReminderHandlingResult =
+      deterministicReminders && claim === 'reminder'
+        ? await step.run('handle-reminder-response', () =>
+            handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
+          )
+        : { kind: 'none' };
     if (reminder.kind === 'outbound') {
       const delivery = await step.run('send-reminder-response', () =>
         sendInboundReply({
@@ -444,12 +546,80 @@ export const handleInboundMessage = inngest.createFunction(
       return { skipped: 'conversation_inactive' };
     }
 
+    // The assistant cannot read this body, and it never becomes an AI turn:
+    // handing our own `[mesazh zanor]` placeholder to the model would have it
+    // invent what the voice note said. One fixed notice per conversation per
+    // day instead, carrying the same handoff offer as any out-of-scope
+    // question. Placed after the takeover check above (a PT already handling
+    // the thread gets the nudge, not an assistant talking over them) and before
+    // the cap gate (no model round happened, so nothing is metered).
+    if (nonText) {
+      // The engine is the single skip choke point for text; this branch never
+      // reaches it, so it owns the same line for a globally paused assistant.
+      if (context.assistantPaused) {
+        log.info(
+          'inbound.non_text',
+          'Non-text message stored; assistant globally paused',
+          { message_id: event.data.messageId },
+        );
+        return { skipped: 'assistant_paused' };
+      }
+
+      const notice = await step.run('prepare-non-text-notice', () =>
+        prepareNonTextNotice({
+          inbound: hydrateInbound(context.inbound),
+          practiceName: context.practiceName,
+          timezone: context.timezone,
+          instant: new Date(context.inbound.occurredAt),
+        }),
+      );
+      if (notice.action === 'skip') {
+        log.info(
+          'inbound.non_text',
+          'Non-text message stored; notice already sent today',
+          { message_id: event.data.messageId },
+        );
+        return { nonText: true, noticeSent: false };
+      }
+
+      const delivery = await step.run('send-non-text-notice', () =>
+        sendInboundReply({
+          outbound: notice.outbound,
+          connectionId: context.connectionId!,
+          recipient: context.recipient!,
+        }),
+      );
+      await step.run('persist-non-text-notice-delivery', () =>
+        persistInboundReplyDelivery({
+          outboundId: notice.outbound.id,
+          messageId: delivery.messageId,
+        }),
+      );
+      await step.run('mark-non-text-notice', () =>
+        markNonTextNotice({
+          ptId: context.inbound.ptId,
+          conversationId: context.inbound.conversationId,
+          instant: new Date(context.inbound.occurredAt),
+        }),
+      );
+
+      log.info('inbound.non_text', 'Non-text message stored; notice sent', {
+        message_id: event.data.messageId,
+        wa_message_id: delivery.messageId,
+      });
+      return {
+        nonText: true,
+        noticeSent: true,
+        outboundMessageId: notice.outbound.id,
+        externalId: delivery.messageId,
+      };
+    }
+
     // Meter the conversation-day and enforce the monthly cap. Paused
-    // conversations skip the gate (not counted) — the engine still runs so
-    // safety-escalation-while-paused works, then self-skips as
-    // `assistant_paused`. The metering instant is the patient message's own
-    // timestamp (not wall-clock) so Inngest retries land on the same billing
-    // day and month.
+    // conversations skip the gate (not counted) — the engine self-skips as
+    // `assistant_paused` before any model call. The metering instant is the
+    // patient message's own timestamp (not wall-clock) so Inngest retries land
+    // on the same billing day and month.
     if (!context.assistantPaused) {
       const gate = await step.run('check-conversation-cap', () =>
         checkAndRecordConversation({
@@ -465,6 +635,21 @@ export const handleInboundMessage = inngest.createFunction(
       );
 
       if (gate.status === 'at_cap') {
+        // The assistant is out of conversations for the month, so this patient
+        // needs a person — no offer to make, nothing to ask. Hand the thread
+        // over and push before the patient's holding message: whatever happens
+        // to the send, the PT knows someone is waiting. This is also what keeps
+        // the 2nd..Nth message of a capped day visible — they take the
+        // manual-handling path above instead of hitting the throttled handoff.
+        await step.run('hand-off-capped-conversation', () =>
+          handOffCappedConversation({
+            ptId: context.inbound.ptId,
+            conversationId: context.inbound.conversationId,
+            patientId: context.inbound.patientId,
+            traceId: event.data.traceId,
+          }),
+        );
+
         const prep = await step.run('prepare-cap-handoff', () =>
           prepareCapHandoff({
             inbound: hydrateInbound(context.inbound),

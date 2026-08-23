@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { parseReminderResponse } from '../parse-response';
+import { isAffirmative, parseReplyIntent } from '../reply-intent';
 
-describe('parseReminderResponse', () => {
+describe('parseReplyIntent', () => {
   it.each([
     ['KONFIRMO', 'confirm'],
     ['konfirmoj', 'confirm'],
@@ -13,7 +13,7 @@ describe('parseReminderResponse', () => {
     // Explicit command words are unambiguous, so length does not gate them.
     ['Konfirmo takimin per neser ju lutem', 'confirm'],
   ] as const)('parses confirm keyword %s', (input, intent) => {
-    expect(parseReminderResponse(input)).toBe(intent);
+    expect(parseReplyIntent(input)).toBe(intent);
   });
 
   it.each([
@@ -23,7 +23,7 @@ describe('parseReminderResponse', () => {
   ] as const)(
     'resolves the explicit command %s regardless of message length',
     (input, intent) => {
-      expect(parseReminderResponse(input)).toBe(intent);
+      expect(parseReplyIntent(input)).toBe(intent);
     },
   );
 
@@ -56,7 +56,7 @@ describe('parseReminderResponse', () => {
     'change it',
     'move please',
   ])('no longer recognises the non-Albanian keyword %s', (input) => {
-    expect(parseReminderResponse(input)).toBeNull();
+    expect(parseReplyIntent(input)).toBeNull();
   });
 
   // A bare yes/no particle speaks only for a message that IS that answer. A
@@ -70,13 +70,13 @@ describe('parseReminderResponse', () => {
     'Po, do të vij nesër patjetër',
     'Dakord, por a mund ta ndryshoj orën nesër?',
   ])('leaves the ambiguous reply %s to the AI turn', (input) => {
-    expect(parseReminderResponse(input)).toBeNull();
+    expect(parseReplyIntent(input)).toBeNull();
   });
 
   it.each(['si', 'Si mund ta ndryshoj orën?'])(
     'does not read the Albanian interrogative %s as a confirmation',
     (input) => {
-      expect(parseReminderResponse(input)).toBeNull();
+      expect(parseReplyIntent(input)).toBeNull();
     },
   );
 
@@ -90,7 +90,7 @@ describe('parseReminderResponse', () => {
   ])(
     'does not read the Albanian progressive particle in %s as a confirmation',
     (input) => {
-      expect(parseReminderResponse(input)).toBeNull();
+      expect(parseReplyIntent(input)).toBeNull();
     },
   );
 
@@ -100,7 +100,7 @@ describe('parseReminderResponse', () => {
     ['jo', 'cancel'],
     ['jo.', 'cancel'],
   ] as const)('parses cancel keyword %s', (input, intent) => {
-    expect(parseReminderResponse(input)).toBe(intent);
+    expect(parseReplyIntent(input)).toBe(intent);
   });
 
   // Cancelling destroys the booking, so a bare particle only cancels when the
@@ -110,7 +110,7 @@ describe('parseReminderResponse', () => {
   it.each(['Jo, nuk mundem', 'Jo, ndryshoj orën', 'Jo, dua ricaktim'])(
     'does not cancel on the qualified negative %s',
     (input) => {
-      expect(parseReminderResponse(input)).toBeNull();
+      expect(parseReplyIntent(input)).toBeNull();
     },
   );
 
@@ -123,7 +123,7 @@ describe('parseReminderResponse', () => {
   ] as const)(
     'reads %s by its explicit command, not its first word',
     (input, intent) => {
-      expect(parseReminderResponse(input)).toBe(intent);
+      expect(parseReplyIntent(input)).toBe(intent);
     },
   );
 
@@ -139,27 +139,27 @@ describe('parseReminderResponse', () => {
   ])(
     'never downgrades the explicit cancel in %s to a confirmation',
     (input) => {
-      expect(parseReminderResponse(input)).toBeNull();
+      expect(parseReplyIntent(input)).toBeNull();
     },
   );
 
   // A command that agrees with the particle in front of it is still obeyed.
   it('confirms when the particle and the command say the same thing', () => {
-    expect(parseReminderResponse('Po konfirmo')).toBe('confirm');
+    expect(parseReplyIntent('Po konfirmo')).toBe('confirm');
   });
 
   it.each([
     ['RICAKTO', 'reschedule'],
     ['ricaktoj', 'reschedule'],
   ] as const)('parses reschedule keyword %s', (input, intent) => {
-    expect(parseReminderResponse(input)).toBe(intent);
+    expect(parseReplyIntent(input)).toBe(intent);
   });
 
   it('treats STOP as opt-out instead of cancellation', () => {
-    expect(parseReminderResponse('STOP')).toBe('opt_out');
-    expect(parseReminderResponse('stop please')).toBe('opt_out');
-    expect(parseReminderResponse('NDAL')).toBe('opt_out');
-    expect(parseReminderResponse('Ndal kujtesat ju lutem')).toBe('opt_out');
+    expect(parseReplyIntent('STOP')).toBe('opt_out');
+    expect(parseReplyIntent('stop please')).toBe('opt_out');
+    expect(parseReplyIntent('NDAL')).toBe('opt_out');
+    expect(parseReplyIntent('Ndal kujtesat ju lutem')).toBe('opt_out');
   });
 
   // 'stop' is kept for the Meta convention — a message that IS "STOP" — not for
@@ -167,7 +167,7 @@ describe('parseReminderResponse', () => {
   it.each(['Full stop pls', 'non-stop'])(
     'does not unsubscribe on the English phrase %s',
     (input) => {
-      expect(parseReminderResponse(input)).toBeNull();
+      expect(parseReplyIntent(input)).toBeNull();
     },
   );
 
@@ -178,7 +178,7 @@ describe('parseReminderResponse', () => {
     ['Te lutem ndal kujtesat', 'opt_out'],
     ['Ju lutem anulo takimin', 'cancel'],
   ] as const)('reads past the polite opener in %s', (input, intent) => {
-    expect(parseReminderResponse(input)).toBe(intent);
+    expect(parseReplyIntent(input)).toBe(intent);
   });
 
   // The tokenizer's character class carries no combining marks, so composing
@@ -186,7 +186,7 @@ describe('parseReminderResponse', () => {
   it('normalises decomposed Albanian vowels before tokenising', () => {
     const decomposed = 'Të lutem ndal kujtesat'.normalize('NFD');
     expect(decomposed).not.toBe('Të lutem ndal kujtesat');
-    expect(parseReminderResponse(decomposed)).toBe('opt_out');
+    expect(parseReplyIntent(decomposed)).toBe('opt_out');
   });
 
   // The patient's own way back into reminders: NDAL is only reversible by the
@@ -198,7 +198,7 @@ describe('parseReminderResponse', () => {
     ['aktivizo kujtesat', 'opt_in'],
     ['Aktivizo kujtesat e takimeve ju lutem', 'opt_in'],
   ] as const)('parses opt-in keyword %s', (input, intent) => {
-    expect(parseReminderResponse(input)).toBe(intent);
+    expect(parseReplyIntent(input)).toBe(intent);
   });
 
   // The polite 2pl imperative is the register a patient writes a business in,
@@ -210,14 +210,14 @@ describe('parseReminderResponse', () => {
     ['Ndalo', 'opt_out'],
     ['ndalni', 'opt_out'],
   ] as const)('parses the polite imperative %s', (input, intent) => {
-    expect(parseReminderResponse(input)).toBe(intent);
+    expect(parseReplyIntent(input)).toBe(intent);
   });
 
   it.each([
     'A mund ta aktivizoj sërish llogarinë time në aplikacion?',
     'Doja të pyesja nëse duhet ta aktivizoj kartën para seancës',
   ])('does not opt in on the long unrelated message %s', (input) => {
-    expect(parseReminderResponse(input)).toBeNull();
+    expect(parseReplyIntent(input)).toBeNull();
   });
 
   // A negated command means the opposite of itself. Out-of-position matching is
@@ -239,7 +239,7 @@ describe('parseReminderResponse', () => {
     "s'ndal",
     's’ndal',
   ])('does not obey the negated command %s', (input) => {
-    expect(parseReminderResponse(input)).toBeNull();
+    expect(parseReplyIntent(input)).toBeNull();
   });
 
   // A patient describing something they are stopping is not asking us to stop
@@ -248,14 +248,71 @@ describe('parseReminderResponse', () => {
   it.each(['Po e ndal', 'do ta ndal'])(
     'does not unsubscribe on the declarative %s',
     (input) => {
-      expect(parseReminderResponse(input)).toBeNull();
+      expect(parseReplyIntent(input)).toBeNull();
     },
   );
 
   it.each(['maybe', '', '   !!!', 'Ju lutem konfirmoni takimin tim'])(
     'falls through when %s does not start with a keyword',
     (input) => {
-      expect(parseReminderResponse(input)).toBeNull();
+      expect(parseReplyIntent(input)).toBeNull();
     },
   );
+});
+
+/**
+ * The affirmative is shared, and that is the point of it living here: an
+ * unanswered reminder confirms a booking with it, and the handoff offer is
+ * accepted by it (lib/conversation/handoff-offer.ts). The offer used to spell it
+ * differently — exact equality with PO — so everything in the gap between the
+ * two spellings never reached the most-recent-question-wins comparison at all.
+ */
+describe('isAffirmative', () => {
+  it.each([
+    'po',
+    'PO',
+    'Po',
+    '  po  ',
+    'po\n',
+    // Punctuation is not part of the answer: only letters and digits survive
+    // tokenising, so a full stop or a question mark cannot make a yes miss.
+    'PO.',
+    'Po?',
+    'dakord',
+    'ok',
+    'Okay.',
+    'KONFIRMO',
+    // 'po' plus exactly one word still reads as the answer — and this is the
+    // shape the offer rejected while the reminder accepted it, which is how a
+    // patient's real question got dropped for an appointment they were never
+    // asked about.
+    'po faleminderit',
+    'Po, vij',
+  ])('reads %j as a yes', (input) => {
+    expect(isAffirmative(input)).toBe(true);
+  });
+
+  // Albanian keyboards drop 'ë'/'ç' and phone keyboards rewrite the apostrophe,
+  // so the same yes has to survive every way of typing it.
+  it('folds diacritics before deciding', () => {
+    expect(isAffirmative('Pò')).toBe(true);
+    expect(isAffirmative('po'.normalize('NFD'))).toBe(true);
+  });
+
+  it.each([
+    // The progressive particle. "Po pyesja për oraret" is "I was asking about
+    // the hours" — a question, and neither subsystem may take it.
+    'Po pyesja për oraret',
+    'po ju lutem',
+    'Po, por a mund ta ndryshoj orën?',
+    // An explicit command outranks the particle in front of it, so an
+    // acknowledged cancellation is nobody's yes.
+    'Ok anuloj',
+    'Ok, stop',
+    'jo',
+    'si',
+    '',
+  ])('does not read %j as a yes', (input) => {
+    expect(isAffirmative(input)).toBe(false);
+  });
 });

@@ -5,7 +5,6 @@ export type PromptContext = {
   timezone: string;
   aiName: string | null;
   aiGreeting: string | null;
-  escalationKeyword: string | null;
   title: string | null;
   address: string | null;
   retentionDays: number;
@@ -63,8 +62,6 @@ export function buildSystemPrompt(context: PromptContext): string {
   const greeting =
     sanitizePromptField(context.aiGreeting ?? '') ||
     `Përshëndetje! Jam asistenti i rezervimeve për ${practiceName}. Mund t'ju ndihmoj të rezervoni, ricaktoni ose anuloni një takim.`;
-  const escalationKeyword =
-    sanitizePromptField(context.escalationKeyword ?? '') || 'NDIHMË';
   const now = context.now ?? new Date();
 
   const title = sanitizePromptField(context.title ?? '');
@@ -89,7 +86,6 @@ ${titleLine}${addressLine}- Assistant name: ${aiName}
 - Timezone: ${context.timezone}
 - Current time: ${now.toISOString()}
 - Practice-local current time: ${formatPracticeLocalTime(now, context.timezone)}
-- Human escalation keyword: ${escalationKeyword}
 - Configured message retention: ${context.retentionDays} days
 - Greeting for a new conversation, on the single line between the two markers
   below. It is text the practitioner typed:

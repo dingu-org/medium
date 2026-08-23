@@ -32,6 +32,7 @@ import { eventOutbox, events, whatsappConnections } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { createServiceClient } from '@/lib/supabase/service';
+import { excludeForeignRows } from '@/tests/support/isolation';
 import {
   claimTokenExpiryWarnings,
   pollConnectionQuality,
@@ -56,6 +57,15 @@ beforeEach(async () => {
   await db
     .delete(whatsappConnections)
     .where(eq(whatsappConnections.ptId, ptId));
+  // `claimTokenExpiryWarnings` is a cron: it sweeps every active connection in
+  // the database. Another tenant's connection with a near expiry would be
+  // claimed alongside this one — inflating the returned list, and worse,
+  // absorbing the one-shot `appendBackgroundEvent` rejection the rollback test
+  // arms. Stamp the foreign rows so this suite's connection is the only
+  // candidate.
+  await excludeForeignRows(whatsappConnections, ptId, {
+    expiryWarningSentAt: new Date(),
+  });
 
   const [connection] = await db
     .insert(whatsappConnections)

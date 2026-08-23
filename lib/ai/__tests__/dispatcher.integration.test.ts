@@ -22,6 +22,13 @@ import {
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
 import { dispatchTool } from '../dispatcher';
+import { DAY, testNow, zonedTime } from '@/tests/support/clock';
+
+// The only availability rule seeded below is Monday 09:00–12:00 local, so every
+// fixture here hangs off a real Monday — derived, and a week out so the bookings
+// are genuinely upcoming (a past fixture made the "upcoming" assertion vacuous).
+const MONDAY = new Date(testNow({ weekday: 1 }).getTime() + 7 * DAY);
+const mondayAt = (hour: number) => zonedTime(MONDAY, hour);
 
 let ptId = '';
 let patientId = '';
@@ -103,8 +110,8 @@ describe('dispatchTool', () => {
     const result = await dispatchTool(
       'get_availability',
       {
-        start: '2026-07-06T09:00:00+02:00',
-        end: '2026-07-06T12:00:00+02:00',
+        start: mondayAt(9).toISOString(),
+        end: mondayAt(12).toISOString(),
       },
       ctx(),
     );
@@ -114,16 +121,16 @@ describe('dispatchTool', () => {
         timezone: 'Europe/Tirane',
         slots: [
           {
-            starts_at: '2026-07-06T07:00:00.000Z',
-            ends_at: '2026-07-06T08:00:00.000Z',
+            starts_at: mondayAt(9).toISOString(),
+            ends_at: mondayAt(10).toISOString(),
           },
           {
-            starts_at: '2026-07-06T08:00:00.000Z',
-            ends_at: '2026-07-06T09:00:00.000Z',
+            starts_at: mondayAt(10).toISOString(),
+            ends_at: mondayAt(11).toISOString(),
           },
           {
-            starts_at: '2026-07-06T09:00:00.000Z',
-            ends_at: '2026-07-06T10:00:00.000Z',
+            starts_at: mondayAt(11).toISOString(),
+            ends_at: mondayAt(12).toISOString(),
           },
         ],
       });
@@ -140,7 +147,7 @@ describe('dispatchTool', () => {
     const result = await dispatchTool(
       'book_appointment',
       {
-        starts_at: '2026-07-06T09:00:00+02:00',
+        starts_at: mondayAt(9).toISOString(),
         service_type: 'Vlerësim i parë',
       },
       ctx(),
@@ -149,7 +156,7 @@ describe('dispatchTool', () => {
       ok: true,
       data: {
         status: 'pending',
-        starts_at: '2026-07-06T07:00:00.000Z',
+        starts_at: mondayAt(9).toISOString(),
       },
     });
 
@@ -165,7 +172,7 @@ describe('dispatchTool', () => {
     const result = await dispatchTool(
       'book_appointment',
       {
-        starts_at: '2026-07-06T09:00:00+02:00',
+        starts_at: mondayAt(9).toISOString(),
         service_type: 'Shërbim i shpikur',
       },
       ctx(),
@@ -190,8 +197,8 @@ describe('dispatchTool', () => {
       .values({
         ptId,
         patientId: otherPatient.id,
-        startsAt: new Date('2026-07-06T09:00:00.000Z'),
-        endsAt: new Date('2026-07-06T10:00:00.000Z'),
+        startsAt: mondayAt(11),
+        endsAt: mondayAt(12),
         status: 'pending',
       })
       .returning({ id: appointments.id });
@@ -234,5 +241,32 @@ describe('dispatchTool', () => {
       .where(eq(auditLog.ptId, ptId));
     expect(rows).toHaveLength(1);
     expect(rows[0].action).toBe('ai.tool.escalate_to_human');
+  });
+
+  // Offering is not escalating. Nothing is handed over until the patient
+  // accepts, so this tool must leave the conversation exactly as it found it —
+  // the engine is what remembers that an offer is outstanding.
+  it('changes no conversation state when the assistant only offers a handoff', async () => {
+    const result = await dispatchTool(
+      'offer_human_handoff',
+      { reason: 'Patient asked something outside scheduling' },
+      ctx(),
+    );
+    expect(result).toEqual({ ok: true, data: { offered: true } });
+
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+    expect(conversation.aiActive).toBe(true);
+    expect(conversation.escalationState).toBe('idle');
+    expect(conversation.handoffOfferMessageId).toBeNull();
+
+    const rows = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.ptId, ptId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].action).toBe('ai.tool.offer_human_handoff');
   });
 });

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { appointmentConfirmationContent } from '../appointment-confirmation';
 import { formatAppointmentTime } from '../appointment-time';
+import { DAY, testNow, zonedTime } from '@/tests/support/clock';
 
 const timezone = 'Europe/Tirane';
-// Monday 6 July 2026, 09:00 in Tirane.
-const startsAt = new Date('2026-07-06T07:00:00.000Z');
+// A derived Monday at 09:00 in Tirane. Which Monday is irrelevant — every
+// expectation below is rendered from this same instant — but it must not be a
+// literal that quietly ages into the past.
+const startsAt = zonedTime(testNow({ weekday: 1 }), 9, 0, timezone);
 const time = formatAppointmentTime(startsAt, timezone);
 
 describe('appointmentConfirmationContent', () => {
@@ -65,7 +68,12 @@ describe('appointmentConfirmationContent', () => {
   );
 
   it('renders a reschedule from the new start, never the old one', () => {
-    const movedTo = new Date('2026-07-07T11:00:00.000Z');
+    const movedTo = zonedTime(
+      new Date(startsAt.getTime() + DAY),
+      13,
+      0,
+      timezone,
+    );
     const content = appointmentConfirmationContent({
       kind: 'rescheduled',
       startsAt: movedTo,

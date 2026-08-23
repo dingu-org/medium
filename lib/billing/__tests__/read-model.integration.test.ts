@@ -4,9 +4,12 @@ import { db } from '@/lib/db';
 import { billingOrders, pts } from '@/lib/db/schema';
 import { getBillingSnapshot } from '@/lib/billing/read-model';
 import { createServiceClient } from '@/lib/supabase/service';
+import { testNowUtc } from '@/tests/support/clock';
 
 const DAY = 86_400_000;
-const NOW = new Date('2026-06-20T12:00:00.000Z');
+// Derived: `seedOrder` places every order at an age in days behind NOW, so a
+// written-down date bought nothing and drifted from the DB's own clock forever.
+const NOW = testNowUtc();
 let ptId = '';
 let seq = 0;
 

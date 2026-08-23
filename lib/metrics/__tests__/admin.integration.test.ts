@@ -15,12 +15,27 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
-import { getAdminMetrics, getBillingMetrics } from '@/lib/metrics/admin';
+import {
+  type FunnelWindow,
+  getAdminMetrics,
+  getBillingMetrics,
+} from '@/lib/metrics/admin';
+import { DAY, HOUR, testNowUtc } from '@/tests/support/clock';
+import { deltaOf } from '@/tests/support/isolation';
 
-// Fixed evaluation instant. All seeded timestamps live in June 2026 so the
-// (past) funnel windows contain only this test's manipulated rows.
-const NOW = new Date('2026-06-15T12:00:00.000Z');
-const at = (iso: string) => new Date(iso);
+// Fixed evaluation instant, derived rather than written down: every funnel and
+// billing window here is measured backwards from `now`, so what the fixtures
+// need is a stable *offset*, never a calendar date. Noon UTC on the 15th keeps
+// every ±14d fixture inside the same month whatever its length, and leaves the
+// ±12h ones on the same UTC day.
+const NOW = testNowUtc({ dayOfMonth: 15 });
+/** Days (and optionally hours) either side of NOW. */
+const at = (days: number, hours = 0) =>
+  new Date(NOW.getTime() + days * DAY + hours * HOUR);
+/** The `yyyy-MM` key of NOW's month. */
+const MONTH_KEY = NOW.toISOString().slice(0, 7);
+/** The `cost_daily.day` key (a UTC yyyy-mm-dd string) that offset falls on. */
+const dayKey = (days: number) => at(days).toISOString().slice(0, 10);
 
 type Pt = { id: string; email: string };
 const created: Pt[] = [];
@@ -101,8 +116,8 @@ async function seedAppointment(
   await db.insert(appointments).values({
     ptId,
     patientId,
-    startsAt: at('2026-07-01T10:00:00.000Z'),
-    endsAt: at('2026-07-01T11:00:00.000Z'),
+    startsAt: at(15, 22),
+    endsAt: at(15, 23),
     createdAt,
   });
 }
@@ -238,10 +253,15 @@ async function seedBillingEvent(args: {
 
 let ptY: Pt;
 let ptWeek: Pt;
-// The onboarding cohort counts ALL PTs (no time filter), so other suites' PTs
-// can coexist in the row count. Capture a baseline before seeding and assert on
-// the delta rather than an absolute total.
+// `getAdminMetrics` is cross-tenant by design, so every count it returns
+// includes whatever else is already in the local database — other suites' PTs,
+// or a leftover `seed:qa` practitioner who also signed up "today". Capture a
+// baseline before seeding and assert on the delta rather than an absolute
+// total. The cohort has no time filter at all; the funnel windows do, but
+// "yesterday" and "the last 7 days" are exactly where a fresh leftover tenant
+// lands, so they need the same treatment.
 let cohortBaseline: { totalPts: number; connectedWithin24h: number };
+let funnelBaseline: { yesterday: FunnelWindow; sevenDay: FunnelWindow };
 
 beforeAll(async () => {
   const base = await getAdminMetrics(NOW);
@@ -249,19 +269,23 @@ beforeAll(async () => {
     totalPts: base.cohort.totalPts,
     connectedWithin24h: base.cohort.connectedWithin24h,
   };
+  funnelBaseline = {
+    yesterday: base.funnelYesterday,
+    sevenDay: base.funnel7d,
+  };
 
   // pt_y — full funnel, all inside "yesterday" (06-14).
-  ptY = await makeUser('y', at('2026-06-14T10:00:00.000Z'));
+  ptY = await makeUser('y', at(-1, -2));
   const yPat1 = await newPatient(ptY.id);
   const yConv1 = await newConversation(ptY.id, yPat1);
-  await seedConnection(ptY.id, at('2026-06-14T11:00:00.000Z'));
+  await seedConnection(ptY.id, at(-1, -1));
   await seedMessage({
     ptId: ptY.id,
     conversationId: yConv1,
     role: 'patient',
-    createdAt: at('2026-06-14T12:00:00.000Z'),
+    createdAt: at(-1),
   });
-  await seedAppointment(ptY.id, yPat1, at('2026-06-14T13:00:00.000Z'));
+  await seedAppointment(ptY.id, yPat1, at(0, -23));
   // pt_y "today" (06-15) live-cost data in a second conversation.
   const yPat2 = await newPatient(ptY.id);
   const yConv2 = await newConversation(ptY.id, yPat2);
@@ -269,75 +293,75 @@ beforeAll(async () => {
     ptId: ptY.id,
     conversationId: yConv2,
     role: 'patient',
-    createdAt: at('2026-06-15T08:00:00.000Z'),
+    createdAt: at(0, -4),
   });
   await seedMessage({
     ptId: ptY.id,
     conversationId: yConv2,
     role: 'ai',
-    createdAt: at('2026-06-15T09:00:00.000Z'),
+    createdAt: at(0, -3),
     model: 'openai/gpt-4.1-mini',
     aiCostMicrousd: 777,
   });
 
   // pt_week — inside the 7d window but not "yesterday".
-  ptWeek = await makeUser('week', at('2026-06-10T10:00:00.000Z'));
+  ptWeek = await makeUser('week', at(-5, -2));
   const wPat = await newPatient(ptWeek.id);
   const wConv = await newConversation(ptWeek.id, wPat);
-  await seedConnection(ptWeek.id, at('2026-06-10T11:00:00.000Z'));
+  await seedConnection(ptWeek.id, at(-5, -1));
   await seedMessage({
     ptId: ptWeek.id,
     conversationId: wConv,
     role: 'patient',
-    createdAt: at('2026-06-10T12:00:00.000Z'),
+    createdAt: at(-5),
   });
-  await seedAppointment(ptWeek.id, wPat, at('2026-06-10T13:00:00.000Z'));
+  await seedAppointment(ptWeek.id, wPat, at(-4, -23));
 
   // pt_boundary — first message BEFORE all windows (06-01) plus an in-window
   // message (06-14). Must NOT count toward ptsWithFirstMessage.
-  const ptBoundary = await makeUser('boundary', at('2026-06-01T10:00:00.000Z'));
+  const ptBoundary = await makeUser('boundary', at(-14, -2));
   const bPat = await newPatient(ptBoundary.id);
   const bConv = await newConversation(ptBoundary.id, bPat);
   await seedMessage({
     ptId: ptBoundary.id,
     conversationId: bConv,
     role: 'patient',
-    createdAt: at('2026-06-01T12:00:00.000Z'),
+    createdAt: at(-14),
   });
   await seedMessage({
     ptId: ptBoundary.id,
     conversationId: bConv,
     role: 'patient',
-    createdAt: at('2026-06-14T12:00:00.000Z'),
+    createdAt: at(-1),
   });
 
   // pt_slow — connected >24h after signup (cohort miss), all before the windows.
-  const ptSlow = await makeUser('slow', at('2026-06-05T00:00:00.000Z'));
-  await seedConnection(ptSlow.id, at('2026-06-07T00:00:00.000Z'));
+  const ptSlow = await makeUser('slow', at(-10, -12));
+  await seedConnection(ptSlow.id, at(-8, -12));
 
   // Cost rollup rows + push events.
-  await seedCostDaily({ ptId: ptY.id, day: '2026-06-14', ai: 1000, meta: 60_000 });
+  await seedCostDaily({ ptId: ptY.id, day: dayKey(-1), ai: 1000, meta: 60_000 });
   await seedCostDaily({
     ptId: ptWeek.id,
-    day: '2026-06-10',
+    day: dayKey(-5),
     ai: 500,
     meta: 120_000,
   });
   await seedPushEvent({
     ptId: ptY.id,
-    occurredAt: at('2026-06-14T10:00:00.000Z'),
+    occurredAt: at(-1, -2),
     sent: 3,
     removed: 1,
   });
   await seedPushEvent({
     ptId: ptY.id,
-    occurredAt: at('2026-06-12T10:00:00.000Z'),
+    occurredAt: at(-3, -2),
     sent: 2,
     removed: 0,
   });
   await seedPushEvent({
     ptId: ptY.id,
-    occurredAt: at('2026-06-01T10:00:00.000Z'), // out of 7d window
+    occurredAt: at(-14, -2), // out of 7d window
     sent: 99,
     removed: 99,
   });
@@ -351,13 +375,16 @@ afterAll(async () => {
 describe('getAdminMetrics', () => {
   it('computes the yesterday + 7d funnel windows', async () => {
     const m = await getAdminMetrics(NOW);
-    expect(m.funnelYesterday).toEqual({
+    // pt_y contributes the whole funnel inside "yesterday"; pt_week adds a
+    // second of each inside the 7d window. pt_boundary's first message predates
+    // both windows and pt_slow never connects, so neither may show up here.
+    expect(deltaOf(m.funnelYesterday, funnelBaseline.yesterday)).toEqual({
       signups: 1,
       whatsappConnections: 1,
       ptsWithFirstMessage: 1,
       ptsWithFirstBooking: 1,
     });
-    expect(m.funnel7d).toEqual({
+    expect(deltaOf(m.funnel7d, funnelBaseline.sevenDay)).toEqual({
       signups: 2,
       whatsappConnections: 2,
       ptsWithFirstMessage: 2,
@@ -426,14 +453,14 @@ describe('getAdminMetrics — Meta cost provenance (C4)', () => {
   let ptActual: Pt;
   let ptMixed: Pt;
   let ptTodayActual: Pt;
-  const OUT_OF_WINDOW = at('2026-05-01T10:00:00.000Z');
+  const OUT_OF_WINDOW = at(-45, -2);
 
   beforeAll(async () => {
     // All-actual current-month rows → 'actual', billable-message SUM = 4.
     ptActual = await makeUser('actual', OUT_OF_WINDOW);
     await seedCostDaily({
       ptId: ptActual.id,
-      day: '2026-06-12',
+      day: dayKey(-3),
       ai: 100,
       meta: 42_000,
       metaCostSource: 'actual',
@@ -441,7 +468,7 @@ describe('getAdminMetrics — Meta cost provenance (C4)', () => {
     });
     await seedCostDaily({
       ptId: ptActual.id,
-      day: '2026-06-13',
+      day: dayKey(-2),
       ai: 50,
       meta: 21_000,
       metaCostSource: 'actual',
@@ -452,7 +479,7 @@ describe('getAdminMetrics — Meta cost provenance (C4)', () => {
     ptMixed = await makeUser('mixed', OUT_OF_WINDOW);
     await seedCostDaily({
       ptId: ptMixed.id,
-      day: '2026-06-12',
+      day: dayKey(-3),
       ai: 80,
       meta: 21_000,
       metaCostSource: 'actual',
@@ -460,7 +487,7 @@ describe('getAdminMetrics — Meta cost provenance (C4)', () => {
     });
     await seedCostDaily({
       ptId: ptMixed.id,
-      day: '2026-06-13',
+      day: dayKey(-2),
       ai: 20,
       meta: 60_000,
       metaCostSource: 'estimated',
@@ -471,19 +498,19 @@ describe('getAdminMetrics — Meta cost provenance (C4)', () => {
     ptTodayActual = await makeUser('today-actual', OUT_OF_WINDOW);
     await seedStatus({
       ptId: ptTodayActual.id,
-      sentAt: at('2026-06-15T08:00:00.000Z'),
+      sentAt: at(0, -4),
       billable: true,
       pricingCategory: 'utility',
     });
     await seedStatus({
       ptId: ptTodayActual.id,
-      sentAt: at('2026-06-15T09:00:00.000Z'),
+      sentAt: at(0, -3),
       billable: true,
       pricingCategory: 'utility',
     });
     await seedStatus({
       ptId: ptTodayActual.id,
-      sentAt: at('2026-06-15T10:00:00.000Z'),
+      sentAt: at(0, -2),
       billable: true,
       pricingCategory: 'service', // billable but €0 rate
     });
@@ -525,10 +552,11 @@ describe('getAdminMetrics — Meta cost provenance (C4)', () => {
 // --- Monetization success metrics (Phase 16 C7) ---------------------------
 // Every metric is asserted as a DELTA against a baseline captured before this
 // block seeds, so other suites' rows (and the concurrent C6 agent sharing this
-// local Postgres) coexist. NOW is fixed to 2026-06-15, so all "current month"
-// windows are June 2026 — isolated from any real-time-`now()` writes elsewhere.
+// local Postgres) coexist. NOW sits mid-month on the real calendar, so "current
+// month" here is the real current month: the delta assertions are what keep
+// other suites' `now()`-stamped rows from mattering.
 describe('getBillingMetrics (C7)', () => {
-  const SIGNUP = at('2026-05-01T10:00:00.000Z');
+  const SIGNUP = at(-45, -2);
   let baseline: Awaited<ReturnType<typeof getBillingMetrics>>;
   let ptDowngrade: Pt;
 
@@ -539,7 +567,7 @@ describe('getBillingMetrics (C7)', () => {
     const ptFree = await makeUser('bill-free', SIGNUP);
     await seedCostDaily({
       ptId: ptFree.id,
-      day: '2026-06-10',
+      day: dayKey(-5),
       ai: 1000,
       meta: 42_000,
       metaCostSource: 'actual',
@@ -547,7 +575,7 @@ describe('getBillingMetrics (C7)', () => {
     });
     await seedCostDaily({
       ptId: ptFree.id,
-      day: '2026-06-11',
+      day: dayKey(-4),
       ai: 500,
       meta: 60_000,
       metaCostSource: 'estimated',
@@ -559,18 +587,18 @@ describe('getBillingMetrics (C7)', () => {
     const ptSoloActive = await makeUser('bill-solo', SIGNUP);
     await setPlan(ptSoloActive.id, {
       plan: 'solo',
-      planExpiresAt: at('2026-07-15T00:00:00.000Z'),
+      planExpiresAt: at(29, 12),
     });
     await seedOrder({
       ptId: ptSoloActive.id,
       status: 'paid',
-      createdAt: at('2026-06-01T09:00:00.000Z'),
-      paidAt: at('2026-06-06T09:00:00.000Z'),
-      newExpiresAt: at('2026-07-06T00:00:00.000Z'), // future → not a renewal boundary
+      createdAt: at(-14, -3),
+      paidAt: at(-9, -3),
+      newExpiresAt: at(20, 12), // future → not a renewal boundary
     });
     await seedCostDaily({
       ptId: ptSoloActive.id,
-      day: '2026-06-10',
+      day: dayKey(-5),
       ai: 9999,
       meta: 99_999,
       metaCostSource: 'actual',
@@ -581,7 +609,7 @@ describe('getBillingMetrics (C7)', () => {
     const ptSoloLapsed = await makeUser('bill-lapsed', SIGNUP);
     await setPlan(ptSoloLapsed.id, {
       plan: 'solo',
-      planExpiresAt: at('2026-06-01T00:00:00.000Z'),
+      planExpiresAt: at(-14, -12),
     });
 
     // Lifetime pilot → its own bucket, excluded from conversion.
@@ -593,17 +621,17 @@ describe('getBillingMetrics (C7)', () => {
     await seedOrder({
       ptId: ptRenewer.id,
       status: 'paid',
-      createdAt: at('2026-05-01T09:00:00.000Z'),
-      paidAt: at('2026-05-05T09:00:00.000Z'),
-      newExpiresAt: at('2026-06-05T00:00:00.000Z'),
+      createdAt: at(-45, -3),
+      paidAt: at(-41, -3),
+      newExpiresAt: at(-10, -12),
     });
     await seedOrder({
       ptId: ptRenewer.id,
       status: 'paid',
-      createdAt: at('2026-06-01T09:00:00.000Z'),
-      paidAt: at('2026-06-04T09:00:00.000Z'), // <= 06-05 + 3d grace
-      previousExpiresAt: at('2026-06-05T00:00:00.000Z'),
-      newExpiresAt: at('2026-07-05T00:00:00.000Z'),
+      createdAt: at(-14, -3),
+      paidAt: at(-11, -3), // <= 06-05 + 3d grace
+      previousExpiresAt: at(-10, -12),
+      newExpiresAt: at(19, 12),
     });
 
     // Non-renewer: a single due boundary (June 10) with no follow-on paid order.
@@ -611,17 +639,17 @@ describe('getBillingMetrics (C7)', () => {
     await seedOrder({
       ptId: ptNonRenewer.id,
       status: 'paid',
-      createdAt: at('2026-05-01T09:00:00.000Z'),
-      paidAt: at('2026-05-10T09:00:00.000Z'),
-      newExpiresAt: at('2026-06-10T00:00:00.000Z'),
+      createdAt: at(-45, -3),
+      paidAt: at(-36, -3),
+      newExpiresAt: at(-5, -12),
     });
 
     // Cap hits (by kind) + the active-PT denominator (conversation_days).
     const ptCapConv = await makeUser('bill-capconv', SIGNUP);
     await seedConvDay({
       ptId: ptCapConv.id,
-      localDay: '2026-06-10',
-      monthKey: '2026-06',
+      localDay: dayKey(-5),
+      monthKey: MONTH_KEY,
     });
     await seedBillingEvent({
       ptId: ptCapConv.id,
@@ -631,16 +659,16 @@ describe('getBillingMetrics (C7)', () => {
         kind: 'conversations',
         used: 30,
         limit: 30,
-        monthKey: '2026-06',
+        monthKey: MONTH_KEY,
       },
-      occurredAt: at('2026-06-10T12:00:00.000Z'),
+      occurredAt: at(-5),
     });
 
     const ptCapRem = await makeUser('bill-caprem', SIGNUP);
     await seedConvDay({
       ptId: ptCapRem.id,
-      localDay: '2026-06-10',
-      monthKey: '2026-06',
+      localDay: dayKey(-5),
+      monthKey: MONTH_KEY,
     });
     await seedBillingEvent({
       ptId: ptCapRem.id,
@@ -650,17 +678,17 @@ describe('getBillingMetrics (C7)', () => {
         kind: 'reminders',
         used: 10,
         limit: 10,
-        monthKey: '2026-06',
+        monthKey: MONTH_KEY,
       },
-      occurredAt: at('2026-06-10T12:00:00.000Z'),
+      occurredAt: at(-5),
     });
 
     // Active this month but never capped — denominator only.
     const ptActiveOnly = await makeUser('bill-active', SIGNUP);
     await seedConvDay({
       ptId: ptActiveOnly.id,
-      localDay: '2026-06-11',
-      monthKey: '2026-06',
+      localDay: dayKey(-4),
+      monthKey: MONTH_KEY,
     });
 
     // Downgrades: one this month, one previous month (read by string type;
@@ -670,13 +698,13 @@ describe('getBillingMetrics (C7)', () => {
       ptId: ptDowngrade.id,
       type: 'billing.downgraded',
       payload: { ptId: ptDowngrade.id },
-      occurredAt: at('2026-06-12T12:00:00.000Z'),
+      occurredAt: at(-3),
     });
     await seedBillingEvent({
       ptId: ptDowngrade.id,
       type: 'billing.downgraded',
       payload: { ptId: ptDowngrade.id },
-      occurredAt: at('2026-05-12T12:00:00.000Z'),
+      occurredAt: at(-34),
     });
   });
 
@@ -746,7 +774,7 @@ describe('getBillingMetrics (C7)', () => {
 
   it('lists current-month payments joined to the PT email', async () => {
     const m = await getBillingMetrics(NOW);
-    // ptSoloActive's order was created 2026-06-01 (current month for NOW).
+    // ptSoloActive's order was created 14 days before NOW — same month.
     const soloRow = m.recentPayments.find(
       (p) => p.status === 'paid' && p.amountMinor === 250000 && p.currency === 'ALL',
     );

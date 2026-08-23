@@ -56,6 +56,7 @@ import {
   recordShortNoticeSkip,
   upsertReminderSchedule,
 } from '../send-reminder';
+import { testNowUtc } from '@/tests/support/clock';
 
 let ptId = '';
 let patientId = '';
@@ -326,7 +327,7 @@ describe('appointment event confirmation', () => {
 
 describe('reminder scheduling and guards', () => {
   it('schedules 24 hours before, delays short-notice reminders, and skips under two hours', () => {
-    const now = new Date('2026-07-01T10:00:00.000Z');
+    const now = testNowUtc();
     expect(computeReminderSchedule(addHours(now, 48), now)).toEqual({
       kind: 'scheduled',
       scheduledFor: addHours(now, 24),

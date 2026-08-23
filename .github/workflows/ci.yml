@@ -1,0 +1,133 @@
+name: CI
+
+# The gate. Runs the exact four commands a developer runs locally, in the same
+# order, against the same local Supabase stack. Everything it needs is in the
+# repo: `.env.example` holds the deterministic local-stack values (the standard
+# Supabase demo keys, byte-identical to a working local `.env`), so this workflow
+# requires NO repository secrets and works on a fork PR.
+#
+# NOTE FOR THE OPERATOR: a workflow that is merely present blocks nothing. It has
+# to be made a *required status check* on `main` and `preview` in the repository
+# branch-protection settings (Settings -> Branches -> Add rule -> "Require status
+# checks to pass" -> select "verify"). Only a repo admin can do that.
+
+on:
+  push:
+    branches: [main, preview]
+  pull_request:
+    branches: [main, preview]
+
+# A superseded push has nothing left to prove; let the newest one hold the lock.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned, not `latest`: the CLI decides which stack images boot and whether the
+  # legacy JWT keys in `.env.example` are still accepted. A silent CLI bump must
+  # not be able to turn this gate red on a day nobody touched the code. This is
+  # the version the suite was verified against locally.
+  SUPABASE_CLI_VERSION: 2.98.2
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    # Cold run is dominated by the Supabase image pull (~3 min) plus the
+    # integration suite, which runs with fileParallelism disabled.
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # No version here on purpose — pnpm/action-setup reads `packageManager`
+      # from package.json, so the version cannot drift from the lockfile.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # No .nvmrc and no `engines` field in package.json; 24 is current LTS
+          # and matches the local toolchain the suite was verified on.
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # vitest.config.ts loads `.env` through dotenv, and tests/setup/global.ts
+      # refuses any DATABASE_URL that is not local. These values ARE the local
+      # stack's defaults, so the copy is the whole configuration step.
+      - name: Create .env from the committed template
+        run: cp .env.example .env
+
+      - name: Set up the Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      # Pulling the stack images dominates a cold run. Key on the CLI version
+      # (which pins the image tags) and on config.toml (which decides which
+      # services boot at all). A miss just falls through to a normal pull.
+      - name: Restore the Supabase stack images
+        id: supabase-images
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/supabase-images.tar
+          key: supabase-images-${{ runner.os }}-${{ env.SUPABASE_CLI_VERSION }}-${{ hashFiles('supabase/config.toml') }}
+
+      # Non-fatal on purpose: the cache is an optimization, never a gate. A
+      # truncated or corrupt entry must degrade to a normal registry pull, not
+      # wedge every build until the key rotates.
+      - name: Load the cached Supabase stack images
+        if: steps.supabase-images.outputs.cache-hit == 'true'
+        run: |
+          docker load --input ~/.cache/supabase-images.tar \
+            || echo "::warning::cached Supabase images unusable — falling back to a registry pull"
+
+      # The FULL stack, not a bare postgres service container:
+      # tests/rls/isolation.integration.test.ts drives anon/authenticated
+      # requests through PostgREST and needs GoTrue's auth.users to exist. A
+      # plain postgres container fails those tests in a way that reads like a
+      # code bug. `supabase start` also blocks until the stack is healthy, so no
+      # wait-for-postgres loop is needed. Migrations are NOT applied here:
+      # tests/setup/global.ts applies drizzle/migrations itself.
+      - name: Start the local Supabase stack
+        run: supabase start
+
+      # Exactly the containers this config booted, nothing else — realtime,
+      # storage, imgproxy and the pooler are disabled in config.toml, so they are
+      # never created and never cached. If the entry ever gets uncomfortably
+      # large (postgres + studio + logflare dominate it), the lever is
+      # `supabase start -x studio,logflare,vector` — the suite needs db, auth
+      # (GoTrue) and rest (PostgREST) only. Left at the plain `supabase start`
+      # here because that is the invocation this gate was verified against.
+      - name: Save the Supabase stack images
+        if: steps.supabase-images.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache
+          docker save --output ~/.cache/supabase-images.tar \
+            $(docker ps -a --format '{{.Image}}' | sort -u)
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+      # Whatever failed above, the stack logs are the only way to tell a real
+      # test failure from a container that never came up.
+      - name: Supabase logs (on failure)
+        if: failure()
+        run: supabase status || docker ps -a

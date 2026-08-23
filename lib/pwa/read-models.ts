@@ -169,7 +169,6 @@ export type SettingsSnapshot = {
   timezone: string;
   aiName: string;
   aiGreeting: string;
-  aiEscalationKeyword: string;
   assistantPaused: boolean;
   retentionDays: number;
   notificationPrefs: NotificationPrefs;
@@ -519,7 +518,6 @@ export async function getSettingsSnapshot(
         timezone: pts.timezone,
         aiName: pts.aiName,
         aiGreeting: pts.aiGreeting,
-        aiEscalationKeyword: pts.aiEscalationKeyword,
         assistantPaused: pts.assistantPaused,
         retentionDays: pts.retentionDays,
         notificationPrefs: pts.notificationPrefs,
@@ -586,7 +584,6 @@ export async function getSettingsSnapshot(
     timezone: pt?.timezone ?? 'Europe/Berlin',
     aiName: pt?.aiName ?? '',
     aiGreeting: pt?.aiGreeting ?? '',
-    aiEscalationKeyword: pt?.aiEscalationKeyword ?? '',
     assistantPaused: pt?.assistantPaused ?? false,
     retentionDays: pt?.retentionDays ?? 90,
     notificationPrefs: resolveNotificationPrefs(pt?.notificationPrefs),

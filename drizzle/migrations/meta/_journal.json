@@ -197,6 +197,27 @@
       "when": 1785449723797,
       "tag": "0027_revoke_reference_and_trigger_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786719704611,
+      "tag": "0028_drop_ai_escalation_keyword",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1786721450302,
+      "tag": "0029_handoff_offer_anchor",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786722976366,
+      "tag": "0030_non_text_notice",
+      "breakpoints": true
     }
   ]
 }

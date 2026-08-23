@@ -30,7 +30,7 @@ import type {
   OutboundMessage,
   ReminderTurnContext,
 } from '@/lib/conversation/types';
-import { parseReminderResponse } from './parse-response';
+import { parseReplyIntent } from '@/lib/language/reply-intent';
 
 type ReminderResponseType = 'confirm' | 'cancel' | 'reschedule_requested';
 
@@ -50,6 +50,8 @@ type ReminderCandidate = {
   appointmentId: string;
   startsAt: Date;
   endsAt: Date;
+  /** When the reminder went out — the instant the patient is answering. */
+  sentAt: Date | null;
   responseType:
     | 'confirm'
     | 'cancel'
@@ -142,6 +144,7 @@ async function loadReminderCandidates(
       appointmentId: appointments.id,
       startsAt: appointments.startsAt,
       endsAt: appointments.endsAt,
+      sentAt: reminderJobs.sentAt,
       responseType: reminderJobs.responseType,
       responseMessageId: reminderJobs.responseMessageId,
       timezone: pts.timezone,
@@ -252,7 +255,7 @@ async function optStateSuperseded(args: {
     .limit(OPT_STATE_LOOKAHEAD_MESSAGES);
 
   for (const message of later) {
-    const intent = parseReminderResponse(message.content);
+    const intent = parseReplyIntent(message.content);
     if (intent === 'opt_out' || intent === 'opt_in') {
       return intent !== args.intent;
     }
@@ -472,6 +475,25 @@ function chooseCandidate(args: {
   return { kind: 'none' };
 }
 
+/**
+ * When the reminder this message would be answering was sent, or null when no
+ * reminder is waiting on an answer from it.
+ *
+ * Deliberately resolved through the very same candidate {@link
+ * handleReminderResponse} would act on, so the two can never disagree about
+ * which reminder is in play. An ambiguous set (several unanswered reminders)
+ * reports null on purpose: the handler does not claim those messages either —
+ * it hands them to the AI turn — so there is no deterministic claim to weigh
+ * against anything else.
+ */
+export async function pendingReminderSentAt(
+  inbound: InboundMessage,
+): Promise<Date | null> {
+  const candidates = await loadReminderCandidates(inbound);
+  const choice = chooseCandidate({ inboundId: inbound.id, candidates });
+  return choice.kind === 'candidate' ? choice.candidate.sentAt : null;
+}
+
 async function handleReminderResponseUnlocked(args: {
   inbound: InboundMessage;
   now: Date;
@@ -479,7 +501,7 @@ async function handleReminderResponseUnlocked(args: {
   const existing = await findExistingReply(args.inbound);
   if (existing) return { kind: 'outbound', outbound: existing };
 
-  const intent = parseReminderResponse(args.inbound.content);
+  const intent = parseReplyIntent(args.inbound.content);
   const candidates = await loadReminderCandidates(args.inbound);
 
   if (intent === 'opt_out') {

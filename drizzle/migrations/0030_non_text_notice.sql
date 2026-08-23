@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "non_text_notice_at" timestamp with time zone;

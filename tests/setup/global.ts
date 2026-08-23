@@ -27,5 +27,12 @@ export async function setup() {
   // Clear users (and cascades to all tenant data) from any prior run.
   await conn`DELETE FROM auth.users`;
 
+  // `erasure_archive` is the ONE table the cascade above cannot reach: it has
+  // no FK to `pts` by design, because a GDPR erasure record has to outlive the
+  // account it describes. On a developer's box that means it is also the one
+  // table that accumulates across every run forever, so clear it explicitly —
+  // otherwise "clean database" quietly stops being true after the first run.
+  await conn`DELETE FROM public.erasure_archive`;
+
   await conn.end({ timeout: 1 });
 }

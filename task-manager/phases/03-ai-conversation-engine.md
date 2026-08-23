@@ -17,9 +17,12 @@
 - Add `list_upcoming_appointments` so cancel/reschedule calls can resolve an appointment before mutating it.
 - Add `messages.reply_to_message_id` with a unique AI-reply index for replay idempotency, plus
   `messages.ai_cost_microusd` for OpenRouter usage accounting.
-- Deterministic safety checks handle explicit human requests plus emergency, legal, billing,
-  insurance, and severe-frustration phrases before model inference. The AI escalation tool remains
-  available for contextual cases.
+- ~~Deterministic safety checks handle explicit human requests plus emergency, legal, billing,
+  insurance, and severe-frustration phrases before model inference.~~ **Reversed 2026-08-14**:
+  nothing pattern-matches the patient's words. The model decides — `escalate_to_human` when a person
+  is asked for, `offer_human_handoff` for anything outside scheduling — and the engine answers the
+  latter with one static offer that only the immediately next message can accept. See the decisions
+  log in `progress.md`.
 - Keep the current PT profile shape and English-only v1. Unknown phone/address details are omitted.
 - Keep patient-controlled profile names out of the system prompt; identity remains in validated database context.
 - Serialize each inbound turn with a transaction-scoped Postgres advisory lock so concurrent retries cannot execute tools twice.
@@ -87,12 +90,13 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 - [x] Exports idempotent `handoffFailedTurn({ inboundMessage })` for Phase 5 retry exhaustion.
 - [x] Returns the final assistant text content.
 
-### Deterministic safety guard
+### Handoff offer (replaced the deterministic safety guard, 2026-08-14)
 
-- [x] Before inference, detect explicit HELP/human requests and configured escalation keywords.
-- [x] Detect emergency, legal, billing, insurance, and severe-frustration phrases.
-- [x] Avoid obvious fall/coverage false positives while retaining conservative escalation for explicit urgent-health and insurance language.
-- [x] Bypass OpenRouter for those cases, perform the escalation state change, and persist a concise safe response.
+- [x] The model alone decides a request is out of scope and calls `offer_human_handoff`; nothing inspects the inbound message before inference.
+- [x] One static, vertical-agnostic offer for every case, interpolating the business name; no emergency guidance.
+- [x] The offer is anchored to the message it answered (`conversations.handoff_offer_message_id`, migration `0029`) and commits with it in one transaction.
+- [x] Only the immediately next patient message can accept, matched whole-message and case/diacritic-insensitively; anything else lapses and is handled normally.
+- [x] Acceptance escalates through the existing `escalate_to_human` path and confirms in one fixed sentence.
 
 ### Model routing policy — `lib/ai/models.ts` + `lib/ai/client.ts`
 

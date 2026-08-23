@@ -15,6 +15,12 @@ export const backgroundEventSchemas = {
     messageId: z.uuid(),
     ptId: z.uuid(),
     conversationId: z.uuid(),
+    // The patient sent a body the assistant cannot read (voice note, photo, …)
+    // and the persisted content is OUR placeholder, not their words. The job
+    // answers with a fixed notice and never hands it to the model, which would
+    // otherwise invent what the voice note said. Optional: absent means text,
+    // so every event written before this existed still validates.
+    nonText: z.boolean().optional(),
     traceId,
   }),
   'wa.connection.created': z.object({

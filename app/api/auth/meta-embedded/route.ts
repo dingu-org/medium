@@ -32,7 +32,12 @@ const bodySchema = z.object({
   code: z.string().min(1),
   phoneNumberId: z.string().min(1).optional(),
   wabaId: z.string().min(1),
-  mode: z.enum(['cloud_api', 'coexistence']).default('coexistence'),
+  // Required, not defaulted: the client derives this from the popup's finish
+  // event (Embedded Signup v4), so an absent mode means the caller never knew
+  // how the PT onboarded. Defaulting that to 'coexistence' would file a
+  // standard Cloud API signup as coexistence and start a 24h sync deadline
+  // that nothing can satisfy.
+  mode: z.enum(['cloud_api', 'coexistence']),
 });
 
 const STATUS_BY_KIND: Record<MetaSignupErrorKind, number> = {
@@ -44,10 +49,11 @@ const STATUS_BY_KIND: Record<MetaSignupErrorKind, number> = {
 
 /**
  * Embedded Signup callback. The settings-page client runs Meta's JS-SDK popup,
- * which returns { code, phone_number_id, waba_id }, then POSTs them here. We
- * exchange the code for the PT's business token, wire up the number on Meta's
- * side, and persist an encrypted connection. CSRF is bound by the authenticated
- * session + an Origin check — there is no redirect round-trip to carry a state token.
+ * which returns { code, phone_number_id, waba_id } plus the finish event the
+ * client derives `mode` from, then POSTs them here. We exchange the code for
+ * the PT's business token, wire up the number on Meta's side, and persist an
+ * encrypted connection. CSRF is bound by the authenticated session + an Origin
+ * check — there is no redirect round-trip to carry a state token.
  */
 export async function POST(req: NextRequest) {
   const trace_id = newTraceId();

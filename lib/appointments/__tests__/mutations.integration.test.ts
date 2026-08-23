@@ -27,17 +27,21 @@ import { cancelAppointment } from '../cancel';
 import { AppointmentError } from '../errors';
 import { rescheduleAppointment } from '../reschedule';
 import { transitionAppointment } from '../state';
+import { DAY, testNow, zonedTime } from '@/tests/support/clock';
+import { excludeForeignRows } from '@/tests/support/isolation';
 
 let ptId = '';
 let patientId = '';
 let otherPatientId = '';
 
-const mondayAt = (hour: number, minute = 0) =>
-  new Date(
-    `2026-07-06T${String(hour - 2).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`,
-  );
-const tuesdayAt = (hour: number) =>
-  new Date(`2026-07-07T${String(hour - 2).padStart(2, '0')}:00:00.000Z`);
+// The availability rules below are keyed by weekday, so the fixtures need a
+// real Monday and Tuesday — derived, and a week out so every booking is in the
+// future. `zonedTime` resolves the local wall time properly instead of the old
+// `hour - 2`, which quietly assumed the anchor was always in summer time.
+const MONDAY = new Date(testNow({ weekday: 1 }).getTime() + 7 * DAY);
+const TUESDAY = new Date(MONDAY.getTime() + DAY);
+const mondayAt = (hour: number, minute = 0) => zonedTime(MONDAY, hour, minute);
+const tuesdayAt = (hour: number) => zonedTime(TUESDAY, hour);
 
 beforeAll(async () => {
   const supabase = createServiceClient();
@@ -56,6 +60,10 @@ beforeEach(async () => {
   await db.delete(patients).where(eq(patients.ptId, ptId));
   await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
   await db.delete(events).where(eq(events.ptId, ptId));
+  // `publishDueOutboxEvents` scans the whole table, so the tally it returns
+  // counts every tenant's due row, not just this suite's. Park the foreign ones
+  // as already published so the claim below can only find what this test wrote.
+  await excludeForeignRows(eventOutbox, ptId, { publishedAt: new Date() });
   await db
     .update(pts)
     .set({ timezone: 'Europe/Tirane' })
@@ -255,8 +263,8 @@ describe('appointment mutations', () => {
       await db.insert(appointments).values({
         ptId,
         patientId: otherPatientId,
-        startsAt: new Date('2026-07-06T07:30:00.000Z'),
-        endsAt: new Date('2026-07-06T08:30:00.000Z'),
+        startsAt: mondayAt(9, 30),
+        endsAt: mondayAt(10, 30),
         status: 'confirmed',
       });
       throw new Error('expected exclusion constraint to reject overlap');

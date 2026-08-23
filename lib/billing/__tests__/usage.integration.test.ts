@@ -16,8 +16,20 @@ import {
 } from '@/lib/billing/usage';
 import { getPlan } from '@/lib/billing/plans';
 import { createServiceClient } from '@/lib/supabase/service';
+import { testNow } from '@/tests/support/clock';
 
 const FREE_LIMIT = getPlan('free').conversationsPerMonth;
+// The unit under test IS a calendar month, so these need a real one. The year is
+// derived so nothing here can go stale; the month is pinned to July on purpose —
+// it has 31 days (the free cap is 30 patient-days plus one over-cap day on top)
+// and Europe/Tirane runs at UTC+2 in July, which is what makes the month-end
+// straddle below actually straddle. A 28-day or winter month breaks both.
+const YEAR = testNow().getUTCFullYear();
+const MONTH_KEY = `${YEAR}-07`;
+const NEXT_MONTH_KEY = `${YEAR}-08`;
+const localDay = (day: number) => `${MONTH_KEY}-${String(day).padStart(2, '0')}`;
+const dayAt = (day: number, hhmm: string) =>
+  new Date(`${localDay(day)}T${hhmm}:00Z`);
 let ptId = '';
 let patientId = '';
 let conversationId = '';
@@ -119,13 +131,13 @@ describe('checkAndRecordConversation', () => {
       plan: 'free' as const,
       timezone: 'UTC',
       inboundMessageId: crypto.randomUUID(),
-      instant: new Date('2026-07-05T10:00:00Z'),
+      instant: dayAt(5, '10:00'),
     };
     const first = await checkAndRecordConversation(args);
     const second = await checkAndRecordConversation({
       ...args,
       inboundMessageId: crypto.randomUUID(),
-      instant: new Date('2026-07-05T18:00:00Z'),
+      instant: dayAt(5, '18:00'),
     });
 
     expect(first).toMatchObject({ status: 'allowed', counted: true });
@@ -147,7 +159,7 @@ describe('checkAndRecordConversation', () => {
       plan: 'free',
       timezone: 'Europe/Tirane',
       inboundMessageId: crypto.randomUUID(),
-      instant: new Date('2026-07-31T22:30:00Z'),
+      instant: dayAt(31, '22:30'),
     });
     const [row] = await db
       .select({
@@ -156,12 +168,15 @@ describe('checkAndRecordConversation', () => {
       })
       .from(conversationDays)
       .where(eq(conversationDays.ptId, ptId));
-    expect(row).toMatchObject({ localDay: '2026-08-01', monthKey: '2026-08' });
+    expect(row).toMatchObject({
+      localDay: `${NEXT_MONTH_KEY}-01`,
+      monthKey: NEXT_MONTH_KEY,
+    });
   });
 
   it('lets exactly one of two boundary racers through', { timeout: 15000 }, async () => {
     // Pre-fill to one below the cap with distinct filler days.
-    await seedDayRange('2026-07', 1, FREE_LIMIT - 1);
+    await seedDayRange(MONTH_KEY, 1, FREE_LIMIT - 1);
     const a = await makePatientConversation();
     const b = await makePatientConversation();
 
@@ -173,7 +188,7 @@ describe('checkAndRecordConversation', () => {
         plan: 'free',
         timezone: 'UTC',
         inboundMessageId: crypto.randomUUID(),
-        instant: new Date('2026-07-30T09:00:00Z'),
+        instant: dayAt(30, '09:00'),
       }),
       checkAndRecordConversation({
         ptId,
@@ -182,7 +197,7 @@ describe('checkAndRecordConversation', () => {
         plan: 'free',
         timezone: 'UTC',
         inboundMessageId: crypto.randomUUID(),
-        instant: new Date('2026-07-30T09:00:00Z'),
+        instant: dayAt(30, '09:00'),
       }),
     ]);
 
@@ -195,7 +210,7 @@ describe('checkAndRecordConversation', () => {
       .where(
         and(
           eq(conversationDays.ptId, ptId),
-          eq(conversationDays.monthKey, '2026-07'),
+          eq(conversationDays.monthKey, MONTH_KEY),
         ),
       );
     expect(rows).toHaveLength(FREE_LIMIT);
@@ -204,7 +219,7 @@ describe('checkAndRecordConversation', () => {
   it('emits one warning and one reached event, deduped', { timeout: 15000 }, async () => {
     const warn = Math.ceil(0.8 * FREE_LIMIT);
     // Seed up to just below the warn threshold.
-    await seedDayRange('2026-07', 1, warn - 1);
+    await seedDayRange(MONTH_KEY, 1, warn - 1);
     // Crossing the warn threshold emits exactly one warning.
     await checkAndRecordConversation({
       ptId,
@@ -213,13 +228,13 @@ describe('checkAndRecordConversation', () => {
       plan: 'free',
       timezone: 'UTC',
       inboundMessageId: crypto.randomUUID(),
-      instant: new Date(`2026-07-${String(warn).padStart(2, '0')}T10:00:00Z`),
+      instant: dayAt(warn, '10:00'),
     });
     expect(await countEvents('billing.limit_warning')).toBe(1);
     expect(await countEvents('billing.limit_reached')).toBe(0);
 
     // Fill the gap up to just below the cap, then cross it.
-    await seedDayRange('2026-07', warn + 1, FREE_LIMIT - 1);
+    await seedDayRange(MONTH_KEY, warn + 1, FREE_LIMIT - 1);
     await checkAndRecordConversation({
       ptId,
       patientId,
@@ -227,9 +242,7 @@ describe('checkAndRecordConversation', () => {
       plan: 'free',
       timezone: 'UTC',
       inboundMessageId: crypto.randomUUID(),
-      instant: new Date(
-        `2026-07-${String(FREE_LIMIT).padStart(2, '0')}T10:00:00Z`,
-      ),
+      instant: dayAt(FREE_LIMIT, '10:00'),
     });
     expect(await countEvents('billing.limit_warning')).toBe(1);
     expect(await countEvents('billing.limit_reached')).toBe(1);
@@ -242,7 +255,7 @@ describe('checkAndRecordConversation', () => {
       plan: 'free',
       timezone: 'UTC',
       inboundMessageId: crypto.randomUUID(),
-      instant: new Date('2026-07-31T10:00:00Z'),
+      instant: dayAt(31, '10:00'),
     });
     expect(over.status).toBe('at_cap');
     expect(await countEvents('billing.limit_warning')).toBe(1);
@@ -252,16 +265,16 @@ describe('checkAndRecordConversation', () => {
 
 describe('getConversationUsage', () => {
   it('reports the effective plan cap and month usage', async () => {
-    await seedDay('2026-07', '2026-07-01');
-    await seedDay('2026-07', '2026-07-02');
+    await seedDay(MONTH_KEY, localDay(1));
+    await seedDay(MONTH_KEY, localDay(2));
     const usage = await getConversationUsage(
       ptId,
-      new Date('2026-07-15T10:00:00Z'),
+      dayAt(15, '10:00'),
     );
     expect(usage).toMatchObject({
       used: 2,
       limit: FREE_LIMIT,
-      monthKey: '2026-07',
+      monthKey: MONTH_KEY,
       atCap: false,
     });
   });

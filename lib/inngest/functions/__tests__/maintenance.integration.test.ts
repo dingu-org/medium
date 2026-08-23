@@ -14,6 +14,7 @@ import {
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
 import { createServiceClient } from '@/lib/supabase/service';
+import { excludeForeignRows } from '@/tests/support/isolation';
 import { checkResumeOffer } from '../offer-resume';
 import {
   claimTokenExpiryWarnings,
@@ -45,6 +46,12 @@ beforeEach(async () => {
     .where(eq(whatsappConnections.ptId, ptId));
   await db.delete(patients).where(eq(patients.ptId, ptId));
   await db.update(pts).set({ retentionDays: 30 }).where(eq(pts.id, ptId));
+  // `claimTokenExpiryWarnings` sweeps every active connection in the database,
+  // so stamp the other tenants' rows as already warned and leave this suite's
+  // connection as the only candidate.
+  await excludeForeignRows(whatsappConnections, ptId, {
+    expiryWarningSentAt: new Date(),
+  });
 
   const [connection] = await db
     .insert(whatsappConnections)

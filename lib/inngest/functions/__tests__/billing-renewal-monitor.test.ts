@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { planRenewalActions } from '../billing-renewal-monitor';
+import { testNowUtc } from '@/tests/support/clock';
 
 const DAY = 86_400_000;
 // Fixed expiry; `now` is placed at day-offsets around it.
-const EXPIRES = new Date('2026-06-15T12:00:00.000Z');
+const EXPIRES = testNowUtc();
 const at = (dayOffset: number) =>
   new Date(EXPIRES.getTime() + dayOffset * DAY);
 

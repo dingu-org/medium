@@ -359,6 +359,103 @@ describe('runModelTurn', () => {
     expect(model.doGenerateCalls).toHaveLength(2);
   });
 
+  // The offer's wording is fixed, so the model is never asked for a second
+  // round — the same saving the booking confirmation makes.
+  it('stops the loop as soon as the model offers a handoff', async () => {
+    const model = new MockLanguageModelV3({
+      provider: 'openrouter',
+      modelId: 'test-model',
+      doGenerate: sequence(
+        toolStepResult(
+          [
+            {
+              toolCallId: 'offer-1',
+              toolName: 'offer_human_handoff',
+              input: { reason: 'Patient asked where to park.' },
+            },
+          ],
+          'Nuk e di ku mund të parkoni.',
+        ),
+        textResult('This round is never requested.'),
+      ),
+    });
+    const dispatch = async (): Promise<ToolResult> => ({
+      ok: true,
+      data: { offered: true },
+    });
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'Ku mund të parkoj?' }],
+      toolContext,
+      dispatch,
+    });
+
+    expect(result).toMatchObject({ outcome: 'handoff_offer' });
+    // The prose beside the tool call is discarded, not sent with the offer.
+    expect(result).not.toHaveProperty('text');
+    expect(model.doGenerateCalls).toHaveLength(1);
+  });
+
+  // Nothing was offered, so there is nothing to remember and nothing to send:
+  // the turn has to carry on and answer the patient in the model's own words.
+  it('keeps looping when the offer call came back as an error', async () => {
+    const model = new MockLanguageModelV3({
+      doGenerate: sequence(
+        toolCallResult('offer-1', 'offer_human_handoff', { reason: '' }),
+        textResult('Mund t’ju ndihmoj me takimet.'),
+      ),
+    });
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'Ku mund të parkoj?' }],
+      toolContext,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'response',
+      text: 'Mund t’ju ndihmoj me takimet.',
+    });
+    expect(model.doGenerateCalls).toHaveLength(2);
+  });
+
+  // A committed change outranks an offer to answer something else: the patient
+  // gets the confirmation for what actually happened.
+  it('prefers a committed booking over an offer made in the same step', async () => {
+    const model = new MockLanguageModelV3({
+      doGenerate: sequence(
+        toolStepResult([
+          bookingCall,
+          {
+            toolCallId: 'offer-1',
+            toolName: 'offer_human_handoff',
+            input: { reason: 'Patient also asked about parking.' },
+          },
+        ]),
+      ),
+    });
+    const dispatch = async (toolName: ToolName): Promise<ToolResult> =>
+      toolName === 'book_appointment'
+        ? { ok: true, data: {}, effect: bookedEffect }
+        : { ok: true, data: { offered: true } };
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'Po, atë orar' }],
+      toolContext,
+      dispatch,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'appointment_mutation',
+      effect: bookedEffect,
+    });
+  });
+
   it('reports the last effect when one step commits two changes', async () => {
     const cancelledEffect: AppointmentMutationEffect = {
       kind: 'cancelled',

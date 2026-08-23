@@ -101,11 +101,9 @@ export const pts = pgTable('pts', {
   timezone: text('timezone').notNull().default('Europe/Berlin'),
   aiName: text('ai_name'),
   aiGreeting: text('ai_greeting'),
-  aiEscalationKeyword: text('ai_escalation_keyword'),
   // Global assistant kill-switch (Phase 15). When true the dispatcher generates
-  // and sends NO AI reply to inbound patient messages; keyword-escalation
-  // detection + PT notifications + appointment reminders still run. Wired to the
-  // dispatcher in a later Phase 15 task.
+  // and sends NO AI reply to inbound patient messages; PT notifications +
+  // appointment reminders still run.
   assistantPaused: boolean('assistant_paused').notNull().default(false),
   servicesConfiguredAt: tsTz('services_configured_at'),
   retentionDays: integer('retention_days').notNull().default(90),
@@ -248,6 +246,21 @@ export const conversations = pgTable(
     // When the conversation-cap hard stop sent its one static handoff message
     // (Phase 16 C2). Null = never capped this cycle; reset on renewal.
     limitHandoffAt: tsTz('limit_handoff_at'),
+    // When the assistant last told this patient it can only read text messages
+    // (lib/conversation/non-text.ts). Same shape and same purpose as
+    // `limit_handoff_at`: one such reply per conversation per local day, so a
+    // burst of voice notes is answered once.
+    nonTextNoticeAt: tsTz('non_text_notice_at'),
+    // The patient message the assistant answered with its "shall I pass this
+    // to the business?" offer. An anchor, not a flag: the offer is accepted
+    // only by the message that immediately follows this one, and anchoring on
+    // the message itself is what makes that true no matter which code path
+    // handled the messages in between (a globally paused assistant, a capped
+    // conversation, a PT takeover) — none of them has to remember to clear it.
+    // Deliberately not a foreign key, like `messages.source_event_id` and
+    // `messages.template_id`: retention purges messages, and a dangling anchor
+    // is self-correcting (it simply stops matching, which is a lapse).
+    handoffOfferMessageId: uuid('handoff_offer_message_id'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
   (t) => [

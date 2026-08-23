@@ -21,6 +21,7 @@ import {
   services,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
+import { deleteAuthUserByEmail } from './lib/delete-auth-user';
 import { assertSeedTarget } from './lib/seed-target';
 
 export const SEED_EMAIL = 'seed@medium.local';
@@ -63,12 +64,7 @@ function prevWeekdayAt(minDaysAgo: number, hour: number): Date {
 export async function deleteSeedPt(
   supabase: ReturnType<typeof createServiceClient> = createServiceClient(),
 ): Promise<void> {
-  const { data: list } = await supabase.auth.admin.listUsers({
-    page: 1,
-    perPage: 200,
-  });
-  const existing = list?.users.find((u) => u.email === SEED_EMAIL);
-  if (existing) await supabase.auth.admin.deleteUser(existing.id);
+  await deleteAuthUserByEmail(SEED_EMAIL, supabase);
 }
 
 export type SeedResult = {

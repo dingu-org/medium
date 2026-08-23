@@ -20,6 +20,7 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
+import { deleteAuthUserByEmail } from './lib/delete-auth-user';
 import { assertSeedTarget } from './lib/seed-target';
 
 const EMAIL = 'qa@medium.local';
@@ -44,12 +45,7 @@ async function main() {
   const supabase = createServiceClient();
 
   // Recreate the QA user from scratch so reruns stay deterministic.
-  const { data: list } = await supabase.auth.admin.listUsers({
-    page: 1,
-    perPage: 200,
-  });
-  const existing = list?.users.find((u) => u.email === EMAIL);
-  if (existing) await supabase.auth.admin.deleteUser(existing.id);
+  await deleteAuthUserByEmail(EMAIL, supabase);
 
   const { data, error } = await supabase.auth.admin.createUser({
     email: EMAIL,

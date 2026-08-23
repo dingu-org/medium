@@ -15,6 +15,11 @@ import { auditLog, whatsappConnections } from '@/lib/db/schema';
 import { decryptToken } from '@/lib/db/crypto';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
+import {
+  META_SIGNUP_ORIGINS,
+  postableMode,
+  readSignupMessage,
+} from '@/app/(dashboard)/settings/whatsapp-signup';
 import { POST } from '../route';
 
 // The route resolves the PT from the Supabase session; mock it to a seeded user.
@@ -150,6 +155,168 @@ describe('POST /api/auth/meta-embedded — auth & CSRF', () => {
     const res = await POST(makePost({ code: '' }));
     expect(res.status).toBe(400);
   });
+
+  it('rejects a body with no mode with 400 (no coexistence default)', async () => {
+    // The mode is derived from the popup's finish event. An absent mode means
+    // the caller never knew how the PT onboarded, so it must not be assumed —
+    // filing a Cloud API signup as coexistence starts a 24h sync deadline that
+    // nothing can satisfy.
+    const res = await POST(
+      makePost({
+        code: 'AUTH_CODE_xyz',
+        phoneNumberId: nextPni(),
+        wabaId: 'WABA_123',
+      }),
+    );
+    expect(res.status).toBe(400);
+    const rows = await db
+      .select()
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+    expect(rows).toHaveLength(0);
+  });
+});
+
+/**
+ * One case per Embedded Signup v4 finish event. Each drives the *real* client
+ * handler (`readSignupMessage` → `postableMode`) with the popup message Meta
+ * would post, then POSTs exactly what the client would POST — so the chain
+ * event → mode → persisted row is asserted end to end rather than assumed.
+ *
+ * Events the client refuses never reach the route; those cases assert the
+ * refusal and then that a forged POST of the same shape is still rejected.
+ */
+const FINISH_EVENTS = [
+  {
+    event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+    carriesNumber: false,
+    persisted: { mode: 'coexistence', coexistenceSyncStatus: 'pending' },
+  },
+  {
+    event: 'FINISH',
+    carriesNumber: true,
+    persisted: { mode: 'cloud_api', coexistenceSyncStatus: 'not_applicable' },
+  },
+  // Shares a WABA but no number — Medium cannot message anyone with it, and the
+  // route rejects a numberless cloud_api signup outright.
+  { event: 'FINISH_ONLY_WABA', carriesNumber: false, persisted: null },
+  // Outcomes we have no onboarding for: refused rather than guessed at.
+  { event: 'FINISH_OBO_MIGRATION', carriesNumber: true, persisted: null },
+  {
+    event: 'FINISH_GRANT_ONLY_API_ACCESS',
+    carriesNumber: true,
+    persisted: null,
+  },
+] as const;
+
+describe('POST /api/auth/meta-embedded — mode per finish event', () => {
+  it.each(FINISH_EVENTS)(
+    '$event',
+    async ({ event, carriesNumber, persisted }) => {
+      vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+      const phoneNumberId = nextPni();
+      // Coexistence arrives with only a waba_id; the route resolves the number.
+      vi.stubGlobal(
+        'fetch',
+        fetchWith('/WABA_123/phone_numbers', 200, {
+          data: [
+            {
+              id: phoneNumberId,
+              display_phone_number: '+355691234567',
+              platform_type: 'CLOUD_API',
+              is_on_biz_app: true,
+            },
+          ],
+        }),
+      );
+
+      const session = readSignupMessage({
+        origin: META_SIGNUP_ORIGINS[0],
+        data: JSON.stringify({
+          type: 'WA_EMBEDDED_SIGNUP',
+          event,
+          data: {
+            waba_id: 'WABA_123',
+            ...(carriesNumber ? { phone_number_id: phoneNumberId } : {}),
+          },
+        }),
+      });
+      expect(session?.event).toBe(event);
+      const mode = postableMode(session!);
+
+      const res = await POST(
+        makePost({
+          code: 'AUTH_CODE_xyz',
+          ...(carriesNumber ? { phoneNumberId } : {}),
+          wabaId: 'WABA_123',
+          ...(mode ? { mode } : {}),
+        }),
+      );
+      const rows = await db
+        .select()
+        .from(whatsappConnections)
+        .where(eq(whatsappConnections.ptId, ptId));
+
+      if (!persisted) {
+        expect(mode).toBeNull();
+        expect(res.status).toBe(400);
+        expect(rows).toHaveLength(0);
+        return;
+      }
+
+      expect(mode).toBe(persisted.mode);
+      expect(res.status).toBe(200);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].phoneNumberId).toBe(phoneNumberId);
+      expect(rows[0].mode).toBe(persisted.mode);
+      expect(rows[0].coexistenceSyncStatus).toBe(
+        persisted.coexistenceSyncStatus,
+      );
+      expect(rows[0].coexistenceSyncDeadlineAt == null).toBe(
+        persisted.mode !== 'coexistence',
+      );
+    },
+  );
+
+  it('refuses a forged FINISH_ONLY_WABA POST that claims coexistence', async () => {
+    // Defence in depth: the client will not send this, but if it did the route
+    // must not invent a number. The WABA has no usable number to resolve.
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    vi.stubGlobal('fetch', fetchWith('/WABA_123/phone_numbers', 200, { data: [] }));
+
+    const res = await POST(
+      makePost({
+        code: 'AUTH_CODE_xyz',
+        wabaId: 'WABA_123',
+        mode: 'coexistence',
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ ok: false, error: 'rejected' });
+    const rows = await db
+      .select()
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it('refuses a forged FINISH_ONLY_WABA POST that claims cloud_api', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    const res = await POST(
+      makePost({
+        code: 'AUTH_CODE_xyz',
+        wabaId: 'WABA_123',
+        mode: 'cloud_api',
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ ok: false, error: 'rejected' });
+    const rows = await db
+      .select()
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.ptId, ptId));
+    expect(rows).toHaveLength(0);
+  });
 });
 
 describe('POST /api/auth/meta-embedded — happy path', () => {
@@ -244,8 +411,14 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     });
     vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
 
+    // No phoneNumberId: the coexistence payload Meta documents carries only
+    // waba_id. `mode` is explicit — the schema no longer defaults it.
     const res = await POST(
-      makePost({ code: 'AUTH_CODE_xyz', wabaId: 'WABA_123' }),
+      makePost({
+        code: 'AUTH_CODE_xyz',
+        wabaId: 'WABA_123',
+        mode: 'coexistence',
+      }),
     );
     expect(res.status).toBe(200);
 
