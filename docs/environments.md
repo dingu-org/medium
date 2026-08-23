@@ -139,9 +139,19 @@ The drizzle config asserts the target's project ref before migrating, so
 ### Reseeding preview
 
 `pnpm seed:qa:preview` (idempotent-ish; wipes and recreates the QA PT) or
-`pnpm seed:reset:preview`. Seeds refuse production unconditionally — there is
-no override. Wiping *all* users (`db:reset:test`, the vitest setup) remains
-local-only by design.
+`pnpm seed:reset:preview` — both wipe and recreate only the seed PT.
+
+To empty the database entirely — every row, every auth user, schema
+re-migrated from `drizzle/migrations`, nothing seeded — use
+`pnpm db:reset:preview` (`pnpm db:reset:test` for the local stack). It prompts
+for the environment name on any non-local target; pass `--yes` to skip the
+prompt in scripts. Follow it with `pnpm seed:qa:preview` if you want fixtures
+back.
+
+Every one of these passes through `assertDestructiveTarget`
+(`scripts/lib/destructive-target.ts`), which checks both `DATABASE_URL` and
+`SUPABASE_URL` against the manifest and refuses production unconditionally —
+`ALLOW_ENV_MISMATCH` included.
 
 ### Borrowing the Meta test app for local E2E
 

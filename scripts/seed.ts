@@ -22,12 +22,12 @@ import {
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { deleteAuthUserByEmail } from './lib/delete-auth-user';
-import { assertSeedTarget } from './lib/seed-target';
+import { assertDestructiveTarget } from './lib/destructive-target';
 
 export const SEED_EMAIL = 'seed@medium.local';
 export const SEED_PASSWORD = 'seed-medium-1234';
 
-assertSeedTarget();
+assertDestructiveTarget();
 
 function at(daysFromToday: number, hour: number, minute = 0) {
   const d = new Date();

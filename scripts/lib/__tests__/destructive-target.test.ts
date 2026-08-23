@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ENVIRONMENTS } from '@/lib/env/environments';
-import { assertSeedTarget } from '../seed-target';
+import { assertDestructiveTarget } from '../destructive-target';
 
 const PROD_REF = ENVIRONMENTS.production.supabaseProjectRef;
 
@@ -9,21 +9,21 @@ const LOCAL = {
   SUPABASE_URL: 'http://127.0.0.1:54321',
 };
 
-describe('assertSeedTarget', () => {
+describe('assertDestructiveTarget', () => {
   it('admits the local stack in development', () => {
-    expect(() => assertSeedTarget({ ...LOCAL })).not.toThrow();
+    expect(() => assertDestructiveTarget({ ...LOCAL })).not.toThrow();
   });
 
   it('refuses production regardless of configuration', () => {
     expect(() =>
-      assertSeedTarget({ ...LOCAL, APP_ENV: 'production' }),
+      assertDestructiveTarget({ ...LOCAL, APP_ENV: 'production' }),
     ).toThrow(/not a thing/);
   });
 
   // The escape hatch is for migrations and backfills — seeding ignores it.
   it('refuses production even with ALLOW_ENV_MISMATCH=1', () => {
     expect(() =>
-      assertSeedTarget({
+      assertDestructiveTarget({
         ...LOCAL,
         APP_ENV: 'production',
         ALLOW_ENV_MISMATCH: '1',
@@ -34,7 +34,7 @@ describe('assertSeedTarget', () => {
   it('refuses any endpoint that resolves to the production project', () => {
     expect(PROD_REF).not.toBeNull();
     expect(() =>
-      assertSeedTarget({
+      assertDestructiveTarget({
         ...LOCAL,
         SUPABASE_URL: `https://${PROD_REF}.supabase.co`,
       }),
@@ -43,7 +43,7 @@ describe('assertSeedTarget', () => {
 
   it('refuses a mixed configuration where only one endpoint is wrong', () => {
     expect(() =>
-      assertSeedTarget({
+      assertDestructiveTarget({
         ...LOCAL,
         DATABASE_URL:
           'postgresql://postgres.someotherref:pw@aws-1-eu-central-1.pooler.supabase.com:6543/postgres',
@@ -56,16 +56,16 @@ describe('assertSeedTarget', () => {
     // is, this test still holds for any env whose ref is null — skip if all
     // provisioned.
     if (ENVIRONMENTS.preview.supabaseProjectRef !== null) return;
-    expect(() => assertSeedTarget({ ...LOCAL, APP_ENV: 'preview' })).toThrow(
-      /no Supabase project declared/,
-    );
+    expect(() =>
+      assertDestructiveTarget({ ...LOCAL, APP_ENV: 'preview' }),
+    ).toThrow(/no Supabase project declared/);
   });
 
   it('admits preview only when both endpoints belong to the preview project', () => {
     const previewRef = ENVIRONMENTS.preview.supabaseProjectRef;
     if (previewRef === null) return; // becomes live once provisioned
     expect(() =>
-      assertSeedTarget({
+      assertDestructiveTarget({
         APP_ENV: 'preview',
         DATABASE_URL: `postgresql://postgres.${previewRef}:pw@aws-1-eu-central-1.pooler.supabase.com:6543/postgres`,
         SUPABASE_URL: `https://${previewRef}.supabase.co`,

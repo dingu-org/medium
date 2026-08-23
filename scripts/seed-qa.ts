@@ -21,14 +21,14 @@ import {
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { deleteAuthUserByEmail } from './lib/delete-auth-user';
-import { assertSeedTarget } from './lib/seed-target';
+import { assertDestructiveTarget } from './lib/destructive-target';
 
 const EMAIL = 'qa@medium.local';
 const PASSWORD = 'qa-medium-1234';
 
 // Development (local stack) by default; preview via `pnpm seed:qa:preview`.
 // Production is unreachable from here by construction — see seed-target.ts.
-assertSeedTarget();
+assertDestructiveTarget();
 
 function at(daysFromToday: number, hour: number, minute = 0) {
   const d = new Date();

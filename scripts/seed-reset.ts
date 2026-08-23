@@ -5,10 +5,10 @@
  */
 import { fileURLToPath } from 'node:url';
 import { createServiceClient } from '@/lib/supabase/service';
-import { assertSeedTarget } from './lib/seed-target';
+import { assertDestructiveTarget } from './lib/destructive-target';
 import { deleteSeedAccount, seedCore, SEED_EMAIL, SEED_PASSWORD } from './seed';
 
-assertSeedTarget();
+assertDestructiveTarget();
 
 async function main(): Promise<void> {
   const supabase = createServiceClient();
