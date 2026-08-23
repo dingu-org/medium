@@ -160,6 +160,12 @@ additional_redirect_urls = [
   "http://127.0.0.1:3000/auth/callback",
   "http://localhost:3000/auth/confirm",
   "http://127.0.0.1:3000/auth/confirm",
+  # Port 3105 is the browser-QA convention (`pnpm dev:test`), where Google
+  # sign-in lands on the same routes from a different origin.
+  "http://localhost:3105/auth/callback",
+  "http://127.0.0.1:3105/auth/callback",
+  "http://localhost:3105/auth/confirm",
+  "http://127.0.0.1:3105/auth/confirm",
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
@@ -346,6 +352,30 @@ url = ""
 skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
+
+# Google OAuth against the local stack. The deployed environments configure this
+# in the Supabase dashboard instead; this block is what makes the same
+# `signInWithOAuth({ provider: 'google' })` in app/(auth)/sign-in/oauth-buttons.tsx
+# work locally rather than failing with "Unsupported provider".
+#
+# Credentials come from `.env` (the CLI substitutes `env(...)` at `supabase start`),
+# so they are never committed. Add `http://127.0.0.1:54321/auth/v1/callback` as an
+# authorized redirect URI on the Google Cloud OAuth client — that is GoTrue's
+# callback, not the app's `/auth/callback`.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# Required, not optional: GoTrue rejects an enabled provider with an empty
+# redirect URI as `Unsupported provider: missing redirect URI`. It would
+# normally be derived from `auth.external_url`, but that is left commented out
+# above, so there is no default to fall back to and it must be spelled out.
+# This is GoTrue's own callback — the first hop, before the app's
+# `/auth/callback` — and the URI that must be registered on the Google client.
+redirect_uri = "http://127.0.0.1:54321/auth/v1/callback"
+# Google does not echo back the nonce the local flow sends; without this, every
+# local Google sign-in fails the nonce check.
+skip_nonce_check = true
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
