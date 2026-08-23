@@ -2,12 +2,12 @@ import { transitionAppointment } from './state';
 import type { AppointmentMutationResult } from './types';
 
 export async function cancelAppointment(input: {
-  ptId: string;
+  accountId: string;
   appointmentId: string;
-  patientId?: string;
+  customerId?: string;
   reason?: string;
-  cancelledBy: 'patient' | 'pt' | 'ai';
-  origin?: 'conversation' | 'pt';
+  cancelledBy: 'customer' | 'account' | 'ai';
+  origin?: 'conversation' | 'account';
 }): Promise<AppointmentMutationResult> {
   return transitionAppointment({
     ...input,

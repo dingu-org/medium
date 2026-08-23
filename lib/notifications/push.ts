@@ -36,7 +36,7 @@ type SubscriptionKeys = { p256dh: string; auth: string };
  * URLs or subscription keys.
  */
 export async function sendPush(
-  ptId: string,
+  accountId: string,
   payload: PushPayload,
 ): Promise<{ sent: number; removed: number }> {
   const rows = await db
@@ -46,7 +46,7 @@ export async function sendPush(
       keys: pushSubscriptions.keys,
     })
     .from(pushSubscriptions)
-    .where(eq(pushSubscriptions.ptId, ptId));
+    .where(eq(pushSubscriptions.accountId, accountId));
 
   if (rows.length === 0) return { sent: 0, removed: 0 };
 
@@ -70,7 +70,7 @@ export async function sendPush(
           return 'removed' as const;
         }
         logger.warn('push.send_failed', 'Web push send failed', {
-          pt_id: ptId,
+          account_id: accountId,
           subscription_id: row.id,
           status_code: statusCode,
           ...serializeError(error),

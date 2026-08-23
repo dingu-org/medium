@@ -7,8 +7,8 @@ import {
   events,
   eventOutbox,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
 } from '@/lib/db/schema';
 import {
   checkAndRecordConversation,
@@ -21,7 +21,7 @@ import { testNow } from '@/tests/support/clock';
 const FREE_LIMIT = getPlan('free').conversationsPerMonth;
 // The unit under test IS a calendar month, so these need a real one. The year is
 // derived so nothing here can go stale; the month is pinned to July on purpose —
-// it has 31 days (the free cap is 30 patient-days plus one over-cap day on top)
+// it has 31 days (the free cap is 30 customer-days plus one over-cap day on top)
 // and Europe/Tirane runs at UTC+2 in July, which is what makes the month-end
 // straddle below actually straddle. A 28-day or winter month breaks both.
 const YEAR = testNow().getUTCFullYear();
@@ -30,32 +30,32 @@ const NEXT_MONTH_KEY = `${YEAR}-08`;
 const localDay = (day: number) => `${MONTH_KEY}-${String(day).padStart(2, '0')}`;
 const dayAt = (day: number, hhmm: string) =>
   new Date(`${localDay(day)}T${hhmm}:00Z`);
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let seq = 0;
 
-async function makePatientConversation(): Promise<{
-  patientId: string;
+async function makeCustomerConversation(): Promise<{
+  customerId: string;
   conversationId: string;
 }> {
   seq += 1;
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: `P${seq}`, phone: `44770090${seq}`, waId: `44770090${seq}` })
-    .returning({ id: patients.id });
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: `P${seq}`, phone: `44770090${seq}`, waId: `44770090${seq}` })
+    .returning({ id: customers.id });
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId: patient.id, channel: 'whatsapp' })
+    .values({ accountId, customerId: customer.id, channel: 'whatsapp' })
     .returning({ id: conversations.id });
-  return { patientId: patient.id, conversationId: conversation.id };
+  return { customerId: customer.id, conversationId: conversation.id };
 }
 
 /** Seed a counted day-fact directly (bypasses the gate) for a distinct day. */
 async function seedDay(monthKey: string, localDay: string) {
   await db.insert(conversationDays).values({
-    ptId,
-    patientId,
+    accountId,
+    customerId,
     conversationId,
     localDay,
     monthKey,
@@ -73,8 +73,8 @@ async function seedDayRange(monthKey: string, startDay: number, endDay: number) 
   const values = [];
   for (let day = startDay; day <= endDay; day += 1) {
     values.push({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       conversationId,
       localDay: `${monthKey}-${String(day).padStart(2, '0')}`,
       monthKey,
@@ -88,7 +88,7 @@ async function countEvents(type: string): Promise<number> {
   const rows = await db
     .select({ id: events.id })
     .from(events)
-    .where(and(eq(events.ptId, ptId), eq(events.type, type)));
+    .where(and(eq(events.accountId, accountId), eq(events.type, type)));
   return rows.length;
 }
 
@@ -99,34 +99,34 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(conversationDays).where(eq(conversationDays.ptId, ptId));
-  await db.delete(messages).where(eq(messages.ptId, ptId));
-  await db.delete(conversations).where(eq(conversations.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
-  await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
+  await db.delete(conversationDays).where(eq(conversationDays.accountId, accountId));
+  await db.delete(messages).where(eq(messages.accountId, accountId));
+  await db.delete(conversations).where(eq(conversations.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
+  await db.delete(eventOutbox).where(eq(eventOutbox.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
   await db
-    .update(pts)
+    .update(accounts)
     .set({ plan: 'free', planLifetime: false, planExpiresAt: null, timezone: 'UTC' })
-    .where(eq(pts.id, ptId));
-  const seeded = await makePatientConversation();
-  patientId = seeded.patientId;
+    .where(eq(accounts.id, accountId));
+  const seeded = await makeCustomerConversation();
+  customerId = seeded.customerId;
   conversationId = seeded.conversationId;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('checkAndRecordConversation', () => {
-  it('counts a patient-day once and is idempotent for the same day', async () => {
+  it('counts a customer-day once and is idempotent for the same day', async () => {
     const args = {
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       conversationId,
       plan: 'free' as const,
       timezone: 'UTC',
@@ -146,15 +146,15 @@ describe('checkAndRecordConversation', () => {
     const rows = await db
       .select({ id: conversationDays.id })
       .from(conversationDays)
-      .where(eq(conversationDays.ptId, ptId));
+      .where(eq(conversationDays.accountId, accountId));
     expect(rows).toHaveLength(1);
   });
 
   it('keys the day-fact by the PT timezone (Europe/Tirane)', async () => {
     // 22:30 UTC on Jul 31 is 00:30 Aug 1 in Tirane (UTC+2).
     await checkAndRecordConversation({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       conversationId,
       plan: 'free',
       timezone: 'Europe/Tirane',
@@ -167,7 +167,7 @@ describe('checkAndRecordConversation', () => {
         monthKey: conversationDays.monthKey,
       })
       .from(conversationDays)
-      .where(eq(conversationDays.ptId, ptId));
+      .where(eq(conversationDays.accountId, accountId));
     expect(row).toMatchObject({
       localDay: `${NEXT_MONTH_KEY}-01`,
       monthKey: NEXT_MONTH_KEY,
@@ -177,13 +177,13 @@ describe('checkAndRecordConversation', () => {
   it('lets exactly one of two boundary racers through', { timeout: 15000 }, async () => {
     // Pre-fill to one below the cap with distinct filler days.
     await seedDayRange(MONTH_KEY, 1, FREE_LIMIT - 1);
-    const a = await makePatientConversation();
-    const b = await makePatientConversation();
+    const a = await makeCustomerConversation();
+    const b = await makeCustomerConversation();
 
     const [ra, rb] = await Promise.all([
       checkAndRecordConversation({
-        ptId,
-        patientId: a.patientId,
+        accountId,
+        customerId: a.customerId,
         conversationId: a.conversationId,
         plan: 'free',
         timezone: 'UTC',
@@ -191,8 +191,8 @@ describe('checkAndRecordConversation', () => {
         instant: dayAt(30, '09:00'),
       }),
       checkAndRecordConversation({
-        ptId,
-        patientId: b.patientId,
+        accountId,
+        customerId: b.customerId,
         conversationId: b.conversationId,
         plan: 'free',
         timezone: 'UTC',
@@ -209,7 +209,7 @@ describe('checkAndRecordConversation', () => {
       .from(conversationDays)
       .where(
         and(
-          eq(conversationDays.ptId, ptId),
+          eq(conversationDays.accountId, accountId),
           eq(conversationDays.monthKey, MONTH_KEY),
         ),
       );
@@ -222,8 +222,8 @@ describe('checkAndRecordConversation', () => {
     await seedDayRange(MONTH_KEY, 1, warn - 1);
     // Crossing the warn threshold emits exactly one warning.
     await checkAndRecordConversation({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       conversationId,
       plan: 'free',
       timezone: 'UTC',
@@ -236,8 +236,8 @@ describe('checkAndRecordConversation', () => {
     // Fill the gap up to just below the cap, then cross it.
     await seedDayRange(MONTH_KEY, warn + 1, FREE_LIMIT - 1);
     await checkAndRecordConversation({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       conversationId,
       plan: 'free',
       timezone: 'UTC',
@@ -247,10 +247,10 @@ describe('checkAndRecordConversation', () => {
     expect(await countEvents('billing.limit_warning')).toBe(1);
     expect(await countEvents('billing.limit_reached')).toBe(1);
 
-    // A fresh patient-day over the cap is turned away and emits nothing new.
+    // A fresh customer-day over the cap is turned away and emits nothing new.
     const over = await checkAndRecordConversation({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       conversationId,
       plan: 'free',
       timezone: 'UTC',
@@ -268,7 +268,7 @@ describe('getConversationUsage', () => {
     await seedDay(MONTH_KEY, localDay(1));
     await seedDay(MONTH_KEY, localDay(2));
     const usage = await getConversationUsage(
-      ptId,
+      accountId,
       dayAt(15, '10:00'),
     );
     expect(usage).toMatchObject({

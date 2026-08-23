@@ -17,8 +17,8 @@ import { db } from '@/lib/db';
 export type PaymentExportRow = {
   paidAt: string | null;
   createdAt: string;
-  ptEmail: string;
-  ptId: string;
+  accountEmail: string;
+  accountId: string;
   plan: string;
   period: string;
   amountMinor: number;
@@ -34,7 +34,7 @@ export const PAYMENTS_CSV_COLUMNS = [
   'paid_at',
   'created_at',
   'pt_email',
-  'pt_id',
+  'account_id',
   'plan',
   'period',
   'amount_minor_units',
@@ -48,8 +48,8 @@ export const PAYMENTS_CSV_COLUMNS = [
 type RawRow = {
   paidAt: Date | string | null;
   createdAt: Date | string;
-  ptEmail: string;
-  ptId: string;
+  accountEmail: string;
+  accountId: string;
   plan: string;
   period: string;
   amountMinor: number;
@@ -73,8 +73,8 @@ function mapRow(row: RawRow): PaymentExportRow {
   return {
     paidAt: toIso(row.paidAt),
     createdAt: toIso(row.createdAt) ?? '',
-    ptEmail: row.ptEmail,
-    ptId: row.ptId,
+    accountEmail: row.accountEmail,
+    accountId: row.accountId,
     plan: row.plan,
     period: row.period,
     amountMinor: Number(row.amountMinor),
@@ -109,14 +109,14 @@ export async function loadPaymentsForMonth(
 
   const selection = sql`
     SELECT o.paid_at AS "paidAt", o.created_at AS "createdAt",
-      p.email AS "ptEmail", o.pt_id AS "ptId",
+      p.email AS "accountEmail", o.account_id AS "accountId",
       o.plan AS "plan", o.period AS "period",
       o.amount_minor AS "amountMinor", o.currency AS "currency",
       o.status AS "status", o.pok_order_id AS "pokOrderId",
       o.previous_expires_at AS "previousExpiresAt",
       o.new_expires_at AS "newExpiresAt"
     FROM billing_orders o
-    JOIN pts p ON p.id = o.pt_id
+    JOIN accounts p ON p.id = o.account_id
   `;
 
   const rows = options.all
@@ -155,8 +155,8 @@ export function buildPaymentsCsv(rows: PaymentExportRow[]): string {
       [
         csvField(row.paidAt),
         csvField(row.createdAt),
-        csvField(row.ptEmail),
-        csvField(row.ptId),
+        csvField(row.accountEmail),
+        csvField(row.accountId),
         csvField(row.plan),
         csvField(row.period),
         csvField(row.amountMinor),

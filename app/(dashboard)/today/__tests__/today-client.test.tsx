@@ -33,9 +33,9 @@ vi.mock('sonner', () => ({
 
 const appointment: TodayAppointment = {
   id: 'appt-1',
-  patientName: 'Ana Krasniqi',
-  patientPhone: '+355691234567',
-  patientWaId: '355691234567',
+  customerName: 'Ana Krasniqi',
+  customerPhone: '+355691234567',
+  customerWaId: '355691234567',
   conversationId: 'conv-1',
   startsAt: '2026-07-30T08:00:00.000Z',
   endsAt: '2026-07-30T08:45:00.000Z',
@@ -49,7 +49,7 @@ const appointment: TodayAppointment = {
 
 function snapshotWith(attention: TodaySnapshot['attention']): TodaySnapshot {
   return {
-    ptId: 'pt-1',
+    accountId: 'account-1',
     timezone: 'Europe/Tirane',
     now: '2026-07-30T07:00:00.000Z',
     attention,
@@ -66,8 +66,8 @@ describe('TodayClient attention card', () => {
         snapshot={snapshotWith([
           {
             kind: 'reminder',
-            patientId: 'patient-1',
-            patientName: appointment.patientName,
+            customerId: 'customer-1',
+            customerName: appointment.customerName,
             conversationId: 'conv-1',
             appointment,
           },
@@ -88,8 +88,8 @@ describe('TodayClient attention card', () => {
         snapshot={snapshotWith([
           {
             kind: 'escalation',
-            patientId: 'patient-1',
-            patientName: appointment.patientName,
+            customerId: 'customer-1',
+            customerName: appointment.customerName,
             conversationId: 'conv-1',
             appointment: null,
           },

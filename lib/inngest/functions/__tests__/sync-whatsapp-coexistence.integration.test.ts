@@ -15,7 +15,7 @@ import { encryptToken } from '@/lib/db/crypto';
 import { createServiceClient } from '@/lib/supabase/service';
 import { syncWhatsappCoexistenceCore } from '../sync-whatsapp-coexistence';
 
-let ptId = '';
+let accountId = '';
 let connectionId = '';
 let sequence = 0;
 
@@ -26,18 +26,18 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
   await db
     .delete(whatsappConnections)
-    .where(eq(whatsappConnections.ptId, ptId));
+    .where(eq(whatsappConnections.accountId, accountId));
 
   const [connection] = await db
     .insert(whatsappConnections)
     .values({
-      ptId,
+      accountId,
       phoneNumberId: `PNI_COEX_SYNC_${Date.now()}_${++sequence}`,
       wabaId: 'WABA_COEX_SYNC',
       accessTokenEncrypted: await encryptToken('COEX_SYNC_TOKEN'),
@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 function syncFetch(): ReturnType<typeof vi.fn> {
@@ -84,7 +84,7 @@ describe('syncWhatsappCoexistenceCore', () => {
     vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
 
     await expect(
-      syncWhatsappCoexistenceCore({ ptId, connectionId }),
+      syncWhatsappCoexistenceCore({ accountId, connectionId }),
     ).resolves.toEqual({
       status: 'syncing',
       contactsRequestId: 'REQ_CONTACTS',
@@ -123,7 +123,7 @@ describe('syncWhatsappCoexistenceCore', () => {
     vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
 
     await expect(
-      syncWhatsappCoexistenceCore({ ptId, connectionId }),
+      syncWhatsappCoexistenceCore({ accountId, connectionId }),
     ).resolves.toEqual({
       status: 'syncing',
       contactsRequestId: 'REQ_CONTACTS_EXISTING',
@@ -140,7 +140,7 @@ describe('syncWhatsappCoexistenceCore', () => {
       .where(eq(whatsappConnections.id, connectionId));
 
     await expect(
-      syncWhatsappCoexistenceCore({ ptId, connectionId }),
+      syncWhatsappCoexistenceCore({ accountId, connectionId }),
     ).resolves.toEqual({ skipped: 'not_coexistence' });
   });
 });

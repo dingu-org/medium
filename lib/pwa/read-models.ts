@@ -15,8 +15,8 @@ import {
   conversations,
   messages,
   messageTemplates,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderJobs,
   waMessageStatuses,
   whatsappConnections,
@@ -45,9 +45,9 @@ export type WeekDaySnapshot = { key: string; label: string; isToday: boolean };
 
 export type CalendarAppointmentSnapshot = {
   id: string;
-  patientName: string;
-  patientPhone: string;
-  patientWaId: string | null;
+  customerName: string;
+  customerPhone: string;
+  customerWaId: string | null;
   conversationId: string | null;
   startsAt: string;
   endsAt: string;
@@ -70,7 +70,7 @@ export type CalendarAppointmentSnapshot = {
 };
 
 export type CalendarSnapshot = {
-  ptId: string;
+  accountId: string;
   timezone: string;
   view: 'day' | 'week';
   anchorKey: string;
@@ -99,13 +99,13 @@ function normalizeDeliveryStatus(value: string | null): WaDeliveryStatus | null 
 
 export type ChatMessageSnapshot = {
   id: string;
-  role: 'patient' | 'ai' | 'pt';
+  role: 'customer' | 'ai' | 'account';
   content: string;
   createdAt: string;
   /**
-   * WhatsApp delivery status for outbound (`pt` / `ai`) messages, sourced from
+   * WhatsApp delivery status for outbound (`account` / `ai`) messages, sourced from
    * `wa_message_statuses` (the Meta `statuses` webhook, joined on the message's
-   * external id). `null` for inbound patient messages or outbound messages Meta
+   * external id). `null` for inbound customer messages or outbound messages Meta
    * has not reported on yet. Server-snapshot only — captured at load and
    * refreshed on the next fetch; there is no realtime channel for it (the status
    * table is deny-all RLS, read only via the owner connection).
@@ -119,7 +119,7 @@ export type ChatMessageSnapshot = {
  */
 type ChatMessageRow = {
   id: string;
-  role: 'patient' | 'ai' | 'pt';
+  role: 'customer' | 'ai' | 'account';
   content: string;
   createdAt: Date;
   deliveryStatus: string | null;
@@ -128,7 +128,7 @@ type ChatMessageRow = {
 /**
  * Shared mapping from a `messages` (+ delivery-status) row to the serializable
  * snapshot shape. Keeps the thread snapshot and the load-older page identical in
- * how they surface `deliveryStatus` (never on inbound patient messages) and how
+ * how they surface `deliveryStatus` (never on inbound customer messages) and how
  * they serialize timestamps to ISO strings.
  */
 function toChatMessageSnapshot(row: ChatMessageRow): ChatMessageSnapshot {
@@ -138,7 +138,7 @@ function toChatMessageSnapshot(row: ChatMessageRow): ChatMessageSnapshot {
     content: row.content,
     createdAt: row.createdAt.toISOString(),
     deliveryStatus:
-      row.role === 'patient'
+      row.role === 'customer'
         ? null
         : normalizeDeliveryStatus(row.deliveryStatus),
   };
@@ -146,8 +146,8 @@ function toChatMessageSnapshot(row: ChatMessageRow): ChatMessageSnapshot {
 
 export type ChatThreadSnapshot = {
   conversationId: string;
-  patientName: string;
-  patientPhone: string;
+  customerName: string;
+  customerPhone: string;
   initialMessages: ChatMessageSnapshot[];
   aiActive: boolean;
   windowOpen: boolean;
@@ -162,7 +162,7 @@ export type ChatThreadSnapshot = {
 };
 
 export type SettingsSnapshot = {
-  practiceName: string;
+  name: string;
   fullName: string;
   title: string;
   address: string;
@@ -192,9 +192,9 @@ export type ChatListRowSnapshot = {
   id: string;
   ai_active: boolean;
   escalation_state: string;
-  patient_name: string;
+  customer_name: string;
   last_content: string | null;
-  last_role: 'patient' | 'ai' | 'pt' | null;
+  last_role: 'customer' | 'ai' | 'account' | null;
   last_at: string | null;
   closed_at: string | null;
   unread_count: number;
@@ -203,15 +203,15 @@ export type ChatListRowSnapshot = {
 };
 
 export async function getCalendarSnapshot(
-  ptId: string,
+  accountId: string,
   input: { date?: string; view?: string } = {},
 ): Promise<CalendarSnapshot> {
-  const [pt] = await db
-    .select({ timezone: pts.timezone })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+  const [account] = await db
+    .select({ timezone: accounts.timezone })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  const timezone = pt?.timezone ?? 'Europe/Berlin';
+  const timezone = account?.timezone ?? 'Europe/Berlin';
 
   const view: 'day' | 'week' = input.view === 'day' ? 'day' : 'week';
   const todayKey = format(new TZDate(new Date(), timezone), 'yyyy-MM-dd');
@@ -236,42 +236,42 @@ export async function getCalendarSnapshot(
         serviceType: appointments.serviceType,
         status: appointments.status,
         notes: appointments.notes,
-        patientName: patients.name,
-        patientPhone: patients.phone,
-        patientWaId: patients.waId,
+        customerName: customers.name,
+        customerPhone: customers.phone,
+        customerWaId: customers.waId,
         conversationId: conversations.id,
         reminderStatus: reminderJobs.status,
         reminderResponse: reminderJobs.responseType,
         reminderSkippedReason: reminderJobs.skippedReason,
       })
       .from(appointments)
-      .innerJoin(patients, eq(appointments.patientId, patients.id))
+      .innerJoin(customers, eq(appointments.customerId, customers.id))
       .leftJoin(
         conversations,
         and(
-          eq(conversations.patientId, appointments.patientId),
+          eq(conversations.customerId, appointments.customerId),
           eq(conversations.channel, 'whatsapp'),
         ),
       )
       .leftJoin(reminderJobs, eq(reminderJobs.appointmentId, appointments.id))
       .where(
         and(
-          eq(appointments.ptId, ptId),
+          eq(appointments.accountId, accountId),
           gte(appointments.startsAt, new Date(gridStart.getTime())),
           lte(appointments.startsAt, new Date(gridEnd.getTime())),
         ),
       )
       .orderBy(asc(appointments.startsAt)),
-    getServices(ptId, { activeOnly: true }),
+    getServices(accountId, { activeOnly: true }),
   ]);
 
   const items: CalendarAppointmentSnapshot[] = rows.map((r) => {
     const tzStart = new TZDate(r.startsAt, timezone);
     return {
       id: r.id,
-      patientName: privacyName(r.patientName),
-      patientPhone: r.patientPhone,
-      patientWaId: r.patientWaId,
+      customerName: privacyName(r.customerName),
+      customerPhone: r.customerPhone,
+      customerWaId: r.customerWaId,
       conversationId: r.conversationId,
       startsAt: r.startsAt.toISOString(),
       endsAt: r.endsAt.toISOString(),
@@ -302,7 +302,7 @@ export async function getCalendarSnapshot(
   });
 
   return {
-    ptId,
+    accountId,
     timezone,
     view,
     anchorKey,
@@ -314,7 +314,7 @@ export async function getCalendarSnapshot(
 }
 
 export async function getChatThreadSnapshot(
-  ptId: string,
+  accountId: string,
   conversationId: string,
 ): Promise<ChatThreadSnapshot | null> {
   const [conversation] = await db
@@ -326,14 +326,14 @@ export async function getChatThreadSnapshot(
       escalationState: conversations.escalationState,
       aiPausedUntil: conversations.aiPausedUntil,
       aiPauseReason: conversations.aiPauseReason,
-      patientId: conversations.patientId,
-      patientName: patients.name,
-      patientPhone: patients.phone,
+      customerId: conversations.customerId,
+      customerName: customers.name,
+      customerPhone: customers.phone,
     })
     .from(conversations)
-    .innerJoin(patients, eq(conversations.patientId, patients.id))
+    .innerJoin(customers, eq(conversations.customerId, customers.id))
     .where(
-      and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
+      and(eq(conversations.id, conversationId), eq(conversations.accountId, accountId)),
     )
     .limit(1);
 
@@ -361,7 +361,7 @@ export async function getChatThreadSnapshot(
     db
       .select({ status: whatsappConnections.status })
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId))
+      .where(eq(whatsappConnections.accountId, accountId))
       .orderBy(desc(whatsappConnections.createdAt))
       .limit(1),
     db
@@ -372,21 +372,21 @@ export async function getChatThreadSnapshot(
       .from(appointments)
       .where(
         and(
-          eq(appointments.ptId, ptId),
-          eq(appointments.patientId, conversation.patientId),
+          eq(appointments.accountId, accountId),
+          eq(appointments.customerId, conversation.customerId),
           inArray(appointments.status, ['pending', 'confirmed']),
           gte(appointments.startsAt, new Date()),
         ),
       )
       .orderBy(asc(appointments.startsAt))
       .limit(1),
-    getConversationUsage(ptId),
+    getConversationUsage(accountId),
   ]);
 
   return {
     conversationId: conversation.id,
-    patientName: privacyName(conversation.patientName),
-    patientPhone: conversation.patientPhone,
+    customerName: privacyName(conversation.customerName),
+    customerPhone: conversation.customerPhone,
     initialMessages: [...rows].reverse().map(toChatMessageSnapshot),
     aiActive: conversation.aiActive,
     windowOpen: conversation.lastInboundAt
@@ -415,7 +415,7 @@ export async function getChatThreadSnapshot(
  * One older page of a conversation's messages, for the thread's "load older"
  * affordance. Keyset-paginated on `(created_at, id)` strictly BEFORE the cursor
  * (the oldest message the client currently holds), so it never re-fetches a
- * loaded row and never skips a tie at the boundary timestamp. `pt_id` is guarded
+ * loaded row and never skips a tie at the boundary timestamp. `account_id` is guarded
  * alongside `conversation_id` so a caller can only page a conversation they own.
  * Served by `messages_conversation_created_at_idx`.
  *
@@ -433,7 +433,7 @@ export async function getChatThreadSnapshot(
  * `messages_conversation_created_at_idx` still serves the scan.
  */
 export async function getOlderChatMessages(
-  ptId: string,
+  accountId: string,
   conversationId: string,
   cursor: { createdAt: string; id: string },
   limit = 50,
@@ -456,7 +456,7 @@ export async function getOlderChatMessages(
     .where(
       and(
         eq(messages.conversationId, conversationId),
-        eq(messages.ptId, ptId),
+        eq(messages.accountId, accountId),
         or(
           lt(messages.createdAt, lo),
           and(
@@ -484,10 +484,10 @@ export async function getOlderChatMessages(
  * page-0 rows so the shape stays `ChatListRowSnapshot[]`.
  */
 export async function getChatListSnapshot(
-  ptId: string,
+  accountId: string,
   input: { status?: 'active' | 'closed'; query?: string } = {},
 ): Promise<ChatListRowSnapshot[]> {
-  const { rows } = await getChatListPage(ptId, input);
+  const { rows } = await getChatListPage(accountId, input);
   return rows;
 }
 
@@ -506,27 +506,27 @@ export function resolveNotificationPrefs(raw: unknown): NotificationPrefs {
 }
 
 export async function getSettingsSnapshot(
-  ptId: string,
+  accountId: string,
 ): Promise<SettingsSnapshot> {
-  const [[pt], [connection], templateRows] = await Promise.all([
+  const [[account], [connection], templateRows] = await Promise.all([
     db
       .select({
-        practiceName: pts.practiceName,
-        fullName: pts.fullName,
-        title: pts.title,
-        address: pts.address,
-        timezone: pts.timezone,
-        aiName: pts.aiName,
-        aiGreeting: pts.aiGreeting,
-        assistantPaused: pts.assistantPaused,
-        retentionDays: pts.retentionDays,
-        notificationPrefs: pts.notificationPrefs,
-        plan: pts.plan,
-        planLifetime: pts.planLifetime,
-        planExpiresAt: pts.planExpiresAt,
+        name: accounts.name,
+        fullName: accounts.fullName,
+        title: accounts.title,
+        address: accounts.address,
+        timezone: accounts.timezone,
+        aiName: accounts.aiName,
+        aiGreeting: accounts.aiGreeting,
+        assistantPaused: accounts.assistantPaused,
+        retentionDays: accounts.retentionDays,
+        notificationPrefs: accounts.notificationPrefs,
+        plan: accounts.plan,
+        planLifetime: accounts.planLifetime,
+        planExpiresAt: accounts.planExpiresAt,
       })
-      .from(pts)
-      .where(eq(pts.id, ptId))
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
       .limit(1),
     db
       .select({
@@ -535,7 +535,7 @@ export async function getSettingsSnapshot(
         displayPhoneNumber: whatsappConnections.displayPhoneNumber,
       })
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId))
+      .where(eq(whatsappConnections.accountId, accountId))
       .orderBy(desc(whatsappConnections.createdAt))
       .limit(1),
     db
@@ -543,7 +543,7 @@ export async function getSettingsSnapshot(
       .from(messageTemplates)
       .where(
         and(
-          eq(messageTemplates.ptId, ptId),
+          eq(messageTemplates.accountId, accountId),
           inArray(
             messageTemplates.name,
             REMINDER_TEMPLATE_PRIORITY.map((tpl) => tpl.name),
@@ -564,12 +564,12 @@ export async function getSettingsSnapshot(
           ? 'rejected'
           : null;
 
-  const effectivePlan: PlanId = pt
+  const effectivePlan: PlanId = account
     ? resolveEffectivePlan(
         {
-          plan: pt.plan,
-          planLifetime: pt.planLifetime,
-          planExpiresAt: pt.planExpiresAt,
+          plan: account.plan,
+          planLifetime: account.planLifetime,
+          planExpiresAt: account.planExpiresAt,
         },
         new Date(),
       )
@@ -577,18 +577,18 @@ export async function getSettingsSnapshot(
   const planConfig = getPlan(effectivePlan);
 
   return {
-    practiceName: pt?.practiceName ?? '',
-    fullName: pt?.fullName ?? '',
-    title: pt?.title ?? '',
-    address: pt?.address ?? '',
-    timezone: pt?.timezone ?? 'Europe/Berlin',
-    aiName: pt?.aiName ?? '',
-    aiGreeting: pt?.aiGreeting ?? '',
-    assistantPaused: pt?.assistantPaused ?? false,
-    retentionDays: pt?.retentionDays ?? 90,
-    notificationPrefs: resolveNotificationPrefs(pt?.notificationPrefs),
+    name: account?.name ?? '',
+    fullName: account?.fullName ?? '',
+    title: account?.title ?? '',
+    address: account?.address ?? '',
+    timezone: account?.timezone ?? 'Europe/Berlin',
+    aiName: account?.aiName ?? '',
+    aiGreeting: account?.aiGreeting ?? '',
+    assistantPaused: account?.assistantPaused ?? false,
+    retentionDays: account?.retentionDays ?? 90,
+    notificationPrefs: resolveNotificationPrefs(account?.notificationPrefs),
     plan: effectivePlan,
-    planLifetime: pt?.planLifetime ?? false,
+    planLifetime: account?.planLifetime ?? false,
     maxActiveServices: planConfig.maxActiveServices,
     customAssistantIdentity: planConfig.customAssistantIdentity,
     retentionMaxDays: planConfig.retentionMaxDays,

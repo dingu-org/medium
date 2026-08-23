@@ -21,7 +21,7 @@ export type ReminderTemplateDefinition = {
 };
 
 // Shared reminder templates (Option A from the spec — consistent wording across PTs).
-// v2 {{1}} = patient first name, {{2}} = practice name, {{3}} = appointment time.
+// v2 {{1}} = customer first name, {{2}} = practice name, {{3}} = appointment time.
 export const REMINDER_TEMPLATE: ReminderTemplateDefinition = {
   name: 'appointment_reminder_24h_sq_v1',
   language: 'sq',
@@ -76,7 +76,7 @@ export const REMINDER_TEMPLATE_PRIORITY = [
  * than resubmitting to Meta. Factored out of the Inngest wrapper for direct testing.
  */
 export async function bootstrapWaConnectionCore(args: {
-  ptId: string;
+  accountId: string;
   connectionId: string;
   template?: ReminderTemplateDefinition;
 }): Promise<{
@@ -86,9 +86,9 @@ export async function bootstrapWaConnectionCore(args: {
   created: boolean;
   name: string;
 }> {
-  const { ptId, connectionId } = args;
+  const { accountId, connectionId } = args;
   const template = args.template ?? REMINDER_TEMPLATE;
-  const svc = getServiceClient(ptId);
+  const svc = getServiceClient(accountId);
 
   const [existing] = await svc.db
     .select({
@@ -99,7 +99,7 @@ export async function bootstrapWaConnectionCore(args: {
     .from(messageTemplates)
     .where(
       and(
-        eq(messageTemplates.ptId, ptId),
+        eq(messageTemplates.accountId, accountId),
         eq(messageTemplates.name, template.name),
         eq(messageTemplates.language, template.language),
       ),
@@ -127,7 +127,7 @@ export async function bootstrapWaConnectionCore(args: {
   const [row] = await svc.db
     .insert(messageTemplates)
     .values({
-      ptId,
+      accountId,
       name: template.name,
       language: template.language,
       status: 'pending',
@@ -147,7 +147,7 @@ export async function bootstrapWaConnectionCore(args: {
 }
 
 export async function applyTemplateStatus(args: {
-  ptId: string;
+  accountId: string;
   templateId: string;
   status: string;
 }): Promise<'pending' | 'approved' | 'rejected'> {
@@ -158,13 +158,13 @@ export async function applyTemplateStatus(args: {
       : normalized === 'REJECTED'
         ? 'rejected'
         : 'pending';
-  await getServiceClient(args.ptId)
+  await getServiceClient(args.accountId)
     .db.update(messageTemplates)
     .set({ status, lastStatusAt: sql`now()` })
     .where(
       and(
         eq(messageTemplates.id, args.templateId),
-        eq(messageTemplates.ptId, args.ptId),
+        eq(messageTemplates.accountId, args.accountId),
       ),
     );
   return status;
@@ -178,9 +178,9 @@ export const bootstrapWaConnection = inngest.createFunction(
   },
   { event: 'wa.connection.created' },
   async ({ event, step }) => {
-    const { ptId, connectionId } = event.data;
+    const { accountId, connectionId } = event.data;
     let template = await step.run('create-reminder-template', () =>
-      bootstrapWaConnectionCore({ ptId, connectionId }),
+      bootstrapWaConnectionCore({ accountId, connectionId }),
     );
     if (template.status === 'approved') {
       return { status: template.status, existing: true };
@@ -188,7 +188,7 @@ export const bootstrapWaConnection = inngest.createFunction(
     if (template.status === 'rejected') {
       template = await step.run('create-fallback-reminder-template', () =>
         bootstrapWaConnectionCore({
-          ptId,
+          accountId,
           connectionId,
           template: FALLBACK_REMINDER_TEMPLATE,
         }),
@@ -208,7 +208,7 @@ export const bootstrapWaConnection = inngest.createFunction(
         async () => {
           const result = await getTemplateStatus(connectionId, template.metaId);
           return applyTemplateStatus({
-            ptId,
+            accountId,
             templateId: template.templateId,
             status: result.status,
           });
@@ -219,7 +219,7 @@ export const bootstrapWaConnection = inngest.createFunction(
         await step.sendEvent('emit-template-approved', {
           name: 'wa.template.approved',
           data: {
-            ptId,
+            accountId,
             templateId: template.templateId,
             metaId: template.metaId,
           },
@@ -230,7 +230,7 @@ export const bootstrapWaConnection = inngest.createFunction(
         await step.sendEvent('emit-template-rejected', {
           name: 'wa.template.rejected',
           data: {
-            ptId,
+            accountId,
             templateId: template.templateId,
             metaId: template.metaId,
           },
@@ -238,7 +238,7 @@ export const bootstrapWaConnection = inngest.createFunction(
         if (template.name === REMINDER_TEMPLATE.name) {
           template = await step.run('create-fallback-reminder-template', () =>
             bootstrapWaConnectionCore({
-              ptId,
+              accountId,
               connectionId,
               template: FALLBACK_REMINDER_TEMPLATE,
             }),
@@ -247,7 +247,7 @@ export const bootstrapWaConnection = inngest.createFunction(
             await step.sendEvent('emit-fallback-template-approved', {
               name: 'wa.template.approved',
               data: {
-                ptId,
+                accountId,
                 templateId: template.templateId,
                 metaId: template.metaId,
               },
@@ -258,7 +258,7 @@ export const bootstrapWaConnection = inngest.createFunction(
             await step.sendEvent('emit-fallback-template-rejected', {
               name: 'wa.template.rejected',
               data: {
-                ptId,
+                accountId,
                 templateId: template.templateId,
                 metaId: template.metaId,
               },
@@ -277,7 +277,7 @@ export const bootstrapWaConnection = inngest.createFunction(
     await step.sendEvent('emit-template-timeout', {
       name: 'wa.template.timed_out',
       data: {
-        ptId,
+        accountId,
         templateId: template.templateId,
         metaId: template.metaId,
       },

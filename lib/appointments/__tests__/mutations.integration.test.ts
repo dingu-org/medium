@@ -16,8 +16,8 @@ import {
   availabilityRules,
   eventOutbox,
   events,
-  patients,
-  pts,
+  customers,
+  accounts,
 } from '@/lib/db/schema';
 import { publishDueOutboxEvents } from '@/lib/events/outbox';
 import { inngest } from '@/lib/inngest/client';
@@ -30,9 +30,9 @@ import { transitionAppointment } from '../state';
 import { DAY, testNow, zonedTime } from '@/tests/support/clock';
 import { excludeForeignRows } from '@/tests/support/isolation';
 
-let ptId = '';
-let patientId = '';
-let otherPatientId = '';
+let accountId = '';
+let customerId = '';
+let otherCustomerId = '';
 
 // The availability rules below are keyed by weekday, so the fixtures need a
 // real Monday and Tuesday — derived, and a week out so every booking is in the
@@ -53,41 +53,41 @@ beforeAll(async () => {
   if (error || !data.user) {
     throw new Error(`createUser failed: ${error?.message}`);
   }
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(patients).where(eq(patients.ptId, ptId));
-  await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
+  await db.delete(availabilityRules).where(eq(availabilityRules.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
   // `publishDueOutboxEvents` scans the whole table, so the tally it returns
   // counts every tenant's due row, not just this suite's. Park the foreign ones
   // as already published so the claim below can only find what this test wrote.
-  await excludeForeignRows(eventOutbox, ptId, { publishedAt: new Date() });
+  await excludeForeignRows(eventOutbox, accountId, { publishedAt: new Date() });
   await db
-    .update(pts)
+    .update(accounts)
     .set({ timezone: 'Europe/Tirane' })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 
   const inserted = await db
-    .insert(patients)
+    .insert(customers)
     .values([
-      { ptId, name: 'Alex', phone: `+3556901${Date.now()}` },
-      { ptId, name: 'Sam', phone: `+3556902${Date.now()}` },
+      { accountId, name: 'Alex', phone: `+3556901${Date.now()}` },
+      { accountId, name: 'Sam', phone: `+3556902${Date.now()}` },
     ])
-    .returning({ id: patients.id });
-  patientId = inserted[0].id;
-  otherPatientId = inserted[1].id;
+    .returning({ id: customers.id });
+  customerId = inserted[0].id;
+  otherCustomerId = inserted[1].id;
 
   await db.insert(availabilityRules).values([
     {
-      ptId,
+      accountId,
       weekday: 1,
       startTime: '09:00:00',
       endTime: '17:00:00',
     },
     {
-      ptId,
+      accountId,
       weekday: 2,
       startTime: '09:00:00',
       endTime: '17:00:00',
@@ -102,14 +102,14 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('appointment mutations', () => {
   it('books once and returns the same appointment on replay', async () => {
     const input = {
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(9),
       serviceType: 'Initial consultation',
     };
@@ -121,15 +121,15 @@ describe('appointment mutations', () => {
     const storedAppointments = await db
       .select()
       .from(appointments)
-      .where(eq(appointments.ptId, ptId));
+      .where(eq(appointments.accountId, accountId));
     const storedEvents = await db
       .select()
       .from(events)
-      .where(eq(events.ptId, ptId));
+      .where(eq(events.accountId, accountId));
     const outbox = await db
       .select()
       .from(eventOutbox)
-      .where(eq(eventOutbox.ptId, ptId));
+      .where(eq(eventOutbox.accountId, accountId));
 
     expect(storedAppointments).toHaveLength(1);
     expect(storedEvents).toHaveLength(1);
@@ -145,26 +145,26 @@ describe('appointment mutations', () => {
     );
   });
 
-  // The consumer of these payloads decides whether to speak to the patient, so
+  // The consumer of these payloads decides whether to speak to the customer, so
   // the origin has to survive the write — it is not derivable from the row.
   it('records the origin of each change in its event payload', async () => {
     const booked = await bookAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(9),
       serviceType: 'Treatment',
       origin: 'conversation',
     });
     await rescheduleAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       appointmentId: booked.id,
       newStartsAt: tuesdayAt(9),
-      origin: 'pt',
+      origin: 'account',
     });
     await cancelAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       appointmentId: booked.id,
       cancelledBy: 'ai',
       origin: 'conversation',
@@ -173,7 +173,7 @@ describe('appointment mutations', () => {
     const rows = await db
       .select({ type: events.type, payload: events.payload })
       .from(events)
-      .where(eq(events.ptId, ptId));
+      .where(eq(events.accountId, accountId));
     expect(rows).toEqual(
       expect.arrayContaining([
         {
@@ -182,7 +182,7 @@ describe('appointment mutations', () => {
         },
         {
           type: 'appointment.rescheduled',
-          payload: expect.objectContaining({ origin: 'pt' }),
+          payload: expect.objectContaining({ origin: 'account' }),
         },
         {
           type: 'appointment.cancelled',
@@ -197,8 +197,8 @@ describe('appointment mutations', () => {
 
   it('returns the event it appended, and null when nothing was appended', async () => {
     const input = {
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(9),
       serviceType: 'Treatment',
       origin: 'conversation' as const,
@@ -207,8 +207,8 @@ describe('appointment mutations', () => {
     const first = await bookAppointment(input);
     const replay = await bookAppointment(input);
     const noop = await rescheduleAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       appointmentId: first.id,
       newStartsAt: mondayAt(9),
     });
@@ -216,7 +216,7 @@ describe('appointment mutations', () => {
     const [stored] = await db
       .select({ id: events.id })
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'appointment.booked')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'appointment.booked')));
     expect(first.eventId).toBe(stored.id);
     // A replay and a same-time reschedule both return the row unchanged and
     // publish nothing, so neither may claim the event the first call produced.
@@ -224,17 +224,17 @@ describe('appointment mutations', () => {
     expect(noop.eventId).toBeNull();
   });
 
-  it('allows only one of two patients to claim the same slot concurrently', async () => {
+  it('allows only one of two customers to claim the same slot concurrently', async () => {
     const results = await Promise.allSettled([
       bookAppointment({
-        ptId,
-        patientId,
+        accountId,
+        customerId,
         startsAt: mondayAt(10),
         serviceType: 'Treatment',
       }),
       bookAppointment({
-        ptId,
-        patientId: otherPatientId,
+        accountId,
+        customerId: otherCustomerId,
         startsAt: mondayAt(10),
         serviceType: 'Treatment',
       }),
@@ -252,8 +252,8 @@ describe('appointment mutations', () => {
 
   it('rejects direct overlapping active inserts at the database boundary', async () => {
     await db.insert(appointments).values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(9),
       endsAt: mondayAt(10),
       status: 'pending',
@@ -261,8 +261,8 @@ describe('appointment mutations', () => {
 
     try {
       await db.insert(appointments).values({
-        ptId,
-        patientId: otherPatientId,
+        accountId,
+        customerId: otherCustomerId,
         startsAt: mondayAt(9, 30),
         endsAt: mondayAt(10, 30),
         status: 'confirmed',
@@ -275,15 +275,15 @@ describe('appointment mutations', () => {
 
   it('reschedules in place, preserves status, and records from/to times', async () => {
     const booked = await bookAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(11, 15),
       serviceType: 'Treatment',
       durationMinutes: 45,
     });
     const moved = await rescheduleAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       appointmentId: booked.id,
       newStartsAt: tuesdayAt(12),
     });
@@ -299,7 +299,7 @@ describe('appointment mutations', () => {
       .select()
       .from(events)
       .where(
-        and(eq(events.ptId, ptId), eq(events.type, 'appointment.rescheduled')),
+        and(eq(events.accountId, accountId), eq(events.type, 'appointment.rescheduled')),
       );
     expect(rows).toHaveLength(1);
     expect(rows[0].payload).toMatchObject({
@@ -314,8 +314,8 @@ describe('appointment mutations', () => {
     // The pickers offer an hourly grid; a 45-minute service is not a member of
     // it, but every one of those times is genuinely free.
     const booked = await bookAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(11),
       serviceType: 'Vlerësim i parë',
       durationMinutes: 45,
@@ -325,8 +325,8 @@ describe('appointment mutations', () => {
     );
 
     const moved = await rescheduleAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       appointmentId: booked.id,
       newStartsAt: tuesdayAt(13),
     });
@@ -339,8 +339,8 @@ describe('appointment mutations', () => {
   it('still refuses a booking that runs past the end of the working day', async () => {
     await expect(
       bookAppointment({
-        ptId,
-        patientId,
+        accountId,
+        customerId,
         startsAt: mondayAt(16, 30),
         serviceType: 'Vlerësim i parë',
         durationMinutes: 45,
@@ -350,42 +350,42 @@ describe('appointment mutations', () => {
 
   it('cancels with actor and reason metadata', async () => {
     const booked = await bookAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(13),
       serviceType: 'Treatment',
     });
     const cancelled = await cancelAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       appointmentId: booked.id,
-      cancelledBy: 'patient',
+      cancelledBy: 'customer',
       reason: 'Travel',
     });
 
     expect(cancelled.status).toBe('cancelled');
-    expect(cancelled.cancelledBy).toBe('patient');
+    expect(cancelled.cancelledBy).toBe('customer');
     expect(cancelled.cancellationReason).toBe('Travel');
   });
 
   it('does not move an appointment into an occupied slot', async () => {
     const first = await bookAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(9),
       serviceType: 'Treatment',
     });
     await bookAppointment({
-      ptId,
-      patientId: otherPatientId,
+      accountId,
+      customerId: otherCustomerId,
       startsAt: mondayAt(10),
       serviceType: 'Treatment',
     });
 
     await expect(
       rescheduleAppointment({
-        ptId,
-        patientId,
+        accountId,
+        customerId,
         appointmentId: first.id,
         newStartsAt: mondayAt(10),
       }),
@@ -400,13 +400,13 @@ describe('appointment mutations', () => {
 
   it('allows pending appointments to close as no-show and rejects terminal changes', async () => {
     const booked = await bookAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(14),
       serviceType: 'Treatment',
     });
     const noShow = await transitionAppointment({
-      ptId,
+      accountId,
       appointmentId: booked.id,
       nextStatus: 'no_show',
     });
@@ -414,7 +414,7 @@ describe('appointment mutations', () => {
 
     await expect(
       transitionAppointment({
-        ptId,
+        accountId,
         appointmentId: booked.id,
         nextStatus: 'confirmed',
       }),
@@ -432,8 +432,8 @@ describe('appointment mutations', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     await bookAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(15),
       serviceType: 'Treatment',
     });
@@ -441,7 +441,7 @@ describe('appointment mutations', () => {
     const [failed] = await db
       .select()
       .from(eventOutbox)
-      .where(eq(eventOutbox.ptId, ptId));
+      .where(eq(eventOutbox.accountId, accountId));
     expect(failed.publishedAt).toBeNull();
     expect(failed.attempts).toBe(1);
     expect(failed.lastError).toContain('temporary');

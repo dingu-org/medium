@@ -218,6 +218,13 @@
       "when": 1786722976366,
       "tag": "0030_non_text_notice",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1787493935920,
+      "tag": "0031_rename_pts_to_accounts",
+      "breakpoints": true
     }
   ]
 }

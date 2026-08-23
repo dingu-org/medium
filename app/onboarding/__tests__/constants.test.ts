@@ -5,19 +5,19 @@ describe('onboarding cookies', () => {
   it('allows dismissal and setup only for the matching practice account', () => {
     expect(
       allowsOnboardingBypass(
-        onboardingCookieValue('dismissed', 'pt-a'),
-        'pt-a',
+        onboardingCookieValue('dismissed', 'account-a'),
+        'account-a',
       ),
     ).toBe(true);
     expect(
-      allowsOnboardingBypass(onboardingCookieValue('setup', 'pt-a'), 'pt-a'),
+      allowsOnboardingBypass(onboardingCookieValue('setup', 'account-a'), 'account-a'),
     ).toBe(true);
     expect(
       allowsOnboardingBypass(
-        onboardingCookieValue('dismissed', 'pt-a'),
-        'pt-b',
+        onboardingCookieValue('dismissed', 'account-a'),
+        'account-b',
       ),
     ).toBe(false);
-    expect(allowsOnboardingBypass('1', 'pt-a')).toBe(false);
+    expect(allowsOnboardingBypass('1', 'account-a')).toBe(false);
   });
 });

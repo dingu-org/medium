@@ -27,8 +27,8 @@ import {
   appointments,
   conversations,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
 } from '@/lib/db/schema';
 import { createLogger, logger, serializeError } from '@/lib/log';
 import { getServiceClient, withAuditLog } from '@/lib/tenancy';
@@ -136,7 +136,7 @@ type Executor = DB | DBTransaction;
 type PersistedContext = {
   inbound: InboundMessage;
   conversationAiActive: boolean;
-  practiceName: string | null;
+  name: string | null;
   timezone: string;
   aiName: string | null;
   aiGreeting: string | null;
@@ -144,7 +144,7 @@ type PersistedContext = {
   address: string | null;
   retentionDays: number;
   assistantPaused: boolean;
-  /** Patient message an outstanding handoff offer answered; null when none. */
+  /** Customer message an outstanding handoff offer answered; null when none. */
   handoffOfferMessageId: string | null;
   // Billing plan state (Phase 16 C1). Pre-wiring only: selected here so the
   // C2/C3 retention/identity gating has the fields; nothing acts on them yet.
@@ -252,7 +252,7 @@ export async function runModelTurn(args: {
   const effects = lastStep ? confirmableEffects(lastStep) : [];
 
   const turnLogger = createLogger({
-    pt_id: args.toolContext.ptId,
+    account_id: args.toolContext.accountId,
     conversation_id: args.toolContext.conversationId,
   });
   // Per-turn cost/usage telemetry for the cost dashboard (Phase 11). ids +
@@ -279,7 +279,7 @@ export async function runModelTurn(args: {
 
   // Ahead of the text branch on purpose: result.text is the LAST step's text, so
   // a model that wrote prose alongside the stopping tool call would otherwise
-  // win. Discarding that prose is the contract — the patient gets exactly one
+  // win. Discarding that prose is the contract — the customer gets exactly one
   // message per change and it is the deterministic one.
   if (effects.length > 0) {
     if (effects.length > 1) {
@@ -328,12 +328,12 @@ export async function runModelTurn(args: {
     reason,
     reason === 'step_limit_reached'
       ? `Conversation turn reached the ${STEP_LIMIT}-step limit without a final response`
-      : 'Model returned no patient-facing text',
+      : 'Model returned no customer-facing text',
   );
 }
 
 async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
-  const svc = getServiceClient(inbound.ptId);
+  const svc = getServiceClient(inbound.accountId);
   const [row] = await svc.db
     .select({
       messageId: messages.id,
@@ -344,32 +344,32 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       conversationId: conversations.id,
       conversationAiActive: conversations.aiActive,
       handoffOfferMessageId: conversations.handoffOfferMessageId,
-      patientId: patients.id,
-      practiceName: pts.practiceName,
-      timezone: pts.timezone,
-      aiName: pts.aiName,
-      aiGreeting: pts.aiGreeting,
-      title: pts.title,
-      address: pts.address,
-      retentionDays: pts.retentionDays,
-      assistantPaused: pts.assistantPaused,
-      plan: pts.plan,
-      planLifetime: pts.planLifetime,
-      planExpiresAt: pts.planExpiresAt,
+      customerId: customers.id,
+      name: accounts.name,
+      timezone: accounts.timezone,
+      aiName: accounts.aiName,
+      aiGreeting: accounts.aiGreeting,
+      title: accounts.title,
+      address: accounts.address,
+      retentionDays: accounts.retentionDays,
+      assistantPaused: accounts.assistantPaused,
+      plan: accounts.plan,
+      planLifetime: accounts.planLifetime,
+      planExpiresAt: accounts.planExpiresAt,
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
-    .innerJoin(patients, eq(conversations.patientId, patients.id))
-    .innerJoin(pts, eq(conversations.ptId, pts.id))
+    .innerJoin(customers, eq(conversations.customerId, customers.id))
+    .innerJoin(accounts, eq(conversations.accountId, accounts.id))
     .where(
       and(
         eq(messages.id, inbound.id),
-        eq(messages.role, 'patient'),
-        eq(messages.ptId, inbound.ptId),
+        eq(messages.role, 'customer'),
+        eq(messages.accountId, inbound.accountId),
         eq(messages.conversationId, inbound.conversationId),
-        eq(conversations.patientId, inbound.patientId),
-        eq(conversations.ptId, inbound.ptId),
-        eq(patients.ptId, inbound.ptId),
+        eq(conversations.customerId, inbound.customerId),
+        eq(conversations.accountId, inbound.accountId),
+        eq(customers.accountId, inbound.accountId),
       ),
     )
     .limit(1);
@@ -385,8 +385,8 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
     inbound: {
       id: row.messageId,
       conversationId: row.conversationId,
-      ptId: inbound.ptId,
-      patientId: row.patientId,
+      accountId: inbound.accountId,
+      customerId: row.customerId,
       content: row.messageContent,
       channel: row.messageChannel,
       externalId: row.messageExternalId,
@@ -394,7 +394,7 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
     },
     conversationAiActive: row.conversationAiActive,
     handoffOfferMessageId: row.handoffOfferMessageId,
-    practiceName: row.practiceName,
+    name: row.name,
     timezone: row.timezone,
     aiName: row.aiName,
     aiGreeting: row.aiGreeting,
@@ -412,7 +412,7 @@ async function findExistingReply(
   inbound: InboundMessage,
   executor?: Executor,
 ): Promise<OutboundMessage | null> {
-  const [existing] = await (executor ?? getServiceClient(inbound.ptId).db)
+  const [existing] = await (executor ?? getServiceClient(inbound.accountId).db)
     .select({
       id: messages.id,
       conversationId: messages.conversationId,
@@ -423,7 +423,7 @@ async function findExistingReply(
     .from(messages)
     .where(
       and(
-        eq(messages.ptId, inbound.ptId),
+        eq(messages.accountId, inbound.accountId),
         eq(messages.conversationId, inbound.conversationId),
         eq(messages.role, 'ai'),
         eq(messages.replyToMessageId, inbound.id),
@@ -436,13 +436,13 @@ async function findExistingReply(
 }
 
 async function loadHistory(inbound: InboundMessage): Promise<ModelMessage[]> {
-  const svc = getServiceClient(inbound.ptId);
+  const svc = getServiceClient(inbound.accountId);
   const rows = await svc.db
     .select({ role: messages.role, content: messages.content })
     .from(messages)
     .where(
       and(
-        eq(messages.ptId, inbound.ptId),
+        eq(messages.accountId, inbound.accountId),
         eq(messages.conversationId, inbound.conversationId),
       ),
     )
@@ -450,7 +450,7 @@ async function loadHistory(inbound: InboundMessage): Promise<ModelMessage[]> {
     .limit(HISTORY_LIMIT);
 
   return rows.reverse().map((row) => ({
-    role: row.role === 'patient' ? 'user' : 'assistant',
+    role: row.role === 'customer' ? 'user' : 'assistant',
     content: row.content,
   }));
 }
@@ -467,11 +467,11 @@ async function persistReply(args: {
   /** Set to join a caller's transaction (the handoff offer arms itself in one). */
   executor?: Executor;
 }): Promise<OutboundMessage> {
-  const executor = args.executor ?? getServiceClient(args.inbound.ptId).db;
+  const executor = args.executor ?? getServiceClient(args.inbound.accountId).db;
   const [inserted] = await executor
     .insert(messages)
     .values({
-      ptId: args.inbound.ptId,
+      accountId: args.inbound.accountId,
       conversationId: args.inbound.conversationId,
       replyToMessageId: args.inbound.id,
       role: 'ai',
@@ -503,15 +503,15 @@ async function persistReply(args: {
 async function conversationIsHumanOwned(
   context: PersistedContext,
 ): Promise<boolean> {
-  const svc = getServiceClient(context.inbound.ptId);
+  const svc = getServiceClient(context.inbound.accountId);
   const [row] = await svc.db
     .select({ id: conversations.id })
     .from(conversations)
     .where(
       and(
         eq(conversations.id, context.inbound.conversationId),
-        eq(conversations.ptId, context.inbound.ptId),
-        eq(conversations.patientId, context.inbound.patientId),
+        eq(conversations.accountId, context.inbound.accountId),
+        eq(conversations.customerId, context.inbound.customerId),
         eq(conversations.aiActive, false),
       ),
     )
@@ -523,7 +523,7 @@ async function conversationIsHumanOwned(
 // `not_found` both for a missing conversation and for one that is already
 // human-owned (the model escalated earlier in the same turn, or the PT took
 // over). Only the first is a failure: when the thread is already escalated the
-// patient must still get their reply instead of the turn throwing.
+// customer must still get their reply instead of the turn throwing.
 async function escalateToHuman(
   context: PersistedContext,
   reason: string,
@@ -533,8 +533,8 @@ async function escalateToHuman(
     'escalate_to_human',
     { reason },
     {
-      ptId: context.inbound.ptId,
-      patientId: context.inbound.patientId,
+      accountId: context.inbound.accountId,
+      customerId: context.inbound.customerId,
       conversationId: context.inbound.conversationId,
     },
   );
@@ -551,7 +551,7 @@ async function escalateToHuman(
 /**
  * Send the one static offer and arm it against this inbound message, in a
  * single transaction. Order matters more than it looks: an armed offer whose
- * message never reached the patient would make an ordinary "po" — how a patient
+ * message never reached the customer would make an ordinary "po" — how a customer
  * takes a proposed slot — silently escalate a conversation nobody offered
  * anything to, so the two facts commit together or not at all.
  *
@@ -562,11 +562,11 @@ async function persistHandoffOffer(
   context: PersistedContext,
   metadata: ModelTurnMetadata & { model: string },
 ): Promise<OutboundMessage> {
-  const svc = getServiceClient(context.inbound.ptId);
+  const svc = getServiceClient(context.inbound.accountId);
   return svc.db.transaction(async (tx) => {
     const outbound = await persistReply({
       inbound: context.inbound,
-      content: handoffOfferMessage(businessLabel(context.practiceName)),
+      content: handoffOfferMessage(businessLabel(context.name)),
       model: metadata.model,
       provider: metadata.provider,
       tokensIn: metadata.tokensIn,
@@ -581,16 +581,16 @@ async function persistHandoffOffer(
 }
 
 /**
- * The patient answered the outstanding offer with the acceptance word. Escalate
+ * The customer answered the outstanding offer with the acceptance word. Escalate
  * exactly as `escalate_to_human` does — the assistant is off for this
  * conversation until the practitioner turns it back on — and confirm in one
- * fixed sentence, so the patient is not left with silence after saying yes.
+ * fixed sentence, so the customer is not left with silence after saying yes.
  *
  * Nothing here may run before the escalation, and that includes disarming the
  * offer. The anchor is the only record that an acceptance is owed: clearing it
  * first — as this path used to, in its own statement — meant a crash before the
  * escalation left a retry with no anchor to read, so it fell through to an
- * ordinary turn and the handoff the patient had accepted never happened. With
+ * ordinary turn and the handoff the customer had accepted never happened. With
  * the escalation durable first, a crash anywhere after it still leaves the
  * anchor armed, and the retry escalates again (idempotently: the second
  * `escalate_to_human` finds the conversation already human-owned).
@@ -605,10 +605,10 @@ async function acceptHandoffOffer(
 ): Promise<OutboundMessage> {
   await escalateToHuman(
     context,
-    'The patient accepted the offer to pass their question to the practice.',
+    'The customer accepted the offer to pass their question to the practice.',
     'Handoff-offer escalation failed',
   );
-  const svc = getServiceClient(context.inbound.ptId);
+  const svc = getServiceClient(context.inbound.accountId);
   return svc.db.transaction(async (tx) => {
     await clearHandoffOffer({
       inbound: context.inbound,
@@ -617,7 +617,7 @@ async function acceptHandoffOffer(
     });
     return persistReply({
       inbound: context.inbound,
-      content: handoffAcceptedMessage(businessLabel(context.practiceName)),
+      content: handoffAcceptedMessage(businessLabel(context.name)),
       model: HANDOFF_ACCEPTED_MODEL,
       provider: 'internal',
       tokensIn: 0,
@@ -631,35 +631,35 @@ async function acceptHandoffOffer(
 
 function logAssistantPausedSkip(context: PersistedContext): void {
   createLogger({
-    pt_id: context.inbound.ptId,
+    account_id: context.inbound.accountId,
     conversation_id: context.inbound.conversationId,
   }).info(
     'ai.assistant_paused',
-    'Assistant globally paused; patient reply suppressed',
+    'Assistant globally paused; customer reply suppressed',
     { message_id: context.inbound.id, phase: 'inbound' },
   );
 }
 
 // 'booking_unconfirmed' is only truthful when the turn actually attempted a
 // mutation; a turn that never got off the ground (provider outage, empty
-// response) must not tell a patient with no booking that their booking could
+// response) must not tell a customer with no booking that their booking could
 // not be confirmed.
 type FailedTurnCopy = 'booking_unconfirmed' | 'technical_failure';
 
 // The failure path runs in a fresh invocation with no memory of what the dead
 // turn managed to do, so the only available mutation signal is state: an
-// appointment this patient gained at or after the inbound message arrived.
+// appointment this customer gained at or after the inbound message arrived.
 // Reschedules and cancellations leave no such trace, but the copy this selects
 // is booking-specific anyway.
 async function bookedSinceInbound(context: PersistedContext): Promise<boolean> {
-  const svc = getServiceClient(context.inbound.ptId);
+  const svc = getServiceClient(context.inbound.accountId);
   const [row] = await svc.db
     .select({ id: appointments.id })
     .from(appointments)
     .where(
       and(
-        eq(appointments.ptId, context.inbound.ptId),
-        eq(appointments.patientId, context.inbound.patientId),
+        eq(appointments.accountId, context.inbound.accountId),
+        eq(appointments.customerId, context.inbound.customerId),
         gte(appointments.createdAt, context.inbound.occurredAt),
       ),
     )
@@ -669,12 +669,12 @@ async function bookedSinceInbound(context: PersistedContext): Promise<boolean> {
 
 function failedTurnHandoffResponse(
   copy: FailedTurnCopy,
-  practiceName: string,
+  name: string,
 ): string {
   if (copy === 'technical_failure') {
-    return `Kam një problem teknik dhe nuk mund t'ju përgjigjem tani. Këtë bisedë ia kalova ${practiceName}; do t'ju përgjigjen sapo të jenë të lirë.`;
+    return `Kam një problem teknik dhe nuk mund t'ju përgjigjem tani. Këtë bisedë ia kalova ${name}; do t'ju përgjigjen sapo të jenë të lirë.`;
   }
-  return `Nuk munda ta konfirmoj me siguri rezultatin e fundit të rezervimit. Këtë bisedë ia kalova ${practiceName} që ta verifikojnë dhe t'ju përgjigjen.`;
+  return `Nuk munda ta konfirmoj me siguri rezultatin e fundit të rezervimit. Këtë bisedë ia kalova ${name} që ta verifikojnë dhe t'ju përgjigjen.`;
 }
 
 async function runFailedTurnHandoff(
@@ -695,7 +695,7 @@ async function runFailedTurnHandoff(
     // stray English noun phrase inside an Albanian sentence.
     content: failedTurnHandoffResponse(
       copy,
-      businessLabel(context.practiceName),
+      businessLabel(context.name),
     ),
     model: metadata.model,
     provider: metadata.provider,
@@ -714,11 +714,11 @@ async function runTurnCoreUnlocked(args: {
   dispatch?: Dispatch;
   allowInactive?: boolean;
   systemAddendum?: string;
-  cancellationActor?: 'ai' | 'patient';
+  cancellationActor?: 'ai' | 'customer';
 }): Promise<OutboundMessage> {
   const context = await withAuditLog(
     {
-      ptId: args.inboundMessage.ptId,
+      accountId: args.inboundMessage.accountId,
       actor: 'ai',
       action: 'ai.conversation.read',
       targetTable: 'messages',
@@ -766,15 +766,15 @@ async function runTurnCoreUnlocked(args: {
   }
 
   const history = await loadHistory(context.inbound);
-  const configuredServices = await getServices(context.inbound.ptId, {
+  const configuredServices = await getServices(context.inbound.accountId, {
     activeOnly: true,
   });
   // Plan-gate the assistant identity: Free (and lapsed-past-grace Solo) fall
   // back to the default persona, Solo/lifetime keep the custom name/greeting.
-  // Resolved from the raw stored plan on context. Covers patient +
+  // Resolved from the raw stored plan on context. Covers customer +
   // reminder-fallback turns.
   const baseSystem = buildSystemPrompt({
-    practiceName: context.practiceName,
+    name: context.name,
     timezone: context.timezone,
     ...effectiveAssistantIdentity(
       {
@@ -801,8 +801,8 @@ async function runTurnCoreUnlocked(args: {
     system,
     messages: history,
     toolContext: {
-      ptId: context.inbound.ptId,
-      patientId: context.inbound.patientId,
+      accountId: context.inbound.accountId,
+      customerId: context.inbound.customerId,
       conversationId: context.inbound.conversationId,
       cancellationActor: args.cancellationActor,
     },
@@ -818,7 +818,7 @@ async function runTurnCoreUnlocked(args: {
       content: appointmentConfirmationContent({
         kind: result.effect.kind,
         startsAt: new Date(result.effect.startsAt),
-        // pts.timezone, the same column loadAppointmentJobContext reads, so the
+        // accounts.timezone, the same column loadAppointmentJobContext reads, so the
         // background job would render this instant identically.
         timezone: context.timezone,
         serviceType: result.effect.serviceType,
@@ -863,7 +863,7 @@ export async function runTurnCore(args: {
   dispatch?: Dispatch;
   allowInactive?: boolean;
   systemAddendum?: string;
-  cancellationActor?: 'ai' | 'patient';
+  cancellationActor?: 'ai' | 'customer';
 }): Promise<OutboundMessage> {
   return withAdvisoryLock(`ai-turn:${args.inboundMessage.id}`, () =>
     runTurnCoreUnlocked(args),
@@ -874,10 +874,10 @@ function reminderSystemAddendum(context: ReminderTurnContext): string {
   const details = [
     '# Reminder response context',
     '',
-    'The latest patient message is related to an appointment reminder.',
+    'The latest customer message is related to an appointment reminder.',
     'Reminder replies may be handled even if the PT has taken over the conversation.',
-    'If the patient wants to cancel in this reminder context, call `cancel_appointment`; the system will record it as patient-cancelled.',
-    'If the patient wants to reschedule, use `list_upcoming_appointments`, `get_availability`, and `reschedule_appointment` as needed.',
+    'If the customer wants to cancel in this reminder context, call `cancel_appointment`; the system will record it as customer-cancelled.',
+    'If the customer wants to reschedule, use `list_upcoming_appointments`, `get_availability`, and `reschedule_appointment` as needed.',
   ];
   if (context.appointmentId) {
     details.push(`- Reminder appointment ID: ${context.appointmentId}`);
@@ -890,8 +890,8 @@ function reminderSystemAddendum(context: ReminderTurnContext): string {
   if (context.timezone) {
     details.push(`- Reminder appointment timezone: ${context.timezone}`);
   }
-  if (context.practiceName?.trim()) {
-    details.push(`- Practice name: ${context.practiceName.trim()}`);
+  if (context.name?.trim()) {
+    details.push(`- Practice name: ${context.name.trim()}`);
   }
   if (context.reason === 'ambiguous_reminders') {
     details.push(
@@ -915,7 +915,7 @@ export async function runReminderTurn(args: {
       model: getOpenRouterModel(modelId, buildModelSettings(modelConfig)),
       allowInactive: true,
       systemAddendum: reminderSystemAddendum(args.reminder),
-      cancellationActor: 'patient',
+      cancellationActor: 'customer',
     });
   } catch (error) {
     // A paused skip is benign (already info-logged in the engine core), not a
@@ -927,7 +927,7 @@ export async function runReminderTurn(args: {
       )
     ) {
       logger.error('conversation.turn_failed', 'Conversation turn failed', {
-        pt_id: args.inboundMessage.ptId,
+        account_id: args.inboundMessage.accountId,
         conversation_id: args.inboundMessage.conversationId,
         message_id: args.inboundMessage.id,
         model: modelId,
@@ -948,7 +948,7 @@ export async function handoffFailedTurn(args: {
   return withAdvisoryLock(`ai-turn:${args.inboundMessage.id}`, async () => {
     const context = await withAuditLog(
       {
-        ptId: args.inboundMessage.ptId,
+        accountId: args.inboundMessage.accountId,
         actor: 'system',
         action: 'ai.conversation.failure_handoff',
         targetTable: 'messages',
@@ -1001,7 +1001,7 @@ export async function runTurn(args: {
       )
     ) {
       logger.error('conversation.turn_failed', 'Conversation turn failed', {
-        pt_id: args.inboundMessage.ptId,
+        account_id: args.inboundMessage.accountId,
         conversation_id: args.inboundMessage.conversationId,
         message_id: args.inboundMessage.id,
         model: modelId,

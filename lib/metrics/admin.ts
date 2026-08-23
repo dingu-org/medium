@@ -26,13 +26,13 @@ export type FunnelWindow = {
 };
 
 export type OnboardingCohort = {
-  totalPts: number;
+  totalAccounts: number;
   connectedWithin24h: number;
   pct: number;
 };
 
-export type PtCostRow = {
-  ptId: string;
+export type AccountCostRow = {
+  accountId: string;
   email: string;
   aiCostMicrousd: number;
   metaCostMicroEur: number;
@@ -47,9 +47,9 @@ export type PtCostRow = {
 };
 
 export type CostSummary = {
-  yesterday: PtCostRow[];
-  currentMonth: PtCostRow[];
-  today: PtCostRow[];
+  yesterday: AccountCostRow[];
+  currentMonth: AccountCostRow[];
+  today: AccountCostRow[];
 };
 
 export type PushDeliverySummary = {
@@ -83,18 +83,18 @@ async function loadFunnelWindow(
     ptsWithFirstBooking: number | string;
   }>(sql`
     SELECT
-      (SELECT count(*) FROM pts
+      (SELECT count(*) FROM accounts
         WHERE created_at >= ${start.toISOString()}::timestamptz
           AND created_at < ${end.toISOString()}::timestamptz) AS "signups",
       (SELECT count(*) FROM whatsapp_connections
         WHERE connected_at >= ${start.toISOString()}::timestamptz
           AND connected_at < ${end.toISOString()}::timestamptz) AS "whatsappConnections",
       (SELECT count(*) FROM (
-        SELECT pt_id, min(created_at) AS m FROM messages GROUP BY pt_id
+        SELECT account_id, min(created_at) AS m FROM messages GROUP BY account_id
       ) fm WHERE fm.m >= ${start.toISOString()}::timestamptz
         AND fm.m < ${end.toISOString()}::timestamptz) AS "ptsWithFirstMessage",
       (SELECT count(*) FROM (
-        SELECT pt_id, min(created_at) AS m FROM appointments GROUP BY pt_id
+        SELECT account_id, min(created_at) AS m FROM appointments GROUP BY account_id
       ) fb WHERE fb.m >= ${start.toISOString()}::timestamptz
         AND fb.m < ${end.toISOString()}::timestamptz) AS "ptsWithFirstBooking"
   `);
@@ -117,26 +117,26 @@ async function loadCohort(): Promise<OnboardingCohort> {
         WHERE fc.first_connected IS NOT NULL
           AND fc.first_connected <= p.created_at + interval '24 hours'
       ) AS within
-    FROM pts p
+    FROM accounts p
     LEFT JOIN (
-      SELECT pt_id, min(connected_at) AS first_connected
+      SELECT account_id, min(connected_at) AS first_connected
       FROM whatsapp_connections
       WHERE connected_at IS NOT NULL
-      GROUP BY pt_id
-    ) fc ON fc.pt_id = p.id
+      GROUP BY account_id
+    ) fc ON fc.account_id = p.id
   `);
-  const totalPts = Number(row.total);
+  const totalAccounts = Number(row.total);
   const connectedWithin24h = Number(row.within);
   return {
-    totalPts,
+    totalAccounts,
     connectedWithin24h,
-    pct: totalPts ? connectedWithin24h / totalPts : 0,
+    pct: totalAccounts ? connectedWithin24h / totalAccounts : 0,
   };
 }
 
-async function loadRolledUpCost(where: ReturnType<typeof sql>): Promise<PtCostRow[]> {
+async function loadRolledUpCost(where: ReturnType<typeof sql>): Promise<AccountCostRow[]> {
   const rows = await db.execute<{
-    ptId: string;
+    accountId: string;
     email: string;
     ai: number | string;
     meta: number | string;
@@ -144,31 +144,31 @@ async function loadRolledUpCost(where: ReturnType<typeof sql>): Promise<PtCostRo
     actualDays: number | string;
     totalDays: number | string;
   }>(sql`
-    SELECT c.pt_id AS "ptId", pts.email AS email,
+    SELECT c.account_id AS "accountId", accounts.email AS email,
       COALESCE(SUM(c.ai_cost_microusd), 0)::bigint AS "ai",
       COALESCE(SUM(c.meta_cost_micro_eur), 0)::bigint AS "meta",
       COALESCE(SUM(c.meta_billable_messages), 0)::bigint AS "billableMsgs",
       count(*) FILTER (WHERE c.meta_cost_source = 'actual')::int AS "actualDays",
       count(*)::int AS "totalDays"
     FROM cost_daily c
-    JOIN pts ON pts.id = c.pt_id
+    JOIN accounts ON accounts.id = c.account_id
     WHERE ${where}
-    GROUP BY c.pt_id, pts.email
-    ORDER BY "ai" DESC, pts.email ASC
+    GROUP BY c.account_id, accounts.email
+    ORDER BY "ai" DESC, accounts.email ASC
   `);
   return rows.map((row) => {
     const actualDays = Number(row.actualDays);
     const totalDays = Number(row.totalDays);
     // Every grouped row has >=1 day. All-actual → 'actual', none-actual →
     // 'estimated', otherwise a 'mixed' window (derived label, never stored).
-    const metaCostSource: PtCostRow['metaCostSource'] =
+    const metaCostSource: AccountCostRow['metaCostSource'] =
       actualDays === totalDays
         ? 'actual'
         : actualDays === 0
           ? 'estimated'
           : 'mixed';
     return {
-      ptId: row.ptId,
+      accountId: row.accountId,
       email: row.email,
       aiCostMicrousd: Number(row.ai),
       metaCostMicroEur: Number(row.meta),
@@ -189,62 +189,62 @@ async function loadRolledUpCost(where: ReturnType<typeof sql>): Promise<PtCostRo
 async function loadTodayLiveCost(
   start: Date,
   end: Date,
-): Promise<PtCostRow[]> {
+): Promise<AccountCostRow[]> {
   const startIso = start.toISOString();
   const endIso = end.toISOString();
 
   const messageRows = await db.execute<{
-    ptId: string;
+    accountId: string;
     email: string;
     ai: number | string;
     convos: number | string;
   }>(sql`
-    SELECT m.pt_id AS "ptId", pts.email AS email,
+    SELECT m.account_id AS "accountId", accounts.email AS email,
       COALESCE(SUM(m.ai_cost_microusd) FILTER (WHERE m.role = 'ai' AND m.model IS NOT NULL), 0)::bigint AS "ai",
-      COUNT(DISTINCT m.conversation_id) FILTER (WHERE m.role = 'patient')::int AS "convos"
+      COUNT(DISTINCT m.conversation_id) FILTER (WHERE m.role = 'customer')::int AS "convos"
     FROM messages m
-    JOIN pts ON pts.id = m.pt_id
+    JOIN accounts ON accounts.id = m.account_id
     WHERE m.created_at >= ${startIso}::timestamptz
       AND m.created_at < ${endIso}::timestamptz
-    GROUP BY m.pt_id, pts.email
+    GROUP BY m.account_id, accounts.email
   `);
 
   const statusRows = await db.execute<{
-    ptId: string;
+    accountId: string;
     email: string;
     category: string;
     rows: number | string;
     billable: number | string;
   }>(sql`
-    SELECT s.pt_id AS "ptId", pts.email AS email,
+    SELECT s.account_id AS "accountId", accounts.email AS email,
       lower(coalesce(s.pricing_category, '')) AS "category",
       count(*)::int AS "rows",
       count(*) FILTER (WHERE s.billable IS TRUE)::int AS "billable"
     FROM wa_message_statuses s
-    JOIN pts ON pts.id = s.pt_id
+    JOIN accounts ON accounts.id = s.account_id
     WHERE coalesce(s.sent_at, s.created_at) >= ${startIso}::timestamptz
       AND coalesce(s.sent_at, s.created_at) < ${endIso}::timestamptz
-    GROUP BY s.pt_id, pts.email, category
+    GROUP BY s.account_id, accounts.email, category
   `);
 
-  const messageByPt = new Map<
+  const messageByAccount = new Map<
     string,
     { email: string; ai: number; convos: number }
   >();
   for (const row of messageRows) {
-    messageByPt.set(row.ptId, {
+    messageByAccount.set(row.accountId, {
       email: row.email,
       ai: Number(row.ai),
       convos: Number(row.convos),
     });
   }
 
-  const statusByPt = new Map<
+  const statusByAccount = new Map<
     string,
     { email: string; hasRows: boolean; billableByCategory: Map<string, number> }
   >();
   for (const row of statusRows) {
-    const fold = statusByPt.get(row.ptId) ?? {
+    const fold = statusByAccount.get(row.accountId) ?? {
       email: row.email,
       hasRows: false,
       billableByCategory: new Map<string, number>(),
@@ -257,17 +257,17 @@ async function loadTodayLiveCost(
         (fold.billableByCategory.get(row.category) ?? 0) + billable,
       );
     }
-    statusByPt.set(row.ptId, fold);
+    statusByAccount.set(row.accountId, fold);
   }
 
-  const ptIds = new Set<string>([
-    ...messageByPt.keys(),
-    ...statusByPt.keys(),
+  const accountIds = new Set<string>([
+    ...messageByAccount.keys(),
+    ...statusByAccount.keys(),
   ]);
-  const out: PtCostRow[] = [];
-  for (const ptId of ptIds) {
-    const msg = messageByPt.get(ptId);
-    const status = statusByPt.get(ptId);
+  const out: AccountCostRow[] = [];
+  for (const accountId of accountIds) {
+    const msg = messageByAccount.get(accountId);
+    const status = statusByAccount.get(accountId);
     const email = msg?.email ?? status?.email ?? '';
     let metaCostSource: 'actual' | 'estimated';
     let metaBillableMessages: number;
@@ -285,7 +285,7 @@ async function loadTodayLiveCost(
       metaCostMicroEur = estimateMetaConversationCostMicroEur(msg?.convos ?? 0);
     }
     out.push({
-      ptId,
+      accountId,
       email,
       aiCostMicrousd: msg?.ai ?? 0,
       metaCostMicroEur,
@@ -405,8 +405,8 @@ export type PlanDistribution = {
  * rate ships with its raw numerator/denominator so a tiny launch N reads honestly.
  */
 export type ConversionMetric = {
-  paidPts: number;
-  eligiblePts: number;
+  paidAccounts: number;
+  eligibleAccounts: number;
   rate: number;
   newThisMonth: number;
   avgDaysToUpgrade: number | null;
@@ -430,26 +430,26 @@ export type RenewalMetric = {
 export type DowngradeMetric = {
   thisMonth: number;
   prevMonth: number;
-  distinctPtsThisMonth: number;
+  distinctAccountsThisMonth: number;
 };
 
 /** Per-kind cap-hit: distinct capped PTs over active PTs (shared denominator). */
-export type CapHitKind = { pts: number; activePts: number; rate: number };
+export type CapHitKind = { accounts: number; activeAccounts: number; rate: number };
 export type CapHitMetric = { conversations: CapHitKind; reminders: CapHitKind };
 
 /**
  * Current-month cost of the effective-FREE cohort. AI (µUSD) and Meta (µEUR)
  * stay in separate figures — never summed. `metaCostSource` is a window-level
- * label derived from the actual/estimated PT-day split (see PtCostRow's note).
+ * label derived from the actual/estimated PT-day split (see AccountCostRow's note).
  */
 export type FreeCogsMetric = {
-  freePtCount: number;
+  freeAccountCount: number;
   aiCostMicrousd: number;
   metaCostMicroEur: number;
   metaCostSource: 'actual' | 'estimated' | 'mixed';
   metaBillableMessages: number;
-  actualPtDays: number;
-  estimatedPtDays: number;
+  actualAccountDays: number;
+  estimatedAccountDays: number;
   avgAiCostMicrousd: number;
   avgMetaCostMicroEur: number;
 };
@@ -461,7 +461,7 @@ export type FreeCogsMetric = {
  */
 export type PaymentRow = {
   orderId: string;
-  ptId: string;
+  accountId: string;
   email: string;
   plan: string;
   period: string;
@@ -513,7 +513,7 @@ async function loadPlanDistribution(nowDate: Date): Promise<PlanDistribution> {
     SELECT plan AS "plan",
       plan_lifetime AS "planLifetime",
       plan_expires_at AS "planExpiresAt"
-    FROM pts
+    FROM accounts
   `);
   let free = 0;
   let solo = 0;
@@ -540,26 +540,26 @@ async function loadPlanDistribution(nowDate: Date): Promise<PlanDistribution> {
 async function loadConversion(nowDate: Date): Promise<ConversionMetric> {
   const nowIso = nowDate.toISOString();
   const [row] = await db.execute<{
-    eligiblePts: string | number;
-    paidPts: string | number;
+    eligibleAccounts: string | number;
+    paidAccounts: string | number;
     newThisMonth: string | number;
     avgSeconds: string | number | null;
     medianSeconds: string | number | null;
   }>(sql`
     WITH first_paid AS (
-      SELECT o.pt_id, MIN(o.paid_at) AS first_paid_at
+      SELECT o.account_id, MIN(o.paid_at) AS first_paid_at
       FROM billing_orders o
       WHERE o.status = 'paid' AND o.paid_at IS NOT NULL
-      GROUP BY o.pt_id
+      GROUP BY o.account_id
     )
     SELECT
-      (SELECT count(*) FROM pts WHERE plan_lifetime = false)::bigint
-        AS "eligiblePts",
+      (SELECT count(*) FROM accounts WHERE plan_lifetime = false)::bigint
+        AS "eligibleAccounts",
       (SELECT count(*) FROM first_paid fp
-        JOIN pts p ON p.id = fp.pt_id
-        WHERE p.plan_lifetime = false)::bigint AS "paidPts",
+        JOIN accounts p ON p.id = fp.account_id
+        WHERE p.plan_lifetime = false)::bigint AS "paidAccounts",
       (SELECT count(*) FROM first_paid fp
-        JOIN pts p ON p.id = fp.pt_id
+        JOIN accounts p ON p.id = fp.account_id
         WHERE p.plan_lifetime = false
           AND fp.first_paid_at >= date_trunc('month', ${nowIso}::timestamptz)
           AND fp.first_paid_at
@@ -567,22 +567,22 @@ async function loadConversion(nowDate: Date): Promise<ConversionMetric> {
         )::bigint AS "newThisMonth",
       (SELECT avg(EXTRACT(EPOCH FROM (fp.first_paid_at - p.created_at)))
         FROM first_paid fp
-        JOIN pts p ON p.id = fp.pt_id
+        JOIN accounts p ON p.id = fp.account_id
         WHERE p.plan_lifetime = false) AS "avgSeconds",
       (SELECT percentile_cont(0.5) WITHIN GROUP (
           ORDER BY EXTRACT(EPOCH FROM (fp.first_paid_at - p.created_at)))
         FROM first_paid fp
-        JOIN pts p ON p.id = fp.pt_id
+        JOIN accounts p ON p.id = fp.account_id
         WHERE p.plan_lifetime = false) AS "medianSeconds"
   `);
-  const eligiblePts = num(row.eligiblePts);
-  const paidPts = num(row.paidPts);
+  const eligibleAccounts = num(row.eligibleAccounts);
+  const paidAccounts = num(row.paidAccounts);
   const avgSeconds = numOrNull(row.avgSeconds);
   const medianSeconds = numOrNull(row.medianSeconds);
   return {
-    paidPts,
-    eligiblePts,
-    rate: eligiblePts ? paidPts / eligiblePts : 0,
+    paidAccounts,
+    eligibleAccounts,
+    rate: eligibleAccounts ? paidAccounts / eligibleAccounts : 0,
     newThisMonth: num(row.newThisMonth),
     avgDaysToUpgrade: avgSeconds == null ? null : avgSeconds / SECONDS_PER_DAY,
     medianDaysToUpgrade:
@@ -599,7 +599,7 @@ async function loadRenewalRate(nowDate: Date): Promise<RenewalMetric> {
     renewedAllTime: string | number;
   }>(sql`
     WITH paid AS (
-      SELECT pt_id, new_expires_at, paid_at
+      SELECT account_id, new_expires_at, paid_at
       FROM billing_orders
       WHERE status = 'paid'
         AND new_expires_at IS NOT NULL
@@ -609,7 +609,7 @@ async function loadRenewalRate(nowDate: Date): Promise<RenewalMetric> {
       SELECT b.new_expires_at,
         EXISTS (
           SELECT 1 FROM paid r
-          WHERE r.pt_id = b.pt_id
+          WHERE r.account_id = b.account_id
             AND r.new_expires_at > b.new_expires_at
             AND r.paid_at
               <= b.new_expires_at + (${EXPIRY_GRACE_DAYS}::int * interval '1 day')
@@ -647,7 +647,7 @@ async function loadDowngrades(nowDate: Date): Promise<DowngradeMetric> {
   const [row] = await db.execute<{
     thisMonth: string | number;
     prevMonth: string | number;
-    distinctPtsThisMonth: string | number;
+    distinctAccountsThisMonth: string | number;
   }>(sql`
     SELECT
       count(*) FILTER (
@@ -660,18 +660,18 @@ async function loadDowngrades(nowDate: Date): Promise<DowngradeMetric> {
             >= date_trunc('month', ${nowIso}::timestamptz) - interval '1 month'
           AND occurred_at < date_trunc('month', ${nowIso}::timestamptz)
       )::bigint AS "prevMonth",
-      count(DISTINCT pt_id) FILTER (
+      count(DISTINCT account_id) FILTER (
         WHERE occurred_at >= date_trunc('month', ${nowIso}::timestamptz)
           AND occurred_at
             < date_trunc('month', ${nowIso}::timestamptz) + interval '1 month'
-      )::bigint AS "distinctPtsThisMonth"
+      )::bigint AS "distinctAccountsThisMonth"
     FROM events
     WHERE type = 'billing.downgraded'
   `);
   return {
     thisMonth: num(row.thisMonth),
     prevMonth: num(row.prevMonth),
-    distinctPtsThisMonth: num(row.distinctPtsThisMonth),
+    distinctAccountsThisMonth: num(row.distinctAccountsThisMonth),
   };
 }
 
@@ -683,9 +683,9 @@ async function loadCapHits(nowDate: Date): Promise<CapHitMetric> {
     reminders: string | number;
   }>(sql`
     SELECT
-      count(DISTINCT pt_id) FILTER (WHERE payload->>'kind' = 'conversations')::bigint
+      count(DISTINCT account_id) FILTER (WHERE payload->>'kind' = 'conversations')::bigint
         AS "conversations",
-      count(DISTINCT pt_id) FILTER (WHERE payload->>'kind' = 'reminders')::bigint
+      count(DISTINCT account_id) FILTER (WHERE payload->>'kind' = 'reminders')::bigint
         AS "reminders"
     FROM events
     WHERE type = 'billing.limit_reached'
@@ -693,24 +693,24 @@ async function loadCapHits(nowDate: Date): Promise<CapHitMetric> {
       AND occurred_at
         < date_trunc('month', ${nowIso}::timestamptz) + interval '1 month'
   `);
-  const [active] = await db.execute<{ activePts: string | number }>(sql`
-    SELECT count(DISTINCT pt_id)::bigint AS "activePts"
+  const [active] = await db.execute<{ activeAccounts: string | number }>(sql`
+    SELECT count(DISTINCT account_id)::bigint AS "activeAccounts"
     FROM conversation_days
     WHERE month_key = ${monthKey}
   `);
-  const activePts = num(active.activePts);
-  const convPts = num(hits.conversations);
-  const remPts = num(hits.reminders);
+  const activeAccounts = num(active.activeAccounts);
+  const convAccounts = num(hits.conversations);
+  const remAccounts = num(hits.reminders);
   return {
     conversations: {
-      pts: convPts,
-      activePts,
-      rate: activePts ? convPts / activePts : 0,
+      accounts: convAccounts,
+      activeAccounts,
+      rate: activeAccounts ? convAccounts / activeAccounts : 0,
     },
     reminders: {
-      pts: remPts,
-      activePts,
-      rate: activePts ? remPts / activePts : 0,
+      accounts: remAccounts,
+      activeAccounts,
+      rate: activeAccounts ? remAccounts / activeAccounts : 0,
     },
   };
 }
@@ -736,19 +736,19 @@ async function loadFreeCogs(nowDate: Date): Promise<FreeCogsMetric> {
       count(*) FILTER (WHERE c.meta_cost_source = 'actual')::int AS "actualDays",
       count(*)::int AS "totalDays"
     FROM cost_daily c
-    JOIN pts p ON p.id = c.pt_id
+    JOIN accounts p ON p.id = c.account_id
     WHERE c.day >= date_trunc('month', ${nowIso}::timestamptz)::date
       AND c.day
         < (date_trunc('month', ${nowIso}::timestamptz) + interval '1 month')::date
-    GROUP BY c.pt_id, p.plan, p.plan_lifetime, p.plan_expires_at
+    GROUP BY c.account_id, p.plan, p.plan_lifetime, p.plan_expires_at
   `);
 
-  let freePtCount = 0;
+  let freeAccountCount = 0;
   let aiCostMicrousd = 0;
   let metaCostMicroEur = 0;
   let metaBillableMessages = 0;
-  let actualPtDays = 0;
-  let totalPtDays = 0;
+  let actualAccountDays = 0;
+  let totalAccountDays = 0;
   for (const row of rows) {
     if (row.planLifetime === true) continue;
     const effective = resolveEffectivePlan(
@@ -760,30 +760,30 @@ async function loadFreeCogs(nowDate: Date): Promise<FreeCogsMetric> {
       nowDate,
     );
     if (effective !== 'free') continue;
-    freePtCount += 1;
+    freeAccountCount += 1;
     aiCostMicrousd += num(row.ai);
     metaCostMicroEur += num(row.meta);
     metaBillableMessages += num(row.billableMsgs);
-    actualPtDays += num(row.actualDays);
-    totalPtDays += num(row.totalDays);
+    actualAccountDays += num(row.actualDays);
+    totalAccountDays += num(row.totalDays);
   }
-  const estimatedPtDays = totalPtDays - actualPtDays;
+  const estimatedAccountDays = totalAccountDays - actualAccountDays;
   const metaCostSource: FreeCogsMetric['metaCostSource'] =
-    totalPtDays === 0 || actualPtDays === 0
+    totalAccountDays === 0 || actualAccountDays === 0
       ? 'estimated'
-      : actualPtDays === totalPtDays
+      : actualAccountDays === totalAccountDays
         ? 'actual'
         : 'mixed';
   return {
-    freePtCount,
+    freeAccountCount,
     aiCostMicrousd,
     metaCostMicroEur,
     metaCostSource,
     metaBillableMessages,
-    actualPtDays,
-    estimatedPtDays,
-    avgAiCostMicrousd: freePtCount ? aiCostMicrousd / freePtCount : 0,
-    avgMetaCostMicroEur: freePtCount ? metaCostMicroEur / freePtCount : 0,
+    actualAccountDays,
+    estimatedAccountDays,
+    avgAiCostMicrousd: freeAccountCount ? aiCostMicrousd / freeAccountCount : 0,
+    avgMetaCostMicroEur: freeAccountCount ? metaCostMicroEur / freeAccountCount : 0,
   };
 }
 
@@ -791,7 +791,7 @@ async function loadRecentPayments(nowDate: Date): Promise<PaymentRow[]> {
   const nowIso = nowDate.toISOString();
   const rows = await db.execute<{
     orderId: string;
-    ptId: string;
+    accountId: string;
     email: string;
     plan: string;
     period: string;
@@ -804,7 +804,7 @@ async function loadRecentPayments(nowDate: Date): Promise<PaymentRow[]> {
     previousExpiresAt: Date | string | null;
     newExpiresAt: Date | string | null;
   }>(sql`
-    SELECT o.id AS "orderId", o.pt_id AS "ptId", p.email AS "email",
+    SELECT o.id AS "orderId", o.account_id AS "accountId", p.email AS "email",
       o.plan AS "plan", o.period AS "period", o.amount_minor AS "amountMinor",
       o.currency AS "currency", o.status AS "status",
       o.created_at AS "createdAt", o.paid_at AS "paidAt",
@@ -812,7 +812,7 @@ async function loadRecentPayments(nowDate: Date): Promise<PaymentRow[]> {
       o.previous_expires_at AS "previousExpiresAt",
       o.new_expires_at AS "newExpiresAt"
     FROM billing_orders o
-    JOIN pts p ON p.id = o.pt_id
+    JOIN accounts p ON p.id = o.account_id
     WHERE o.created_at >= date_trunc('month', ${nowIso}::timestamptz)
       AND o.created_at
         < date_trunc('month', ${nowIso}::timestamptz) + interval '1 month'
@@ -821,7 +821,7 @@ async function loadRecentPayments(nowDate: Date): Promise<PaymentRow[]> {
   `);
   return rows.map((row) => ({
     orderId: row.orderId,
-    ptId: row.ptId,
+    accountId: row.accountId,
     email: row.email,
     plan: row.plan,
     period: row.period,

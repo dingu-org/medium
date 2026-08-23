@@ -18,16 +18,16 @@ vi.mock('@/lib/events/outbox', () => ({
 }));
 
 import { db } from '@/lib/db';
-import { eventOutbox, events, pts, services } from '@/lib/db/schema';
+import { eventOutbox, events, accounts, services } from '@/lib/db/schema';
 import {
   loadRenewalCandidates,
-  processRenewalForPt,
+  processRenewalForAccount,
 } from '@/lib/inngest/functions/billing-renewal-monitor';
 import { createServiceClient } from '@/lib/supabase/service';
 import { testNowUtc } from '@/tests/support/clock';
 
 const DAY = 86_400_000;
-let ptId = '';
+let accountId = '';
 
 beforeAll(async () => {
   const { data, error } = await createServiceClient().auth.admin.createUser({
@@ -36,34 +36,34 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
   // Outbox first (FK to events), then events; then reset services + billing.
-  await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
-  await db.delete(services).where(eq(services.ptId, ptId));
+  await db.delete(eventOutbox).where(eq(eventOutbox.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
+  await db.delete(services).where(eq(services.accountId, accountId));
   await db
-    .update(pts)
+    .update(accounts)
     .set({
       plan: 'solo',
       planLifetime: false,
       planExpiresAt: null,
       planDowngradedAt: null,
     })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 });
 
 async function seedService(name: string, ageDays: number, now: Date) {
   const [row] = await db
     .insert(services)
     .values({
-      ptId,
+      accountId,
       name,
       durationMin: 30,
       active: true,
@@ -77,40 +77,40 @@ async function downgradeEvents() {
   return db
     .select({ id: events.id })
     .from(events)
-    .where(and(eq(events.ptId, ptId), eq(events.type, 'billing.downgraded')));
+    .where(and(eq(events.accountId, accountId), eq(events.type, 'billing.downgraded')));
 }
 
-describe('processRenewalForPt — downgrade money path', () => {
+describe('processRenewalForAccount — downgrade money path', () => {
   it('downgrades a past-grace Solo, keeps only the oldest active service, emits once', async () => {
     const now = testNowUtc();
     const expiresAt = new Date(now.getTime() - 4 * DAY); // past the 3-day grace
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planExpiresAt: expiresAt })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
     const oldest = await seedService('oldest', 30, now);
     await seedService('mid', 20, now);
     await seedService('newest', 10, now);
 
-    const outcome = await processRenewalForPt(
-      { id: ptId, planExpiresAt: expiresAt },
+    const outcome = await processRenewalForAccount(
+      { id: accountId, planExpiresAt: expiresAt },
       now,
     );
     expect(outcome.downgraded).toBe(true);
 
-    const [pt] = await db
-      .select({ plan: pts.plan, dg: pts.planDowngradedAt })
-      .from(pts)
-      .where(eq(pts.id, ptId));
-    expect(pt.plan).toBe('free');
-    expect(pt.dg).not.toBeNull();
+    const [account] = await db
+      .select({ plan: accounts.plan, dg: accounts.planDowngradedAt })
+      .from(accounts)
+      .where(eq(accounts.id, accountId));
+    expect(account.plan).toBe('free');
+    expect(account.dg).not.toBeNull();
 
     // Downgrade deletes nothing: all rows remain, only the oldest stays active.
     const rows = await db
       .select({ id: services.id, active: services.active })
       .from(services)
-      .where(eq(services.ptId, ptId));
+      .where(eq(services.accountId, accountId));
     expect(rows).toHaveLength(3);
     const active = rows.filter((r) => r.active);
     expect(active).toHaveLength(1);
@@ -120,7 +120,7 @@ describe('processRenewalForPt — downgrade money path', () => {
     const outbox = await db
       .select({ id: eventOutbox.id })
       .from(eventOutbox)
-      .where(eq(eventOutbox.ptId, ptId));
+      .where(eq(eventOutbox.accountId, accountId));
     expect(outbox.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -128,16 +128,16 @@ describe('processRenewalForPt — downgrade money path', () => {
     const now = testNowUtc();
     const expiresAt = new Date(now.getTime() - 4 * DAY);
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planExpiresAt: expiresAt })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
-    const first = await processRenewalForPt(
-      { id: ptId, planExpiresAt: expiresAt },
+    const first = await processRenewalForAccount(
+      { id: accountId, planExpiresAt: expiresAt },
       now,
     );
-    const second = await processRenewalForPt(
-      { id: ptId, planExpiresAt: expiresAt },
+    const second = await processRenewalForAccount(
+      { id: accountId, planExpiresAt: expiresAt },
       now,
     );
     expect(first.downgraded).toBe(true);
@@ -151,47 +151,47 @@ describe('processRenewalForPt — downgrade money path', () => {
     // The row was renewed (as applyOrderOutcome does): future expiry, cleared
     // downgrade marker. The stale candidate must NOT trigger a downgrade.
     await db
-      .update(pts)
+      .update(accounts)
       .set({
         plan: 'solo',
         planExpiresAt: new Date(now.getTime() + 20 * DAY),
         planDowngradedAt: null,
       })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
-    const outcome = await processRenewalForPt(
-      { id: ptId, planExpiresAt: staleExpiry },
+    const outcome = await processRenewalForAccount(
+      { id: accountId, planExpiresAt: staleExpiry },
       now,
     );
     expect(outcome.downgraded).toBe(false);
 
-    const [pt] = await db
-      .select({ plan: pts.plan })
-      .from(pts)
-      .where(eq(pts.id, ptId));
-    expect(pt.plan).toBe('solo');
+    const [account] = await db
+      .select({ plan: accounts.plan })
+      .from(accounts)
+      .where(eq(accounts.id, accountId));
+    expect(account.plan).toBe('solo');
     expect(await downgradeEvents()).toHaveLength(0);
   });
 });
 
-describe('processRenewalForPt — reminders & grace', () => {
+describe('processRenewalForAccount — reminders & grace', () => {
   it('fires both reminders and grace, deduped on re-run', async () => {
     const E = testNowUtc();
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planExpiresAt: E })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
     // 3 days before expiry → only the 5-day reminder, no grace yet.
-    const before = await processRenewalForPt(
-      { id: ptId, planExpiresAt: E },
+    const before = await processRenewalForAccount(
+      { id: accountId, planExpiresAt: E },
       new Date(E.getTime() - 3 * DAY),
     );
     expect(before.remindersDue).toBe(1);
     expect(before.graceStarted).toBe(false);
 
     // On the expiry day → the day-0 reminder + grace start.
-    const onDay = await processRenewalForPt({ id: ptId, planExpiresAt: E }, E);
+    const onDay = await processRenewalForAccount({ id: accountId, planExpiresAt: E }, E);
     expect(onDay.remindersDue).toBe(1);
     expect(onDay.graceStarted).toBe(true);
 
@@ -200,7 +200,7 @@ describe('processRenewalForPt — reminders & grace', () => {
       .select({ payload: events.payload })
       .from(events)
       .where(
-        and(eq(events.ptId, ptId), eq(events.type, 'billing.renewal_due')),
+        and(eq(events.accountId, accountId), eq(events.type, 'billing.renewal_due')),
       );
     const offsets = renewals
       .map((r) => (r.payload as { offset: number }).offset)
@@ -208,7 +208,7 @@ describe('processRenewalForPt — reminders & grace', () => {
     expect(offsets).toEqual([0, 5]);
 
     // Same-day re-run → everything already emitted, nothing new fires.
-    const rerun = await processRenewalForPt({ id: ptId, planExpiresAt: E }, E);
+    const rerun = await processRenewalForAccount({ id: accountId, planExpiresAt: E }, E);
     expect(rerun.remindersDue).toBe(0);
     expect(rerun.graceStarted).toBe(false);
   });
@@ -218,22 +218,22 @@ describe('loadRenewalCandidates', () => {
   it('includes non-lifetime Solo PTs with an expiry and excludes the rest', async () => {
     const E = new Date(Date.now() + 10 * DAY);
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planLifetime: false, planExpiresAt: E })
-      .where(eq(pts.id, ptId));
-    expect((await loadRenewalCandidates()).map((c) => c.id)).toContain(ptId);
+      .where(eq(accounts.id, accountId));
+    expect((await loadRenewalCandidates()).map((c) => c.id)).toContain(accountId);
 
-    await db.update(pts).set({ planLifetime: true }).where(eq(pts.id, ptId));
+    await db.update(accounts).set({ planLifetime: true }).where(eq(accounts.id, accountId));
     expect((await loadRenewalCandidates()).map((c) => c.id)).not.toContain(
-      ptId,
+      accountId,
     );
 
     await db
-      .update(pts)
+      .update(accounts)
       .set({ planLifetime: false, plan: 'free', planExpiresAt: null })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
     expect((await loadRenewalCandidates()).map((c) => c.id)).not.toContain(
-      ptId,
+      accountId,
     );
   });
 });

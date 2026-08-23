@@ -38,13 +38,13 @@ export function assertAppointmentTransition(
 }
 
 type TransitionAppointmentInput = {
-  ptId: string;
+  accountId: string;
   appointmentId: string;
   nextStatus: AppointmentStatus;
-  patientId?: string;
-  cancelledBy?: 'patient' | 'pt' | 'ai';
+  customerId?: string;
+  cancelledBy?: 'customer' | 'account' | 'ai';
   reason?: string;
-  origin?: 'conversation' | 'pt';
+  origin?: 'conversation' | 'account';
 };
 
 function transitionEvent(
@@ -100,14 +100,14 @@ function transitionEvent(
 export async function transitionAppointment(
   input: TransitionAppointmentInput,
 ): Promise<AppointmentMutationResult> {
-  return withAppointmentLock(input.ptId, async () => {
+  return withAppointmentLock(input.accountId, async () => {
     const result = await db.transaction(async (tx) => {
       const conditions = [
         eq(appointments.id, input.appointmentId),
-        eq(appointments.ptId, input.ptId),
+        eq(appointments.accountId, input.accountId),
       ];
-      if (input.patientId) {
-        conditions.push(eq(appointments.patientId, input.patientId));
+      if (input.customerId) {
+        conditions.push(eq(appointments.customerId, input.customerId));
       }
 
       const [current] = await tx

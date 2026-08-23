@@ -6,15 +6,15 @@ import {
   availabilityRules,
   conversations,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
 } from '@/lib/db/schema';
-import { deleteSeedPt, seedCore, SeedResult } from '../seed';
+import { deleteSeedAccount, seedCore, SeedResult } from '../seed';
 
 let result: SeedResult;
 
 afterAll(async () => {
-  await deleteSeedPt();
+  await deleteSeedAccount();
 });
 
 describe('seedCore', () => {
@@ -22,18 +22,18 @@ describe('seedCore', () => {
     result = await seedCore();
   });
 
-  it('creates exactly one pts row with a filled-in profile', async () => {
-    const rows = await db.select().from(pts).where(eq(pts.id, result.ptId));
+  it('creates exactly one accounts row with a filled-in profile', async () => {
+    const rows = await db.select().from(accounts).where(eq(accounts.id, result.accountId));
     expect(rows).toHaveLength(1);
-    expect(rows[0].practiceName).toBe('Fizio Vita');
+    expect(rows[0].name).toBe('Fizio Vita');
     expect(rows[0].timezone).toBe('Europe/Tirane');
   });
 
-  it('creates exactly one patient with an E.164 phone', async () => {
+  it('creates exactly one customer with an E.164 phone', async () => {
     const rows = await db
       .select()
-      .from(patients)
-      .where(eq(patients.ptId, result.ptId));
+      .from(customers)
+      .where(eq(customers.accountId, result.accountId));
     expect(rows).toHaveLength(1);
     expect(rows[0].phone).toMatch(/^\+355\d+$/);
     expect(rows[0].waId).not.toBeNull();
@@ -43,7 +43,7 @@ describe('seedCore', () => {
     const rows = await db
       .select()
       .from(availabilityRules)
-      .where(eq(availabilityRules.ptId, result.ptId));
+      .where(eq(availabilityRules.accountId, result.accountId));
     expect(rows).toHaveLength(5);
     const weekdays = rows.map((r) => r.weekday).sort((a, b) => a - b);
     expect(weekdays).toEqual([1, 2, 3, 4, 5]);
@@ -57,7 +57,7 @@ describe('seedCore', () => {
     const rows = await db
       .select()
       .from(appointments)
-      .where(eq(appointments.ptId, result.ptId));
+      .where(eq(appointments.accountId, result.accountId));
     expect(rows).toHaveLength(2);
 
     const now = Date.now();
@@ -82,7 +82,7 @@ describe('seedCore', () => {
     const rows = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.ptId, result.ptId));
+      .where(eq(conversations.accountId, result.accountId));
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe(result.conversationId);
     expect(rows[0].closedAt).toBeNull();
@@ -98,17 +98,17 @@ describe('seedCore', () => {
     expect(rows).toHaveLength(5);
 
     for (const row of rows) {
-      expect(['patient', 'ai']).toContain(row.role);
+      expect(['customer', 'ai']).toContain(row.role);
     }
-    expect(rows.some((r) => r.role === 'patient')).toBe(true);
+    expect(rows.some((r) => r.role === 'customer')).toBe(true);
     expect(rows.some((r) => r.role === 'ai')).toBe(true);
 
     expect(rows.map((r) => r.role)).toEqual([
-      'patient',
+      'customer',
       'ai',
-      'patient',
+      'customer',
       'ai',
-      'patient',
+      'customer',
     ]);
     expect(rows[0].content).toBe(
       'Përshëndetje, dua të lë një takim këtë javë.',
@@ -116,17 +116,17 @@ describe('seedCore', () => {
     expect(rows[4].content).toBe('15:00 është mirë, faleminderit.');
   });
 
-  it('is idempotent: rerunning leaves exactly one PT / one patient / 5 messages', async () => {
+  it('is idempotent: rerunning leaves exactly one PT / one customer / 5 messages', async () => {
     const second = await seedCore();
 
-    const ptRows = await db.select().from(pts).where(eq(pts.id, second.ptId));
-    expect(ptRows).toHaveLength(1);
+    const accountRows = await db.select().from(accounts).where(eq(accounts.id, second.accountId));
+    expect(accountRows).toHaveLength(1);
 
-    const patientRows = await db
+    const customerRows = await db
       .select()
-      .from(patients)
-      .where(eq(patients.ptId, second.ptId));
-    expect(patientRows).toHaveLength(1);
+      .from(customers)
+      .where(eq(customers.accountId, second.accountId));
+    expect(customerRows).toHaveLength(1);
 
     const messageRows = await db
       .select()
@@ -138,7 +138,7 @@ describe('seedCore', () => {
     const staleAppointments = await db
       .select()
       .from(appointments)
-      .where(eq(appointments.ptId, result.ptId));
+      .where(eq(appointments.accountId, result.accountId));
     expect(staleAppointments).toHaveLength(0);
 
     result = second;

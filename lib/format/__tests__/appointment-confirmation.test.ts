@@ -85,7 +85,7 @@ describe('appointmentConfirmationContent', () => {
     expect(content).not.toContain(time);
   });
 
-  // A patient comparing this line against the reminder for the same booking must
+  // A customer comparing this line against the reminder for the same booking must
   // not be shown two different times.
   it('quotes the instant through the shared formatter, in the PT timezone', () => {
     expect(

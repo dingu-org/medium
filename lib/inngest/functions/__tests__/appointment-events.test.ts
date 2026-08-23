@@ -10,26 +10,26 @@ const changeKinds = [
 describe('appointmentEventPlan', () => {
   it('notifies and confirms for bookings and reschedules', () => {
     expect(appointmentEventPlan({ kind: 'appointment.booked' })).toEqual({
-      notifyPt: true,
-      confirmPatient: true,
+      notifyAccount: true,
+      confirmCustomer: true,
     });
     expect(appointmentEventPlan({ kind: 'appointment.rescheduled' })).toEqual({
-      notifyPt: true,
-      confirmPatient: true,
+      notifyAccount: true,
+      confirmCustomer: true,
     });
   });
 
-  it('confirms a PT-side cancellation, the only one the patient has not heard about', () => {
+  it('confirms a PT-side cancellation, the only one the customer has not heard about', () => {
     expect(
       appointmentEventPlan({
         kind: 'appointment.cancelled',
-        cancelledBy: 'pt',
+        cancelledBy: 'account',
         cancellationReason: null,
       }),
-    ).toEqual({ notifyPt: true, confirmPatient: true });
+    ).toEqual({ notifyAccount: true, confirmCustomer: true });
   });
 
-  it.each(['patient', 'ai'] as const)(
+  it.each(['customer', 'ai'] as const)(
     'suppresses the duplicate confirmation for a %s cancellation',
     (cancelledBy) => {
       expect(
@@ -39,8 +39,8 @@ describe('appointmentEventPlan', () => {
           cancellationReason: 'ANULO',
         }),
       ).toEqual({
-        notifyPt: true,
-        confirmPatient: false,
+        notifyAccount: true,
+        confirmCustomer: false,
         skipped: 'conversation_replied',
       });
     },
@@ -50,36 +50,36 @@ describe('appointmentEventPlan', () => {
     expect(
       appointmentEventPlan({ kind: 'appointment.cancelled' }),
     ).toMatchObject({
-      confirmPatient: false,
+      confirmCustomer: false,
       skipped: 'conversation_replied',
     });
   });
 
-  it('does not let a patient reply spoof the erasure marker', () => {
+  it('does not let a customer reply spoof the erasure marker', () => {
     expect(
       appointmentEventPlan({
         kind: 'appointment.cancelled',
-        cancelledBy: 'patient',
-        cancellationReason: 'patient_erased',
+        cancelledBy: 'customer',
+        cancellationReason: 'customer_erased',
       }),
-    ).toMatchObject({ notifyPt: true, skipped: 'conversation_replied' });
+    ).toMatchObject({ notifyAccount: true, skipped: 'conversation_replied' });
   });
 
-  it('drops both the PT push and the patient confirmation for a GDPR erasure', () => {
+  it('drops both the PT push and the customer confirmation for a GDPR erasure', () => {
     expect(
       appointmentEventPlan({
         kind: 'appointment.cancelled',
-        cancelledBy: 'pt',
-        cancellationReason: 'patient_erased',
+        cancelledBy: 'account',
+        cancellationReason: 'customer_erased',
       }),
     ).toEqual({
-      notifyPt: false,
-      confirmPatient: false,
-      skipped: 'patient_erased',
+      notifyAccount: false,
+      confirmCustomer: false,
+      skipped: 'customer_erased',
     });
   });
 
-  // The turn that made the change already sent the patient this exact text, so
+  // The turn that made the change already sent the customer this exact text, so
   // the background job is the second sender and must stay silent — the whole
   // point of routing on origin instead of guessing from timing.
   it.each(changeKinds)(
@@ -89,23 +89,23 @@ describe('appointmentEventPlan', () => {
         appointmentEventPlan({
           kind,
           origin: 'conversation',
-          cancelledBy: kind === 'appointment.cancelled' ? 'patient' : undefined,
+          cancelledBy: kind === 'appointment.cancelled' ? 'customer' : undefined,
         }),
       ).toEqual({
-        notifyPt: true,
-        confirmPatient: false,
+        notifyAccount: true,
+        confirmCustomer: false,
         skipped: 'conversation_replied',
       });
     },
   );
 
-  // Suppressing the patient confirmation must never suppress the PT's push:
+  // Suppressing the customer confirmation must never suppress the PT's push:
   // she still has to see that her calendar moved.
   it.each(changeKinds)(
     'still pushes the PT for a conversation-originated %s',
     (kind) => {
       expect(
-        appointmentEventPlan({ kind, origin: 'conversation' }).notifyPt,
+        appointmentEventPlan({ kind, origin: 'conversation' }).notifyAccount,
       ).toBe(true);
     },
   );
@@ -114,29 +114,29 @@ describe('appointmentEventPlan', () => {
     expect(
       appointmentEventPlan({
         kind,
-        origin: 'pt',
-        cancelledBy: kind === 'appointment.cancelled' ? 'pt' : undefined,
+        origin: 'account',
+        cancelledBy: kind === 'appointment.cancelled' ? 'account' : undefined,
       }),
-    ).toEqual({ notifyPt: true, confirmPatient: true });
+    ).toEqual({ notifyAccount: true, confirmCustomer: true });
   });
 
-  // A cancellation the AI made carries cancelledBy 'patient' in the reminder
+  // A cancellation the AI made carries cancelledBy 'customer' in the reminder
   // fallback, so the actor alone cannot decide — the explicit origin outranks it.
-  it('routes an AI cancellation recorded as patient-initiated by its origin', () => {
+  it('routes an AI cancellation recorded as customer-initiated by its origin', () => {
     expect(
       appointmentEventPlan({
         kind: 'appointment.cancelled',
         origin: 'conversation',
-        cancelledBy: 'patient',
+        cancelledBy: 'customer',
       }),
-    ).toMatchObject({ confirmPatient: false });
+    ).toMatchObject({ confirmCustomer: false });
     expect(
       appointmentEventPlan({
         kind: 'appointment.cancelled',
-        origin: 'pt',
-        cancelledBy: 'patient',
+        origin: 'account',
+        cancelledBy: 'customer',
       }),
-    ).toMatchObject({ confirmPatient: true });
+    ).toMatchObject({ confirmCustomer: true });
   });
 
   // Outbox rows written before `origin` existed must drain out behaving exactly
@@ -146,12 +146,12 @@ describe('appointmentEventPlan', () => {
     'treats a %s with no origin as PT-initiated',
     (kind) => {
       expect(appointmentEventPlan({ kind })).toEqual({
-        notifyPt: true,
-        confirmPatient: true,
+        notifyAccount: true,
+        confirmCustomer: true,
       });
       expect(appointmentEventPlan({ kind, origin: null })).toEqual({
-        notifyPt: true,
-        confirmPatient: true,
+        notifyAccount: true,
+        confirmCustomer: true,
       });
     },
   );
@@ -161,9 +161,9 @@ describe('appointmentEventPlan', () => {
       appointmentEventPlan({
         kind: 'appointment.cancelled',
         origin: null,
-        cancelledBy: 'pt',
+        cancelledBy: 'account',
       }),
-    ).toEqual({ notifyPt: true, confirmPatient: true });
+    ).toEqual({ notifyAccount: true, confirmCustomer: true });
     expect(
       appointmentEventPlan({
         kind: 'appointment.cancelled',
@@ -171,26 +171,26 @@ describe('appointmentEventPlan', () => {
         cancelledBy: 'ai',
       }),
     ).toEqual({
-      notifyPt: true,
-      confirmPatient: false,
+      notifyAccount: true,
+      confirmCustomer: false,
       skipped: 'conversation_replied',
     });
   });
 
-  it.each(['conversation', 'pt', null, undefined] as const)(
+  it.each(['conversation', 'account', null, undefined] as const)(
     'keeps a GDPR erasure fully silent with origin %s',
     (origin) => {
       expect(
         appointmentEventPlan({
           kind: 'appointment.cancelled',
           origin,
-          cancelledBy: 'pt',
-          cancellationReason: 'patient_erased',
+          cancelledBy: 'account',
+          cancellationReason: 'customer_erased',
         }),
       ).toEqual({
-        notifyPt: false,
-        confirmPatient: false,
-        skipped: 'patient_erased',
+        notifyAccount: false,
+        confirmCustomer: false,
+        skipped: 'customer_erased',
       });
     },
   );

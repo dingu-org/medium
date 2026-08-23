@@ -11,7 +11,7 @@ import {
 } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { appointments, patients, pts } from '@/lib/db/schema';
+import { appointments, customers, accounts } from '@/lib/db/schema';
 import { getServices } from '@/lib/services/queries';
 import { createService, deleteService, updateService } from '../actions';
 import { MINUTE, testNow } from '@/tests/support/clock';
@@ -46,14 +46,14 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 // A real service client, independent of the mocks above, purely to seed/clean
-// up a real auth user (the trigger creates pts + the three design services).
+// up a real auth user (the trigger creates accounts + the three design services).
 const realService = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-let ptId = '';
+let accountId = '';
 
 beforeAll(async () => {
   const { data, error } = await realService.auth.admin.createUser({
@@ -62,19 +62,19 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await realService.auth.admin.deleteUser(ptId);
+  if (accountId) await realService.auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
-  getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
   // This suite covers create/update/delete behavior, not the Phase 16 C6
   // active-service cap (which is Free-only and has its own plan-gate suite).
   // Grant lifetime Solo so createService isn't capped by the seeded services.
-  await db.update(pts).set({ planLifetime: true }).where(eq(pts.id, ptId));
+  await db.update(accounts).set({ planLifetime: true }).where(eq(accounts.id, accountId));
 });
 
 afterEach(() => {
@@ -82,7 +82,7 @@ afterEach(() => {
 });
 
 async function serviceByName(name: string) {
-  const rows = await getServices(ptId);
+  const rows = await getServices(accountId);
   return rows.find((row) => row.name === name);
 }
 
@@ -159,13 +159,13 @@ describe('deleteService', () => {
     const target = await serviceByName('Seancë vijuese');
     expect(target).toBeDefined();
 
-    const [patient] = await db
-      .insert(patients)
-      .values({ ptId, name: 'P', phone: '+355690000000' })
-      .returning({ id: patients.id });
+    const [customer] = await db
+      .insert(customers)
+      .values({ accountId, name: 'P', phone: '+355690000000' })
+      .returning({ id: customers.id });
     await db.insert(appointments).values({
-      ptId,
-      patientId: patient.id,
+      accountId,
+      customerId: customer.id,
       startsAt: APPOINTMENT_AT,
       endsAt: new Date(APPOINTMENT_AT.getTime() + 30 * MINUTE),
       // Mixed case proves the lower(btrim(...)) name normalization.

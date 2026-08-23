@@ -5,8 +5,8 @@ import { db } from '@/lib/db';
 import {
   conversations,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
@@ -65,7 +65,7 @@ export type InboundJobContext = {
   /** PT timezone — the calendar boundary for conversation-day metering (C2). */
   timezone: string;
   /** Names the business in the deterministic non-text notice's handoff offer. */
-  practiceName: string | null;
+  name: string | null;
   connectionId: string | null;
   recipient: string | null;
 };
@@ -79,7 +79,7 @@ function hydrateInbound(inbound: InboundJobContext['inbound']): InboundMessage {
 
 export async function loadInboundJobContext(args: {
   messageId: string;
-  ptId: string;
+  accountId: string;
   conversationId: string;
 }): Promise<InboundJobContext | null> {
   const [row] = await db
@@ -93,27 +93,27 @@ export async function loadInboundJobContext(args: {
       aiActive: conversations.aiActive,
       aiPausedUntil: conversations.aiPausedUntil,
       aiPauseReason: conversations.aiPauseReason,
-      patientId: patients.id,
-      waId: patients.waId,
-      assistantPaused: pts.assistantPaused,
-      plan: pts.plan,
-      planLifetime: pts.planLifetime,
-      planExpiresAt: pts.planExpiresAt,
-      timezone: pts.timezone,
-      practiceName: pts.practiceName,
+      customerId: customers.id,
+      waId: customers.waId,
+      assistantPaused: accounts.assistantPaused,
+      plan: accounts.plan,
+      planLifetime: accounts.planLifetime,
+      planExpiresAt: accounts.planExpiresAt,
+      timezone: accounts.timezone,
+      name: accounts.name,
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
-    .innerJoin(patients, eq(conversations.patientId, patients.id))
-    .innerJoin(pts, eq(conversations.ptId, pts.id))
+    .innerJoin(customers, eq(conversations.customerId, customers.id))
+    .innerJoin(accounts, eq(conversations.accountId, accounts.id))
     .where(
       and(
         eq(messages.id, args.messageId),
-        eq(messages.ptId, args.ptId),
-        eq(messages.role, 'patient'),
+        eq(messages.accountId, args.accountId),
+        eq(messages.role, 'customer'),
         eq(conversations.id, args.conversationId),
-        eq(conversations.ptId, args.ptId),
-        eq(patients.ptId, args.ptId),
+        eq(conversations.accountId, args.accountId),
+        eq(customers.accountId, args.accountId),
       ),
     )
     .limit(1);
@@ -137,7 +137,7 @@ export async function loadInboundJobContext(args: {
         .where(
           and(
             eq(conversations.id, row.conversationId),
-            eq(conversations.ptId, args.ptId),
+            eq(conversations.accountId, args.accountId),
             eq(conversations.aiPauseReason, 'whatsapp_business_app_echo'),
             eq(conversations.aiPausedUntil, row.aiPausedUntil),
           ),
@@ -157,7 +157,7 @@ export async function loadInboundJobContext(args: {
     .from(whatsappConnections)
     .where(
       and(
-        eq(whatsappConnections.ptId, args.ptId),
+        eq(whatsappConnections.accountId, args.accountId),
         eq(whatsappConnections.status, 'active'),
       ),
     )
@@ -168,8 +168,8 @@ export async function loadInboundJobContext(args: {
     inbound: {
       id: row.messageId,
       conversationId: row.conversationId,
-      ptId: args.ptId,
-      patientId: row.patientId,
+      accountId: args.accountId,
+      customerId: row.customerId,
       content: row.content,
       channel: row.channel,
       externalId: row.externalId,
@@ -190,7 +190,7 @@ export async function loadInboundJobContext(args: {
       new Date(),
     ),
     timezone: row.timezone,
-    practiceName: row.practiceName,
+    name: row.name,
     connectionId: connection?.id ?? null,
     recipient: row.waId,
   };
@@ -205,7 +205,7 @@ export type InboundClaim = 'reminder' | 'handoff_offer';
  * (lib/language/reply-intent.ts) and it is also what the handoff offer asks
  * for. The reminder handler runs first and returns before the engine, so
  * without this gate a bare PO always confirmed the appointment, the escalation
- * never happened, and the patient was answered about something they had not
+ * never happened, and the customer was answered about something they had not
  * asked about.
  *
  * The owner's rule (2026-08-14): whichever question was asked most recently
@@ -226,7 +226,7 @@ export type InboundClaim = 'reminder' | 'handoff_offer';
  * subsystem runs first, which is always the reminder.
  *
  * When the reminder wins the offer lapses here, consistent with the rule that
- * only the immediately-next message can accept: the patient answered the
+ * only the immediately-next message can accept: the customer answered the
  * reminder, not the offer, so the anchor is cleared rather than left armed
  * against some later, unrelated message.
  */
@@ -234,7 +234,7 @@ export async function resolveInboundClaim(
   inbound: InboundMessage,
 ): Promise<InboundClaim> {
   const offer = await outstandingHandoffOffer({
-    ptId: inbound.ptId,
+    accountId: inbound.accountId,
     conversationId: inbound.conversationId,
   });
   if (!offer) return 'reminder';
@@ -254,7 +254,7 @@ export async function resolveInboundClaim(
   // theory: Postgres keeps these to the microsecond but a JS `Date` truncates to
   // the millisecond, so an offer made within 999µs of the reminder ties here.
   // The reminder is the safer side of that coin — confirming an appointment the
-  // patient does hold is recoverable, and the offer is re-made the moment they
+  // customer does hold is recoverable, and the offer is re-made the moment they
   // ask again.
   if (offer.offeredAt.getTime() > reminderSentAt.getTime()) {
     return 'handoff_offer';
@@ -357,7 +357,7 @@ export async function persistInboundReplyDelivery(args: {
  * Inngest emission for any future consumer.
  */
 export async function recordConversationFailure(args: {
-  ptId: string;
+  accountId: string;
   conversationId: string;
   messageId: string;
   traceId?: string;
@@ -366,7 +366,7 @@ export async function recordConversationFailure(args: {
     appendBackgroundEvent(tx, {
       type: 'conversation.failed',
       data: {
-        ptId: args.ptId,
+        accountId: args.accountId,
         conversationId: args.conversationId,
         messageId: args.messageId,
         traceId: args.traceId,
@@ -378,14 +378,14 @@ export async function recordConversationFailure(args: {
 
 async function recoverFailedInbound(args: {
   messageId: string;
-  ptId: string;
+  accountId: string;
   conversationId: string;
   traceId?: string;
   step: GetStepTools<typeof inngest>;
 }) {
   await args.step.run('record-conversation-failed', () =>
     recordConversationFailure({
-      ptId: args.ptId,
+      accountId: args.accountId,
       conversationId: args.conversationId,
       messageId: args.messageId,
       traceId: args.traceId,
@@ -439,7 +439,7 @@ export const handleInboundMessage = inngest.createFunction(
       const original = event.data.event.data;
       return recoverFailedInbound({
         messageId: original.messageId,
-        ptId: original.ptId,
+        accountId: original.accountId,
         conversationId: original.conversationId,
         traceId: original.traceId,
         step,
@@ -454,7 +454,7 @@ export const handleInboundMessage = inngest.createFunction(
     const trace_id = event.data.traceId ?? runId;
     const log = createLogger({
       trace_id,
-      pt_id: event.data.ptId,
+      account_id: event.data.accountId,
       conversation_id: event.data.conversationId,
     });
     log.info('inbound.processing', 'Processing inbound message', {
@@ -524,7 +524,7 @@ export const handleInboundMessage = inngest.createFunction(
     // metered. (A reminder AI fallback runs even during takeover, so it is
     // excluded here and does get metered below.)
     if (reminder.kind !== 'fallback' && !context.aiActive) {
-      // The assistant won't answer, so the patient's message needs a manual
+      // The assistant won't answer, so the customer's message needs a manual
       // reply — push a nudge (push-only, no bell entry). Echo-paused
       // conversations are excluded via `manualHandling`; the per-conversation
       // device tag collapses a burst of messages into one notification. The
@@ -535,9 +535,9 @@ export const handleInboundMessage = inngest.createFunction(
           dispatchPushForEvent({
             name: 'conversation.needs_reply',
             data: {
-              ptId: context.inbound.ptId,
+              accountId: context.inbound.accountId,
               conversationId: context.inbound.conversationId,
-              patientId: context.inbound.patientId,
+              customerId: context.inbound.customerId,
               traceId: event.data.traceId,
             },
           }),
@@ -568,7 +568,7 @@ export const handleInboundMessage = inngest.createFunction(
       const notice = await step.run('prepare-non-text-notice', () =>
         prepareNonTextNotice({
           inbound: hydrateInbound(context.inbound),
-          practiceName: context.practiceName,
+          name: context.name,
           timezone: context.timezone,
           instant: new Date(context.inbound.occurredAt),
         }),
@@ -597,7 +597,7 @@ export const handleInboundMessage = inngest.createFunction(
       );
       await step.run('mark-non-text-notice', () =>
         markNonTextNotice({
-          ptId: context.inbound.ptId,
+          accountId: context.inbound.accountId,
           conversationId: context.inbound.conversationId,
           instant: new Date(context.inbound.occurredAt),
         }),
@@ -618,13 +618,13 @@ export const handleInboundMessage = inngest.createFunction(
     // Meter the conversation-day and enforce the monthly cap. Paused
     // conversations skip the gate (not counted) — the engine self-skips as
     // `assistant_paused` before any model call. The metering instant is the
-    // patient message's own timestamp (not wall-clock) so Inngest retries land
+    // customer message's own timestamp (not wall-clock) so Inngest retries land
     // on the same billing day and month.
     if (!context.assistantPaused) {
       const gate = await step.run('check-conversation-cap', () =>
         checkAndRecordConversation({
-          ptId: context.inbound.ptId,
-          patientId: context.inbound.patientId,
+          accountId: context.inbound.accountId,
+          customerId: context.inbound.customerId,
           conversationId: context.inbound.conversationId,
           plan: context.plan,
           timezone: context.timezone,
@@ -635,17 +635,17 @@ export const handleInboundMessage = inngest.createFunction(
       );
 
       if (gate.status === 'at_cap') {
-        // The assistant is out of conversations for the month, so this patient
+        // The assistant is out of conversations for the month, so this customer
         // needs a person — no offer to make, nothing to ask. Hand the thread
-        // over and push before the patient's holding message: whatever happens
+        // over and push before the customer's holding message: whatever happens
         // to the send, the PT knows someone is waiting. This is also what keeps
         // the 2nd..Nth message of a capped day visible — they take the
         // manual-handling path above instead of hitting the throttled handoff.
         await step.run('hand-off-capped-conversation', () =>
           handOffCappedConversation({
-            ptId: context.inbound.ptId,
+            accountId: context.inbound.accountId,
             conversationId: context.inbound.conversationId,
-            patientId: context.inbound.patientId,
+            customerId: context.inbound.customerId,
             traceId: event.data.traceId,
           }),
         );
@@ -679,7 +679,7 @@ export const handleInboundMessage = inngest.createFunction(
         );
         await step.run('mark-cap-handoff', () =>
           markCapHandoff({
-            ptId: context.inbound.ptId,
+            accountId: context.inbound.accountId,
             conversationId: context.inbound.conversationId,
             instant: new Date(context.inbound.occurredAt),
           }),

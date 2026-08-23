@@ -22,7 +22,7 @@ async function recordPwaInstalledImpl(): Promise<void> {
     await db.transaction((tx) =>
       appendBackgroundEvent(tx, {
         type: 'pwa.installed',
-        data: { ptId: user.id },
+        data: { accountId: user.id },
       }),
     );
   } catch {

@@ -5,15 +5,15 @@
  * event to the level-mapped `console` fn, and rely on Vercel + Supabase log
  * ingestion + filtering. The standard line shape is:
  *
- *   { timestamp, level, trace_id?, pt_id?, conversation_id?, event_name, message, ...attrs }
+ *   { timestamp, level, trace_id?, account_id?, conversation_id?, event_name, message, ...attrs }
  *
- * The envelope keys (timestamp/level/trace_id/pt_id/conversation_id/event_name/
+ * The envelope keys (timestamp/level/trace_id/account_id/conversation_id/event_name/
  * message) are structural (uuids or the log discriminator) and are NEVER passed
  * through PII redaction. Only the caller-supplied `attrs` object is redacted.
- * `attrs` may carry `trace_id`/`pt_id`/`conversation_id`, which are promoted
+ * `attrs` may carry `trace_id`/`account_id`/`conversation_id`, which are promoted
  * into the envelope (and therefore not redacted).
  *
- * NEVER log tokens, phone numbers, patient names, or message bodies. Redaction
+ * NEVER log tokens, phone numbers, customer names, or message bodies. Redaction
  * is enforced here (see REDACT_KEY_RE + the E.164 value scrubber) as a backstop,
  * but callers should still pass ids/counts only.
  */
@@ -22,7 +22,7 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export type LogContext = {
   trace_id?: string;
-  pt_id?: string;
+  account_id?: string;
   conversation_id?: string;
 };
 
@@ -35,7 +35,7 @@ export type Logger = {
 
 /**
  * Keys whose values must be redacted from structured log payloads. Matches
- * substrings case-insensitively, so `phoneNumber`, `patientName`, `authToken`,
+ * substrings case-insensitively, so `phoneNumber`, `customerName`, `authToken`,
  * `p256dh`, etc. are all caught.
  */
 export const REDACT_KEY_RE =
@@ -45,7 +45,7 @@ export const REDACT_KEY_RE =
  * Keys that match REDACT_KEY_RE (via `name`/`phone`) but are deliberately
  * non-PII and must survive redaction: the log discriminator, the thrown
  * error's class name, and Meta's business identifiers (template name and
- * phone_number_id — a WABA asset id, not a patient phone number).
+ * phone_number_id — a WABA asset id, not a customer phone number).
  */
 export const REDACT_ALLOWLIST: ReadonlySet<string> = new Set([
   'event_name',
@@ -127,7 +127,7 @@ type Envelope = {
 } & LogContext &
   Record<string, unknown>;
 
-const CONTEXT_KEYS = ['trace_id', 'pt_id', 'conversation_id'] as const;
+const CONTEXT_KEYS = ['trace_id', 'account_id', 'conversation_id'] as const;
 
 /**
  * Split caller attrs into the context keys to promote onto the envelope

@@ -1,8 +1,8 @@
 export type InboundMessage = {
   id: string;
   conversationId: string;
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   content: string;
   channel: string;
   externalId: string | null;
@@ -22,5 +22,5 @@ export type ReminderTurnContext = {
   appointmentId?: string;
   appointmentStartsAt?: string;
   timezone?: string;
-  practiceName?: string | null;
+  name?: string | null;
 };

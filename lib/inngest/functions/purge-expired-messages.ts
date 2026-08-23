@@ -1,14 +1,14 @@
 import { db } from '@/lib/db';
-import { auditLog, pts } from '@/lib/db/schema';
+import { auditLog, accounts } from '@/lib/db/schema';
 import { sql } from 'drizzle-orm';
 import { effectiveRetentionDays } from '@/lib/billing/entitlements';
 import { inngest } from '../client';
 
 export type PurgeResult = {
-  ptId: string;
+  accountId: string;
   retentionDays: number;
   deletedCount: number;
-  /** Domain-event rows dropped by the same window (see purgePtExpiredMessages). */
+  /** Domain-event rows dropped by the same window (see purgeAccountExpiredMessages). */
   deletedEventCount: number;
 };
 
@@ -32,8 +32,8 @@ export async function purgeExpiredAuditLog(
   return { deletedCount: deleted.length };
 }
 
-export async function purgePtExpiredMessages(args: {
-  ptId: string;
+export async function purgeAccountExpiredMessages(args: {
+  accountId: string;
   retentionDays: number;
   now?: Date;
 }): Promise<PurgeResult> {
@@ -45,7 +45,7 @@ export async function purgePtExpiredMessages(args: {
   return db.transaction(async (tx) => {
     const deleted = await tx.execute<{ id: string }>(sql`
       DELETE FROM messages AS message
-      WHERE message.pt_id = ${args.ptId}
+      WHERE message.account_id = ${args.accountId}
         AND message.created_at < ${cutoff.toISOString()}::timestamptz
         AND NOT EXISTS (
           SELECT 1
@@ -59,15 +59,15 @@ export async function purgePtExpiredMessages(args: {
     `);
 
     // `events` is a personal-data store too: appointment events carry the
-    // patient id and the schedule (and erasure itself appends them), so leaving
-    // the table out of retention kept an erased patient's appointments forever.
+    // customer id and the schedule (and erasure itself appends them), so leaving
+    // the table out of retention kept an erased customer's appointments forever.
     // Two carve-outs: a row the outbox has not published yet is still owed to a
     // consumer (and event_outbox cascades from it), and `billing.*` rows ARE the
     // once-per-month dedupe key for limit warnings — deleting one late in a long
     // month would re-notify the PT for usage they were already told about.
     const deletedEvents = await tx.execute<{ id: string }>(sql`
       DELETE FROM events AS event
-      WHERE event.pt_id = ${args.ptId}
+      WHERE event.account_id = ${args.accountId}
         AND event.occurred_at < ${cutoff.toISOString()}::timestamptz
         AND event.type NOT LIKE 'billing.%'
         AND NOT EXISTS (
@@ -80,13 +80,13 @@ export async function purgePtExpiredMessages(args: {
     `);
 
     const result = {
-      ptId: args.ptId,
+      accountId: args.accountId,
       retentionDays: args.retentionDays,
       deletedCount: deleted.length,
       deletedEventCount: deletedEvents.length,
     };
     await tx.insert(auditLog).values({
-      ptId: args.ptId,
+      accountId: args.accountId,
       actor: 'system',
       action: 'messages.retention_purge',
       targetTable: 'messages',
@@ -111,20 +111,20 @@ export async function purgePtExpiredMessages(args: {
  */
 export async function loadRetentionTenants(
   now: Date,
-): Promise<{ ptId: string; retentionDays: number }[]> {
+): Promise<{ accountId: string; retentionDays: number }[]> {
   const rows = await db
     .select({
-      id: pts.id,
-      plan: pts.plan,
-      planLifetime: pts.planLifetime,
-      planExpiresAt: pts.planExpiresAt,
-      planDowngradedAt: pts.planDowngradedAt,
-      retentionDays: pts.retentionDays,
+      id: accounts.id,
+      plan: accounts.plan,
+      planLifetime: accounts.planLifetime,
+      planExpiresAt: accounts.planExpiresAt,
+      planDowngradedAt: accounts.planDowngradedAt,
+      retentionDays: accounts.retentionDays,
     })
-    .from(pts);
-  return rows.map((pt) => ({
-    ptId: pt.id,
-    retentionDays: effectiveRetentionDays(pt, now),
+    .from(accounts);
+  return rows.map((account) => ({
+    accountId: account.id,
+    retentionDays: effectiveRetentionDays(account, now),
   }));
 }
 
@@ -134,7 +134,7 @@ export async function purgeExpiredMessagesCore(
   const tenants = await loadRetentionTenants(now);
   const results: PurgeResult[] = [];
   for (const tenant of tenants) {
-    results.push(await purgePtExpiredMessages({ ...tenant, now }));
+    results.push(await purgeAccountExpiredMessages({ ...tenant, now }));
   }
   return results;
 }
@@ -153,8 +153,8 @@ export const purgeExpiredMessages = inngest.createFunction(
     const results: PurgeResult[] = [];
     for (const tenant of tenants) {
       results.push(
-        await step.run(`purge-messages-${tenant.ptId}`, () =>
-          purgePtExpiredMessages(tenant),
+        await step.run(`purge-messages-${tenant.accountId}`, () =>
+          purgeAccountExpiredMessages(tenant),
         ),
       );
     }

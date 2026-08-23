@@ -17,8 +17,8 @@ import { db, type DB, type DBTransaction } from '@/lib/db';
 import {
   appointments,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderJobs,
 } from '@/lib/db/schema';
 import { getFreeSlotsInternal } from '@/lib/appointments/availability';
@@ -50,7 +50,7 @@ type ReminderCandidate = {
   appointmentId: string;
   startsAt: Date;
   endsAt: Date;
-  /** When the reminder went out — the instant the patient is answering. */
+  /** When the reminder went out — the instant the customer is answering. */
   sentAt: Date | null;
   responseType:
     | 'confirm'
@@ -60,7 +60,7 @@ type ReminderCandidate = {
     | null;
   responseMessageId: string | null;
   timezone: string;
-  practiceName: string | null;
+  name: string | null;
 };
 
 export type ReminderHandlingResult =
@@ -86,7 +86,7 @@ async function findExistingReply(
     .from(messages)
     .where(
       and(
-        eq(messages.ptId, inbound.ptId),
+        eq(messages.accountId, inbound.accountId),
         eq(messages.conversationId, inbound.conversationId),
         eq(messages.role, 'ai'),
         eq(messages.replyToMessageId, inbound.id),
@@ -107,7 +107,7 @@ async function persistReminderReply(args: {
   const [inserted] = await executor
     .insert(messages)
     .values({
-      ptId: args.inbound.ptId,
+      accountId: args.inbound.accountId,
       conversationId: args.inbound.conversationId,
       replyToMessageId: args.inbound.id,
       role: 'ai',
@@ -147,19 +147,19 @@ async function loadReminderCandidates(
       sentAt: reminderJobs.sentAt,
       responseType: reminderJobs.responseType,
       responseMessageId: reminderJobs.responseMessageId,
-      timezone: pts.timezone,
-      practiceName: pts.practiceName,
+      timezone: accounts.timezone,
+      name: accounts.name,
     })
     .from(reminderJobs)
     .innerJoin(appointments, eq(reminderJobs.appointmentId, appointments.id))
     .innerJoin(messages, eq(reminderJobs.messageId, messages.id))
-    .innerJoin(pts, eq(appointments.ptId, pts.id))
+    .innerJoin(accounts, eq(appointments.accountId, accounts.id))
     .where(
       and(
-        eq(reminderJobs.ptId, inbound.ptId),
+        eq(reminderJobs.accountId, inbound.accountId),
         eq(reminderJobs.status, 'sent'),
-        eq(appointments.ptId, inbound.ptId),
-        eq(appointments.patientId, inbound.patientId),
+        eq(appointments.accountId, inbound.accountId),
+        eq(appointments.customerId, inbound.customerId),
         // Still actionable, or already acted on by this very message: a retry
         // that lost its reply has to resolve to the same candidate, and a
         // cancellation this message applied has left `cancelled` behind.
@@ -214,19 +214,19 @@ function reminderTurnContext(
     appointmentId: candidate.appointmentId,
     appointmentStartsAt: candidate.startsAt.toISOString(),
     timezone: candidate.timezone,
-    practiceName: candidate.practiceName,
+    name: candidate.name,
   };
 }
 
 /**
  * How far ahead of this message to look for a newer opt-state instruction. A
  * conversation that ran on for this many messages has moved past the switch the
- * patient flipped, and the bound keeps the lookahead a constant-cost query.
+ * customer flipped, and the bound keeps the lookahead a constant-cost query.
  */
 const OPT_STATE_LOOKAHEAD_MESSAGES = 20;
 
 /**
- * Whether a newer patient message already asks for the opposite opt state.
+ * Whether a newer customer message already asks for the opposite opt state.
  *
  * Inngest's per-conversation concurrency bounds parallelism but promises no
  * FIFO, so a rapid "NDAL" → "AKTIVIZO" pair can run in either order and the
@@ -245,9 +245,9 @@ async function optStateSuperseded(args: {
     .from(messages)
     .where(
       and(
-        eq(messages.ptId, args.inbound.ptId),
+        eq(messages.accountId, args.inbound.accountId),
         eq(messages.conversationId, args.inbound.conversationId),
-        eq(messages.role, 'patient'),
+        eq(messages.role, 'customer'),
         gt(messages.createdAt, args.inbound.occurredAt),
       ),
     )
@@ -265,36 +265,36 @@ async function optStateSuperseded(args: {
 
 async function setReminderOptOut(inbound: InboundMessage): Promise<void> {
   await db
-    .update(patients)
+    .update(customers)
     .set({
-      reminderOptedOutAt: sql`COALESCE(${patients.reminderOptedOutAt}, now())`,
+      reminderOptedOutAt: sql`COALESCE(${customers.reminderOptedOutAt}, now())`,
     })
     .where(
-      and(eq(patients.id, inbound.patientId), eq(patients.ptId, inbound.ptId)),
+      and(eq(customers.id, inbound.customerId), eq(customers.accountId, inbound.accountId)),
     );
 }
 
 /**
  * Undo of {@link setReminderOptOut}, and the only one that exists: consent to
- * resume billed template messages has to come from the patient, so there is
+ * resume billed template messages has to come from the customer, so there is
  * deliberately no PT-side toggle. Gated on `IS NOT NULL` so an AKTIVIZO from a
- * patient who never opted out writes nothing; the boolean picks the reply.
+ * customer who never opted out writes nothing; the boolean picks the reply.
  */
 async function clearReminderOptOut(
   inbound: InboundMessage,
   executor: Executor = db,
 ): Promise<boolean> {
   const cleared = await executor
-    .update(patients)
+    .update(customers)
     .set({ reminderOptedOutAt: null })
     .where(
       and(
-        eq(patients.id, inbound.patientId),
-        eq(patients.ptId, inbound.ptId),
-        isNotNull(patients.reminderOptedOutAt),
+        eq(customers.id, inbound.customerId),
+        eq(customers.accountId, inbound.accountId),
+        isNotNull(customers.reminderOptedOutAt),
       ),
     )
-    .returning({ id: patients.id });
+    .returning({ id: customers.id });
   return cleared.length > 0;
 }
 
@@ -303,8 +303,8 @@ async function handleConfirm(args: {
   candidate: ReminderCandidate;
 }): Promise<OutboundMessage> {
   await transitionAppointment({
-    ptId: args.inbound.ptId,
-    patientId: args.inbound.patientId,
+    accountId: args.inbound.accountId,
+    customerId: args.inbound.customerId,
     appointmentId: args.candidate.appointmentId,
     nextStatus: 'confirmed',
     origin: 'conversation',
@@ -329,10 +329,10 @@ async function handleCancel(args: {
   candidate: ReminderCandidate;
 }): Promise<OutboundMessage> {
   await cancelAppointment({
-    ptId: args.inbound.ptId,
-    patientId: args.inbound.patientId,
+    accountId: args.inbound.accountId,
+    customerId: args.inbound.customerId,
     appointmentId: args.candidate.appointmentId,
-    cancelledBy: 'patient',
+    cancelledBy: 'customer',
     reason: args.inbound.content,
     origin: 'conversation',
   });
@@ -368,7 +368,7 @@ async function handleOptOut(args: {
     });
   }
   // The reply carries the way back on purpose: nothing else in the product tells
-  // a patient how to restore reminders, and no PT-side toggle exists, so without
+  // a customer how to restore reminders, and no PT-side toggle exists, so without
   // this sentence the opt-in path is unreachable.
   return persistReminderReply({
     inbound: args.inbound,
@@ -385,7 +385,7 @@ async function handleOptIn(args: {
     intent: 'opt_in',
   });
   // One unit of work: a commit that cleared the opt-out but lost its reply
-  // would leave the retry with nothing to restore, so the patient who just came
+  // would leave the retry with nothing to restore, so the customer who just came
   // back would be told reminders were already on.
   return db.transaction(async (tx) => {
     const restored = superseded
@@ -412,7 +412,7 @@ async function handleReschedule(args: {
     responseType: 'reschedule_requested',
   });
   const availability = await getFreeSlotsInternal({
-    ptId: args.inbound.ptId,
+    accountId: args.inbound.accountId,
     start: args.now,
     end: addDays(args.now, 7),
     durationMinutes: Math.round(
@@ -455,7 +455,7 @@ function chooseCandidate(args: {
       (!candidate.responseMessageId && !candidate.responseType) ||
       // Answered by this same message: the transition committed and the reply
       // did not, so a retry must land on the candidate it already handled
-      // instead of falling through to `none` and never answering the patient.
+      // instead of falling through to `none` and never answering the customer.
       candidate.responseMessageId === args.inboundId,
   );
   const rescheduleFollowups = args.candidates.filter(
@@ -515,7 +515,7 @@ async function handleReminderResponseUnlocked(args: {
     };
   }
 
-  // Symmetric to opt-out: it is about the patient, not about any one reminder,
+  // Symmetric to opt-out: it is about the customer, not about any one reminder,
   // so it resolves with no candidate. It is also not recorded on a reminder job
   // — `reminder_jobs.response_type` has no opt-in value, and an AKTIVIZO is not
   // an answer to the reminder, so the job stays unanswered for the PT.

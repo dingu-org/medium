@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import {
   availabilityRules,
   messages,
-  pts,
+  accounts,
   services,
   whatsappConnections,
 } from '@/lib/db/schema';
@@ -31,7 +31,7 @@ export type OnboardingState = {
  * is done when the corresponding rows exist.
  */
 export async function getOnboardingState(
-  ptId: string,
+  accountId: string,
 ): Promise<OnboardingState> {
   const [
     profileRows,
@@ -42,20 +42,20 @@ export async function getOnboardingState(
   ] = await Promise.all([
     db
       .select({
-        practiceName: pts.practiceName,
-        servicesConfiguredAt: pts.servicesConfiguredAt,
-        plan: pts.plan,
-        planStepSeenAt: pts.planStepSeenAt,
+        name: accounts.name,
+        servicesConfiguredAt: accounts.servicesConfiguredAt,
+        plan: accounts.plan,
+        planStepSeenAt: accounts.planStepSeenAt,
       })
-      .from(pts)
-      .where(eq(pts.id, ptId))
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
       .limit(1),
     db
       .select({ id: whatsappConnections.id })
       .from(whatsappConnections)
       .where(
         and(
-          eq(whatsappConnections.ptId, ptId),
+          eq(whatsappConnections.accountId, accountId),
           eq(whatsappConnections.status, 'active'),
         ),
       )
@@ -63,21 +63,21 @@ export async function getOnboardingState(
     db
       .select({ id: availabilityRules.id })
       .from(availabilityRules)
-      .where(eq(availabilityRules.ptId, ptId))
+      .where(eq(availabilityRules.accountId, accountId))
       .limit(1),
     db
       .select({ id: services.id })
       .from(services)
-      .where(and(eq(services.ptId, ptId), eq(services.active, true)))
+      .where(and(eq(services.accountId, accountId), eq(services.active, true)))
       .limit(1),
     db
       .select({ id: messages.id })
       .from(messages)
-      .where(eq(messages.ptId, ptId))
+      .where(eq(messages.accountId, accountId))
       .limit(1),
   ]);
 
-  const profile = Boolean(profileRows[0]?.practiceName?.trim());
+  const profile = Boolean(profileRows[0]?.name?.trim());
   const whatsapp = whatsappRows.length > 0;
   const availability = availabilityRows.length > 0;
   const hasServices =

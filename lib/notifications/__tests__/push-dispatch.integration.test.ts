@@ -10,7 +10,7 @@ import {
 } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { events, patients, pts } from '@/lib/db/schema';
+import { events, customers, accounts } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 
 const sendPush = vi.hoisted(() => vi.fn());
@@ -23,8 +23,8 @@ import {
 import { dispatchPushForEvent } from '../push-dispatch';
 import type { PushEvent } from '../push-payload';
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 
 beforeAll(async () => {
   const { data, error } = await createServiceClient().auth.admin.createUser({
@@ -33,41 +33,41 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(patients).where(eq(patients.ptId, ptId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
   await db
-    .update(pts)
+    .update(accounts)
     .set({ timezone: 'Europe/Tirane', notificationPrefs: null })
-    .where(eq(pts.id, ptId));
-  const [patient] = await db
-    .insert(patients)
+    .where(eq(accounts.id, accountId));
+  const [customer] = await db
+    .insert(customers)
     .values({
-      ptId,
-      name: 'Alex Patient',
+      accountId,
+      name: 'Alex Customer',
       phone: '447700900500',
       waId: '447700900500',
     })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+    .returning({ id: customers.id });
+  customerId = customer.id;
   sendPush.mockReset();
   sendPush.mockResolvedValue({ sent: 1, removed: 0 });
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 function bookedEvent(): PushEvent {
   return {
     name: 'notification.requested',
     data: {
-      ptId,
+      accountId,
       kind: 'appointment.booked',
       appointmentId: randomUUID(),
-      patientId,
+      customerId,
       startsAt: new Date().toISOString(),
       previousStartsAt: null,
     },
@@ -77,7 +77,7 @@ function bookedEvent(): PushEvent {
 function revokedEvent(): PushEvent {
   return {
     name: 'wa.connection.revoked',
-    data: { ptId, connectionId: randomUUID(), reason: 'unauthorized' },
+    data: { accountId, connectionId: randomUUID(), reason: 'unauthorized' },
   };
 }
 
@@ -94,10 +94,10 @@ function eventForPref(key: keyof NotificationPrefs): PushEvent {
       return {
         name: 'notification.requested',
         data: {
-          ptId,
+          accountId,
           kind: 'appointment.cancelled',
           appointmentId: randomUUID(),
-          patientId,
+          customerId,
           startsAt: new Date().toISOString(),
           previousStartsAt: null,
         },
@@ -106,10 +106,10 @@ function eventForPref(key: keyof NotificationPrefs): PushEvent {
       return {
         name: 'notification.requested',
         data: {
-          ptId,
+          accountId,
           kind: 'appointment.rescheduled',
           appointmentId: randomUUID(),
-          patientId,
+          customerId,
           startsAt: new Date().toISOString(),
           previousStartsAt: new Date().toISOString(),
         },
@@ -117,30 +117,30 @@ function eventForPref(key: keyof NotificationPrefs): PushEvent {
     case 'escalation':
       return {
         name: 'conversation.escalated',
-        data: { ptId, conversationId: randomUUID(), patientId },
+        data: { accountId, conversationId: randomUUID(), customerId },
       };
     case 'manualReply':
       return {
         name: 'conversation.needs_reply',
-        data: { ptId, conversationId: randomUUID(), patientId },
+        data: { accountId, conversationId: randomUUID(), customerId },
       };
     case 'resumeOffer':
       return {
         name: 'conversation.resume_offered',
-        data: { ptId, conversationId: randomUUID(), patientId },
+        data: { accountId, conversationId: randomUUID(), customerId },
       };
     case 'connection':
       return revokedEvent();
     case 'reminderFailure':
       return {
         name: 'reminder.failed',
-        data: { ptId, appointmentId: randomUUID(), reason: 'send_failed' },
+        data: { accountId, appointmentId: randomUUID(), reason: 'send_failed' },
       };
     case 'billing':
       return {
         name: 'billing.limit_reached',
         data: {
-          ptId,
+          accountId,
           kind: 'conversations',
           used: 30,
           limit: 30,
@@ -155,16 +155,16 @@ describe('dispatchPushForEvent', () => {
     const result = await dispatchPushForEvent(bookedEvent());
     expect(result).toEqual({ status: 'sent', sent: 1, removed: 0 });
     expect(sendPush).toHaveBeenCalledTimes(1);
-    const [calledPtId, payload] = sendPush.mock.calls[0];
-    expect(calledPtId).toBe(ptId);
+    const [calledAccountId, payload] = sendPush.mock.calls[0];
+    expect(calledAccountId).toBe(accountId);
     expect(payload.title).toBe('Rezervim i ri');
   });
 
   it('skips when the matching toggle is disabled', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ notificationPrefs: { booking: false } })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
     const result = await dispatchPushForEvent(bookedEvent());
     expect(result).toEqual({ status: 'skipped', reason: 'pref_disabled' });
     expect(sendPush).not.toHaveBeenCalled();
@@ -172,9 +172,9 @@ describe('dispatchPushForEvent', () => {
 
   it('gates the new connection toggle', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ notificationPrefs: { connection: false } })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
     expect(await dispatchPushForEvent(revokedEvent())).toEqual({
       status: 'skipped',
       reason: 'pref_disabled',
@@ -195,10 +195,10 @@ describe('dispatchPushForEvent', () => {
     const result = await dispatchPushForEvent({
       name: 'notification.requested',
       data: {
-        ptId: randomUUID(),
+        accountId: randomUUID(),
         kind: 'appointment.booked',
         appointmentId: randomUUID(),
-        patientId,
+        customerId,
         startsAt: new Date().toISOString(),
         previousStartsAt: null,
       },
@@ -219,9 +219,9 @@ describe('dispatchPushForEvent', () => {
 
     it('skips when that toggle is off', async () => {
       await db
-        .update(pts)
+        .update(accounts)
         .set({ notificationPrefs: { [key]: false } as NotificationPrefs })
-        .where(eq(pts.id, ptId));
+        .where(eq(accounts.id, accountId));
       const result = await dispatchPushForEvent(eventForPref(key));
       expect(result).toEqual({ status: 'skipped', reason: 'pref_disabled' });
       expect(sendPush).not.toHaveBeenCalled();
@@ -242,7 +242,7 @@ describe('dispatchPushForEvent', () => {
       expect(line).toMatchObject({
         level: 'warn',
         event_name: 'push.dispatch_no_live_subscriptions',
-        pt_id: ptId,
+        account_id: accountId,
         source_event: 'notification.requested',
         removed: 2,
       });
@@ -264,7 +264,7 @@ describe('dispatchPushForEvent', () => {
   });
 
   it('records a push.dispatched event with counts after a dispatch', async () => {
-    await db.delete(events).where(eq(events.ptId, ptId));
+    await db.delete(events).where(eq(events.accountId, accountId));
     sendPush.mockResolvedValue({ sent: 2, removed: 1 });
     const result = await dispatchPushForEvent(bookedEvent());
     expect(result).toEqual({ status: 'sent', sent: 2, removed: 1 });
@@ -272,10 +272,10 @@ describe('dispatchPushForEvent', () => {
     const rows = await db
       .select()
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'push.dispatched')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'push.dispatched')));
     expect(rows).toHaveLength(1);
     expect(rows[0].payload).toMatchObject({
-      ptId,
+      accountId,
       sourceEvent: 'notification.requested',
       sent: 2,
       removed: 1,
@@ -298,7 +298,7 @@ describe('dispatchPushForEvent', () => {
       expect(recordFailed).toMatchObject({
         level: 'warn',
         event_name: 'push.dispatched_record_failed',
-        pt_id: ptId,
+        account_id: accountId,
       });
     } finally {
       warn.mockRestore();

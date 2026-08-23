@@ -185,7 +185,7 @@ export function AppointmentSheet({
       <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="font-heading flex items-center justify-between gap-2.5 pr-9 text-[19px] font-semibold tracking-[-0.02em]">
-            {appointment.patientName}
+            {appointment.customerName}
             <StatusBadge status={appointment.status} />
           </SheetTitle>
           <SheetDescription className="sr-only">
@@ -229,15 +229,15 @@ export function AppointmentSheet({
               {/* Canvas QuickActs: equal-width bordered tiles. */}
               <div className="flex gap-2">
                 <a
-                  href={`tel:${appointment.patientPhone}`}
+                  href={`tel:${appointment.customerPhone}`}
                   className="border-line hover:bg-muted/50 flex h-[42px] flex-1 items-center justify-center gap-[7px] rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
                 >
                   <Phone className="text-primary h-4 w-4" aria-hidden="true" />
                   {t.appointment.call}
                 </a>
-                {appointment.patientWaId && (
+                {appointment.customerWaId && (
                   <a
-                    href={`https://wa.me/${appointment.patientWaId.replace(/\D/g, '')}`}
+                    href={`https://wa.me/${appointment.customerWaId.replace(/\D/g, '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="border-line hover:bg-muted/50 flex h-[42px] flex-1 items-center justify-center gap-[7px] rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
@@ -257,7 +257,7 @@ export function AppointmentSheet({
                 )}
               </div>
 
-              <div className="pt-1">
+              <div className="account-1">
                 <label
                   htmlFor="appt-notes"
                   className="mb-[7px] block text-[13px] font-semibold text-[var(--neutral-700)]"
@@ -286,7 +286,7 @@ export function AppointmentSheet({
               </div>
 
               {isActive && (
-                <div className="border-sep flex flex-col gap-2.5 border-t pt-[18px]">
+                <div className="border-sep flex flex-col gap-2.5 border-t account-[18px]">
                   {ended && (
                     <Button
                       onClick={() =>

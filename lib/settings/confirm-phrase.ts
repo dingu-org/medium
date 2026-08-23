@@ -1,6 +1,6 @@
 /**
  * Typed confirmation for destructive dialogs. The phrase is normally the name of
- * the thing being deleted, but that name can be blank — `pts.practice_name` is
+ * the thing being deleted, but that name can be blank — `accounts.name` is
  * nullable and onboarding is skippable — and comparing against a blank phrase
  * makes an empty input "match", leaving the destructive button armed the moment
  * the dialog opens. Fall back to a literal word so there is always something to

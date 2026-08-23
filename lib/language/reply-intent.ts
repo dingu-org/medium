@@ -1,8 +1,8 @@
 /**
- * How a short patient reply is read, for every subsystem that reads one.
+ * How a short customer reply is read, for every subsystem that reads one.
  *
  * It lives here rather than in `lib/reminders` because two subsystems ask the
- * patient a yes/no question and both get answered in the same words: an
+ * customer a yes/no question and both get answered in the same words: an
  * unanswered reminder ("do you confirm?") and the handoff offer ("reply PO and
  * I'll pass this on"). While both are outstanding they compete for the same
  * message, and the rule that settles it is which question was asked most
@@ -11,7 +11,7 @@
  * two agree on what an affirmative IS. They did not: the offer demanded exact
  * equality with PO while the reminder accepted 'dakord', 'ok', and 'po' plus one
  * word, so "po faleminderit" was never weighed at all — the reminder took it,
- * the appointment was confirmed, and the patient's real question was dropped.
+ * the appointment was confirmed, and the customer's real question was dropped.
  * One definition, one place, no spelling technicality deciding the winner.
  */
 export type ReplyIntent =
@@ -31,15 +31,15 @@ export type ReplyIntent =
 //     more often than "dakord" and unambiguous in a reply to a reminder.
 //   • 'stop' — the universal, Meta-conventional opt-out word. Opting OUT is the
 //     conservative direction (it can only stop messages, never change a
-//     booking), so recognising it costs nothing and the patient can always
+//     booking), so recognising it costs nothing and the customer can always
 //     write AKTIVIZO to come back.
 const KEYWORDS: Record<ReplyIntent, Set<string>> = {
   confirm: new Set(['konfirmo', 'konfirmoj', 'dakord', 'po', 'ok', 'okay']),
   cancel: new Set(['anulo', 'anuloj', 'jo']),
   reschedule: new Set(['ricakto', 'ricaktoj']),
   // Both switches also carry the polite 2pl imperative ("ndalni", "aktivizoni"),
-  // which is the register a patient writes to a business in. NDAL is reversible
-  // only by the patient, so an AKTIVIZO the parser does not know is a dead end:
+  // which is the register a customer writes to a business in. NDAL is reversible
+  // only by the customer, so an AKTIVIZO the parser does not know is a dead end:
   // the two sets have to be equally forgiving.
   opt_out: new Set(['ndal', 'ndalo', 'ndalni', 'ndaloni', 'stop']),
   opt_in: new Set(['aktivizo', 'aktivizoj', 'aktivizoni', 'aktivizoje']),
@@ -158,7 +158,7 @@ const OUT_OF_POSITION_INTENTS: ReadonlySet<ReplyIntent> = new Set([
  *   • a negator — "mos e ndal", "nuk ricakto", and the contracted "s'ndal",
  *     whose apostrophe (U+0027 or U+2019) splits off a bare "s";
  *   • a future or progressive marker — "do ta ndal" / "Po e ndal" is "I'm
- *     stopping it", a patient describing something, not an instruction;
+ *     stopping it", a customer describing something, not an instruction;
  *   • an English modifier — "full stop", "non-stop".
  */
 function followsAnswerParticlesOnly(tokens: string[], index: number): boolean {
@@ -187,7 +187,7 @@ export function parseReplyIntent(input: string): ReplyIntent | null {
     const leading = intentOf(tokens[0]);
     // A command the scan refused to obey must never be downgraded to the
     // particle in front of it: "Ok, anuloj" ("OK, I'm cancelling") is not the
-    // confirmation a bare "Ok" would be, and confirming it strands a patient
+    // confirmation a bare "Ok" would be, and confirming it strands a customer
     // who believes they cancelled. Only a command that says the same thing as
     // the particle is harmless ("Po, konfirmo").
     if (commands.some((command) => command.intent !== leading)) return null;

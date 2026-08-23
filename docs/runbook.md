@@ -101,8 +101,8 @@ coverage as follows:
 
 | Rehearsal item | Coverage |
 |---|---|
-| Delete a patient → cascade + audit-log entry | Phase 10 patient-erase tests (`lib/patients/erase.ts`, `lib/gdpr/*` test suites) |
-| Export a patient → JSON valid + complete | Phase 10 export tests (`app/(dashboard)/settings/export-data.tsx` + export lib tests) |
+| Delete a customer → cascade + audit-log entry | Phase 10 customer-erase tests (`lib/customers/erase.ts`, `lib/gdpr/*` test suites) |
+| Export a customer → JSON valid + complete | Phase 10 export tests (`app/(dashboard)/settings/export-data.tsx` + export lib tests) |
 | Revoke token → adapter catches auth error → connection `revoked` → reconnect CTA | Phase 2/5 WhatsApp client tests (`lib/channels/whatsapp/__tests__/client.integration.test.ts`, `GraphApiError.isAuthError`) + `connect-whatsapp.tsx` reconnect UI |
 | Bad template → rejection surfaces in dashboard | Phase 5/6 template tests + `errorStatus('rejected')` status card |
 | Disconnect WhatsApp → "Reconnect" CTA | `disconnectWhatsApp` action test |

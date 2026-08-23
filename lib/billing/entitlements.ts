@@ -13,7 +13,7 @@ import {
 
 const DAY_MS = 86_400_000;
 
-export type BillingPt = {
+export type BillingAccount = {
   plan: PlanId;
   planLifetime: boolean;
   planExpiresAt: Date | null;
@@ -32,18 +32,18 @@ export type BillingPt = {
  *   renewal cron to write the downgrade back to the row.
  * - otherwise the stored plan (free).
  */
-export function resolveEffectivePlan(pt: BillingPt, now: Date): PlanId {
-  if (pt.planLifetime) return 'solo';
-  if (pt.plan === 'solo') {
+export function resolveEffectivePlan(account: BillingAccount, now: Date): PlanId {
+  if (account.planLifetime) return 'solo';
+  if (account.plan === 'solo') {
     if (
-      pt.planExpiresAt &&
-      now.getTime() <= pt.planExpiresAt.getTime() + EXPIRY_GRACE_DAYS * DAY_MS
+      account.planExpiresAt &&
+      now.getTime() <= account.planExpiresAt.getTime() + EXPIRY_GRACE_DAYS * DAY_MS
     ) {
       return 'solo';
     }
     return 'free';
   }
-  return pt.plan;
+  return account.plan;
 }
 
 /**
@@ -51,14 +51,14 @@ export function resolveEffectivePlan(pt: BillingPt, now: Date): PlanId {
  * immediately: the PT's stored setting stands for RETENTION_CLAMP_GRACE_DAYS
  * after `plan_downgraded_at`, then clamps to the effective plan's max.
  */
-export function effectiveRetentionDays(pt: BillingPt, now: Date): number {
-  const stored = pt.retentionDays ?? 90;
+export function effectiveRetentionDays(account: BillingAccount, now: Date): number {
+  const stored = account.retentionDays ?? 90;
   if (
-    pt.planDowngradedAt &&
+    account.planDowngradedAt &&
     now.getTime() >=
-      pt.planDowngradedAt.getTime() + RETENTION_CLAMP_GRACE_DAYS * DAY_MS
+      account.planDowngradedAt.getTime() + RETENTION_CLAMP_GRACE_DAYS * DAY_MS
   ) {
-    const plan = PLANS[resolveEffectivePlan(pt, now)];
+    const plan = PLANS[resolveEffectivePlan(account, now)];
     return Math.min(stored, plan.retentionMaxDays);
   }
   return stored;
@@ -69,11 +69,11 @@ export function effectiveRetentionDays(pt: BillingPt, now: Date): number {
  * nulls, which the prompt layer resolves to its default assistant persona.
  */
 export function effectiveAssistantIdentity(
-  pt: BillingPt,
+  account: BillingAccount,
   now: Date = new Date(),
 ): { aiName: string | null; aiGreeting: string | null } {
-  if (!PLANS[resolveEffectivePlan(pt, now)].customAssistantIdentity) {
+  if (!PLANS[resolveEffectivePlan(account, now)].customAssistantIdentity) {
     return { aiName: null, aiGreeting: null };
   }
-  return { aiName: pt.aiName ?? null, aiGreeting: pt.aiGreeting ?? null };
+  return { aiName: account.aiName ?? null, aiGreeting: account.aiGreeting ?? null };
 }

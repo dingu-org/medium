@@ -18,16 +18,16 @@ export default async function CalendarPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
-  const ptId = user.id;
+  const accountId = user.id;
 
-  const snapshot = await getCalendarSnapshot(ptId, {
+  const snapshot = await getCalendarSnapshot(accountId, {
     date,
     view: viewParam,
   });
 
   return (
     <CalendarClient
-      ptId={snapshot.ptId}
+      accountId={snapshot.accountId}
       timezone={snapshot.timezone}
       view={snapshot.view}
       anchorKey={snapshot.anchorKey}

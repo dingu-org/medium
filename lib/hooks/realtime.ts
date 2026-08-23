@@ -46,7 +46,7 @@ type ChangeHandler<T extends Record<string, unknown>> = (
 
 /**
  * Subscribe to `postgres_changes` on a table (optionally filtered, e.g.
- * `pt_id=eq.<uuid>`). RLS is enforced channel-side by Supabase, so a PT only
+ * `account_id=eq.<uuid>`). RLS is enforced channel-side by Supabase, so a PT only
  * ever receives rows they own. Cleans up on unmount and reconnects with
  * exponential backoff if the channel errors or times out.
  */
@@ -233,7 +233,7 @@ export function useRealtimeRefresh(
 
 export type LiveMessage = {
   id: string;
-  role: 'patient' | 'ai' | 'pt';
+  role: 'customer' | 'ai' | 'account';
   content: string;
   createdAt: string;
   /**
@@ -247,7 +247,7 @@ export type LiveMessage = {
 
 type RawMessage = {
   id: string;
-  role: 'patient' | 'ai' | 'pt';
+  role: 'customer' | 'ai' | 'account';
   content: string;
   created_at: string;
 };
@@ -285,7 +285,7 @@ export function compareMessages(
 
 /**
  * Live message thread for one conversation. Seeds from server-fetched messages
- * and applies realtime INSERT/UPDATE so new patient/AI/PT messages appear
+ * and applies realtime INSERT/UPDATE so new customer/AI/PT messages appear
  * instantly. Keyed by id, so an optimistic row and its realtime echo dedupe.
  * On (re)connect and on foreground it re-seeds from the server to backfill any
  * messages that landed while the socket was down (see useCatchUpRefresh).

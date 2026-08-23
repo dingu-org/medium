@@ -3,15 +3,15 @@ import { db } from '@/lib/db';
 import {
   appointments,
   conversations,
-  patients,
-  pts,
+  customers,
+  accounts,
   whatsappConnections,
 } from '@/lib/db/schema';
 
 export type AppointmentJobContext = {
   appointmentId: string;
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   startsAt: Date;
   endsAt: Date;
   serviceType: string | null;
@@ -22,42 +22,42 @@ export type AppointmentJobContext = {
     | 'no_show'
     | 'completed'
     | 'rescheduled';
-  patientName: string;
+  customerName: string;
   reminderOptedOutAt: Date | null;
   recipient: string | null;
   conversationId: string | null;
   timezone: string;
-  practiceName: string | null;
+  name: string | null;
   connectionId: string | null;
 };
 
 export async function loadAppointmentJobContext(args: {
   appointmentId: string;
-  ptId: string;
+  accountId: string;
 }): Promise<AppointmentJobContext | null> {
   const [row] = await db
     .select({
       appointmentId: appointments.id,
-      ptId: appointments.ptId,
-      patientId: appointments.patientId,
+      accountId: appointments.accountId,
+      customerId: appointments.customerId,
       startsAt: appointments.startsAt,
       endsAt: appointments.endsAt,
       serviceType: appointments.serviceType,
       status: appointments.status,
-      patientName: patients.name,
-      reminderOptedOutAt: patients.reminderOptedOutAt,
-      recipient: patients.waId,
-      timezone: pts.timezone,
-      practiceName: pts.practiceName,
+      customerName: customers.name,
+      reminderOptedOutAt: customers.reminderOptedOutAt,
+      recipient: customers.waId,
+      timezone: accounts.timezone,
+      name: accounts.name,
     })
     .from(appointments)
-    .innerJoin(patients, eq(appointments.patientId, patients.id))
-    .innerJoin(pts, eq(appointments.ptId, pts.id))
+    .innerJoin(customers, eq(appointments.customerId, customers.id))
+    .innerJoin(accounts, eq(appointments.accountId, accounts.id))
     .where(
       and(
         eq(appointments.id, args.appointmentId),
-        eq(appointments.ptId, args.ptId),
-        eq(patients.ptId, args.ptId),
+        eq(appointments.accountId, args.accountId),
+        eq(customers.accountId, args.accountId),
       ),
     )
     .limit(1);
@@ -70,8 +70,8 @@ export async function loadAppointmentJobContext(args: {
       .from(conversations)
       .where(
         and(
-          eq(conversations.ptId, args.ptId),
-          eq(conversations.patientId, row.patientId),
+          eq(conversations.accountId, args.accountId),
+          eq(conversations.customerId, row.customerId),
           eq(conversations.channel, 'whatsapp'),
         ),
       )
@@ -84,7 +84,7 @@ export async function loadAppointmentJobContext(args: {
       .from(whatsappConnections)
       .where(
         and(
-          eq(whatsappConnections.ptId, args.ptId),
+          eq(whatsappConnections.accountId, args.accountId),
           eq(whatsappConnections.status, 'active'),
         ),
       )

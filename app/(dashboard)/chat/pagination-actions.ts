@@ -12,7 +12,7 @@ import {
 } from '@/lib/pwa/read-models';
 import { createServerClient } from '@/lib/supabase/server';
 
-async function requirePtId(): Promise<string> {
+async function requireAccountId(): Promise<string> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -24,15 +24,15 @@ async function requirePtId(): Promise<string> {
 /**
  * Fetch a later page of the conversation list for "load more". The PT is
  * resolved from auth here (untestable), while the actual paging query lives in
- * the `ptId`-parameterized `getChatListPage`, which is unit-testable directly.
+ * the `accountId`-parameterized `getChatListPage`, which is unit-testable directly.
  */
 async function loadMoreConversationsImpl(input: {
   status: 'active' | 'closed';
   query?: string;
   page: number;
 }): Promise<ChatListPage> {
-  const ptId = await requirePtId();
-  return getChatListPage(ptId, {
+  const accountId = await requireAccountId();
+  return getChatListPage(accountId, {
     status: input.status,
     query: input.query,
     page: input.page,
@@ -47,15 +47,15 @@ export const loadMoreConversations = instrumentedAction(
 /**
  * Fetch one older page of a thread's messages for the "load older" affordance.
  * As with the list loader, the PT is resolved from auth here and the paging
- * itself lives in the `ptId`-parameterized `getOlderChatMessages`. The cursor is
+ * itself lives in the `accountId`-parameterized `getOlderChatMessages`. The cursor is
  * the oldest message the client currently holds.
  */
 async function fetchOlderMessagesImpl(input: {
   conversationId: string;
   cursor: { createdAt: string; id: string };
 }): Promise<{ messages: ChatMessageSnapshot[]; hasMore: boolean }> {
-  const ptId = await requirePtId();
-  return getOlderChatMessages(ptId, input.conversationId, input.cursor);
+  const accountId = await requireAccountId();
+  return getOlderChatMessages(accountId, input.conversationId, input.cursor);
 }
 
 export const fetchOlderMessages = instrumentedAction(

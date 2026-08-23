@@ -44,7 +44,7 @@ export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
   }
 
   return (
-    <div className="space-y-4 pt-1">
+    <div className="space-y-4 account-1">
       <OfflineNote />
 
       {services.length === 0 ? (
@@ -109,7 +109,7 @@ export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
             {t.settings.serviceAdd}
           </AddDashed>
 
-          <p className="px-2 pt-1 text-[12.5px] leading-[1.5] text-ink-3">
+          <p className="px-2 account-1 text-[12.5px] leading-[1.5] text-ink-3">
             {t.settings.serviceListFooter}
           </p>
         </>
@@ -268,7 +268,7 @@ function ServiceForm({
         disabled={!online}
       />
 
-      <div className="flex flex-col gap-2 pt-2">
+      <div className="flex flex-col gap-2 account-2">
         <Button type="submit" className="w-full" disabled={pending || !online}>
           {pending ? t.actions.saving : t.settings.serviceSave}
         </Button>

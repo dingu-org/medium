@@ -14,7 +14,7 @@ import { getPostgresErrorCode } from '@/lib/db/postgres-errors';
 import {
   conversations,
   messages,
-  patients,
+  customers,
   waMessageStatuses,
   whatsappConnections,
   whatsappContacts,
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   return new Response('EVENT_RECEIVED', { status: 200 });
 }
 
-type WebhookConnection = { id: string; ptId: string; wabaId: string };
+type WebhookConnection = { id: string; accountId: string; wabaId: string };
 
 async function loadConnectionByPhoneNumberId(
   phoneNumberId: string | undefined,
@@ -136,7 +136,7 @@ async function loadConnectionByPhoneNumberId(
   const [connection] = await db
     .select({
       id: whatsappConnections.id,
-      ptId: whatsappConnections.ptId,
+      accountId: whatsappConnections.accountId,
       wabaId: whatsappConnections.wabaId,
     })
     .from(whatsappConnections)
@@ -180,7 +180,7 @@ async function handleMessagesChange(
   if (!connection) {
     return;
   }
-  const { ptId } = connection;
+  const { accountId } = connection;
 
   for (const msg of value.messages ?? []) {
     const contact = value.contacts?.find((c) => c.wa_id === msg.from);
@@ -188,7 +188,7 @@ async function handleMessagesChange(
 
     // A body the assistant cannot read (voice note, photo, document, …). It is
     // still persisted, as a deterministic placeholder plus whatever caption the
-    // patient typed: that one row is what gives the PT an unread badge, a
+    // customer typed: that one row is what gives the PT an unread badge, a
     // chat-list preview and a realtime refresh — all three read it, and without
     // it the message simply never happened as far as the PT is concerned. The
     // `message.received` event carries `nonText` so the inbound job answers with
@@ -211,17 +211,17 @@ async function handleMessagesChange(
       const inboundAt = parseWebhookTimestamp(msg.timestamp);
       const nonTextResult = await db.transaction(async (tx) => {
         const { conversationId } = await ensureWhatsappConversation(tx, {
-          ptId,
+          accountId,
           waId: msg.from,
           name,
         });
         const inserted = await tx
           .insert(messages)
           .values({
-            ptId,
+            accountId,
             conversationId,
             externalId: msg.id,
-            role: 'patient',
+            role: 'customer',
             channel: 'whatsapp',
             content: nonTextContent(placeholder, inboundCaption(msg)),
           })
@@ -240,7 +240,7 @@ async function handleMessagesChange(
           type: 'message.received',
           data: {
             messageId,
-            ptId,
+            accountId,
             conversationId,
             nonText: true,
             traceId: trace_id,
@@ -255,7 +255,7 @@ async function handleMessagesChange(
           'webhook.non_text_message_accepted',
           'Inbound non-text message accepted',
           {
-            pt_id: ptId,
+            account_id: accountId,
             type: msg.type,
             conversation_id: nonTextResult.conversationId,
             message_id: nonTextResult.messageId,
@@ -268,7 +268,7 @@ async function handleMessagesChange(
 
     const result = await db.transaction(async (tx) => {
       const { conversationId } = await ensureWhatsappConversation(tx, {
-        ptId,
+        accountId,
         waId: msg.from,
         name,
       });
@@ -276,10 +276,10 @@ async function handleMessagesChange(
       const inserted = await tx
         .insert(messages)
         .values({
-          ptId,
+          accountId,
           conversationId,
           externalId: msg.id,
-          role: 'patient',
+          role: 'customer',
           channel: 'whatsapp',
           content,
         })
@@ -295,7 +295,7 @@ async function handleMessagesChange(
         type: 'message.received',
         data: {
           messageId,
-          ptId,
+          accountId,
           conversationId,
           traceId: trace_id,
         },
@@ -311,7 +311,7 @@ async function handleMessagesChange(
     if (result.fresh) {
       await tryPublishOutboxEvent(result.eventId);
       log.info('webhook.message_accepted', 'Inbound message accepted', {
-        pt_id: ptId,
+        account_id: accountId,
         conversation_id: result.conversationId,
         message_id: result.messageId,
       });
@@ -345,7 +345,7 @@ function statusRankSql(expr: SQLWrapper): SQL {
 }
 
 async function upsertMessageStatus(args: {
-  ptId: string;
+  accountId: string;
   status: 'sent' | 'delivered' | 'read' | 'failed';
   ts: Date;
   externalId: string;
@@ -359,7 +359,7 @@ async function upsertMessageStatus(args: {
   await db
     .insert(waMessageStatuses)
     .values({
-      ptId: args.ptId,
+      accountId: args.accountId,
       externalId: args.externalId,
       lastStatus: args.status,
       sentAt: tsColumn === 'sentAt' ? args.ts : null,
@@ -407,19 +407,19 @@ async function upsertMessageStatus(args: {
  *   churning; the delivery row is still written either way.
  */
 async function markReminderDelivered(
-  ptId: string,
+  accountId: string,
   wamid: string,
 ): Promise<void> {
   await db.execute(sql`
     WITH delivered AS (
-      SELECT rj.id AS job_id, rj.pt_id, rj.appointment_id, s.delivered_at
+      SELECT rj.id AS job_id, rj.account_id, rj.appointment_id, s.delivered_at
       FROM reminder_jobs AS rj
       INNER JOIN messages AS m ON m.id = rj.message_id
       INNER JOIN wa_message_statuses AS s
-        ON s.external_id = m.external_id AND s.pt_id = m.pt_id
+        ON s.external_id = m.external_id AND s.account_id = m.account_id
       WHERE m.external_id = ${wamid}
-        AND m.pt_id = ${ptId}
-        AND rj.pt_id = ${ptId}
+        AND m.account_id = ${accountId}
+        AND rj.account_id = ${accountId}
         AND s.delivered_at IS NOT NULL
     ), stamped AS (
       UPDATE reminder_jobs AS rj
@@ -428,8 +428,8 @@ async function markReminderDelivered(
       WHERE rj.id = delivered.job_id
         AND rj.delivered_at IS DISTINCT FROM delivered.delivered_at
     )
-    INSERT INTO reminder_deliveries (pt_id, appointment_id, external_id, delivered_at)
-    SELECT pt_id, appointment_id, ${wamid}, delivered_at FROM delivered
+    INSERT INTO reminder_deliveries (account_id, appointment_id, external_id, delivered_at)
+    SELECT account_id, appointment_id, ${wamid}, delivered_at FROM delivered
     ON CONFLICT (external_id) DO NOTHING
   `);
 }
@@ -444,7 +444,7 @@ async function markReminderDelivered(
  * silently swallowed every second-cycle failure).
  */
 async function failReminderDelivery(args: {
-  ptId: string;
+  accountId: string;
   wamid: string;
   reason: string;
   trace_id: string;
@@ -456,16 +456,16 @@ async function failReminderDelivery(args: {
       SET status = 'failed', last_error = ${args.reason}, skipped_reason = NULL
       FROM messages AS m
       WHERE m.external_id = ${args.wamid}
-        AND m.pt_id = ${args.ptId}
+        AND m.account_id = ${args.accountId}
         AND rj.message_id = m.id
-        AND rj.pt_id = ${args.ptId}
+        AND rj.account_id = ${args.accountId}
         AND rj.status = 'sent'
         AND rj.response_type IS NULL
         AND NOT EXISTS (
           SELECT 1
           FROM wa_message_statuses AS s
           WHERE s.external_id = m.external_id
-            AND s.pt_id = m.pt_id
+            AND s.account_id = m.account_id
             AND s.delivered_at IS NOT NULL
         )
       RETURNING rj.appointment_id AS "appointmentId"
@@ -475,7 +475,7 @@ async function failReminderDelivery(args: {
     const eventId = await appendBackgroundEvent(tx, {
       type: 'reminder.failed',
       data: {
-        ptId: args.ptId,
+        accountId: args.accountId,
         appointmentId: row.appointmentId,
         reason: args.reason,
         traceId: args.trace_id,
@@ -489,7 +489,7 @@ async function failReminderDelivery(args: {
     log.info(
       'webhook.reminder_delivery_failed',
       'Reminder template delivery failed',
-      { pt_id: args.ptId, appointment_id: result.appointmentId },
+      { account_id: args.accountId, appointment_id: result.appointmentId },
     );
   }
 }
@@ -508,7 +508,7 @@ async function handleStatusesChange(
     trace_id,
   );
   if (!connection) return;
-  const { ptId } = connection;
+  const { accountId } = connection;
 
   for (const status of statuses) {
     if (!(status.status in WA_STATUS_RANK)) {
@@ -523,7 +523,7 @@ async function handleStatusesChange(
     const ts = parseWebhookTimestamp(status.timestamp);
 
     await upsertMessageStatus({
-      ptId,
+      accountId,
       status: narrowed,
       ts,
       externalId: status.id,
@@ -535,52 +535,52 @@ async function handleStatusesChange(
     });
 
     if (narrowed === 'delivered') {
-      await markReminderDelivered(ptId, status.id);
+      await markReminderDelivered(accountId, status.id);
     } else if (narrowed === 'failed') {
       const firstError = status.errors?.[0];
       const reason = firstError
         ? errorText(firstError)
         : 'template_delivery_failed';
-      await failReminderDelivery({ ptId, wamid: status.id, reason, trace_id });
+      await failReminderDelivery({ accountId, wamid: status.id, reason, trace_id });
     }
   }
 }
 
-async function linkManualPatient(
+async function linkManualCustomer(
   tx: DBTransaction,
-  ptId: string,
+  accountId: string,
   waId: string,
 ): Promise<void> {
   const [existing] = await tx
-    .select({ id: patients.id })
-    .from(patients)
-    .where(and(eq(patients.ptId, ptId), eq(patients.waId, waId)))
+    .select({ id: customers.id })
+    .from(customers)
+    .where(and(eq(customers.accountId, accountId), eq(customers.waId, waId)))
     .limit(1);
   if (existing) return;
 
   const digits = waId.replace(/\D/g, '');
   if (!digits) return;
   const [manual] = await tx
-    .select({ id: patients.id })
-    .from(patients)
+    .select({ id: customers.id })
+    .from(customers)
     .where(
       and(
-        eq(patients.ptId, ptId),
-        isNull(patients.waId),
-        sql`regexp_replace(${patients.phone}, '[^0-9]', '', 'g') = ${digits}`,
+        eq(customers.accountId, accountId),
+        isNull(customers.waId),
+        sql`regexp_replace(${customers.phone}, '[^0-9]', '', 'g') = ${digits}`,
       ),
     )
     .limit(1);
   if (!manual) return;
 
   await tx
-    .update(patients)
+    .update(customers)
     .set({ waId })
     .where(
       and(
-        eq(patients.id, manual.id),
-        eq(patients.ptId, ptId),
-        isNull(patients.waId),
+        eq(customers.id, manual.id),
+        eq(customers.accountId, accountId),
+        isNull(customers.waId),
       ),
     );
 }
@@ -697,7 +697,7 @@ async function handleAppStateSyncChange(
       deletedAt,
     };
 
-    // The table is unique on both (pt_id, phone) and (pt_id, wa_id) — an
+    // The table is unique on both (account_id, phone) and (account_id, wa_id) — an
     // explicit ON CONFLICT target only covers one index, so infer on wa_id
     // whenever Meta sent one (two address-book entries with differently
     // formatted phone strings resolve to the same wa_id). A collision on the
@@ -705,20 +705,20 @@ async function handleAppStateSyncChange(
     // batch, which Meta would redeliver forever.
     const arbiter = contact.wa_id
       ? {
-          target: [whatsappContacts.ptId, whatsappContacts.waId],
+          target: [whatsappContacts.accountId, whatsappContacts.waId],
           // Required to infer the partial index (…) WHERE wa_id IS NOT NULL.
           targetWhere: isNotNull(whatsappContacts.waId),
         }
-      : { target: [whatsappContacts.ptId, whatsappContacts.phone] };
+      : { target: [whatsappContacts.accountId, whatsappContacts.phone] };
 
     try {
       await db
         .insert(whatsappContacts)
-        .values({ ptId: connection.ptId, ...set })
+        .values({ accountId: connection.accountId, ...set })
         .onConflictDoUpdate({ ...arbiter, set });
     } catch (err) {
       log.warn('webhook.contact_sync_failed', 'Skipping unsyncable contact', {
-        pt_id: connection.ptId,
+        account_id: connection.accountId,
         pg_code: getPostgresErrorCode(err),
         wa_id: waId,
       });
@@ -726,7 +726,7 @@ async function handleAppStateSyncChange(
   }
 }
 
-async function contactName(ptId: string, phone: string): Promise<string> {
+async function contactName(accountId: string, phone: string): Promise<string> {
   const [contact] = await db
     .select({
       fullName: whatsappContacts.fullName,
@@ -735,7 +735,7 @@ async function contactName(ptId: string, phone: string): Promise<string> {
     .from(whatsappContacts)
     .where(
       and(
-        eq(whatsappContacts.ptId, ptId),
+        eq(whatsappContacts.accountId, accountId),
         or(eq(whatsappContacts.phone, phone), eq(whatsappContacts.waId, phone)),
       ),
     )
@@ -752,7 +752,7 @@ async function contactName(ptId: string, phone: string): Promise<string> {
  * no `external_id` dedupe). Meta redelivers the whole batch whenever any change
  * in the POST throws, so both the reopen AND the window itself are keyed off the
  * inbound's own timestamp, never `now()`: a conversation the PT closed *after*
- * the patient wrote stays closed however many times the batch comes back, and a
+ * the customer wrote stays closed however many times the batch comes back, and a
  * redelivered image from yesterday cannot re-open a service window that has in
  * fact expired (the PT's free-form reply would then be rejected by Meta or
  * billed as a new conversation). `GREATEST` keeps the window monotonic.
@@ -779,48 +779,48 @@ async function bumpLastInboundAt(
     .where(eq(conversations.id, conversationId));
 }
 
-/** Ensure the patient + WhatsApp conversation rows exist; never touches
+/** Ensure the customer + WhatsApp conversation rows exist; never touches
  *  handling state (callers own `last_inbound_at` / AI pauses). */
 async function ensureWhatsappConversation(
   tx: DBTransaction,
   args: {
-    ptId: string;
+    accountId: string;
     waId: string;
     name: string;
   },
-): Promise<{ patientId: string; conversationId: string }> {
-  await linkManualPatient(tx, args.ptId, args.waId);
+): Promise<{ customerId: string; conversationId: string }> {
+  await linkManualCustomer(tx, args.accountId, args.waId);
   await tx
-    .insert(patients)
+    .insert(customers)
     .values({
-      ptId: args.ptId,
+      accountId: args.accountId,
       name: args.name,
       phone: args.waId,
       waId: args.waId,
     })
-    .onConflictDoNothing({ target: [patients.ptId, patients.waId] });
+    .onConflictDoNothing({ target: [customers.accountId, customers.waId] });
 
-  const [patient] = await tx
-    .select({ id: patients.id })
-    .from(patients)
-    .where(and(eq(patients.ptId, args.ptId), eq(patients.waId, args.waId)))
+  const [customer] = await tx
+    .select({ id: customers.id })
+    .from(customers)
+    .where(and(eq(customers.accountId, args.accountId), eq(customers.waId, args.waId)))
     .limit(1);
 
-  if (!patient) {
+  if (!customer) {
     throw new Error(
-      `[whatsapp-webhook] patient row missing after upsert (wa_id=${args.waId})`,
+      `[whatsapp-webhook] customer row missing after upsert (wa_id=${args.waId})`,
     );
   }
 
   const insertedConversation = await tx
     .insert(conversations)
     .values({
-      ptId: args.ptId,
-      patientId: patient.id,
+      accountId: args.accountId,
+      customerId: customer.id,
       channel: 'whatsapp',
     })
     .onConflictDoNothing({
-      target: [conversations.patientId, conversations.channel],
+      target: [conversations.customerId, conversations.channel],
     })
     .returning({ id: conversations.id });
   const [conversation] = insertedConversation.length
@@ -830,18 +830,18 @@ async function ensureWhatsappConversation(
         .from(conversations)
         .where(
           and(
-            eq(conversations.patientId, patient.id),
+            eq(conversations.customerId, customer.id),
             eq(conversations.channel, 'whatsapp'),
           ),
         )
         .limit(1);
   if (!conversation) {
     throw new Error(
-      `[whatsapp-webhook] conversation row missing after upsert (patient_id=${patient.id})`,
+      `[whatsapp-webhook] conversation row missing after upsert (customer_id=${customer.id})`,
     );
   }
 
-  return { patientId: patient.id, conversationId: conversation.id };
+  return { customerId: customer.id, conversationId: conversation.id };
 }
 
 async function handleMessageEchoesChange(
@@ -866,16 +866,16 @@ async function handleMessageEchoesChange(
       continue;
     }
 
-    const patientWaId = echo.to;
-    const name = await contactName(connection.ptId, patientWaId);
+    const customerWaId = echo.to;
+    const name = await contactName(connection.accountId, customerWaId);
     const pauseUntil = new Date(Date.now() + 2 * 60 * 60 * 1000);
 
     const result = await db.transaction(async (tx) => {
-      const { patientId, conversationId } = await ensureWhatsappConversation(
+      const { customerId, conversationId } = await ensureWhatsappConversation(
         tx,
         {
-          ptId: connection.ptId,
-          waId: patientWaId,
+          accountId: connection.accountId,
+          waId: customerWaId,
           name,
         },
       );
@@ -883,10 +883,10 @@ async function handleMessageEchoesChange(
       const inserted = await tx
         .insert(messages)
         .values({
-          ptId: connection.ptId,
+          accountId: connection.accountId,
           conversationId,
           externalId: echo.id,
-          role: 'pt',
+          role: 'account',
           channel: 'whatsapp',
           content: echo.text!.body,
         })
@@ -919,9 +919,9 @@ async function handleMessageEchoesChange(
           ? await appendBackgroundEvent(tx, {
               type: 'conversation.ai_paused',
               data: {
-                ptId: connection.ptId,
+                accountId: connection.accountId,
                 conversationId,
-                patientId,
+                customerId,
                 pausedUntil: pauseUntil.toISOString(),
                 reason: 'whatsapp_business_app_echo',
               },
@@ -938,7 +938,7 @@ async function handleMessageEchoesChange(
     if (result.fresh) {
       if (result.eventId) await tryPublishOutboxEvent(result.eventId);
       log.info('webhook.message_accepted', 'Inbound message accepted', {
-        pt_id: connection.ptId,
+        account_id: connection.accountId,
         conversation_id: result.conversationId,
         message_id: result.messageId,
       });
@@ -972,7 +972,7 @@ async function revokeActiveConnections(
   const connections = await db
     .select({
       id: whatsappConnections.id,
-      ptId: whatsappConnections.ptId,
+      accountId: whatsappConnections.accountId,
     })
     .from(whatsappConnections)
     .where(
@@ -986,7 +986,7 @@ async function revokeActiveConnections(
   for (const connection of connections) {
     await markConnectionRevoked({
       connectionId: connection.id,
-      ptId: connection.ptId,
+      accountId: connection.accountId,
       reason,
     });
   }

@@ -51,7 +51,7 @@ export function computeReminderSchedule(
 }
 
 export async function upsertReminderSchedule(args: {
-  ptId: string;
+  accountId: string;
   appointmentId: string;
   scheduledFor: Date;
   runId: string;
@@ -59,7 +59,7 @@ export async function upsertReminderSchedule(args: {
   await db
     .insert(reminderJobs)
     .values({
-      ptId: args.ptId,
+      accountId: args.accountId,
       appointmentId: args.appointmentId,
       scheduledFor: args.scheduledFor,
       inngestRunId: args.runId,
@@ -77,7 +77,7 @@ export async function upsertReminderSchedule(args: {
         sentAt: null,
         messageId: null,
         // The row is unique per appointment, so a reschedule re-arms the SAME
-        // row. The patient's answer belongs to the cycle it answered, so it is
+        // row. The customer's answer belongs to the cycle it answered, so it is
         // cleared or the new send inherits the old cycle's reply (Today's
         // unanswered list, deterministic replies). `delivered_at` is NOT cleared:
         // it is a Meta-billed fact and the only source of monthly reminder usage
@@ -94,11 +94,11 @@ export async function upsertReminderSchedule(args: {
  * An appointment moved inside the minimum-notice window: the row is parked as
  * skipped and no replacement reminder will ever be sent. So unlike a re-arm this
  * path touches only the scheduling columns — the previous cycle's delivery
- * (`delivered_at`, Meta-billed, drives monthly usage) and the patient's answer
+ * (`delivered_at`, Meta-billed, drives monthly usage) and the customer's answer
  * to it are facts that already happened and must survive.
  */
 export async function recordShortNoticeSkip(args: {
-  ptId: string;
+  accountId: string;
   appointmentId: string;
   startsAt: Date;
   runId: string;
@@ -107,7 +107,7 @@ export async function recordShortNoticeSkip(args: {
   await db
     .insert(reminderJobs)
     .values({
-      ptId: args.ptId,
+      accountId: args.accountId,
       appointmentId: args.appointmentId,
       scheduledFor: args.startsAt,
       inngestRunId: args.runId,
@@ -184,7 +184,7 @@ export function tierLimit(tier: string | null): number | null {
 }
 
 async function hasRateCapacity(args: {
-  ptId: string;
+  accountId: string;
   tier: string | null;
   now: Date;
 }): Promise<boolean> {
@@ -196,7 +196,7 @@ async function hasRateCapacity(args: {
     .from(messages)
     .where(
       and(
-        eq(messages.ptId, args.ptId),
+        eq(messages.accountId, args.accountId),
         isNotNull(messages.templateId),
         isNotNull(messages.externalId),
         gte(messages.createdAt, subHours(args.now, 24)),
@@ -206,7 +206,7 @@ async function hasRateCapacity(args: {
 }
 
 async function selectApprovedReminderTemplate(
-  ptId: string,
+  accountId: string,
 ): Promise<ApprovedReminderTemplate | null> {
   const rows = await db
     .select({
@@ -218,7 +218,7 @@ async function selectApprovedReminderTemplate(
     .from(messageTemplates)
     .where(
       and(
-        eq(messageTemplates.ptId, ptId),
+        eq(messageTemplates.accountId, accountId),
         eq(messageTemplates.status, 'approved'),
         inArray(
           messageTemplates.name,
@@ -239,7 +239,7 @@ async function selectApprovedReminderTemplate(
 }
 
 export async function loadReminderAttempt(args: {
-  ptId: string;
+  accountId: string;
   appointmentId: string;
   runId: string;
   scheduledFor: Date;
@@ -275,7 +275,7 @@ export async function loadReminderAttempt(args: {
     return { kind: 'skipped', reason: `appointment_${context.status}` };
   }
   if (context.reminderOptedOutAt) {
-    return { kind: 'skipped', reason: 'patient_opted_out' };
+    return { kind: 'skipped', reason: 'customer_opted_out' };
   }
   if (context.startsAt <= now) {
     return { kind: 'skipped', reason: 'appointment_started' };
@@ -289,7 +289,7 @@ export async function loadReminderAttempt(args: {
   // window and the appointment must be flagged now). The caller marks the job
   // skipped with `plan_reminder_quota` (surfaced on the appointment badge) and
   // emits `billing.limit_reached{kind:'reminders'}` — nothing fails silently.
-  if (!(await reminderQuotaAvailable(args.ptId, now))) {
+  if (!(await reminderQuotaAvailable(args.accountId, now))) {
     return { kind: 'skipped', reason: 'plan_reminder_quota' };
   }
 
@@ -300,7 +300,7 @@ export async function loadReminderAttempt(args: {
     .limit(1);
   if (
     !(await hasRateCapacity({
-      ptId: args.ptId,
+      accountId: args.accountId,
       tier: connection?.tier ?? null,
       now,
     }))
@@ -308,7 +308,7 @@ export async function loadReminderAttempt(args: {
     return { kind: 'retry', reason: 'rate_tier_near_limit' };
   }
 
-  const template = await selectApprovedReminderTemplate(args.ptId);
+  const template = await selectApprovedReminderTemplate(args.accountId);
   if (!template) {
     return { kind: 'retry', reason: 'template_not_approved' };
   }
@@ -316,25 +316,25 @@ export async function loadReminderAttempt(args: {
   return { kind: 'ready', context, template };
 }
 
-function patientFirstName(name: string): string {
+function customerFirstName(name: string): string {
   return name.trim().split(/\s+/)[0] || 'Ju';
 }
 
 function templateVariables(args: {
   template: ApprovedReminderTemplate;
-  patientName: string;
-  practiceName: string | null;
+  customerName: string;
+  name: string | null;
   localTime: string;
 }): string[] {
-  const firstName = patientFirstName(args.patientName);
+  const firstName = customerFirstName(args.customerName);
   if (args.template.variableSet === 'legacy') {
     return [firstName, args.localTime];
   }
-  return [firstName, args.practiceName?.trim() || 'praktika', args.localTime];
+  return [firstName, args.name?.trim() || 'praktika', args.localTime];
 }
 
 async function prepareReminderMessage(args: {
-  ptId: string;
+  accountId: string;
   appointmentId: string;
   conversationId: string;
   templateId: string;
@@ -358,7 +358,7 @@ async function prepareReminderMessage(args: {
     const [created] = await tx
       .insert(messages)
       .values({
-        ptId: args.ptId,
+        accountId: args.accountId,
         conversationId: args.conversationId,
         role: 'ai',
         channel: 'whatsapp',
@@ -386,7 +386,7 @@ async function prepareReminderMessage(args: {
  * prepare-reminder-message step: two runs for the same appointment (a booking
  * plus a reschedule) both resolve the same message row, and the second one's
  * memoized snapshot still says `external_id: null` long after the first one
- * sent. Re-sending means two identical templates to the patient, two Meta
+ * sent. Re-sending means two identical templates to the customer, two Meta
  * charges, and only the last wamid on the row — so the first delivery's status
  * callbacks resolve to no reminder job at all.
  */
@@ -449,7 +449,7 @@ async function persistReminderDelivery(args: {
  * NOTIFICATION_TYPES emitters (appointment-events, poll-whatsapp-health).
  */
 export async function recordReminderFailure(args: {
-  ptId: string;
+  accountId: string;
   appointmentId: string;
   scheduledFor: Date;
   runId: string;
@@ -459,7 +459,7 @@ export async function recordReminderFailure(args: {
     const written = await tx
       .insert(reminderJobs)
       .values({
-        ptId: args.ptId,
+        accountId: args.accountId,
         appointmentId: args.appointmentId,
         scheduledFor: args.scheduledFor,
         inngestRunId: args.runId,
@@ -484,7 +484,7 @@ export async function recordReminderFailure(args: {
     return appendBackgroundEvent(tx, {
       type: 'reminder.failed',
       data: {
-        ptId: args.ptId,
+        accountId: args.accountId,
         appointmentId: args.appointmentId,
         reason: args.error,
       },
@@ -495,7 +495,7 @@ export async function recordReminderFailure(args: {
 
 /** Same durable signal for the in-run give-up after MAX_TEMPLATE_ATTEMPTS. */
 async function recordReminderAttemptFailure(args: {
-  ptId: string;
+  accountId: string;
   appointmentId: string;
   runId: string;
   attempts: number;
@@ -520,7 +520,7 @@ async function recordReminderAttemptFailure(args: {
     return appendBackgroundEvent(tx, {
       type: 'reminder.failed',
       data: {
-        ptId: args.ptId,
+        accountId: args.accountId,
         appointmentId: args.appointmentId,
         reason: args.reason,
       },
@@ -546,17 +546,17 @@ export const sendReminder = inngest.createFunction(
     ],
     onFailure: async ({ event, error, step }) => {
       const original = event.data.event;
-      let ptId: string;
+      let accountId: string;
       let appointmentId: string;
       let startsAt: Date;
       switch (original.name) {
         case 'appointment.booked':
-          ptId = original.data.ptId;
+          accountId = original.data.accountId;
           appointmentId = original.data.appointmentId;
           startsAt = new Date(original.data.startsAt);
           break;
         case 'appointment.rescheduled':
-          ptId = original.data.ptId;
+          accountId = original.data.accountId;
           appointmentId = original.data.appointmentId;
           startsAt = new Date(original.data.to.startsAt);
           break;
@@ -566,7 +566,7 @@ export const sendReminder = inngest.createFunction(
       const reason = `${error.name}: ${error.message}`.slice(0, 500);
       await step.run('record-reminder-run-failure', () =>
         recordReminderFailure({
-          ptId,
+          accountId,
           appointmentId,
           scheduledFor: startsAt,
           runId: event.data.run_id,
@@ -579,17 +579,17 @@ export const sendReminder = inngest.createFunction(
   [{ event: 'appointment.booked' }, { event: 'appointment.rescheduled' }],
   async ({ event, runId, step }) => {
     let startsAt: Date;
-    let ptId: string;
+    let accountId: string;
     let appointmentId: string;
     switch (event.name) {
       case 'appointment.booked':
         startsAt = new Date(event.data.startsAt);
-        ptId = event.data.ptId;
+        accountId = event.data.accountId;
         appointmentId = event.data.appointmentId;
         break;
       case 'appointment.rescheduled':
         startsAt = new Date(event.data.to.startsAt);
-        ptId = event.data.ptId;
+        accountId = event.data.accountId;
         appointmentId = event.data.appointmentId;
         break;
       default:
@@ -603,7 +603,7 @@ export const sendReminder = inngest.createFunction(
     if (schedule.kind === 'skipped') {
       await step.run('record-short-notice-skip', () =>
         recordShortNoticeSkip({
-          ptId,
+          accountId,
           appointmentId,
           startsAt,
           runId,
@@ -612,14 +612,14 @@ export const sendReminder = inngest.createFunction(
       );
       await step.sendEvent('emit-short-notice-reminder-skipped', {
         name: 'reminder.skipped',
-        data: { ptId, appointmentId, reason: schedule.reason },
+        data: { accountId, appointmentId, reason: schedule.reason },
       });
       return { skipped: schedule.reason };
     }
 
     await step.run('record-reminder-schedule', () =>
       upsertReminderSchedule({
-        ptId,
+        accountId,
         appointmentId,
         scheduledFor: schedule.scheduledFor,
         runId,
@@ -630,7 +630,7 @@ export const sendReminder = inngest.createFunction(
     for (let attempt = 1; attempt <= MAX_TEMPLATE_ATTEMPTS; attempt++) {
       const state = await step.run(`load-reminder-attempt-${attempt}`, () =>
         loadReminderAttempt({
-          ptId,
+          accountId,
           appointmentId,
           runId,
           scheduledFor: schedule.scheduledFor,
@@ -655,13 +655,13 @@ export const sendReminder = inngest.createFunction(
         if (!marked) return { skipped: state.reason };
         await step.sendEvent(`emit-reminder-skipped-${attempt}`, {
           name: 'reminder.skipped',
-          data: { ptId, appointmentId, reason: state.reason },
+          data: { accountId, appointmentId, reason: state.reason },
         });
         // The reminder cap is a hard stop: notify the PT once this month
         // (billing.limit_reached → push/bell), on top of the flagged badge.
         if (state.reason === 'plan_reminder_quota') {
           await step.run(`emit-reminder-quota-reached-${attempt}`, () =>
-            emitReminderLimitReachedOnce(ptId, new Date()),
+            emitReminderLimitReachedOnce(accountId, new Date()),
           );
         }
         return { skipped: state.reason };
@@ -671,7 +671,7 @@ export const sendReminder = inngest.createFunction(
         if (attempt === MAX_TEMPLATE_ATTEMPTS) {
           await step.run('record-reminder-failure', () =>
             recordReminderAttemptFailure({
-              ptId,
+              accountId,
               appointmentId,
               runId,
               attempts: attempt,
@@ -700,11 +700,11 @@ export const sendReminder = inngest.createFunction(
         new Date(state.context.startsAt),
         state.context.timezone,
       );
-      const practiceName = state.context.practiceName?.trim() || 'praktika';
-      const content = `Kujtesë: ${patientFirstName(state.context.patientName)}, takimi juaj me ${practiceName} është më ${localTime}.`;
+      const name = state.context.name?.trim() || 'praktika';
+      const content = `Kujtesë: ${customerFirstName(state.context.customerName)}, takimi juaj me ${name} është më ${localTime}.`;
       const message = await step.run('prepare-reminder-message', () =>
         prepareReminderMessage({
-          ptId,
+          accountId,
           appointmentId,
           conversationId: state.context.conversationId!,
           templateId: state.template.id,
@@ -720,8 +720,8 @@ export const sendReminder = inngest.createFunction(
           language: state.template.language,
           variables: templateVariables({
             template: state.template,
-            patientName: state.context.patientName,
-            practiceName: state.context.practiceName,
+            customerName: state.context.customerName,
+            name: state.context.name,
             localTime,
           }),
         }),

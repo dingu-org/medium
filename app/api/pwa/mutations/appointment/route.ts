@@ -10,10 +10,10 @@ import {
   transitionAppointment,
 } from '@/lib/appointments';
 import { db } from '@/lib/db';
-import { appointments, pts } from '@/lib/db/schema';
-import { getPwaPtId } from '@/lib/pwa/auth';
+import { appointments, accounts } from '@/lib/db/schema';
+import { getPwaAccountId } from '@/lib/pwa/auth';
 import { resolveBookingService } from '@/lib/services/queries';
-import { createManualPatient } from '@/lib/clients/mutations';
+import { createManualCustomer } from '@/lib/clients/mutations';
 import {
   beginPwaMutation,
   completePwaMutation,
@@ -34,8 +34,8 @@ const manualBookSchema = z
   .object({
     clientMutationId,
     action: z.literal('manual_book'),
-    patientId: z.uuid().optional(),
-    newPatient: z
+    customerId: z.uuid().optional(),
+    newCustomer: z
       .object({
         name: z.string().trim().min(1).max(120),
         phone: z.string().trim().min(3).max(40),
@@ -47,7 +47,7 @@ const manualBookSchema = z
     serviceType: z.string().trim().max(80).optional(),
     notes: z.string().trim().max(500).optional(),
   })
-  .refine((v) => v.patientId || v.newPatient, {
+  .refine((v) => v.customerId || v.newCustomer, {
     message: 'Zgjidh ose shto një klient.',
   });
 
@@ -86,8 +86,8 @@ function jsonError(error: string, status: number) {
 }
 
 export async function POST(request: Request) {
-  const ptId = await getPwaPtId();
-  if (!ptId) return jsonError('Pa autorizim', 401);
+  const accountId = await getPwaAccountId();
+  if (!accountId) return jsonError('Pa autorizim', 401);
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
   const input = parsed.data;
 
   const started = await beginPwaMutation({
-    ptId,
+    accountId,
     clientMutationId: input.clientMutationId,
     type: `appointment.${input.action}`,
   });
@@ -116,9 +116,9 @@ export async function POST(request: Request) {
   const priorProgress = started.kind === 'new' ? started.priorProgress : null;
 
   try {
-    const result = await runAppointmentMutation(ptId, input, priorProgress);
+    const result = await runAppointmentMutation(accountId, input, priorProgress);
     await completePwaMutation({
-      ptId,
+      accountId,
       clientMutationId: input.clientMutationId,
       result,
     });
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
     const { message, status } = messageFor(error);
     if (status < 500) {
       await failPwaMutation({
-        ptId,
+        accountId,
         clientMutationId: input.clientMutationId,
         error: message,
       });
@@ -137,40 +137,40 @@ export async function POST(request: Request) {
 }
 
 async function runAppointmentMutation(
-  ptId: string,
+  accountId: string,
   input: AppointmentInput,
   priorProgress: Record<string, unknown> | null,
 ): Promise<{ ok: true; appointmentId: string }> {
   if (input.action === 'manual_book') {
-    const appointment = await bookManual(ptId, input, priorProgress);
+    const appointment = await bookManual(accountId, input, priorProgress);
     return { ok: true, appointmentId: appointment.id };
   }
   if (input.action === 'cancel') {
     const appointment = await cancelAppointment({
-      ptId,
+      accountId,
       appointmentId: input.appointmentId,
-      cancelledBy: 'pt',
+      cancelledBy: 'account',
       reason: input.reason,
-      origin: 'pt',
+      origin: 'account',
     });
     return { ok: true, appointmentId: appointment.id };
   }
   if (input.action === 'reschedule') {
     const dateValue = new Date(input.newStartsAt);
     const appointment = await rescheduleAppointment({
-      ptId,
+      accountId,
       appointmentId: input.appointmentId,
       newStartsAt: dateValue,
-      origin: 'pt',
+      origin: 'account',
     });
     return { ok: true, appointmentId: appointment.id };
   }
   if (input.action === 'transition') {
     const appointment = await transitionAppointment({
-      ptId,
+      accountId,
       appointmentId: input.appointmentId,
       nextStatus: input.nextStatus,
-      origin: 'pt',
+      origin: 'account',
     });
     return { ok: true, appointmentId: appointment.id };
   }
@@ -183,7 +183,7 @@ async function runAppointmentMutation(
     .where(
       and(
         eq(appointments.id, input.appointmentId),
-        eq(appointments.ptId, ptId),
+        eq(appointments.accountId, accountId),
       ),
     )
     .returning({ id: appointments.id });
@@ -193,45 +193,45 @@ async function runAppointmentMutation(
   return { ok: true, appointmentId: input.appointmentId };
 }
 
-/** Where bookManual stashes the patient it created, for a reclaimed retry. */
-function priorCreatedPatientId(
+/** Where bookManual stashes the customer it created, for a reclaimed retry. */
+function priorCreatedCustomerId(
   progress: Record<string, unknown> | null,
 ): string | null {
-  const value = progress?.createdPatientId;
+  const value = progress?.createdCustomerId;
   return typeof value === 'string' ? value : null;
 }
 
 async function bookManual(
-  ptId: string,
+  accountId: string,
   input: z.infer<typeof manualBookSchema>,
   priorProgress: Record<string, unknown> | null,
 ) {
-  const [pt] = await db
-    .select({ timezone: pts.timezone })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+  const [account] = await db
+    .select({ timezone: accounts.timezone })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  const timezone = pt?.timezone ?? 'Europe/Berlin';
+  const timezone = account?.timezone ?? 'Europe/Berlin';
   const [year, month, day] = input.date.split('-').map(Number);
   const [h, m] = input.time.split(':').map(Number);
   const startsAt = new Date(
     new TZDate(year, month - 1, day, h, m, 0, 0, timezone).getTime(),
   );
 
-  let patientId = input.patientId;
-  if (!patientId && input.newPatient) {
-    // createManualPatient and the booking below are two separate writes, not
+  let customerId = input.customerId;
+  if (!customerId && input.newCustomer) {
+    // createManualCustomer and the booking below are two separate writes, not
     // one transaction. If a prior attempt at this same clientMutationId
-    // created the patient and then died before booking committed, a plain
-    // retry would call createManualPatient again, get DUPLICATE_PHONE for the
-    // patient it just made, and dead-end permanently on a misleading "client
+    // created the customer and then died before booking committed, a plain
+    // retry would call createManualCustomer again, get DUPLICATE_PHONE for the
+    // customer it just made, and dead-end permanently on a misleading "client
     // already exists" error despite never having booked anything. Reuse the
     // stashed id instead of re-creating.
-    const priorPatientId = priorCreatedPatientId(priorProgress);
-    if (priorPatientId) {
-      patientId = priorPatientId;
+    const priorCustomerId = priorCreatedCustomerId(priorProgress);
+    if (priorCustomerId) {
+      customerId = priorCustomerId;
     } else {
-      const created = await createManualPatient({ ptId, ...input.newPatient });
+      const created = await createManualCustomer({ accountId, ...input.newCustomer });
       if ('failure' in created) {
         throw new AppointmentError(
           'invalid_input',
@@ -240,18 +240,18 @@ async function bookManual(
             : 'Numri i telefonit nuk është i vlefshëm.',
         );
       }
-      patientId = created.id;
+      customerId = created.id;
       await recordPwaMutationProgress({
-        ptId,
+        accountId,
         clientMutationId: input.clientMutationId,
-        progress: { createdPatientId: created.id },
+        progress: { createdCustomerId: created.id },
       });
     }
   }
-  if (!patientId) {
+  if (!customerId) {
     throw new AppointmentError('invalid_input', 'Zgjidh ose shto një klient.');
   }
-  const service = await resolveBookingService(ptId, {
+  const service = await resolveBookingService(accountId, {
     serviceId: input.serviceId,
     legacyServiceType: input.serviceType,
   });
@@ -260,14 +260,14 @@ async function bookManual(
   }
 
   return bookAppointment({
-    ptId,
-    patientId,
+    accountId,
+    customerId,
     startsAt,
     serviceType: service.name,
     durationMinutes: service.durationMinutes,
     notes: input.notes,
     allowOutsideAvailability: true,
-    origin: 'pt',
+    origin: 'account',
   });
 }
 

@@ -32,7 +32,7 @@ async function findExistingReply(
     .from(messages)
     .where(
       and(
-        eq(messages.ptId, inbound.ptId),
+        eq(messages.accountId, inbound.accountId),
         eq(messages.conversationId, inbound.conversationId),
         eq(messages.role, 'ai'),
         eq(messages.replyToMessageId, inbound.id),
@@ -55,7 +55,7 @@ export async function persistDeterministicReply(args: {
   const [inserted] = await executor
     .insert(messages)
     .values({
-      ptId: args.inbound.ptId,
+      accountId: args.inbound.accountId,
       conversationId: args.inbound.conversationId,
       replyToMessageId: args.inbound.id,
       role: 'ai',

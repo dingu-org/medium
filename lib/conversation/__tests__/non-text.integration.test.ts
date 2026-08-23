@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { conversations, messages, patients, pts } from '@/lib/db/schema';
+import { conversations, messages, customers, accounts } from '@/lib/db/schema';
 import type { InboundMessage } from '@/lib/conversation/types';
 import {
   markNonTextNotice,
@@ -19,8 +19,8 @@ import { DAY, HOUR, testNow } from '@/tests/support/clock';
 // UTC day.
 const DAY_ONE = testNow();
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let seq = 0;
 
@@ -29,10 +29,10 @@ async function seedInbound(content: string): Promise<InboundMessage> {
   const [row] = await db
     .insert(messages)
     .values({
-      ptId,
+      accountId,
       conversationId,
       externalId: `wamid.NONTEXT.${Date.now()}.${seq}`,
-      role: 'patient',
+      role: 'customer',
       channel: 'whatsapp',
       content,
     })
@@ -40,8 +40,8 @@ async function seedInbound(content: string): Promise<InboundMessage> {
   return {
     id: row.id,
     conversationId,
-    ptId,
-    patientId,
+    accountId,
+    customerId,
     content,
     channel: row.channel,
     externalId: null,
@@ -54,7 +54,7 @@ async function countNotices(): Promise<number> {
     .select({ id: messages.id })
     .from(messages)
     .where(
-      and(eq(messages.ptId, ptId), eq(messages.model, NON_TEXT_NOTICE_MODEL)),
+      and(eq(messages.accountId, accountId), eq(messages.model, NON_TEXT_NOTICE_MODEL)),
     );
   return rows.length;
 }
@@ -74,32 +74,32 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(messages).where(eq(messages.ptId, ptId));
-  await db.delete(conversations).where(eq(conversations.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
+  await db.delete(messages).where(eq(messages.accountId, accountId));
+  await db.delete(conversations).where(eq(conversations.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
   await db
-    .update(pts)
-    .set({ timezone: 'UTC', practiceName: 'Studio Bella' })
-    .where(eq(pts.id, ptId));
+    .update(accounts)
+    .set({ timezone: 'UTC', name: 'Studio Bella' })
+    .where(eq(accounts.id, accountId));
 
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Pat', phone: '447700900888', waId: '447700900888' })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Pat', phone: '447700900888', waId: '447700900888' })
+    .returning({ id: customers.id });
+  customerId = customer.id;
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId, channel: 'whatsapp' })
+    .values({ accountId, customerId, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   conversationId = conversation.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('non-text notice', () => {
@@ -107,7 +107,7 @@ describe('non-text notice', () => {
     const inbound = await seedInbound('[mesazh zanor]');
     const result = await prepareNonTextNotice({
       inbound,
-      practiceName: 'Studio Bella',
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: DAY_ONE,
     });
@@ -121,22 +121,22 @@ describe('non-text notice', () => {
     expect(await readOfferAnchor()).toBe(inbound.id);
   });
 
-  // A patient who fires off five voice notes in a row is told once, not five
+  // A customer who fires off five voice notes in a row is told once, not five
   // times — the second media message gets no second explanatory reply.
   it('sends no second notice for another media message the same day', async () => {
     const first = await seedInbound('[mesazh zanor]');
     await prepareNonTextNotice({
       inbound: first,
-      practiceName: 'Studio Bella',
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: DAY_ONE,
     });
-    await markNonTextNotice({ ptId, conversationId, instant: DAY_ONE });
+    await markNonTextNotice({ accountId, conversationId, instant: DAY_ONE });
 
     const second = await seedInbound('[foto]');
     const repeat = await prepareNonTextNotice({
       inbound: second,
-      practiceName: 'Studio Bella',
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: new Date(DAY_ONE.getTime() + HOUR),
     });
@@ -152,22 +152,22 @@ describe('non-text notice', () => {
   });
 
   // Per day rather than once per conversation for good: a conversation row lives
-  // as long as the patient does, so a once-ever notice would meet the voice note
+  // as long as the customer does, so a once-ever notice would meet the voice note
   // they send months from now with the very silence this exists to remove.
   it('answers again on a new local day', async () => {
     const first = await seedInbound('[mesazh zanor]');
     await prepareNonTextNotice({
       inbound: first,
-      practiceName: 'Studio Bella',
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: DAY_ONE,
     });
-    await markNonTextNotice({ ptId, conversationId, instant: DAY_ONE });
+    await markNonTextNotice({ accountId, conversationId, instant: DAY_ONE });
 
     const later = await seedInbound('[mesazh zanor]');
     const next = await prepareNonTextNotice({
       inbound: later,
-      practiceName: 'Studio Bella',
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: new Date(DAY_ONE.getTime() + DAY),
     });
@@ -181,13 +181,13 @@ describe('non-text notice', () => {
     const inbound = await seedInbound('[foto]');
     const a = await prepareNonTextNotice({
       inbound,
-      practiceName: 'Studio Bella',
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: DAY_ONE,
     });
     const b = await prepareNonTextNotice({
       inbound,
-      practiceName: 'Studio Bella',
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: DAY_ONE,
     });
@@ -203,7 +203,7 @@ describe('non-text notice', () => {
     const inbound = await seedInbound('[dokument]');
     const result = await prepareNonTextNotice({
       inbound,
-      practiceName: null,
+      name: null,
       timezone: 'UTC',
       instant: DAY_ONE,
     });

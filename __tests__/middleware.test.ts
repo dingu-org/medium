@@ -26,7 +26,7 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:54321');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key');
   getUserMock.mockReset();
-  getUserMock.mockResolvedValue({ data: { user: { id: 'pt-a' } } });
+  getUserMock.mockResolvedValue({ data: { user: { id: 'account-a' } } });
   createServerClientMock.mockReset();
 });
 

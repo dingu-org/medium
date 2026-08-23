@@ -245,7 +245,7 @@ export default async function OnboardingPage() {
               </div>
             )}
 
-            <div className="mt-auto space-y-3 pt-10">
+            <div className="mt-auto space-y-3 account-10">
               {current.key === 'services' ? (
                 <>
                   <form action={confirmServices}>

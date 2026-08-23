@@ -8,7 +8,7 @@ const UUID2 = '22222222-2222-4222-8222-222222222222';
 describe('backgroundEventSchemas — Phase 11 additions', () => {
   it('validates a push.dispatched counts payload', () => {
     const parsed = backgroundEventSchemas['push.dispatched'].parse({
-      ptId: UUID,
+      accountId: UUID,
       sourceEvent: 'notification.requested',
       sent: 2,
       removed: 1,
@@ -19,7 +19,7 @@ describe('backgroundEventSchemas — Phase 11 additions', () => {
   it('rejects negative push.dispatched counts', () => {
     expect(
       backgroundEventSchemas['push.dispatched'].safeParse({
-        ptId: UUID,
+        accountId: UUID,
         sourceEvent: 'x',
         sent: -1,
         removed: 0,
@@ -29,17 +29,17 @@ describe('backgroundEventSchemas — Phase 11 additions', () => {
 
   it('validates the pwa.installed and push.subscribed producer payloads', () => {
     expect(
-      backgroundEventSchemas['pwa.installed'].parse({ ptId: UUID }),
-    ).toEqual({ ptId: UUID });
+      backgroundEventSchemas['pwa.installed'].parse({ accountId: UUID }),
+    ).toEqual({ accountId: UUID });
     expect(
-      backgroundEventSchemas['push.subscribed'].parse({ ptId: UUID }),
-    ).toEqual({ ptId: UUID });
+      backgroundEventSchemas['push.subscribed'].parse({ accountId: UUID }),
+    ).toEqual({ accountId: UUID });
   });
 
   it('preserves an optional traceId on an existing event', () => {
     const parsed = backgroundEventSchemas['message.received'].parse({
       messageId: UUID,
-      ptId: UUID,
+      accountId: UUID,
       conversationId: UUID2,
       traceId: UUID,
     });
@@ -49,7 +49,7 @@ describe('backgroundEventSchemas — Phase 11 additions', () => {
   it('strips undeclared keys (why traceId must be declared)', () => {
     const parsed = backgroundEventSchemas['message.received'].parse({
       messageId: UUID,
-      ptId: UUID,
+      accountId: UUID,
       conversationId: UUID2,
       undeclared: 'x',
     }) as Record<string, unknown>;
@@ -61,9 +61,9 @@ describe('backgroundEventSchemas — Phase 11 additions', () => {
 describe('appointmentEventSchemas — traceId', () => {
   it('accepts an optional traceId on the appointment summary', () => {
     const parsed = appointmentEventSchemas['appointment.booked'].parse({
-      ptId: UUID,
+      accountId: UUID,
       appointmentId: UUID,
-      patientId: UUID2,
+      customerId: UUID2,
       startsAt: '2026-06-15T10:00:00.000Z',
       endsAt: '2026-06-15T11:00:00.000Z',
       serviceType: null,

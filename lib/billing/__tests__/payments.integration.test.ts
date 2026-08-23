@@ -26,11 +26,11 @@ vi.mock('@/lib/billing/pok/client', () => ({
 }));
 
 import { db } from '@/lib/db';
-import { billingOrders, eventOutbox, events, pts } from '@/lib/db/schema';
+import { billingOrders, eventOutbox, events, accounts } from '@/lib/db/schema';
 import { applyOrderOutcome, type BillingPeriod } from '@/lib/billing/payments';
 import { createServiceClient } from '@/lib/supabase/service';
 
-let ptId = '';
+let accountId = '';
 let seq = 0;
 
 async function seedCreatedOrder(
@@ -39,7 +39,7 @@ async function seedCreatedOrder(
   seq += 1;
   const pokOrderId = `pok-${Date.now()}-${seq}`;
   await db.insert(billingOrders).values({
-    ptId,
+    accountId,
     pokOrderId,
     plan: 'solo',
     period,
@@ -54,16 +54,16 @@ async function countPaymentEvents(): Promise<number> {
   const rows = await db
     .select({ id: events.id })
     .from(events)
-    .where(and(eq(events.ptId, ptId), eq(events.type, 'billing.payment_received')));
+    .where(and(eq(events.accountId, accountId), eq(events.type, 'billing.payment_received')));
   return rows.length;
 }
 
 async function planState(): Promise<{ plan: string; expiresAt: Date | null }> {
-  const [pt] = await db
-    .select({ plan: pts.plan, expiresAt: pts.planExpiresAt })
-    .from(pts)
-    .where(eq(pts.id, ptId));
-  return { plan: pt.plan, expiresAt: pt.expiresAt };
+  const [account] = await db
+    .select({ plan: accounts.plan, expiresAt: accounts.planExpiresAt })
+    .from(accounts)
+    .where(eq(accounts.id, accountId));
+  return { plan: account.plan, expiresAt: account.expiresAt };
 }
 
 beforeAll(async () => {
@@ -73,28 +73,28 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
   mockGetOrder.mockReset();
   mockCreateOrder.mockReset();
-  await db.delete(billingOrders).where(eq(billingOrders.ptId, ptId));
-  await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
+  await db.delete(billingOrders).where(eq(billingOrders.accountId, accountId));
+  await db.delete(eventOutbox).where(eq(eventOutbox.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
   await db
-    .update(pts)
+    .update(accounts)
     .set({
       plan: 'free',
       planExpiresAt: null,
       planLifetime: false,
       planDowngradedAt: null,
     })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('applyOrderOutcome', () => {

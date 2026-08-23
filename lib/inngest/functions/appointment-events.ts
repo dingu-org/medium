@@ -48,35 +48,35 @@ function confirmationContent(args: {
  * second send here would be a duplicate. That suppression is final — there is no
  * second producer to coordinate with, so nothing to wait for and nothing to
  * re-check. Delivery reliability is the ordinary contract every other
- * patient-facing send has: retry, then `conversation.failed` on the PT's bell
+ * customer-facing send has: retry, then `conversation.failed` on the PT's bell
  * and the thread handed to a human.
  *
  * `origin` is deliberately not `cancelledBy`: that records who decided, not who
  * speaks, and the two diverge in the reminder-fallback turn, which records a
- * patient cancellation from inside an AI turn.
+ * customer cancellation from inside an AI turn.
  *
  * A GDPR erasure cancels every active appointment on its way to deleting the
- * patient: the PT tapped Fshi herself and the patient row is already gone, so a
+ * customer: the PT tapped Fshi herself and the customer row is already gone, so a
  * push naming a deleted client is noise and there is nobody left to confirm to.
  * It resolves first so the marker stays trusted only on a PT-side cancellation —
- * a patient's own reason is their free-text reply and must not be able to spoof
+ * a customer's own reason is their free-text reply and must not be able to spoof
  * it.
  */
 export function appointmentEventPlan(args: {
   kind: AppointmentNotificationKind;
-  origin?: 'conversation' | 'pt' | null;
-  cancelledBy?: 'patient' | 'pt' | 'ai' | null;
+  origin?: 'conversation' | 'account' | null;
+  cancelledBy?: 'customer' | 'account' | 'ai' | null;
   cancellationReason?: string | null;
-}): { notifyPt: boolean; confirmPatient: boolean; skipped?: string } {
+}): { notifyAccount: boolean; confirmCustomer: boolean; skipped?: string } {
   if (
     args.kind === 'appointment.cancelled' &&
-    args.cancelledBy === 'pt' &&
-    args.cancellationReason === 'patient_erased'
+    args.cancelledBy === 'account' &&
+    args.cancellationReason === 'customer_erased'
   ) {
     return {
-      notifyPt: false,
-      confirmPatient: false,
-      skipped: 'patient_erased',
+      notifyAccount: false,
+      confirmCustomer: false,
+      skipped: 'customer_erased',
     };
   }
 
@@ -86,25 +86,25 @@ export function appointmentEventPlan(args: {
   const origin =
     args.origin ??
     (args.kind === 'appointment.cancelled'
-      ? args.cancelledBy === 'pt'
-        ? 'pt'
+      ? args.cancelledBy === 'account'
+        ? 'account'
         : 'conversation'
-      : 'pt');
+      : 'account');
 
   if (origin === 'conversation') {
     return {
-      notifyPt: true,
-      confirmPatient: false,
+      notifyAccount: true,
+      confirmCustomer: false,
       skipped: 'conversation_replied',
     };
   }
-  return { notifyPt: true, confirmPatient: true };
+  return { notifyAccount: true, confirmCustomer: true };
 }
 
 export async function prepareAppointmentConfirmation(args: {
   sourceEventId: string;
   kind: AppointmentNotificationKind;
-  ptId: string;
+  accountId: string;
   appointmentId: string;
   startsAt: Date;
 }): Promise<
@@ -133,7 +133,7 @@ export async function prepareAppointmentConfirmation(args: {
   await db
     .insert(messages)
     .values({
-      ptId: args.ptId,
+      accountId: args.accountId,
       conversationId: context.conversationId,
       sourceEventId: args.sourceEventId,
       role: 'ai',
@@ -206,14 +206,14 @@ export async function persistAppointmentConfirmation(args: {
 }
 
 /**
- * Every retry of the patient confirmation is spent. The message row was already
+ * Every retry of the customer confirmation is spent. The message row was already
  * persisted before the send, so it would sit there with a NULL externalId and
- * nothing would ever tell the PT the patient was not reached — while her own
+ * nothing would ever tell the PT the customer was not reached — while her own
  * `notification.requested` push says the change went through. Append a durable
  * `conversation.failed` so the bell points her at the thread.
  */
 export async function recordConfirmationFailure(args: {
-  ptId: string;
+  accountId: string;
   sourceEventId: string;
 }): Promise<{ recorded: boolean; reason?: string }> {
   const [pending] = await db
@@ -224,7 +224,7 @@ export async function recordConfirmationFailure(args: {
     .from(messages)
     .where(
       and(
-        eq(messages.ptId, args.ptId),
+        eq(messages.accountId, args.accountId),
         eq(messages.sourceEventId, args.sourceEventId),
         isNull(messages.externalId),
       ),
@@ -238,7 +238,7 @@ export async function recordConfirmationFailure(args: {
     appendBackgroundEvent(tx, {
       type: 'conversation.failed',
       data: {
-        ptId: args.ptId,
+        accountId: args.accountId,
         conversationId: pending.conversationId,
         messageId: pending.id,
       },
@@ -258,7 +258,7 @@ export const handleAppointmentEvent = inngest.createFunction(
       if (!original.id) return { skipped: 'missing_event_id' };
       return step.run('record-confirmation-failure', () =>
         recordConfirmationFailure({
-          ptId: original.data.ptId,
+          accountId: original.data.accountId,
           sourceEventId: original.id!,
         }),
       );
@@ -275,29 +275,29 @@ export const handleAppointmentEvent = inngest.createFunction(
     let kind: AppointmentNotificationKind;
     let startsAt: string;
     let previousStartsAt: string | null;
-    let ptId: string;
+    let accountId: string;
     let appointmentId: string;
-    let patientId: string;
-    let origin: 'conversation' | 'pt' | null = null;
-    let cancelledBy: 'patient' | 'pt' | 'ai' | null = null;
+    let customerId: string;
+    let origin: 'conversation' | 'account' | null = null;
+    let cancelledBy: 'customer' | 'account' | 'ai' | null = null;
     let cancellationReason: string | null = null;
     switch (event.name) {
       case 'appointment.booked':
         kind = event.name;
         startsAt = event.data.startsAt;
         previousStartsAt = null;
-        ptId = event.data.ptId;
+        accountId = event.data.accountId;
         appointmentId = event.data.appointmentId;
-        patientId = event.data.patientId;
+        customerId = event.data.customerId;
         origin = event.data.origin ?? null;
         break;
       case 'appointment.cancelled':
         kind = event.name;
         startsAt = event.data.startsAt;
         previousStartsAt = null;
-        ptId = event.data.ptId;
+        accountId = event.data.accountId;
         appointmentId = event.data.appointmentId;
-        patientId = event.data.patientId;
+        customerId = event.data.customerId;
         origin = event.data.origin ?? null;
         cancelledBy = event.data.cancelledBy;
         cancellationReason = event.data.reason;
@@ -306,9 +306,9 @@ export const handleAppointmentEvent = inngest.createFunction(
         kind = event.name;
         startsAt = event.data.to.startsAt;
         previousStartsAt = event.data.from.startsAt;
-        ptId = event.data.ptId;
+        accountId = event.data.accountId;
         appointmentId = event.data.appointmentId;
-        patientId = event.data.patientId;
+        customerId = event.data.customerId;
         origin = event.data.origin ?? null;
         break;
       default:
@@ -331,49 +331,49 @@ export const handleAppointmentEvent = inngest.createFunction(
       cancellationReason,
     });
 
-    if (plan.notifyPt) {
-      await step.sendEvent('request-pt-notification', {
+    if (plan.notifyAccount) {
+      await step.sendEvent('request-account-notification', {
         name: 'notification.requested',
         data: {
-          ptId,
+          accountId,
           kind,
           appointmentId,
-          patientId,
+          customerId,
           startsAt,
           previousStartsAt,
         },
       });
     }
-    if (!plan.confirmPatient) {
-      return { patientConfirmation: null, skipped: plan.skipped };
+    if (!plan.confirmCustomer) {
+      return { customerConfirmation: null, skipped: plan.skipped };
     }
 
-    const confirmation = await step.run('prepare-patient-confirmation', () =>
+    const confirmation = await step.run('prepare-customer-confirmation', () =>
       prepareAppointmentConfirmation({
         sourceEventId: event.id!,
         kind,
-        ptId,
+        accountId,
         appointmentId,
         startsAt: new Date(startsAt),
       }),
     );
 
-    let patientConfirmation: string | null = null;
+    let customerConfirmation: string | null = null;
     if (confirmation.kind === 'ready') {
-      const delivery = await step.run('send-patient-confirmation', () =>
+      const delivery = await step.run('send-customer-confirmation', () =>
         sendAppointmentConfirmation(confirmation),
       );
-      await step.run('persist-patient-confirmation', () =>
+      await step.run('persist-customer-confirmation', () =>
         persistAppointmentConfirmation({
           messageId: confirmation.messageId,
           externalId: delivery.externalId,
         }),
       );
-      patientConfirmation = delivery.externalId;
+      customerConfirmation = delivery.externalId;
     }
 
     return {
-      patientConfirmation,
+      customerConfirmation,
       skipped:
         confirmation.kind === 'skipped' ? confirmation.reason : undefined,
     };

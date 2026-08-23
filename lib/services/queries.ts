@@ -11,10 +11,10 @@ export type ServiceRecord = {
 };
 
 export async function getServices(
-  ptId: string,
+  accountId: string,
   options: { activeOnly?: boolean } = {},
 ): Promise<ServiceRecord[]> {
-  const filters = [eq(services.ptId, ptId)];
+  const filters = [eq(services.accountId, accountId)];
   if (options.activeOnly) filters.push(eq(services.active, true));
 
   const rows = await db
@@ -42,7 +42,7 @@ export async function getServices(
 }
 
 export async function getActiveService(
-  ptId: string,
+  accountId: string,
   serviceId: string,
 ): Promise<ServiceRecord | null> {
   const [service] = await db
@@ -57,7 +57,7 @@ export async function getActiveService(
     .where(
       and(
         eq(services.id, serviceId),
-        eq(services.ptId, ptId),
+        eq(services.accountId, accountId),
         eq(services.active, true),
       ),
     )
@@ -67,11 +67,11 @@ export async function getActiveService(
 }
 
 export async function resolveBookingService(
-  ptId: string,
+  accountId: string,
   input: { serviceId?: string; legacyServiceType?: string },
 ): Promise<{ name: string; durationMinutes: number } | null> {
   if (input.serviceId) {
-    const service = await getActiveService(ptId, input.serviceId);
+    const service = await getActiveService(accountId, input.serviceId);
     return service
       ? { name: service.name, durationMinutes: service.durationMinutes }
       : null;
@@ -84,7 +84,7 @@ export async function resolveBookingService(
     .from(services)
     .where(
       and(
-        eq(services.ptId, ptId),
+        eq(services.accountId, accountId),
         eq(services.active, true),
         sql`lower(btrim(${services.name})) = lower(btrim(${legacyName}))`,
       ),
@@ -97,7 +97,7 @@ export async function resolveBookingService(
 }
 
 export async function getActiveServiceByName(
-  ptId: string,
+  accountId: string,
   name: string,
 ): Promise<{ name: string; durationMinutes: number } | null> {
   const normalized = name.trim();
@@ -107,7 +107,7 @@ export async function getActiveServiceByName(
     .from(services)
     .where(
       and(
-        eq(services.ptId, ptId),
+        eq(services.accountId, accountId),
         eq(services.active, true),
         sql`lower(btrim(${services.name})) = lower(btrim(${normalized}))`,
       ),

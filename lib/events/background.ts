@@ -13,9 +13,9 @@ const traceId = z.uuid().optional();
 export const backgroundEventSchemas = {
   'message.received': z.object({
     messageId: z.uuid(),
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     conversationId: z.uuid(),
-    // The patient sent a body the assistant cannot read (voice note, photo, …)
+    // The customer sent a body the assistant cannot read (voice note, photo, …)
     // and the persisted content is OUR placeholder, not their words. The job
     // answers with a fixed notice and never hands it to the model, which would
     // otherwise invent what the voice note said. Optional: absent means text,
@@ -24,7 +24,7 @@ export const backgroundEventSchemas = {
     traceId,
   }),
   'wa.connection.created': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     connectionId: z.uuid(),
     phoneNumberId: z.string().min(1),
     wabaId: z.string().min(1),
@@ -32,7 +32,7 @@ export const backgroundEventSchemas = {
     traceId,
   }),
   'wa.connection.revoked': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     connectionId: z.uuid(),
     reason: z.enum([
       'unauthorized',
@@ -49,110 +49,110 @@ export const backgroundEventSchemas = {
     traceId,
   }),
   'wa.connection.expiring': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     connectionId: z.uuid(),
     expiresAt: isoDateTime,
     daysRemaining: z.number().int().nonnegative(),
     traceId,
   }),
   'wa.template.approved': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     templateId: z.uuid(),
     metaId: z.string().min(1),
     traceId,
   }),
   'wa.template.rejected': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     templateId: z.uuid(),
     metaId: z.string().min(1),
     traceId,
   }),
   'wa.template.timed_out': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     templateId: z.uuid(),
     metaId: z.string().min(1),
     traceId,
   }),
   'wa.quality_warning': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     connectionId: z.uuid(),
     qualityRating: z.string().min(1),
     tier: z.string().nullable(),
     traceId,
   }),
   'conversation.failed': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     conversationId: z.uuid(),
     messageId: z.uuid(),
     traceId,
   }),
   'conversation.taken_over': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     conversationId: z.uuid(),
-    patientId: z.uuid(),
+    customerId: z.uuid(),
     takenOverAt: isoDateTime,
     traceId,
   }),
   'conversation.resume_offered': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     conversationId: z.uuid(),
-    patientId: z.uuid(),
+    customerId: z.uuid(),
     traceId,
   }),
   'conversation.ai_paused': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     conversationId: z.uuid(),
-    patientId: z.uuid(),
+    customerId: z.uuid(),
     pausedUntil: isoDateTime,
     reason: z.literal('whatsapp_business_app_echo'),
     traceId,
   }),
   'conversation.escalated': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     conversationId: z.uuid(),
-    patientId: z.uuid(),
+    customerId: z.uuid(),
     traceId,
   }),
-  // A patient wrote to a conversation the assistant is NOT handling (PT takeover
+  // A customer wrote to a conversation the assistant is NOT handling (PT takeover
   // or an open escalation), so the message needs a manual reply. Push-only: it
   // never lands in the `events` bell feed (it's emitted by the inbound handler,
   // not via appendBackgroundEvent) — only the manual-reply push is produced.
   'conversation.needs_reply': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     conversationId: z.uuid(),
-    patientId: z.uuid(),
+    customerId: z.uuid(),
     traceId,
   }),
   'notification.requested': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     kind: z.enum([
       'appointment.booked',
       'appointment.cancelled',
       'appointment.rescheduled',
     ]),
     appointmentId: z.uuid(),
-    patientId: z.uuid(),
+    customerId: z.uuid(),
     startsAt: isoDateTime,
     previousStartsAt: isoDateTime.nullable(),
     traceId,
   }),
   'reminder.failed': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     appointmentId: z.uuid(),
     reason: z.string().min(1),
     traceId,
   }),
   'reminder.skipped': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     appointmentId: z.uuid(),
     reason: z.string().min(1),
     traceId,
   }),
-  // Phase 16 billing usage warnings/stops. One row per (pt, type, kind, month)
+  // Phase 16 billing usage warnings/stops. One row per (account, type, kind, month)
   // — the emitter dedupes on an events-exists check. `kind` covers C3's reminder
   // events too so that chunk doesn't have to re-touch this shared schema.
   'billing.limit_warning': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     kind: z.enum(['conversations', 'reminders', 'reminders_predictive']),
     used: z.number().int().nonnegative(),
     limit: z.number().int().nonnegative(),
@@ -162,7 +162,7 @@ export const backgroundEventSchemas = {
     traceId,
   }),
   'billing.limit_reached': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     kind: z.enum(['conversations', 'reminders']),
     used: z.number().int().nonnegative(),
     limit: z.number().int().nonnegative(),
@@ -174,7 +174,7 @@ export const backgroundEventSchemas = {
   // subscribes (push=no per architecture); the notification bell reads it from
   // the events table. The push/bell formatter wiring is C6.
   'billing.payment_received': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     orderId: z.uuid(),
     period: z.enum(['monthly', 'yearly']),
     newExpiresAt: isoDateTime,
@@ -182,22 +182,22 @@ export const backgroundEventSchemas = {
   }),
   // Phase 16 C6 lifecycle events, emitted by the billing-renewal-monitor cron.
   // All three deep-link to /settings/billing and fan out to push + bell. The
-  // renewal reminder fires once per (pt, expiresAt, offset) so BOTH the 5-day
-  // and day-0 reminders send; grace/downgrade dedupe on (pt, expiresAt).
+  // renewal reminder fires once per (account, expiresAt, offset) so BOTH the 5-day
+  // and day-0 reminders send; grace/downgrade dedupe on (account, expiresAt).
   'billing.renewal_due': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     expiresAt: isoDateTime,
     daysLeft: z.number().int(),
     offset: z.number().int().nonnegative(),
     traceId,
   }),
   'billing.grace_started': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     expiresAt: isoDateTime,
     traceId,
   }),
   'billing.downgraded': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     from: z.enum(['free', 'solo']),
     to: z.enum(['free', 'solo']),
     traceId,
@@ -206,15 +206,15 @@ export const backgroundEventSchemas = {
   // consumer (no registered trigger), so their outbox rows simply drain and
   // no-op — only the `events` row is used, for funnel/delivery metrics.
   'pwa.installed': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     traceId,
   }),
   'push.subscribed': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     traceId,
   }),
   'push.dispatched': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     sourceEvent: z.string().min(1),
     sent: z.number().int().nonnegative(),
     removed: z.number().int().nonnegative(),
@@ -242,7 +242,7 @@ export async function appendBackgroundEvent(
   >;
   const payload = schema.parse(event.data);
   return appendStoredEvent(tx, {
-    ptId: payload.ptId,
+    accountId: payload.accountId,
     type: event.type,
     payload,
   });

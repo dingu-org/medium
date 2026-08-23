@@ -12,7 +12,7 @@ import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { WebVitalsReporter } from '@/components/web-vitals-reporter';
 import { Toaster } from '@/components/ui/sonner';
 import { db } from '@/lib/db';
-import { pts } from '@/lib/db/schema';
+import { accounts } from '@/lib/db/schema';
 import { getNotificationData } from '@/lib/notifications/query';
 import { getOnboardingState } from '@/lib/onboarding/state';
 import { createServerClient } from '@/lib/supabase/server';
@@ -41,20 +41,20 @@ export default async function DashboardLayout({
     if (!onboarding.complete) redirect('/onboarding');
   }
 
-  const [[pt], notifications, unreadChats] = await Promise.all([
+  const [[account], notifications, unreadChats] = await Promise.all([
     db
-      .select({ practiceName: pts.practiceName, email: pts.email })
-      .from(pts)
-      .where(eq(pts.id, user.id)),
+      .select({ name: accounts.name, email: accounts.email })
+      .from(accounts)
+      .where(eq(accounts.id, user.id)),
     getNotificationData(user.id),
     getUnreadChatCount(user.id),
   ]);
 
   return (
     <DashboardChrome
-      ptId={user.id}
-      practiceName={pt?.practiceName ?? null}
-      email={pt?.email ?? user.email ?? ''}
+      accountId={user.id}
+      name={account?.name ?? null}
+      email={account?.email ?? user.email ?? ''}
       notificationCount={notifications.unreadCount}
       notifications={notifications.items}
       unreadChats={unreadChats}
@@ -62,10 +62,10 @@ export default async function DashboardLayout({
       <PwaProvider />
       {/* App-wide: keeps the bottom-nav unread chat badge fresh on screens
           without their own conversations subscription (calendar, settings).
-          Every inbound patient message bumps conversations.last_inbound_at. */}
+          Every inbound customer message bumps conversations.last_inbound_at. */}
       <RealtimeRefresher
         table="conversations"
-        filter={`pt_id=eq.${user.id}`}
+        filter={`account_id=eq.${user.id}`}
       />
       <WebVitalsReporter />
       {children}

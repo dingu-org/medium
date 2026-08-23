@@ -29,7 +29,7 @@ describe('isHandoffAcceptance', () => {
     expect(isHandoffAcceptance(content)).toBe(true);
   });
 
-  // 'po' is Albanian for "yes" and the single most common thing a patient
+  // 'po' is Albanian for "yes" and the single most common thing a customer
   // types, including to take a proposed time slot, so the parse still refuses
   // anything that is not essentially the bare answer — a contained 'po' would
   // switch the assistant off mid-booking. What bounds the rest is the caller:
@@ -52,7 +52,7 @@ describe('isHandoffAcceptance', () => {
    * most-recent-question-wins rule in `resolveInboundClaim` never sees the
    * messages that fall between two definitions — which is exactly how
    * "po faleminderit" confirmed an appointment nobody had asked about while the
-   * patient's real question was dropped.
+   * customer's real question was dropped.
    */
   it.each([
     'po',
@@ -73,7 +73,7 @@ describe('isHandoffAcceptance', () => {
 });
 
 describe('handoff offer copy', () => {
-  it('names the business and the word the patient has to send back', () => {
+  it('names the business and the word the customer has to send back', () => {
     expect(handoffOfferMessage('Studio Elira')).toBe(
       "Mund të ndihmoj vetëm me takimet. Nëse dëshironi t'ia kaloj këtë pyetje Studio Elira, përgjigjuni me PO.",
     );

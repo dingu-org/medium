@@ -53,15 +53,15 @@ export function formatTime(iso: string | undefined, timezone: string): string {
 }
 
 /**
- * Build a human-readable notification line from an event row. `patientName` is
- * resolved by the caller (a join on the payload's patientId); falls back to a
+ * Build a human-readable notification line from an event row. `customerName` is
+ * resolved by the caller (a join on the payload's customerId); falls back to a
  * neutral label when absent.
  */
 export function formatNotification(
   event: { id: string; type: string; payload: Payload; occurredAt: string },
-  opts: { timezone: string; patientName?: string },
+  opts: { timezone: string; customerName?: string },
 ): NotificationView {
-  const who = opts.patientName ?? 'Një klient';
+  const who = opts.customerName ?? 'Një klient';
   const when = formatTime(str(event.payload, 'startsAt'), opts.timezone);
   const base = { id: event.id, type: event.type, occurredAt: event.occurredAt };
 
@@ -81,10 +81,10 @@ export function formatNotification(
         href: '/calendar',
       };
     case 'appointment.cancelled': {
-      const byPatient = str(event.payload, 'cancelledBy') === 'patient';
+      const byCustomer = str(event.payload, 'cancelledBy') === 'customer';
       return {
         ...base,
-        title: byPatient
+        title: byCustomer
           ? `${who} anuloi një takim${when}`
           : `Një takim u anulua${when}`,
         icon: 'x',

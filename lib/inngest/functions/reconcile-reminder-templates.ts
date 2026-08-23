@@ -42,7 +42,7 @@ export function repairedBody(body: string): string {
  * rejecting is edited at most once per body version.
  */
 async function repairRejectedTemplate(args: {
-  ptId: string;
+  accountId: string;
   connectionId: string;
   template: ReminderTemplateDefinition;
   templateId: string;
@@ -58,33 +58,33 @@ async function repairRejectedTemplate(args: {
     args.template.body,
     args.template.exampleValues,
   );
-  await getServiceClient(args.ptId)
+  await getServiceClient(args.accountId)
     .db.update(messageTemplates)
     .set({ status: 'pending', body: target, lastStatusAt: sql`now()` })
     .where(
       and(
         eq(messageTemplates.id, args.templateId),
-        eq(messageTemplates.ptId, args.ptId),
+        eq(messageTemplates.accountId, args.accountId),
       ),
     );
   return true;
 }
 
 async function reconcileDefinition(args: {
-  ptId: string;
+  accountId: string;
   connectionId: string;
   template: ReminderTemplateDefinition;
 }): Promise<ReconciliationResult> {
   const record = await bootstrapWaConnectionCore(args);
 
   if (record.status === 'rejected' && record.metaId) {
-    const [row] = await getServiceClient(args.ptId)
+    const [row] = await getServiceClient(args.accountId)
       .db.select({ body: messageTemplates.body })
       .from(messageTemplates)
       .where(
         and(
           eq(messageTemplates.id, record.templateId),
-          eq(messageTemplates.ptId, args.ptId),
+          eq(messageTemplates.accountId, args.accountId),
         ),
       )
       .limit(1);
@@ -92,7 +92,7 @@ async function reconcileDefinition(args: {
     if (
       row &&
       (await repairRejectedTemplate({
-        ptId: args.ptId,
+        accountId: args.accountId,
         connectionId: args.connectionId,
         template: args.template,
         templateId: record.templateId,
@@ -111,7 +111,7 @@ async function reconcileDefinition(args: {
 
   const remote = await getTemplateStatus(args.connectionId, record.metaId);
   const status = await applyTemplateStatus({
-    ptId: args.ptId,
+    accountId: args.accountId,
     templateId: record.templateId,
     status: remote.status,
   });
@@ -119,7 +119,7 @@ async function reconcileDefinition(args: {
 }
 
 export async function reconcileAlbanianReminderTemplatesCore(args: {
-  ptId: string;
+  accountId: string;
   connectionId: string;
 }): Promise<ReconciliationResult> {
   const primary = await reconcileDefinition({
@@ -146,7 +146,7 @@ export const reconcileAlbanianReminderTemplates = inngest.createFunction(
       db
         .select({
           id: whatsappConnections.id,
-          ptId: whatsappConnections.ptId,
+          accountId: whatsappConnections.accountId,
         })
         .from(whatsappConnections)
         .where(eq(whatsappConnections.status, 'active')),
@@ -157,7 +157,7 @@ export const reconcileAlbanianReminderTemplates = inngest.createFunction(
       results.push(
         await step.run(`reconcile-template-${connection.id}`, () =>
           reconcileAlbanianReminderTemplatesCore({
-            ptId: connection.ptId,
+            accountId: connection.accountId,
             connectionId: connection.id,
           }),
         ),

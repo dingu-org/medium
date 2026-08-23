@@ -12,7 +12,7 @@ import {
   conversations,
   costDaily,
   messages,
-  patients,
+  customers,
   waMessageStatuses,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -44,8 +44,8 @@ const inDay = (hms: string) => {
   return new Date(DAY_START.getTime() + h * HOUR + m * MINUTE + s * SECOND);
 };
 
-let ptA = '';
-let ptB = '';
+let accountA = '';
+let accountB = '';
 
 async function makeUser(tag: string): Promise<string> {
   const { data, error } = await createServiceClient().auth.admin.createUser({
@@ -57,35 +57,35 @@ async function makeUser(tag: string): Promise<string> {
   return data.user.id;
 }
 
-// One whatsapp conversation is allowed per patient (unique on patient+channel),
-// so each distinct conversation needs its own patient.
-async function newConversation(ptId: string): Promise<string> {
+// One whatsapp conversation is allowed per customer (unique on customer+channel),
+// so each distinct conversation needs its own customer.
+async function newConversation(accountId: string): Promise<string> {
   const [pat] = await db
-    .insert(patients)
+    .insert(customers)
     .values({
-      ptId,
+      accountId,
       name: 'seed',
       phone: `+49${Date.now()}${Math.floor(Math.random() * 1e6)}`,
     })
-    .returning({ id: patients.id });
+    .returning({ id: customers.id });
   const [conv] = await db
     .insert(conversations)
-    .values({ ptId, patientId: pat.id, channel: 'whatsapp' })
+    .values({ accountId, customerId: pat.id, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   return conv.id;
 }
 
 async function seedMessage(args: {
-  ptId: string;
+  accountId: string;
   conversationId: string;
-  role: 'ai' | 'patient';
+  role: 'ai' | 'customer';
   createdAt: Date;
   model?: string;
   aiCostMicrousd?: number;
   cachedTokens?: number;
 }): Promise<void> {
   await db.insert(messages).values({
-    ptId: args.ptId,
+    accountId: args.accountId,
     conversationId: args.conversationId,
     role: args.role,
     channel: 'whatsapp',
@@ -98,20 +98,20 @@ async function seedMessage(args: {
 }
 
 beforeAll(async () => {
-  ptA = await makeUser('a');
-  ptB = await makeUser('b');
+  accountA = await makeUser('a');
+  accountB = await makeUser('b');
 });
 
 beforeEach(async () => {
-  await db.delete(costDaily).where(inArray(costDaily.ptId, [ptA, ptB]));
-  await db.delete(patients).where(inArray(patients.ptId, [ptA, ptB]));
+  await db.delete(costDaily).where(inArray(costDaily.accountId, [accountA, accountB]));
+  await db.delete(customers).where(inArray(customers.accountId, [accountA, accountB]));
 
-  // --- PT A: 2 AI turns + patient messages across 2 conversations on DAY ---
-  const a1 = await newConversation(ptA);
-  const a2 = await newConversation(ptA);
+  // --- PT A: 2 AI turns + customer messages across 2 conversations on DAY ---
+  const a1 = await newConversation(accountA);
+  const a2 = await newConversation(accountA);
 
   await seedMessage({
-    ptId: ptA,
+    accountId: accountA,
     conversationId: a1,
     role: 'ai',
     createdAt: inDay('10:00'),
@@ -120,7 +120,7 @@ beforeEach(async () => {
     cachedTokens: 10,
   });
   await seedMessage({
-    ptId: ptA,
+    accountId: accountA,
     conversationId: a1,
     role: 'ai',
     createdAt: inDay('11:00'),
@@ -130,26 +130,26 @@ beforeEach(async () => {
   });
   // Two distinct inbound conversations (a1, a2) + a duplicate inbound in a1.
   await seedMessage({
-    ptId: ptA,
+    accountId: accountA,
     conversationId: a1,
-    role: 'patient',
+    role: 'customer',
     createdAt: inDay('09:59'),
   });
   await seedMessage({
-    ptId: ptA,
+    accountId: accountA,
     conversationId: a1,
-    role: 'patient',
+    role: 'customer',
     createdAt: inDay('10:30'),
   });
   await seedMessage({
-    ptId: ptA,
+    accountId: accountA,
     conversationId: a2,
-    role: 'patient',
+    role: 'customer',
     createdAt: inDay('12:00'),
   });
   // Out-of-window: a costly AI turn the NEXT day and an inbound the PREV day.
   await seedMessage({
-    ptId: ptA,
+    accountId: accountA,
     conversationId: a1,
     role: 'ai',
     createdAt: NEXT_DAY,
@@ -157,18 +157,18 @@ beforeEach(async () => {
     aiCostMicrousd: 9_999,
     cachedTokens: 999,
   });
-  const a3 = await newConversation(ptA);
+  const a3 = await newConversation(accountA);
   await seedMessage({
-    ptId: ptA,
+    accountId: accountA,
     conversationId: a3,
-    role: 'patient',
+    role: 'customer',
     createdAt: PREV_DAY,
   });
 
   // --- PT B: 1 AI turn + 1 inbound conversation on DAY ---
-  const b1 = await newConversation(ptB);
+  const b1 = await newConversation(accountB);
   await seedMessage({
-    ptId: ptB,
+    accountId: accountB,
     conversationId: b1,
     role: 'ai',
     createdAt: inDay('14:00'),
@@ -177,25 +177,25 @@ beforeEach(async () => {
     cachedTokens: 20,
   });
   await seedMessage({
-    ptId: ptB,
+    accountId: accountB,
     conversationId: b1,
-    role: 'patient',
+    role: 'customer',
     createdAt: inDay('13:59'),
   });
 });
 
 afterAll(async () => {
-  await db.delete(costDaily).where(inArray(costDaily.ptId, [ptA, ptB]));
+  await db.delete(costDaily).where(inArray(costDaily.accountId, [accountA, accountB]));
   const sb = createServiceClient();
-  if (ptA) await sb.auth.admin.deleteUser(ptA);
-  if (ptB) await sb.auth.admin.deleteUser(ptB);
+  if (accountA) await sb.auth.admin.deleteUser(accountA);
+  if (accountB) await sb.auth.admin.deleteUser(accountB);
 });
 
-async function rowFor(ptId: string) {
+async function rowFor(accountId: string) {
   const [row] = await db
     .select()
     .from(costDaily)
-    .where(and(eq(costDaily.ptId, ptId), eq(costDaily.day, DAY_KEY)));
+    .where(and(eq(costDaily.accountId, accountId), eq(costDaily.day, DAY_KEY)));
   return row;
 }
 
@@ -203,41 +203,41 @@ describe('aggregateCostDailyCore', () => {
   it('sums AI cost/cached and counts distinct inbound conversations per PT', async () => {
     const rows = await aggregateCostDailyCore(DAY);
 
-    const byPt = new Map(rows.map((r) => [r.ptId, r]));
-    expect(byPt.get(ptA)).toMatchObject({
+    const byAccount = new Map(rows.map((r) => [r.accountId, r]));
+    expect(byAccount.get(accountA)).toMatchObject({
       aiCostMicrousd: 150,
       aiCachedTokens: 15,
       metaConversations: 2,
       metaCostMicroEur: 120_000,
     });
-    expect(byPt.get(ptB)).toMatchObject({
+    expect(byAccount.get(accountB)).toMatchObject({
       aiCostMicrousd: 200,
       aiCachedTokens: 20,
       metaConversations: 1,
       metaCostMicroEur: 60_000,
     });
 
-    const persistedA = await rowFor(ptA);
+    const persistedA = await rowFor(accountA);
     expect(persistedA).toMatchObject({
       aiCostMicrousd: 150,
       aiCachedTokens: 15,
       metaConversations: 2,
       metaCostMicroEur: 120_000,
     });
-    const persistedB = await rowFor(ptB);
+    const persistedB = await rowFor(accountB);
     expect(persistedB.metaCostMicroEur).toBe(60_000);
   });
 
   it('is idempotent: re-running upserts in place and advances computed_at', async () => {
     await aggregateCostDailyCore(DAY);
-    const first = await rowFor(ptA);
+    const first = await rowFor(accountA);
     await new Promise((r) => setTimeout(r, 10));
     await aggregateCostDailyCore(DAY);
 
     const rows = await db
       .select()
       .from(costDaily)
-      .where(and(eq(costDaily.ptId, ptA), eq(costDaily.day, DAY_KEY)));
+      .where(and(eq(costDaily.accountId, accountA), eq(costDaily.day, DAY_KEY)));
     expect(rows).toHaveLength(1);
     expect(rows[0].aiCostMicrousd).toBe(150);
     expect(rows[0].computedAt.getTime()).toBeGreaterThanOrEqual(
@@ -245,10 +245,10 @@ describe('aggregateCostDailyCore', () => {
     );
   });
 
-  it('has no status rows in the base fixtures → estimated fallback for ptA/ptB', async () => {
+  it('has no status rows in the base fixtures → estimated fallback for accountA/accountB', async () => {
     await aggregateCostDailyCore(DAY);
-    const a = await rowFor(ptA);
-    const b = await rowFor(ptB);
+    const a = await rowFor(accountA);
+    const b = await rowFor(accountB);
     expect(a.metaCostSource).toBe('estimated');
     expect(a.metaBillableMessages).toBe(0);
     expect(a.metaCostMicroEur).toBe(120_000); // estimate(2 convos)
@@ -260,7 +260,7 @@ describe('aggregateCostDailyCore', () => {
 
 // --- Actual-first Meta costing off wa_message_statuses (Phase 16 C4) ---------
 describe('aggregateCostDailyCore — Meta actual-first cost', () => {
-  let ptC = '';
+  let accountC = '';
   let statusSeq = 0;
 
   async function seedStatus(args: {
@@ -271,7 +271,7 @@ describe('aggregateCostDailyCore — Meta actual-first cost', () => {
     lastStatus?: string;
   }): Promise<void> {
     await db.insert(waMessageStatuses).values({
-      ptId: ptC,
+      accountId: accountC,
       externalId: `wamid.c.${Date.now()}.${statusSeq++}.${Math.floor(
         Math.random() * 1e9,
       )}`,
@@ -287,24 +287,24 @@ describe('aggregateCostDailyCore — Meta actual-first cost', () => {
     const [row] = await db
       .select()
       .from(costDaily)
-      .where(and(eq(costDaily.ptId, ptC), eq(costDaily.day, DAY_KEY)));
+      .where(and(eq(costDaily.accountId, accountC), eq(costDaily.day, DAY_KEY)));
     return row;
   }
 
   beforeAll(async () => {
-    ptC = await makeUser('c');
+    accountC = await makeUser('c');
   });
 
   beforeEach(async () => {
-    await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptC));
-    await db.delete(costDaily).where(eq(costDaily.ptId, ptC));
-    await db.delete(patients).where(eq(patients.ptId, ptC));
+    await db.delete(waMessageStatuses).where(eq(waMessageStatuses.accountId, accountC));
+    await db.delete(costDaily).where(eq(costDaily.accountId, accountC));
+    await db.delete(customers).where(eq(customers.accountId, accountC));
   });
 
   afterAll(async () => {
-    await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptC));
-    await db.delete(costDaily).where(eq(costDaily.ptId, ptC));
-    await createServiceClient().auth.admin.deleteUser(ptC);
+    await db.delete(waMessageStatuses).where(eq(waMessageStatuses.accountId, accountC));
+    await db.delete(costDaily).where(eq(costDaily.accountId, accountC));
+    await createServiceClient().auth.admin.deleteUser(accountC);
   });
 
   it('prices mixed billable categories from the rate card and marks source=actual', async () => {
@@ -395,12 +395,12 @@ describe('aggregateCostDailyCore — Meta actual-first cost', () => {
   });
 
   it('flips a day from estimated to actual when a status row lands on re-run (backfill window)', async () => {
-    // Day starts with only a patient message → estimated fallback.
-    const conv = await newConversation(ptC);
+    // Day starts with only a customer message → estimated fallback.
+    const conv = await newConversation(accountC);
     await seedMessage({
-      ptId: ptC,
+      accountId: accountC,
       conversationId: conv,
-      role: 'patient',
+      role: 'customer',
       createdAt: inDay('09:00'),
     });
 
@@ -421,7 +421,7 @@ describe('aggregateCostDailyCore — Meta actual-first cost', () => {
     const after = await db
       .select()
       .from(costDaily)
-      .where(and(eq(costDaily.ptId, ptC), eq(costDaily.day, DAY_KEY)));
+      .where(and(eq(costDaily.accountId, accountC), eq(costDaily.day, DAY_KEY)));
     expect(after).toHaveLength(1); // idempotent upsert, not a duplicate
     expect(after[0].metaCostSource).toBe('actual');
     expect(after[0].metaBillableMessages).toBe(1);

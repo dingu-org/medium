@@ -21,8 +21,8 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 
-let ptId = '';
-let otherPtId = '';
+let accountId = '';
+let otherAccountId = '';
 
 beforeAll(async () => {
   const supabase = createServiceClient();
@@ -32,8 +32,8 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
-  authState.userId = ptId;
+  accountId = data.user.id;
+  authState.userId = accountId;
 
   const other = await supabase.auth.admin.createUser({
     email: `push-actions-other-${Date.now()}@example.com`,
@@ -41,21 +41,21 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (other.error || !other.data.user) throw new Error(other.error?.message);
-  otherPtId = other.data.user.id;
+  otherAccountId = other.data.user.id;
 });
 
 beforeEach(async () => {
-  authState.userId = ptId;
+  authState.userId = accountId;
   await db
     .delete(pushSubscriptions)
-    .where(inArray(pushSubscriptions.ptId, [ptId, otherPtId]));
-  await db.delete(events).where(inArray(events.ptId, [ptId, otherPtId]));
+    .where(inArray(pushSubscriptions.accountId, [accountId, otherAccountId]));
+  await db.delete(events).where(inArray(events.accountId, [accountId, otherAccountId]));
 });
 
 afterAll(async () => {
   const supabase = createServiceClient();
-  if (ptId) await supabase.auth.admin.deleteUser(ptId);
-  if (otherPtId) await supabase.auth.admin.deleteUser(otherPtId);
+  if (accountId) await supabase.auth.admin.deleteUser(accountId);
+  if (otherAccountId) await supabase.auth.admin.deleteUser(otherAccountId);
 });
 
 describe('savePushSubscription', () => {
@@ -69,14 +69,14 @@ describe('savePushSubscription', () => {
     const [row] = await db
       .select({ endpoint: pushSubscriptions.endpoint })
       .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.ptId, ptId));
+      .where(eq(pushSubscriptions.accountId, accountId));
     expect(row?.endpoint).toBe('https://push.example.com/abc123');
 
     const [event] = await db
       .select({ payload: events.payload })
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'push.subscribed')));
-    expect(event?.payload).toMatchObject({ ptId });
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'push.subscribed')));
+    expect(event?.payload).toMatchObject({ accountId });
   });
 });
 
@@ -96,15 +96,15 @@ describe('isEndpointOwned', () => {
     ).resolves.toBe(false);
   });
 
-  it('is false for an endpoint stored against another pt', async () => {
+  it('is false for an endpoint stored against another account', async () => {
     await db.insert(pushSubscriptions).values({
-      ptId: otherPtId,
-      endpoint: 'https://push.example.com/other-pt',
+      accountId: otherAccountId,
+      endpoint: 'https://push.example.com/other-account',
       keys: { p256dh: 'p256dh-value', auth: 'auth-value' },
     });
 
     await expect(
-      isEndpointOwned('https://push.example.com/other-pt'),
+      isEndpointOwned('https://push.example.com/other-account'),
     ).resolves.toBe(false);
   });
 });
@@ -116,7 +116,7 @@ describe('removePushSubscription', () => {
       keys: { p256dh: 'p256dh-value', auth: 'auth-value' },
     });
     await db.insert(pushSubscriptions).values({
-      ptId: otherPtId,
+      accountId: otherAccountId,
       endpoint: 'https://push.example.com/theirs',
       keys: { p256dh: 'p256dh-value', auth: 'auth-value' },
     });
@@ -126,13 +126,13 @@ describe('removePushSubscription', () => {
     const mine = await db
       .select({ id: pushSubscriptions.id })
       .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.ptId, ptId));
+      .where(eq(pushSubscriptions.accountId, accountId));
     expect(mine).toHaveLength(0);
 
     const theirs = await db
       .select({ id: pushSubscriptions.id })
       .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.ptId, otherPtId));
+      .where(eq(pushSubscriptions.accountId, otherAccountId));
     expect(theirs).toHaveLength(1);
   });
 });
@@ -144,7 +144,7 @@ describe('recordPwaInstalled', () => {
     const [event] = await db
       .select({ payload: events.payload })
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'pwa.installed')));
-    expect(event?.payload).toMatchObject({ ptId });
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'pwa.installed')));
+    expect(event?.payload).toMatchObject({ accountId });
   });
 });

@@ -2,22 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { conversations, messages, patients } from '@/lib/db/schema';
+import { conversations, messages, customers } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { checkResumeOffer } from '../offer-resume';
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let sequence = 0;
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
 
-async function insertPtMessage(createdAt: Date) {
+async function insertAccountMessage(createdAt: Date) {
   await db.insert(messages).values({
-    ptId,
+    accountId,
     conversationId,
-    role: 'pt',
+    role: 'account',
     channel: 'whatsapp',
     content: 'Po e shikoj vetë.',
     createdAt,
@@ -31,56 +31,56 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(patients).where(eq(patients.ptId, ptId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
 
-  const [patient] = await db
-    .insert(patients)
+  const [customer] = await db
+    .insert(customers)
     .values({
-      ptId,
+      accountId,
       name: 'Pat',
       phone: `44770092${++sequence}`,
       waId: `44770092${sequence}`,
     })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+    .returning({ id: customers.id });
+  customerId = customer.id;
 
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId, channel: 'whatsapp', aiActive: false })
+    .values({ accountId, customerId, channel: 'whatsapp', aiActive: false })
     .returning({ id: conversations.id });
   conversationId = conversation.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('checkResumeOffer', () => {
   it('offers to resume when the PT has been silent for over an hour', async () => {
-    await insertPtMessage(minutesAgo(90));
+    await insertAccountMessage(minutesAgo(90));
 
     await expect(
-      checkResumeOffer({ ptId, conversationId, patientId }),
+      checkResumeOffer({ accountId, conversationId, customerId }),
     ).resolves.toEqual({ offer: true });
   });
 
   it('re-arms from the last PT message instead of declining for good', async () => {
     const lastMessageAt = minutesAgo(5);
-    await insertPtMessage(lastMessageAt);
+    await insertAccountMessage(lastMessageAt);
 
     const decision = await checkResumeOffer({
-      ptId,
+      accountId,
       conversationId,
-      patientId,
+      customerId,
     });
 
     expect(decision).toMatchObject({
       offer: false,
-      reason: 'recent_pt_activity',
+      reason: 'recent_account_activity',
     });
     // The retry lands one idle hour after that message, i.e. still in the future.
     const retryAt = new Date(
@@ -97,13 +97,13 @@ describe('checkResumeOffer', () => {
       .where(eq(conversations.id, conversationId));
 
     await expect(
-      checkResumeOffer({ ptId, conversationId, patientId }),
+      checkResumeOffer({ accountId, conversationId, customerId }),
     ).resolves.toEqual({ offer: false, reason: 'ai_active' });
   });
 
   it('declines when the conversation no longer exists', async () => {
     await expect(
-      checkResumeOffer({ ptId, conversationId: randomUUID(), patientId }),
+      checkResumeOffer({ accountId, conversationId: randomUUID(), customerId }),
     ).resolves.toEqual({ offer: false, reason: 'not_found' });
   });
 });

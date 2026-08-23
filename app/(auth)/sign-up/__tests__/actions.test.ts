@@ -16,7 +16,7 @@ vi.mock('next/navigation', () => ({
 
 const initial = { error: null, fieldErrors: null };
 
-function credentials(email = 'pt@biznesi.al', password = 'fjalekalim1') {
+function credentials(email = 'account@biznesi.al', password = 'fjalekalim1') {
   const data = new FormData();
   data.set('email', email);
   data.set('password', password);
@@ -30,7 +30,7 @@ beforeEach(() => {
 describe('signUp', () => {
   it('goes straight to onboarding when confirmations are off and a session came back', async () => {
     signUpMock.mockResolvedValue({
-      data: { user: { id: 'pt-a' }, session: { access_token: 'jwt' } },
+      data: { user: { id: 'account-a' }, session: { access_token: 'jwt' } },
       error: null,
     });
     await expect(signUp(initial, credentials())).rejects.toThrow(
@@ -40,7 +40,7 @@ describe('signUp', () => {
 
   it('asks the PT to confirm their email when no session came back', async () => {
     signUpMock.mockResolvedValue({
-      data: { user: { id: 'pt-a' }, session: null },
+      data: { user: { id: 'account-a' }, session: null },
       error: null,
     });
     await expect(signUp(initial, credentials())).rejects.toThrow(
@@ -62,7 +62,7 @@ describe('signUp', () => {
   it('points the confirmation mail at the token-hash route', async () => {
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.com');
     signUpMock.mockResolvedValue({
-      data: { user: { id: 'pt-a' }, session: null },
+      data: { user: { id: 'account-a' }, session: null },
       error: null,
     });
 
@@ -79,7 +79,7 @@ describe('signUp', () => {
   });
 
   it('rejects a short password without calling Supabase', async () => {
-    const state = await signUp(initial, credentials('pt@biznesi.al', 'short'));
+    const state = await signUp(initial, credentials('account@biznesi.al', 'short'));
     expect(state.fieldErrors?.password?.[0]).toBe(t.auth.errors.passwordMin);
     expect(signUpMock).not.toHaveBeenCalled();
   });

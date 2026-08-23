@@ -11,7 +11,7 @@ import {
   vi,
 } from 'vitest';
 import { db } from '@/lib/db';
-import { pts } from '@/lib/db/schema';
+import { accounts } from '@/lib/db/schema';
 import { t } from '@/lib/i18n';
 import { updateAssistantIdentity } from '../actions';
 
@@ -48,16 +48,16 @@ const form = (entries: Record<string, string>) => {
   return fd;
 };
 
-let ptId = '';
+let accountId = '';
 
 async function identity() {
   const [row] = await db
     .select({
-      aiName: pts.aiName,
-      aiGreeting: pts.aiGreeting,
+      aiName: accounts.aiName,
+      aiGreeting: accounts.aiGreeting,
     })
-    .from(pts)
-    .where(eq(pts.id, ptId));
+    .from(accounts)
+    .where(eq(accounts.id, accountId));
   return row;
 }
 
@@ -68,24 +68,24 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await realService.auth.admin.deleteUser(ptId);
+  if (accountId) await realService.auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
-  getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
   await db
-    .update(pts)
+    .update(accounts)
     .set({
       plan: 'free',
       planLifetime: false,
       aiName: null,
       aiGreeting: null,
     })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -111,9 +111,9 @@ describe('updateAssistantIdentity plan gate', () => {
 
   it('allows a custom name on an effective Solo plan', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planLifetime: true })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
     const result = await updateAssistantIdentity(INITIAL, form({ aiName: 'Ana' }));
     expect(result).toMatchObject({ success: true });
     expect((await identity()).aiName).toBe('Ana');

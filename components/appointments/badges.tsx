@@ -40,7 +40,7 @@ export function reminderBadge(
       if (r.responseType === 'confirm')
         return { label: t.reminder.confirmed, tone: 'success' };
       if (r.responseType === 'cancel')
-        return { label: t.reminder.cancelledByPatient, tone: 'danger' };
+        return { label: t.reminder.cancelledByCustomer, tone: 'danger' };
       if (r.responseType === 'reschedule_requested')
         return { label: t.reminder.wantsReschedule, tone: 'warning' };
       return { label: t.reminder.sent, tone: 'neutral' };

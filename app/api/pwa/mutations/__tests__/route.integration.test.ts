@@ -22,7 +22,7 @@ import {
   eventOutbox,
   events,
   messages,
-  patients,
+  customers,
   pwaMutations,
   whatsappConnections,
 } from '@/lib/db/schema';
@@ -49,8 +49,8 @@ vi.mock('@/lib/channels/whatsapp/client', () => ({
   sendFreeForm: sendFreeFormMock,
 }));
 
-let ptId = '';
-let otherPtId = '';
+let accountId = '';
+let otherAccountId = '';
 let counter = 0;
 
 const nextId = () => {
@@ -66,29 +66,29 @@ function makePost(path: string, body: object): Request {
   });
 }
 
-async function seedConversation(ownerPtId: string) {
-  const [patient] = await db
-    .insert(patients)
+async function seedConversation(ownerAccountId: string) {
+  const [customer] = await db
+    .insert(customers)
     .values({
-      ptId: ownerPtId,
-      name: `Patient ${++counter}`,
+      accountId: ownerAccountId,
+      name: `Customer ${++counter}`,
       phone: `+1555000${counter}`,
       waId: `1555000${counter}`,
     })
-    .returning({ id: patients.id });
+    .returning({ id: customers.id });
 
   const [conversation] = await db
     .insert(conversations)
     .values({
-      ptId: ownerPtId,
-      patientId: patient.id,
+      accountId: ownerAccountId,
+      customerId: customer.id,
       channel: 'whatsapp',
       lastInboundAt: new Date(),
       aiActive: true,
     })
     .returning({ id: conversations.id });
 
-  return { patientId: patient.id, conversationId: conversation.id };
+  return { customerId: customer.id, conversationId: conversation.id };
 }
 
 // Bookings need real, upcoming days — derived, and spread apart so the two
@@ -100,22 +100,22 @@ const BOOK_TWO = new Date(testNow().getTime() + 5 * DAY);
 const dateKey = (day: Date) =>
   new TZDate(day.getTime(), TEST_TIMEZONE).toISOString().slice(0, 10);
 
-async function seedConnection(ownerPtId: string) {
+async function seedConnection(ownerAccountId: string) {
   await db.insert(whatsappConnections).values({
-    ptId: ownerPtId,
+    accountId: ownerAccountId,
     phoneNumberId: `PNI_${Date.now()}_${++counter}`,
     wabaId: `WABA_${counter}`,
     status: 'active',
   });
 }
 
-async function seedAppointment(ownerPtId: string) {
-  const { patientId } = await seedConversation(ownerPtId);
+async function seedAppointment(ownerAccountId: string) {
+  const { customerId } = await seedConversation(ownerAccountId);
   const [appointment] = await db
     .insert(appointments)
     .values({
-      ptId: ownerPtId,
-      patientId,
+      accountId: ownerAccountId,
+      customerId,
       startsAt: zonedTime(BOOKING_DAY, 11),
       endsAt: zonedTime(BOOKING_DAY, 12),
       status: 'pending',
@@ -134,7 +134,7 @@ beforeAll(async () => {
   if (a.error || !a.data.user) {
     throw new Error(`createUser failed: ${a.error?.message}`);
   }
-  ptId = a.data.user.id;
+  accountId = a.data.user.id;
 
   const b = await supabase.auth.admin.createUser({
     email: `pwa-route-other-${Date.now()}@example.com`,
@@ -144,13 +144,13 @@ beforeAll(async () => {
   if (b.error || !b.data.user) {
     throw new Error(`createUser failed: ${b.error?.message}`);
   }
-  otherPtId = b.data.user.id;
+  otherAccountId = b.data.user.id;
 });
 
 beforeEach(async () => {
   getUserMock.mockReset();
   sendFreeFormMock.mockReset();
-  getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
   sendFreeFormMock.mockResolvedValue({ messageId: 'wamid.pwa-test' });
   // A manual reply takes the conversation over and publishes its outbox row
   // immediately — keep that off the wire.
@@ -158,12 +158,12 @@ beforeEach(async () => {
 
   await db
     .delete(pwaMutations)
-    .where(inArray(pwaMutations.ptId, [ptId, otherPtId]));
+    .where(inArray(pwaMutations.accountId, [accountId, otherAccountId]));
   await db
     .delete(whatsappConnections)
-    .where(inArray(whatsappConnections.ptId, [ptId, otherPtId]));
-  await db.delete(events).where(inArray(events.ptId, [ptId, otherPtId])); // cascades event_outbox
-  await db.delete(patients).where(inArray(patients.ptId, [ptId, otherPtId]));
+    .where(inArray(whatsappConnections.accountId, [accountId, otherAccountId]));
+  await db.delete(events).where(inArray(events.accountId, [accountId, otherAccountId])); // cascades event_outbox
+  await db.delete(customers).where(inArray(customers.accountId, [accountId, otherAccountId]));
 });
 
 afterEach(() => {
@@ -172,8 +172,8 @@ afterEach(() => {
 
 afterAll(async () => {
   const supabase = createServiceClient();
-  if (ptId) await supabase.auth.admin.deleteUser(ptId);
-  if (otherPtId) await supabase.auth.admin.deleteUser(otherPtId);
+  if (accountId) await supabase.auth.admin.deleteUser(accountId);
+  if (otherAccountId) await supabase.auth.admin.deleteUser(otherAccountId);
 });
 
 describe('PWA message mutation API', () => {
@@ -193,8 +193,8 @@ describe('PWA message mutation API', () => {
   });
 
   it('rejects conversations owned by another tenant', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(otherPtId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(otherAccountId);
 
     const res = await postMessage(
       makePost('/api/pwa/mutations/message', {
@@ -209,8 +209,8 @@ describe('PWA message mutation API', () => {
   });
 
   it('does not duplicate sends or local messages for a replayed clientMutationId', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(ptId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     const body = {
       clientMutationId,
@@ -234,7 +234,7 @@ describe('PWA message mutation API', () => {
       .from(messages)
       .where(
         and(
-          eq(messages.ptId, ptId),
+          eq(messages.accountId, accountId),
           eq(messages.sourceEventId, clientMutationId),
         ),
       );
@@ -242,8 +242,8 @@ describe('PWA message mutation API', () => {
   });
 
   it('records WhatsApp send failures instead of leaving mutations processing', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(ptId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     const body = {
       clientMutationId,
@@ -275,7 +275,7 @@ describe('PWA message mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       )
@@ -288,11 +288,11 @@ describe('PWA message mutation API', () => {
   });
 
   it('retries stale processing message mutations', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(ptId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     await db.insert(pwaMutations).values({
-      ptId,
+      accountId,
       clientMutationId,
       type: 'message.send',
       status: 'processing',
@@ -315,7 +315,7 @@ describe('PWA message mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       )
@@ -324,11 +324,11 @@ describe('PWA message mutation API', () => {
   });
 
   it('reclaims a stale processing send once even when two replays overlap', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(ptId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     await db.insert(pwaMutations).values({
-      ptId,
+      accountId,
       clientMutationId,
       type: 'message.send',
       status: 'processing',
@@ -342,7 +342,7 @@ describe('PWA message mutation API', () => {
 
     // Two tabs (or a tab plus the Background Sync relay) replay the same id at
     // once: the reclaim must be a single guarded statement, or both read
-    // reclaims = 0 and the patient gets two copies of the message.
+    // reclaims = 0 and the customer gets two copies of the message.
     const [first, second] = await Promise.all([
       postMessage(makePost('/api/pwa/mutations/message', body)),
       postMessage(makePost('/api/pwa/mutations/message', body)),
@@ -359,8 +359,8 @@ describe('PWA message mutation API', () => {
   });
 
   it('recovers a stamped-but-unpersisted send on the same clientMutationId without re-sending', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(ptId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     const body = {
       clientMutationId,
@@ -390,7 +390,7 @@ describe('PWA message mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       )
@@ -405,7 +405,7 @@ describe('PWA message mutation API', () => {
       .from(messages)
       .where(
         and(
-          eq(messages.ptId, ptId),
+          eq(messages.accountId, accountId),
           eq(messages.sourceEventId, clientMutationId),
         ),
       );
@@ -429,7 +429,7 @@ describe('PWA message mutation API', () => {
       .from(messages)
       .where(
         and(
-          eq(messages.ptId, ptId),
+          eq(messages.accountId, accountId),
           eq(messages.sourceEventId, clientMutationId),
         ),
       );
@@ -441,7 +441,7 @@ describe('PWA message mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       )
@@ -450,11 +450,11 @@ describe('PWA message mutation API', () => {
   });
 
   it('recovers directly from a pre-seeded sent ledger row', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(ptId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     await db.insert(pwaMutations).values({
-      ptId,
+      accountId,
       clientMutationId,
       type: 'message.send',
       status: 'sent',
@@ -477,7 +477,7 @@ describe('PWA message mutation API', () => {
       .from(messages)
       .where(
         and(
-          eq(messages.ptId, ptId),
+          eq(messages.accountId, accountId),
           eq(messages.sourceEventId, clientMutationId),
         ),
       );
@@ -489,7 +489,7 @@ describe('PWA message mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       )
@@ -498,7 +498,7 @@ describe('PWA message mutation API', () => {
   });
 
   it('pre-send refusal discards the ledger so the same id can retry', async () => {
-    const { conversationId } = await seedConversation(ptId);
+    const { conversationId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     const body = {
       clientMutationId,
@@ -522,13 +522,13 @@ describe('PWA message mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       );
     expect(discarded).toHaveLength(0);
 
-    await seedConnection(ptId);
+    await seedConnection(accountId);
     const second = await postMessage(
       makePost('/api/pwa/mutations/message', body),
     );
@@ -541,7 +541,7 @@ describe('PWA message mutation API', () => {
       .from(messages)
       .where(
         and(
-          eq(messages.ptId, ptId),
+          eq(messages.accountId, accountId),
           eq(messages.sourceEventId, clientMutationId),
         ),
       );
@@ -549,8 +549,8 @@ describe('PWA message mutation API', () => {
   });
 
   it('outside-window refusal discards the ledger', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(ptId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     sendFreeFormMock.mockRejectedValueOnce(new OutsideWindowError());
 
@@ -573,7 +573,7 @@ describe('PWA message mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       );
@@ -581,8 +581,8 @@ describe('PWA message mutation API', () => {
   });
 
   it('rate-limited (429) discards the ledger', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(ptId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     sendFreeFormMock.mockRejectedValueOnce(
       new GraphApiError({ status: 429, message: 'rate' }),
@@ -607,7 +607,7 @@ describe('PWA message mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       );
@@ -615,8 +615,8 @@ describe('PWA message mutation API', () => {
   });
 
   it('arms the resume offer once per assistant on -> off transition', async () => {
-    await seedConnection(ptId);
-    const { conversationId } = await seedConversation(ptId);
+    await seedConnection(accountId);
+    const { conversationId } = await seedConversation(accountId);
 
     const first = await postMessage(
       makePost('/api/pwa/mutations/message', {
@@ -634,12 +634,12 @@ describe('PWA message mutation API', () => {
     expect(conversation.aiActive).toBe(false);
 
     // Replying by hand is a takeover, so it must emit the event that schedules
-    // offer-resume — without it the assistant stays off for this patient forever.
+    // offer-resume — without it the assistant stays off for this customer forever.
     const takenOver = await db
       .select({ id: events.id, payload: events.payload })
       .from(events)
       .where(
-        and(eq(events.ptId, ptId), eq(events.type, 'conversation.taken_over')),
+        and(eq(events.accountId, accountId), eq(events.type, 'conversation.taken_over')),
       );
     expect(takenOver).toHaveLength(1);
     expect(takenOver[0].payload).toMatchObject({ conversationId });
@@ -664,7 +664,7 @@ describe('PWA message mutation API', () => {
       .select({ id: events.id })
       .from(events)
       .where(
-        and(eq(events.ptId, ptId), eq(events.type, 'conversation.taken_over')),
+        and(eq(events.accountId, accountId), eq(events.type, 'conversation.taken_over')),
       );
     expect(afterSecond).toHaveLength(1);
   });
@@ -687,7 +687,7 @@ describe('PWA appointment mutation API', () => {
   });
 
   it('rejects appointment mutations owned by another tenant', async () => {
-    const appointmentId = await seedAppointment(otherPtId);
+    const appointmentId = await seedAppointment(otherAccountId);
 
     const res = await postAppointment(
       makePost('/api/pwa/mutations/appointment', {
@@ -706,12 +706,12 @@ describe('PWA appointment mutation API', () => {
   });
 
   it('does not duplicate manual bookings for a replayed clientMutationId', async () => {
-    const { patientId } = await seedConversation(ptId);
+    const { customerId } = await seedConversation(accountId);
     const clientMutationId = nextId();
     const body = {
       clientMutationId,
       action: 'manual_book',
-      patientId,
+      customerId,
       date: dateKey(BOOK_ONE),
       time: '10:30',
       serviceType: 'Offline booking',
@@ -730,7 +730,7 @@ describe('PWA appointment mutation API', () => {
     const storedAppointments = await db
       .select()
       .from(appointments)
-      .where(eq(appointments.ptId, ptId));
+      .where(eq(appointments.accountId, accountId));
     expect(storedAppointments).toHaveLength(1);
 
     const storedMutations = await db
@@ -738,15 +738,15 @@ describe('PWA appointment mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       );
     expect(storedMutations).toEqual([{ status: 'success' }]);
   });
 
-  it('persists treatment notes on the pt own appointment', async () => {
-    const appointmentId = await seedAppointment(ptId);
+  it('persists treatment notes on the account own appointment', async () => {
+    const appointmentId = await seedAppointment(accountId);
 
     const res = await postAppointment(
       makePost('/api/pwa/mutations/appointment', {
@@ -786,7 +786,7 @@ describe('PWA appointment mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       );
@@ -794,7 +794,7 @@ describe('PWA appointment mutation API', () => {
   });
 
   it('does not write notes onto another tenant appointment', async () => {
-    const appointmentId = await seedAppointment(otherPtId);
+    const appointmentId = await seedAppointment(otherAccountId);
     await db
       .update(appointments)
       .set({ notes: 'Shënime të tjetrit' })
@@ -818,10 +818,10 @@ describe('PWA appointment mutation API', () => {
   });
 
   it('reclaims a stale processing mutation once, then refuses to run it again', async () => {
-    const appointmentId = await seedAppointment(ptId);
+    const appointmentId = await seedAppointment(accountId);
     const clientMutationId = nextId();
     await db.insert(pwaMutations).values({
-      ptId,
+      accountId,
       clientMutationId,
       type: 'appointment.notes',
       status: 'processing',
@@ -850,7 +850,7 @@ describe('PWA appointment mutation API', () => {
       })
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       );
@@ -875,7 +875,7 @@ describe('PWA appointment mutation API', () => {
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       );
@@ -885,30 +885,30 @@ describe('PWA appointment mutation API', () => {
     );
   });
 
-  // W3 regression: createManualPatient and bookAppointment are two separate
-  // writes. If a crashed first attempt got as far as creating the patient but
-  // died before booking, a naive retry would call createManualPatient again,
-  // get DUPLICATE_PHONE for the patient it just made, and dead-end forever —
+  // W3 regression: createManualCustomer and bookAppointment are two separate
+  // writes. If a crashed first attempt got as far as creating the customer but
+  // died before booking, a naive retry would call createManualCustomer again,
+  // get DUPLICATE_PHONE for the customer it just made, and dead-end forever —
   // even though the fix is to just finish the booking. Simulate that crashed
-  // state directly: a stale 'processing' row with the created patient's id
+  // state directly: a stale 'processing' row with the created customer's id
   // stashed exactly as recordPwaMutationProgress leaves it.
-  it('reuses the patient a crashed manual_book attempt already created instead of dead-ending on DUPLICATE_PHONE', async () => {
+  it('reuses the customer a crashed manual_book attempt already created instead of dead-ending on DUPLICATE_PHONE', async () => {
     const clientMutationId = nextId();
     const phone = `+15550${(++counter).toString().padStart(6, '0')}`;
-    const [priorPatient] = await db
-      .insert(patients)
-      .values({ ptId, name: 'Agim Prior', phone })
-      .returning({ id: patients.id });
+    const [priorCustomer] = await db
+      .insert(customers)
+      .values({ accountId, name: 'Agim Prior', phone })
+      .returning({ id: customers.id });
     await db.insert(pwaMutations).values({
-      ptId,
+      accountId,
       clientMutationId,
       type: 'appointment.manual_book',
       status: 'processing',
       // Nested under `progress` because that is the shape
       // recordPwaMutationProgress writes and beginPwaMutation reads back; a
       // top-level key is invisible to the reclaim and the retry would create the
-      // patient a second time.
-      result: { progress: { createdPatientId: priorPatient.id } },
+      // customer a second time.
+      result: { progress: { createdCustomerId: priorCustomer.id } },
       updatedAt: new Date(Date.now() - 5 * 60 * 1000),
     });
 
@@ -916,7 +916,7 @@ describe('PWA appointment mutation API', () => {
       makePost('/api/pwa/mutations/appointment', {
         clientMutationId,
         action: 'manual_book',
-        newPatient: { name: 'Agim Prior', phone },
+        newCustomer: { name: 'Agim Prior', phone },
         date: dateKey(BOOK_TWO),
         time: '09:00',
         serviceType: 'Recovered booking',
@@ -925,25 +925,25 @@ describe('PWA appointment mutation API', () => {
 
     expect(res.status).toBe(200);
 
-    const patientsWithPhone = await db
-      .select({ id: patients.id })
-      .from(patients)
-      .where(and(eq(patients.ptId, ptId), eq(patients.phone, phone)));
-    expect(patientsWithPhone).toHaveLength(1);
+    const customersWithPhone = await db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(and(eq(customers.accountId, accountId), eq(customers.phone, phone)));
+    expect(customersWithPhone).toHaveLength(1);
 
     const booked = await db
-      .select({ patientId: appointments.patientId })
+      .select({ customerId: appointments.customerId })
       .from(appointments)
-      .where(eq(appointments.ptId, ptId));
+      .where(eq(appointments.accountId, accountId));
     expect(booked).toHaveLength(1);
-    expect(booked[0].patientId).toBe(priorPatient.id);
+    expect(booked[0].customerId).toBe(priorCustomer.id);
 
     const [storedMutation] = await db
       .select({ status: pwaMutations.status })
       .from(pwaMutations)
       .where(
         and(
-          eq(pwaMutations.ptId, ptId),
+          eq(pwaMutations.accountId, accountId),
           eq(pwaMutations.clientMutationId, clientMutationId),
         ),
       );

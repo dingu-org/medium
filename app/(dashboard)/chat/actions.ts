@@ -12,8 +12,8 @@ import {
   conversations,
   messageTemplates,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
@@ -26,7 +26,7 @@ import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
 
-async function requirePtId(): Promise<string> {
+async function requireAccountId(): Promise<string> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -43,12 +43,12 @@ async function setTakeoverImpl(
   conversationId: string,
   takeover: boolean,
 ): Promise<{ ok: boolean }> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
 
   await withAuditLog(
     {
-      ptId,
-      actor: 'pt',
+      accountId,
+      actor: 'account',
       action: 'conversation.takeover',
       targetTable: 'conversations',
       targetId: conversationId,
@@ -75,19 +75,19 @@ async function setTakeoverImpl(
           .where(
             and(
               eq(conversations.id, conversationId),
-              eq(conversations.ptId, ptId),
+              eq(conversations.accountId, accountId),
             ),
           )
-          .returning({ patientId: conversations.patientId });
+          .returning({ customerId: conversations.customerId });
 
         if (!updated || !takeover) return null;
 
         return appendBackgroundEvent(tx, {
           type: 'conversation.taken_over',
           data: {
-            ptId,
+            accountId,
             conversationId,
-            patientId: updated.patientId,
+            customerId: updated.customerId,
             takenOverAt: new Date().toISOString(),
           },
         });
@@ -110,7 +110,7 @@ async function markConversationReadImpl(
   conversationId: string,
   throughMessageId: string,
 ): Promise<{ ok: boolean }> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const [throughMessage] = await db
     .select({ id: messages.id })
     .from(messages)
@@ -119,7 +119,7 @@ async function markConversationReadImpl(
       and(
         eq(messages.id, throughMessageId),
         eq(conversations.id, conversationId),
-        eq(conversations.ptId, ptId),
+        eq(conversations.accountId, accountId),
       ),
     )
     .limit(1);
@@ -143,7 +143,7 @@ async function markConversationReadImpl(
       )`,
     })
     .where(
-      and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
+      and(eq(conversations.id, conversationId), eq(conversations.accountId, accountId)),
     );
   revalidatePath('/chat');
   return { ok: true };
@@ -158,7 +158,7 @@ async function setConversationClosedImpl(
   conversationId: string,
   closed: boolean,
 ): Promise<{ ok: boolean }> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   await db
     .update(conversations)
     .set(
@@ -182,7 +182,7 @@ async function setConversationClosedImpl(
           },
     )
     .where(
-      and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
+      and(eq(conversations.id, conversationId), eq(conversations.accountId, accountId)),
     );
   revalidatePath('/chat');
   revalidatePath(`/chat/${conversationId}`);
@@ -197,27 +197,27 @@ export const setConversationClosed = instrumentedAction(
 async function sendUpcomingReminderTemplateImpl(
   conversationId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const [context] = await db
     .select({
-      patientId: conversations.patientId,
-      patientName: patients.name,
-      waId: patients.waId,
-      reminderOptedOutAt: patients.reminderOptedOutAt,
-      practiceName: pts.practiceName,
-      timezone: pts.timezone,
+      customerId: conversations.customerId,
+      customerName: customers.name,
+      waId: customers.waId,
+      reminderOptedOutAt: customers.reminderOptedOutAt,
+      name: accounts.name,
+      timezone: accounts.timezone,
     })
     .from(conversations)
-    .innerJoin(patients, eq(conversations.patientId, patients.id))
-    .innerJoin(pts, eq(conversations.ptId, pts.id))
+    .innerJoin(customers, eq(conversations.customerId, customers.id))
+    .innerJoin(accounts, eq(conversations.accountId, accounts.id))
     .where(
-      and(eq(conversations.id, conversationId), eq(conversations.ptId, ptId)),
+      and(eq(conversations.id, conversationId), eq(conversations.accountId, accountId)),
     )
     .limit(1);
   if (!context?.waId) return { ok: false, error: 'Biseda nuk u gjet.' };
-  // The automated path skips an opted-out patient with `patient_opted_out`
+  // The automated path skips an opted-out customer with `customer_opted_out`
   // (send-reminder.ts loadReminderAttempt); the manual one-tap send has to
-  // honour the same NDAL/STOP, or it bills a template the patient refused.
+  // honour the same NDAL/STOP, or it bills a template the customer refused.
   if (context.reminderOptedOutAt) {
     return { ok: false, error: 'Klienti ka çaktivizuar kujtesat.' };
   }
@@ -230,7 +230,7 @@ async function sendUpcomingReminderTemplateImpl(
       .from(whatsappConnections)
       .where(
         and(
-          eq(whatsappConnections.ptId, ptId),
+          eq(whatsappConnections.accountId, accountId),
           eq(whatsappConnections.status, 'active'),
         ),
       )
@@ -241,8 +241,8 @@ async function sendUpcomingReminderTemplateImpl(
       .from(appointments)
       .where(
         and(
-          eq(appointments.ptId, ptId),
-          eq(appointments.patientId, context.patientId),
+          eq(appointments.accountId, accountId),
+          eq(appointments.customerId, context.customerId),
           inArray(appointments.status, ['pending', 'confirmed']),
           gt(appointments.startsAt, new Date()),
         ),
@@ -258,7 +258,7 @@ async function sendUpcomingReminderTemplateImpl(
       .from(messageTemplates)
       .where(
         and(
-          eq(messageTemplates.ptId, ptId),
+          eq(messageTemplates.accountId, accountId),
           eq(messageTemplates.status, 'approved'),
           inArray(
             messageTemplates.name,
@@ -297,12 +297,12 @@ async function sendUpcomingReminderTemplateImpl(
     appointment.startsAt,
     context.timezone,
   );
-  const firstName = context.patientName.trim().split(/\s+/)[0] || 'Ju';
-  const practiceName = context.practiceName?.trim() || 'praktika';
+  const firstName = context.customerName.trim().split(/\s+/)[0] || 'Ju';
+  const name = context.name?.trim() || 'praktika';
   const variables =
     definition.variableSet === 'legacy'
       ? [firstName, localTime]
-      : [firstName, practiceName, localTime];
+      : [firstName, name, localTime];
 
   // Serialize per conversation and skip if this same reminder template was just
   // sent — otherwise a double-tap (before the button's pending state commits)
@@ -330,13 +330,13 @@ async function sendUpcomingReminderTemplateImpl(
     // Nest a PT-scoped lock around the check-and-consume section — a second key
     // on the same withAdvisoryLock connection, so it serializes across
     // conversations without reserving another pooled connection per attempt.
-    return withAdvisoryLock(`reminder-quota:${ptId}`, async () => {
+    return withAdvisoryLock(`reminder-quota:${accountId}`, async () => {
       // A manual template is billed by Meta and counts against the plan's
       // monthly reminder cap exactly like the automated one (send-reminder.ts
       // gates on the same helper) — without this the cap is circumventable one
       // thread at a time.
       const sentAt = new Date();
-      if (!(await reminderQuotaAvailable(ptId, sentAt))) {
+      if (!(await reminderQuotaAvailable(accountId, sentAt))) {
         return { ok: false, error: 'Kufiri i kujtesave u arrit për këtë muaj.' };
       }
 
@@ -364,9 +364,9 @@ async function sendUpcomingReminderTemplateImpl(
           const [created] = await tx
             .insert(messages)
             .values({
-              ptId,
+              accountId,
               conversationId,
-              role: 'pt',
+              role: 'account',
               channel: 'whatsapp',
               content: `Kujtesë për takimin më ${localTime}.`,
               templateId: template.id,
@@ -376,11 +376,11 @@ async function sendUpcomingReminderTemplateImpl(
           // The reminder_jobs row is what makes the manual send visible to the
           // rest of the system: the plan meter counts jobs only (usage.ts), and
           // loadReminderCandidates joins jobs → messages, so without it the
-          // patient's KONFIRMO/ANULO reply matches nothing and is dropped.
+          // customer's KONFIRMO/ANULO reply matches nothing and is dropped.
           await tx
             .insert(reminderJobs)
             .values({
-              ptId,
+              accountId,
               appointmentId: appointment.id,
               scheduledFor: sentAt,
               status: 'sent',
@@ -393,7 +393,7 @@ async function sendUpcomingReminderTemplateImpl(
               // still-scheduled automated job. inngestRunId/scheduledFor are left
               // untouched deliberately: clearing them makes the sleeping run trip
               // loadReminderAttempt's stale_run guard, and that branch marks the
-              // job skipped — rewriting this 'sent' row, so the patient's
+              // job skipped — rewriting this 'sent' row, so the customer's
               // KONFIRMO/ANULO in the final hours matches no candidate and the
               // appointment badge claims no reminder was sent. The woken run
               // cannot double-send either way: prepareReminderMessage reuses the
@@ -406,10 +406,10 @@ async function sendUpcomingReminderTemplateImpl(
                 skippedReason: null,
                 sentAt,
                 messageId: created.id,
-                // The patient's answer belongs to the cycle it answered, so it is
+                // The customer's answer belongs to the cycle it answered, so it is
                 // cleared exactly like upsertReminderSchedule does, or this send
                 // inherits the previous cycle's reply and chooseCandidate filters
-                // the row out — the patient's next ANULO would cancel nothing.
+                // the row out — the customer's next ANULO would cancel nothing.
                 // `delivered_at` is NOT cleared, for the same reason as there: it
                 // is a Meta-billed fact and the only source of monthly usage
                 // (lib/billing/usage.ts countDeliveredReminders), so wiping it
@@ -431,7 +431,7 @@ async function sendUpcomingReminderTemplateImpl(
             .where(
               and(
                 eq(conversations.id, conversationId),
-                eq(conversations.ptId, ptId),
+                eq(conversations.accountId, accountId),
               ),
             );
         });
@@ -440,7 +440,7 @@ async function sendUpcomingReminderTemplateImpl(
           'chat.reminder_persist_failed',
           'Reminder template sent but not persisted',
           {
-            ptId,
+            accountId,
             conversationId,
             externalId: sent.messageId,
             ...serializeError(error),

@@ -1,8 +1,8 @@
 /**
  * Seed a single fixed test PT for the local dev loop (Phase 12): filled-in
- * profile, one E.164 patient, Mon–Fri 09:00–17:00 availability, one past +
+ * profile, one E.164 customer, Mon–Fri 09:00–17:00 availability, one past +
  * one upcoming appointment, and one open conversation with its last 5
- * messages. Unlike `seed-qa.ts` (multi-patient design-QA fixture), this is
+ * messages. Unlike `seed-qa.ts` (multi-customer design-QA fixture), this is
  * the minimal single-tenant fixture the Phase 12 spec calls for.
  *
  * Run: pnpm seed        (local stack via .env)
@@ -16,8 +16,8 @@ import {
   availabilityRules,
   conversations,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   services,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -61,15 +61,15 @@ function prevWeekdayAt(minDaysAgo: number, hour: number): Date {
 }
 
 /** Deletes the seed PT (and, via FK cascade, everything scoped to it). No-op if absent. */
-export async function deleteSeedPt(
+export async function deleteSeedAccount(
   supabase: ReturnType<typeof createServiceClient> = createServiceClient(),
 ): Promise<void> {
   await deleteAuthUserByEmail(SEED_EMAIL, supabase);
 }
 
 export type SeedResult = {
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   conversationId: string;
   pastAppointmentId: string;
   upcomingAppointmentId: string;
@@ -86,7 +86,7 @@ export async function seedCore(
 
   // Recreate the seed user from scratch so reruns stay deterministic and
   // idempotent (createUser errors on a duplicate email otherwise).
-  await deleteSeedPt(supabase);
+  await deleteSeedAccount(supabase);
 
   const { data, error } = await supabase.auth.admin.createUser({
     email: SEED_EMAIL,
@@ -94,42 +94,42 @@ export async function seedCore(
     email_confirm: true,
   });
   if (error || !data.user) throw error ?? new Error('Missing user');
-  const ptId = data.user.id;
+  const accountId = data.user.id;
 
   await database
-    .update(pts)
+    .update(accounts)
     .set({
-      practiceName: 'Fizio Vita',
+      name: 'Fizio Vita',
       timezone: 'Europe/Tirane',
       aiName: 'Medium',
       servicesConfiguredAt: new Date(),
     })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 
   // A signup trigger may pre-create preset services — keep this idempotent.
   await database
     .insert(services)
-    .values({ ptId, name: 'Seancë fizioterapie', durationMin: 45 })
+    .values({ accountId, name: 'Seancë fizioterapie', durationMin: 45 })
     .onConflictDoNothing();
 
   await database.insert(availabilityRules).values(
     [1, 2, 3, 4, 5].map((weekday) => ({
-      ptId,
+      accountId,
       weekday,
       startTime: '09:00',
       endTime: '17:00',
     })),
   );
 
-  const [patient] = await database
-    .insert(patients)
+  const [customer] = await database
+    .insert(customers)
     .values({
-      ptId,
+      accountId,
       name: 'Elira Hoxha',
       phone: '+355691234567',
       waId: '355691234567',
     })
-    .returning({ id: patients.id });
+    .returning({ id: customers.id });
 
   // Compute each appointment's base date once, then derive `endsAt` by
   // cloning + adjusting the hour — never call nextWeekdayAt/prevWeekdayAt
@@ -147,16 +147,16 @@ export async function seedCore(
     .insert(appointments)
     .values([
       {
-        ptId,
-        patientId: patient.id,
+        accountId,
+        customerId: customer.id,
         startsAt: pastStart,
         endsAt: pastEnd,
         serviceType: 'Seancë fizioterapie',
         status: 'completed',
       },
       {
-        ptId,
-        patientId: patient.id,
+        accountId,
+        customerId: customer.id,
         startsAt: upcomingStart,
         endsAt: upcomingEnd,
         serviceType: 'Seancë fizioterapie',
@@ -168,8 +168,8 @@ export async function seedCore(
   const [conversation] = await database
     .insert(conversations)
     .values({
-      ptId,
-      patientId: patient.id,
+      accountId,
+      customerId: customer.id,
       channel: 'whatsapp',
       aiActive: true,
       escalationState: 'idle',
@@ -180,12 +180,12 @@ export async function seedCore(
     .returning({ id: conversations.id });
 
   const scriptedMessages: Array<{
-    role: 'patient' | 'ai';
+    role: 'customer' | 'ai';
     content: string;
     minsAgo: number;
   }> = [
     {
-      role: 'patient',
+      role: 'customer',
       content: 'Përshëndetje, dua të lë një takim këtë javë.',
       minsAgo: 22,
     },
@@ -195,14 +195,14 @@ export async function seedCore(
         'Përshëndetje. Sigurisht — për cilën ditë ju përshtatet më mirë?',
       minsAgo: 21,
     },
-    { role: 'patient', content: 'Të enjten pasdite po munda.', minsAgo: 19 },
+    { role: 'customer', content: 'Të enjten pasdite po munda.', minsAgo: 19 },
     {
       role: 'ai',
       content: 'Kam të lirë të enjten në 15:00 ose 16:00. Cila ju shkon?',
       minsAgo: 18,
     },
     {
-      role: 'patient',
+      role: 'customer',
       content: '15:00 është mirë, faleminderit.',
       minsAgo: 15,
     },
@@ -210,7 +210,7 @@ export async function seedCore(
 
   for (const m of scriptedMessages) {
     await database.insert(messages).values({
-      ptId,
+      accountId,
       conversationId: conversation.id,
       role: m.role,
       channel: 'whatsapp',
@@ -220,8 +220,8 @@ export async function seedCore(
   }
 
   return {
-    ptId,
-    patientId: patient.id,
+    accountId,
+    customerId: customer.id,
     conversationId: conversation.id,
     pastAppointmentId: pastAppointment.id,
     upcomingAppointmentId: upcomingAppointment.id,
@@ -230,7 +230,7 @@ export async function seedCore(
 
 async function main(): Promise<void> {
   const result = await seedCore();
-  console.log(`Seeded test PT ${SEED_EMAIL} (${result.ptId})`);
+  console.log(`Seeded test PT ${SEED_EMAIL} (${result.accountId})`);
   console.log(`Sign in with ${SEED_EMAIL} / ${SEED_PASSWORD}`);
   process.exit(0);
 }

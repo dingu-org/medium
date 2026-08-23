@@ -11,7 +11,7 @@ import {
   vi,
 } from 'vitest';
 import { db } from '@/lib/db';
-import { pts } from '@/lib/db/schema';
+import { accounts } from '@/lib/db/schema';
 import { t } from '@/lib/i18n';
 import { updateRetention } from '../actions';
 
@@ -41,13 +41,13 @@ const realService = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-let ptId = '';
+let accountId = '';
 
 async function retentionDays(): Promise<number> {
   const [row] = await db
-    .select({ retentionDays: pts.retentionDays })
-    .from(pts)
-    .where(eq(pts.id, ptId));
+    .select({ retentionDays: accounts.retentionDays })
+    .from(accounts)
+    .where(eq(accounts.id, accountId));
   return row.retentionDays;
 }
 
@@ -58,19 +58,19 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await realService.auth.admin.deleteUser(ptId);
+  if (accountId) await realService.auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
-  getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
   await db
-    .update(pts)
+    .update(accounts)
     .set({ plan: 'free', planLifetime: false, retentionDays: 30 })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -88,9 +88,9 @@ describe('updateRetention plan gate', () => {
 
   it('allows the long window on an effective Solo plan', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planLifetime: true })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
     await expect(updateRetention(365)).resolves.toBeUndefined();
     expect(await retentionDays()).toBe(365);
   });

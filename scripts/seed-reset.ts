@@ -6,15 +6,15 @@
 import { fileURLToPath } from 'node:url';
 import { createServiceClient } from '@/lib/supabase/service';
 import { assertSeedTarget } from './lib/seed-target';
-import { deleteSeedPt, seedCore, SEED_EMAIL, SEED_PASSWORD } from './seed';
+import { deleteSeedAccount, seedCore, SEED_EMAIL, SEED_PASSWORD } from './seed';
 
 assertSeedTarget();
 
 async function main(): Promise<void> {
   const supabase = createServiceClient();
-  await deleteSeedPt(supabase);
+  await deleteSeedAccount(supabase);
   const result = await seedCore({ supabase });
-  console.log(`Reset and reseeded test PT ${SEED_EMAIL} (${result.ptId})`);
+  console.log(`Reset and reseeded test PT ${SEED_EMAIL} (${result.accountId})`);
   console.log(`Sign in with ${SEED_EMAIL} / ${SEED_PASSWORD}`);
   process.exit(0);
 }

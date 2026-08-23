@@ -87,8 +87,8 @@ function sequence(...results: MockGenerateResult[]) {
 }
 
 const toolContext: ToolExecutionContext = {
-  ptId: '11111111-2222-3333-4444-555555555555',
-  patientId: '66666666-7777-4888-9999-000000000000',
+  accountId: '11111111-2222-3333-4444-555555555555',
+  customerId: '66666666-7777-4888-9999-000000000000',
   conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
 };
 
@@ -178,7 +178,7 @@ describe('runModelTurn', () => {
       modelId: 'test-model',
       doGenerate: sequence(
         toolCallResult('call-1', 'escalate_to_human', {
-          reason: 'Patient asked for the therapist.',
+          reason: 'Customer asked for the therapist.',
         }),
         textResult('', 12, 6, 0.000012),
       ),
@@ -211,7 +211,7 @@ describe('runModelTurn', () => {
     const model = new MockLanguageModelV3({
       doGenerate: sequence(
         toolCallResult('call-1', 'escalate_to_human', {
-          reason: 'Patient asked for the therapist.',
+          reason: 'Customer asked for the therapist.',
         }),
         ...Array.from({ length: 4 }, (_, index) =>
           toolCallResult(`call-${index + 2}`, 'list_upcoming_appointments', {}),
@@ -271,7 +271,7 @@ describe('runModelTurn', () => {
   });
 
   // Discarding the model's own words is the contract, not an accident: the
-  // patient gets one message per change and it is the deterministic one.
+  // customer gets one message per change and it is the deterministic one.
   it('prefers the deterministic outcome over prose written beside the tool call', async () => {
     const model = new MockLanguageModelV3({
       doGenerate: sequence(
@@ -334,7 +334,7 @@ describe('runModelTurn', () => {
     const model = new MockLanguageModelV3({
       doGenerate: sequence(
         toolCallResult('call-1', 'escalate_to_human', {
-          reason: 'Patient asked for the therapist.',
+          reason: 'Customer asked for the therapist.',
         }),
         textResult('Ia kalova bisedën praktikës.'),
       ),
@@ -371,7 +371,7 @@ describe('runModelTurn', () => {
             {
               toolCallId: 'offer-1',
               toolName: 'offer_human_handoff',
-              input: { reason: 'Patient asked where to park.' },
+              input: { reason: 'Customer asked where to park.' },
             },
           ],
           'Nuk e di ku mund të parkoni.',
@@ -399,7 +399,7 @@ describe('runModelTurn', () => {
   });
 
   // Nothing was offered, so there is nothing to remember and nothing to send:
-  // the turn has to carry on and answer the patient in the model's own words.
+  // the turn has to carry on and answer the customer in the model's own words.
   it('keeps looping when the offer call came back as an error', async () => {
     const model = new MockLanguageModelV3({
       doGenerate: sequence(
@@ -422,7 +422,7 @@ describe('runModelTurn', () => {
     expect(model.doGenerateCalls).toHaveLength(2);
   });
 
-  // A committed change outranks an offer to answer something else: the patient
+  // A committed change outranks an offer to answer something else: the customer
   // gets the confirmation for what actually happened.
   it('prefers a committed booking over an offer made in the same step', async () => {
     const model = new MockLanguageModelV3({
@@ -432,7 +432,7 @@ describe('runModelTurn', () => {
           {
             toolCallId: 'offer-1',
             toolName: 'offer_human_handoff',
-            input: { reason: 'Patient also asked about parking.' },
+            input: { reason: 'Customer also asked about parking.' },
           },
         ]),
       ),

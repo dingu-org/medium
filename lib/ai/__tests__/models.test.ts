@@ -36,7 +36,7 @@ describe('selectModelForPlan', () => {
   // A reasoning budget is derived from the request's max_tokens and floored at
   // 1024, so any effort at all is unsafe until the engine's maxOutputTokens
   // clears that floor — thinking otherwise consumes the whole allowance and the
-  // turn returns no patient-facing text. Guards every environment, not just
+  // turn returns no customer-facing text. Guards every environment, not just
   // production: dev and preview send the same request shape.
   it.each(['development', 'preview', 'production'] as const)(
     'sets no reasoning effort in %s while maxOutputTokens is below the 1024 floor',

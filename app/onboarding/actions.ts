@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { isInternalPath } from '@/lib/auth/safe-next';
 import { db } from '@/lib/db';
-import { pts, services } from '@/lib/db/schema';
+import { accounts, services } from '@/lib/db/schema';
 import { createServerClient } from '@/lib/supabase/server';
 import { ONBOARDING_SKIP_COOKIE, onboardingCookieValue } from './constants';
 
@@ -78,9 +78,9 @@ export async function continueSetup(formData: FormData): Promise<void> {
 export async function skipPlanStep(): Promise<void> {
   const userId = await requireUserId();
   await db
-    .update(pts)
+    .update(accounts)
     .set({ planStepSeenAt: new Date() })
-    .where(eq(pts.id, userId));
+    .where(eq(accounts.id, userId));
   revalidatePath('/onboarding');
   redirect('/onboarding');
 }
@@ -91,14 +91,14 @@ export async function confirmServices(): Promise<void> {
   const [activeService] = await db
     .select({ id: services.id })
     .from(services)
-    .where(and(eq(services.ptId, userId), eq(services.active, true)))
+    .where(and(eq(services.accountId, userId), eq(services.active, true)))
     .limit(1);
   if (!activeService) redirect('/settings/services?from=onboarding');
 
   await db
-    .update(pts)
+    .update(accounts)
     .set({ servicesConfiguredAt: new Date() })
-    .where(eq(pts.id, userId));
+    .where(eq(accounts.id, userId));
   revalidatePath('/onboarding');
   redirect('/onboarding');
 }

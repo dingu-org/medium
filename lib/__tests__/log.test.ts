@@ -122,33 +122,33 @@ describe('createLogger / envelope', () => {
     expect(line.count).toBe(2);
   });
 
-  it('never redacts the trace_id/pt_id/conversation_id envelope keys', () => {
+  it('never redacts the trace_id/account_id/conversation_id envelope keys', () => {
     const line = captureLine('info', () =>
       createLogger({
         trace_id: UUID,
-        pt_id: UUID,
+        account_id: UUID,
         conversation_id: UUID,
       }).info('e', 'm'),
     );
     expect(line.trace_id).toBe(UUID);
-    expect(line.pt_id).toBe(UUID);
+    expect(line.account_id).toBe(UUID);
     expect(line.conversation_id).toBe(UUID);
   });
 
   it('promotes context keys from attrs into the envelope unredacted', () => {
     const line = captureLine('info', () =>
-      logger.info('e', 'm', { pt_id: UUID, phone: '+355691234567' }),
+      logger.info('e', 'm', { account_id: UUID, phone: '+355691234567' }),
     );
-    expect(line.pt_id).toBe(UUID);
+    expect(line.account_id).toBe(UUID);
     expect(line.phone).toBe('[REDACTED]');
   });
 
   it('lets attrs override the base context', () => {
     const other = '22222222-2222-4222-8222-222222222222';
     const line = captureLine('info', () =>
-      createLogger({ pt_id: UUID }).info('e', 'm', { pt_id: other }),
+      createLogger({ account_id: UUID }).info('e', 'm', { account_id: other }),
     );
-    expect(line.pt_id).toBe(other);
+    expect(line.account_id).toBe(other);
   });
 
   it('never lets attrs overwrite the event_name/message/level envelope keys', () => {

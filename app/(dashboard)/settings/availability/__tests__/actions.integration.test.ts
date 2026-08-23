@@ -11,7 +11,7 @@ import {
   vi,
 } from 'vitest';
 import { db } from '@/lib/db';
-import { availabilityRules, blockedPeriods, pts } from '@/lib/db/schema';
+import { availabilityRules, blockedPeriods, accounts } from '@/lib/db/schema';
 import { addBlockedPeriod, saveAvailability, saveTimezone } from '../actions';
 
 const { getUserMock, redirectMock } = vi.hoisted(() => ({
@@ -40,14 +40,14 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 // A real service client, independent of the mocks above, purely to seed/clean
-// up a real auth user (the trigger creates the pts row) for these tests.
+// up a real auth user (the trigger creates the accounts row) for these tests.
 const realService = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-let ptId = '';
+let accountId = '';
 
 beforeAll(async () => {
   const { data, error } = await realService.auth.admin.createUser({
@@ -56,15 +56,15 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await realService.auth.admin.deleteUser(ptId);
+  if (accountId) await realService.auth.admin.deleteUser(accountId);
 });
 
 beforeEach(() => {
-  getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
 });
 
 afterEach(() => {
@@ -73,9 +73,9 @@ afterEach(() => {
 
 async function readTimezone() {
   const [row] = await db
-    .select({ timezone: pts.timezone })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+    .select({ timezone: accounts.timezone })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
   return row.timezone;
 }
@@ -116,7 +116,7 @@ describe('saveAvailability', () => {
     const rows = await db
       .select({ weekday: availabilityRules.weekday })
       .from(availabilityRules)
-      .where(eq(availabilityRules.ptId, ptId))
+      .where(eq(availabilityRules.accountId, accountId))
       .orderBy(asc(availabilityRules.weekday));
     expect(rows).toHaveLength(1);
     expect(rows[0].weekday).toBe(1);
@@ -126,7 +126,7 @@ describe('saveAvailability', () => {
 describe('addBlockedPeriod', () => {
   it('computes the stored instant in the availability-owned timezone', async () => {
     // Europe/Tirane is UTC+2 in July (CEST); the timezone move must keep
-    // wall-clock → instant conversion anchored to pts.timezone.
+    // wall-clock → instant conversion anchored to accounts.timezone.
     await saveTimezone({ timezone: 'Europe/Tirane' });
 
     const result = await addBlockedPeriod({
@@ -142,7 +142,7 @@ describe('addBlockedPeriod', () => {
         endsAt: blockedPeriods.endsAt,
       })
       .from(blockedPeriods)
-      .where(eq(blockedPeriods.ptId, ptId))
+      .where(eq(blockedPeriods.accountId, accountId))
       .limit(1);
     expect(row.startsAt.toISOString()).toBe('2026-07-15T06:00:00.000Z');
     expect(row.endsAt.toISOString()).toBe('2026-07-15T12:00:00.000Z');

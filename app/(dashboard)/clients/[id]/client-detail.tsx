@@ -31,7 +31,7 @@ import { SectionLabel } from '@/components/ui/section-label';
 import { Textarea } from '@/components/ui/textarea';
 import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
 import type { ClientDetailSnapshot } from '@/lib/clients/queries';
-import { erasePatient, exportPatient, updateClientNotes } from '../actions';
+import { eraseCustomer, exportCustomer, updateClientNotes } from '../actions';
 import { formatDateLong, formatMonthYear, formatTime, t } from '@/lib/i18n';
 import { confirmMatches, confirmPhrase } from '@/lib/settings/confirm-phrase';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
@@ -45,7 +45,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
   const [exporting, startExport] = useTransition();
   const [erasing, startErase] = useTransition();
   const [confirmText, setConfirmText] = useState('');
-  // WhatsApp-derived patients are not created through the name-validating
+  // WhatsApp-derived customers are not created through the name-validating
   // action, so the name can be blank — which would otherwise arm Erase on an
   // empty input the moment the dialog opens.
   const erasePhrase = confirmPhrase(client.name);
@@ -65,7 +65,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
   function onExport() {
     startExport(async () => {
       try {
-        const result = await exportPatient(client.id);
+        const result = await exportCustomer(client.id);
         if (!result.ok) {
           toast.error(t.clients.exportFailed);
           return;
@@ -76,7 +76,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = `patient-${client.id}.json`;
+        anchor.download = `customer-${client.id}.json`;
         anchor.click();
         URL.revokeObjectURL(url);
       } catch {
@@ -88,7 +88,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
   function onErase() {
     startErase(async () => {
       try {
-        await erasePatient(client.id);
+        await eraseCustomer(client.id);
         toast.success(t.clients.erasedToast);
         router.push('/clients');
       } catch {
@@ -99,18 +99,18 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
 
   return (
     <div className="-mx-4 -mt-4">
-      <RealtimeRefresher table="patients" filter={`pt_id=eq.${client.ptId}`} />
+      <RealtimeRefresher table="customers" filter={`account_id=eq.${client.accountId}`} />
       <RealtimeRefresher
         table="appointments"
-        filter={`pt_id=eq.${client.ptId}`}
+        filter={`account_id=eq.${client.accountId}`}
       />
       <RealtimeRefresher
         table="conversations"
-        filter={`pt_id=eq.${client.ptId}`}
+        filter={`account_id=eq.${client.accountId}`}
       />
       <NavBar backHref="/clients" title={client.name} />
 
-      <div className="px-5 pt-4 pb-7">
+      <div className="px-5 account-4 pb-7">
         {/* Canvas ClientHeader: big avatar, Manrope name, mono phone. */}
         <section className="flex flex-col items-center pb-1 text-center">
           <InitialsAvatar name={client.name} size={72} />
@@ -295,7 +295,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
   );
 }
 
-/** Manually-added patient badge (canvas ManualBadge). */
+/** Manually-added customer badge (canvas ManualBadge). */
 function ManualBadge() {
   return (
     <span className="text-ink-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--neutral-100)] py-[5px] pr-[11px] pl-[9px] text-xs font-medium">

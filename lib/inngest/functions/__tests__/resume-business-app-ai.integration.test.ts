@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { conversations, patients } from '@/lib/db/schema';
+import { conversations, customers } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { resumeBusinessAppAiCore } from '../resume-business-app-ai';
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let sequence = 0;
 
@@ -17,28 +17,28 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(patients).where(eq(patients.ptId, ptId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
 
-  const [patient] = await db
-    .insert(patients)
+  const [customer] = await db
+    .insert(customers)
     .values({
-      ptId,
+      accountId,
       name: 'Pat',
       phone: `44770091${++sequence}`,
       waId: `44770091${sequence}`,
     })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+    .returning({ id: customers.id });
+  customerId = customer.id;
 
   const [conversation] = await db
     .insert(conversations)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       channel: 'whatsapp',
       aiActive: false,
       aiPausedUntil: new Date(Date.now() - 60_000),
@@ -50,7 +50,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('resumeBusinessAppAiCore', () => {
@@ -62,8 +62,8 @@ describe('resumeBusinessAppAiCore', () => {
 
     await expect(
       resumeBusinessAppAiCore({
-        ptId,
-        patientId,
+        accountId,
+        customerId,
         conversationId,
         pausedUntil: before.pausedUntil!.toISOString(),
       }),
@@ -87,8 +87,8 @@ describe('resumeBusinessAppAiCore', () => {
 
     await expect(
       resumeBusinessAppAiCore({
-        ptId,
-        patientId,
+        accountId,
+        customerId,
         conversationId,
         pausedUntil: future.toISOString(),
       }),
@@ -114,8 +114,8 @@ describe('resumeBusinessAppAiCore', () => {
 
     await expect(
       resumeBusinessAppAiCore({
-        ptId,
-        patientId,
+        accountId,
+        customerId,
         conversationId,
         pausedUntil: before.pausedUntil!.toISOString(),
       }),

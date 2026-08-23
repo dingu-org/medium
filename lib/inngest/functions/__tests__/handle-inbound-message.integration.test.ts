@@ -29,8 +29,8 @@ import {
   eventOutbox,
   events,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
@@ -73,10 +73,10 @@ import { DAY, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
 // future whatever day the suite runs on.
 const MONDAY = new Date(testNow({ weekday: 1 }).getTime() + 7 * DAY);
 
-let ptId = '';
+let accountId = '';
 let connectionId = '';
 let conversationId = '';
-let patientId = '';
+let customerId = '';
 let inboundMessageId = '';
 let sequence = 0;
 
@@ -87,23 +87,23 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
   await db
     .delete(whatsappConnections)
-    .where(eq(whatsappConnections.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
+    .where(eq(whatsappConnections.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
   await db
-    .update(pts)
+    .update(accounts)
     .set({ assistantPaused: false })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 
   const [connection] = await db
     .insert(whatsappConnections)
     .values({
-      ptId,
+      accountId,
       phoneNumberId: `PNI_INBOUND_${Date.now()}_${++sequence}`,
       wabaId: 'WABA_INBOUND',
       accessTokenEncrypted: await encryptToken('INBOUND_TOKEN'),
@@ -112,22 +112,22 @@ beforeEach(async () => {
     .returning({ id: whatsappConnections.id });
   connectionId = connection.id;
 
-  const [patient] = await db
-    .insert(patients)
+  const [customer] = await db
+    .insert(customers)
     .values({
-      ptId,
+      accountId,
       name: 'Pat',
       phone: '447700900100',
       waId: '447700900100',
     })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+    .returning({ id: customers.id });
+  customerId = customer.id;
 
   const [conversation] = await db
     .insert(conversations)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       channel: 'whatsapp',
       lastInboundAt: new Date(),
     })
@@ -137,10 +137,10 @@ beforeEach(async () => {
   const [inbound] = await db
     .insert(messages)
     .values({
-      ptId,
+      accountId,
       conversationId,
       externalId: `wamid.IN.${Date.now()}.${sequence}`,
-      role: 'patient',
+      role: 'customer',
       channel: 'whatsapp',
       content: 'Can I book tomorrow?',
     })
@@ -153,14 +153,14 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('handleInboundMessage cores', () => {
   it('loads authoritative tenant and delivery context', async () => {
     const context = await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     });
 
@@ -173,8 +173,8 @@ describe('handleInboundMessage cores', () => {
       inbound: {
         id: inboundMessageId,
         conversationId,
-        ptId,
-        patientId,
+        accountId,
+        customerId,
         content: 'Can I book tomorrow?',
       },
     });
@@ -194,7 +194,7 @@ describe('handleInboundMessage cores', () => {
     const [newer] = await db
       .insert(whatsappConnections)
       .values({
-        ptId,
+        accountId,
         phoneNumberId: `PNI_INBOUND_NEWER_${Date.now()}_${++sequence}`,
         wabaId: 'WABA_INBOUND',
         accessTokenEncrypted: await encryptToken('INBOUND_TOKEN_NEWER'),
@@ -205,7 +205,7 @@ describe('handleInboundMessage cores', () => {
 
     const context = await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     });
 
@@ -225,7 +225,7 @@ describe('handleInboundMessage cores', () => {
 
     const context = await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     });
 
@@ -245,7 +245,7 @@ describe('handleInboundMessage cores', () => {
 
     const context = await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     });
 
@@ -254,20 +254,20 @@ describe('handleInboundMessage cores', () => {
   });
 
   // The 2nd..Nth message of a capped day. The gate compensates its day-fact
-  // away for a turned-away patient, so each later message hits the cap afresh
+  // away for a turned-away customer, so each later message hits the cap afresh
   // and the once-a-day handoff throttle skips — which used to be silence for
   // everyone. Owning the thread is what turns those messages into the
   // manual-reply nudge instead.
   it('flags manual handling for the messages that follow a cap handoff', async () => {
-    await handOffCappedConversation({ ptId, conversationId, patientId });
+    await handOffCappedConversation({ accountId, conversationId, customerId });
 
     const [second] = await db
       .insert(messages)
       .values({
-        ptId,
+        accountId,
         conversationId,
         externalId: `wamid.IN.CAP.${Date.now()}.${++sequence}`,
-        role: 'patient',
+        role: 'customer',
         channel: 'whatsapp',
         content: 'Jam ende duke pritur',
       })
@@ -275,7 +275,7 @@ describe('handleInboundMessage cores', () => {
 
     const context = await loadInboundJobContext({
       messageId: second.id,
-      ptId,
+      accountId,
       conversationId,
     });
 
@@ -295,7 +295,7 @@ describe('handleInboundMessage cores', () => {
 
     const context = await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     });
 
@@ -312,7 +312,7 @@ describe('handleInboundMessage cores', () => {
   it('translates non-retriable engine states into skips', async () => {
     const context = (await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     }))!;
     const runTurnFn = vi.fn(async () => {
@@ -331,19 +331,19 @@ describe('handleInboundMessage cores', () => {
   it('surfaces the global assistant pause flag in the job context', async () => {
     const before = await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     });
     expect(before).toMatchObject({ assistantPaused: false });
 
     await db
-      .update(pts)
+      .update(accounts)
       .set({ assistantPaused: true })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
     const after = await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     });
     expect(after?.assistantPaused).toBe(true);
@@ -352,7 +352,7 @@ describe('handleInboundMessage cores', () => {
   it('translates an assistant_paused engine throw into a skip', async () => {
     const context = (await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     }))!;
     const runTurnFn = vi.fn(async () => {
@@ -372,8 +372,8 @@ describe('handleInboundMessage cores', () => {
     const [appointment] = await db
       .insert(appointments)
       .values({
-        ptId,
-        patientId,
+        accountId,
+        customerId,
         startsAt,
         endsAt: addHours(startsAt, 1),
         status: 'pending',
@@ -383,7 +383,7 @@ describe('handleInboundMessage cores', () => {
     const [reminderMessage] = await db
       .insert(messages)
       .values({
-        ptId,
+        accountId,
         conversationId,
         externalId: `wamid.REMINDER.${Date.now()}.${sequence}`,
         role: 'ai',
@@ -394,7 +394,7 @@ describe('handleInboundMessage cores', () => {
       })
       .returning({ id: messages.id });
     await db.insert(reminderJobs).values({
-      ptId,
+      accountId,
       appointmentId: appointment.id,
       scheduledFor: subHours(startsAt, 24),
       inngestRunId: `run-paused-${sequence}`,
@@ -407,13 +407,13 @@ describe('handleInboundMessage cores', () => {
       .set({ content: 'KONFIRMO' })
       .where(eq(messages.id, inboundMessageId));
     await db
-      .update(pts)
+      .update(accounts)
       .set({ assistantPaused: true })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
     const context = (await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     }))!;
     expect(context.assistantPaused).toBe(true);
@@ -462,7 +462,7 @@ describe('handleInboundMessage cores', () => {
   it('stops Inngest retries for non-retryable provider failures', async () => {
     const context = (await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     }))!;
     const providerError = new APICallError({
@@ -491,7 +491,7 @@ describe('handleInboundMessage cores', () => {
   it('keeps retryable provider failures eligible for Inngest retries', async () => {
     const context = (await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     }))!;
     const providerError = new APICallError({
@@ -514,7 +514,7 @@ describe('handleInboundMessage cores', () => {
     const [outbound] = await db
       .insert(messages)
       .values({
-        ptId,
+        accountId,
         conversationId,
         replyToMessageId: inboundMessageId,
         role: 'ai',
@@ -568,12 +568,12 @@ describe('handleInboundMessage cores', () => {
    */
   it('sends exactly one WhatsApp message for an AI booking turn', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ timezone: 'Europe/Tirane' })
-      .where(eq(pts.id, ptId));
-    await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
+      .where(eq(accounts.id, accountId));
+    await db.delete(availabilityRules).where(eq(availabilityRules.accountId, accountId));
     await db.insert(availabilityRules).values({
-      ptId,
+      accountId,
       weekday: 1,
       startTime: '09:00:00',
       endTime: '17:00:00',
@@ -582,7 +582,7 @@ describe('handleInboundMessage cores', () => {
 
     const context = (await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     }))!;
     const outbound = await runTurnCore({
@@ -638,20 +638,20 @@ describe('handleInboundMessage cores', () => {
     const [booked] = await db
       .select()
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'appointment.booked')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'appointment.booked')));
     const payload = booked.payload as {
       appointmentId: string;
-      origin?: 'conversation' | 'pt';
+      origin?: 'conversation' | 'account';
     };
     const plan = appointmentEventPlan({
       kind: 'appointment.booked',
       origin: payload.origin,
     });
-    if (plan.confirmPatient) {
+    if (plan.confirmCustomer) {
       const confirmation = await prepareAppointmentConfirmation({
         sourceEventId: booked.id,
         kind: 'appointment.booked',
-        ptId,
+        accountId,
         appointmentId: payload.appointmentId,
         startsAt,
       });
@@ -669,14 +669,14 @@ describe('handleInboundMessage cores', () => {
     const sent = await db
       .select({ id: messages.id })
       .from(messages)
-      .where(and(eq(messages.ptId, ptId), eq(messages.role, 'ai')));
+      .where(and(eq(messages.accountId, accountId), eq(messages.role, 'ai')));
     expect(sent).toHaveLength(1);
   });
 
   it('runs reminder-aware AI turns with reminder context', async () => {
     const context = (await loadInboundJobContext({
       messageId: inboundMessageId,
-      ptId,
+      accountId,
       conversationId,
     }))!;
     const runReminderTurnFn = vi.fn(async () => ({
@@ -691,7 +691,7 @@ describe('handleInboundMessage cores', () => {
       appointmentId: '00000000-0000-4000-8000-000000000002',
       appointmentStartsAt: zonedTime(MONDAY, 12).toISOString(),
       timezone: 'Europe/Tirane',
-      practiceName: 'Move Well',
+      name: 'Move Well',
     };
 
     await expect(
@@ -705,7 +705,7 @@ describe('handleInboundMessage cores', () => {
     expect(runReminderTurnFn).toHaveBeenCalledWith({
       inboundMessage: expect.objectContaining({
         id: inboundMessageId,
-        ptId,
+        accountId,
         conversationId,
       }),
       reminder,
@@ -715,10 +715,10 @@ describe('handleInboundMessage cores', () => {
   });
 
   it('records an exhausted turn durably so the bell can surface it', async () => {
-    await db.delete(events).where(eq(events.ptId, ptId));
+    await db.delete(events).where(eq(events.accountId, accountId));
 
     await recordConversationFailure({
-      ptId,
+      accountId,
       conversationId,
       messageId: inboundMessageId,
     });
@@ -727,11 +727,11 @@ describe('handleInboundMessage cores', () => {
       .select()
       .from(events)
       .where(
-        and(eq(events.ptId, ptId), eq(events.type, 'conversation.failed')),
+        and(eq(events.accountId, accountId), eq(events.type, 'conversation.failed')),
       );
     expect(stored).toHaveLength(1);
     expect(stored[0].payload).toMatchObject({
-      ptId,
+      accountId,
       conversationId,
       messageId: inboundMessageId,
     });
@@ -747,7 +747,7 @@ describe('handleInboundMessage cores', () => {
 
     // The bell reads `events` filtered by NOTIFICATION_TYPES, so the
     // conversation.failed formatter branch is now reachable at all.
-    const bell = await getNotificationData(ptId);
+    const bell = await getNotificationData(accountId);
     expect(bell.items).toEqual([
       expect.objectContaining({
         type: 'conversation.failed',
@@ -761,7 +761,7 @@ describe('handleInboundMessage cores', () => {
    * The affirmative collision (2026-08-14). A yes confirms an unanswered
    * reminder and it also accepts the handoff offer — and the reminder handler
    * runs first and returns before the engine, so with both outstanding a yes
-   * confirmed an appointment the patient had not been asked about while their
+   * confirmed an appointment the customer had not been asked about while their
    * accepted handoff silently never happened.
    *
    * The rule: whichever question was asked most recently wins. It only decides
@@ -843,7 +843,7 @@ describe('handleInboundMessage cores', () => {
       offerMinutesBefore?: number;
       content?: string;
     }): Promise<{ inbound: InboundMessage; appointmentId: string | null }> {
-      await db.delete(events).where(eq(events.ptId, ptId));
+      await db.delete(events).where(eq(events.accountId, accountId));
       const at = new Date();
       await db
         .update(messages)
@@ -859,17 +859,17 @@ describe('handleInboundMessage cores', () => {
         const [anchor] = await db
           .insert(messages)
           .values({
-            ptId,
+            accountId,
             conversationId,
             externalId: `wamid.ASK.${Date.now()}.${++sequence}`,
-            role: 'patient',
+            role: 'customer',
             channel: 'whatsapp',
             content: 'A bëni edhe masazh sportiv?',
             createdAt: offeredAt,
           })
           .returning({ id: messages.id });
         await db.insert(messages).values({
-          ptId,
+          accountId,
           conversationId,
           replyToMessageId: anchor.id,
           role: 'ai',
@@ -894,8 +894,8 @@ describe('handleInboundMessage cores', () => {
         const [appointment] = await db
           .insert(appointments)
           .values({
-            ptId,
-            patientId,
+            accountId,
+            customerId,
             startsAt,
             endsAt: addHours(startsAt, 1),
             status: 'pending',
@@ -906,7 +906,7 @@ describe('handleInboundMessage cores', () => {
         const [reminderMessage] = await db
           .insert(messages)
           .values({
-            ptId,
+            accountId,
             conversationId,
             externalId: `wamid.REM.${Date.now()}.${++sequence}`,
             role: 'ai',
@@ -918,7 +918,7 @@ describe('handleInboundMessage cores', () => {
           })
           .returning({ id: messages.id });
         await db.insert(reminderJobs).values({
-          ptId,
+          accountId,
           appointmentId: appointment.id,
           scheduledFor: subHours(startsAt, 24),
           inngestRunId: `run-collision-${++sequence}`,
@@ -930,7 +930,7 @@ describe('handleInboundMessage cores', () => {
 
       const context = (await loadInboundJobContext({
         messageId: inboundMessageId,
-        ptId,
+        accountId,
         conversationId,
       }))!;
       return {
@@ -977,7 +977,7 @@ describe('handleInboundMessage cores', () => {
         .from(events)
         .where(
           and(
-            eq(events.ptId, ptId),
+            eq(events.accountId, accountId),
             eq(events.type, 'conversation.escalated'),
           ),
         );
@@ -1010,7 +1010,7 @@ describe('handleInboundMessage cores', () => {
         { type: 'conversation.escalated' },
       ]);
 
-      // The appointment the patient was never asked about is untouched.
+      // The appointment the customer was never asked about is untouched.
       const [appointment] = await db
         .select()
         .from(appointments)
@@ -1026,7 +1026,7 @@ describe('handleInboundMessage cores', () => {
     /**
      * The measured defect (2026-08-14). With the offer as the newer question by
      * 85 minutes, "po faleminderit" ("yes, thank you") went to the reminder: the
-     * appointment was confirmed, nothing escalated, and the patient's question
+     * appointment was confirmed, nothing escalated, and the customer's question
      * was dropped. Not because precedence decided it — because the offer could
      * not claim the message at all, so precedence never saw it. Same bug the
      * timestamp rule was written for, one spelling narrower.
@@ -1058,7 +1058,7 @@ describe('handleInboundMessage cores', () => {
         { type: 'conversation.escalated' },
       ]);
 
-      // The appointment the patient was never asked about is untouched.
+      // The appointment the customer was never asked about is untouched.
       const [appointment] = await db
         .select()
         .from(appointments)
@@ -1181,7 +1181,7 @@ describe('handleInboundMessage cores', () => {
       const conversation = await conversationRow();
       expect(conversation.aiActive).toBe(true);
       expect(conversation.escalationState).toBe('idle');
-      // The patient answered the reminder, not the offer, so the offer lapses
+      // The customer answered the reminder, not the offer, so the offer lapses
       // here rather than staying armed against a later, unrelated message.
       expect(conversation.handoffOfferMessageId).toBeNull();
       expect(await escalationEvents()).toEqual([]);
@@ -1197,7 +1197,7 @@ describe('handleInboundMessage cores', () => {
      * wording: only the message directly after the offer can accept it, so a
      * casual "ok" is read as acceptance exactly where "ok" is answering the
      * offer. The cost of being wrong there is an escalation to the PT, who sees
-     * the patient's real question — recoverable, and the safe direction.
+     * the customer's real question — recoverable, and the safe direction.
      */
     it.each(['dakord', 'ok'])(
       'accepts an outstanding offer on %j',
@@ -1253,12 +1253,12 @@ describe('handleInboundMessage cores', () => {
 
     it('still books a proposed slot on a bare po with neither a reminder nor an offer', async () => {
       await db
-        .update(pts)
+        .update(accounts)
         .set({ timezone: 'Europe/Tirane' })
-        .where(eq(pts.id, ptId));
-      await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
+        .where(eq(accounts.id, accountId));
+      await db.delete(availabilityRules).where(eq(availabilityRules.accountId, accountId));
       await db.insert(availabilityRules).values({
-        ptId,
+        accountId,
         weekday: 1,
         startTime: '09:00:00',
         endTime: '17:00:00',
@@ -1280,7 +1280,7 @@ describe('handleInboundMessage cores', () => {
       const [appointment] = await db
         .select()
         .from(appointments)
-        .where(eq(appointments.patientId, patientId));
+        .where(eq(appointments.customerId, customerId));
       expect(appointment.startsAt).toEqual(startsAt);
       expect(await escalationEvents()).toEqual([]);
     });
@@ -1303,7 +1303,7 @@ describe('handleInboundMessage cores', () => {
       const claims: InboundClaim[] = [];
       for (let attempt = 0; attempt < 3; attempt += 1) {
         // The seed books a fresh appointment each pass and they would overlap.
-        await db.delete(appointments).where(eq(appointments.ptId, ptId));
+        await db.delete(appointments).where(eq(appointments.accountId, accountId));
         const { inbound, appointmentId } = await seedCollision({
           reminderSentMinutesBefore: 30,
           offerMinutesBefore: 30,

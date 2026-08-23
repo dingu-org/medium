@@ -53,8 +53,8 @@ import { useOnlineStatus } from '@/lib/hooks/realtime';
 
 type Props = {
   conversationId: string;
-  patientName: string;
-  patientPhone: string;
+  customerName: string;
+  customerPhone: string;
   initialMessages: LiveMessage[];
   aiActive: boolean;
   windowOpen: boolean;
@@ -81,8 +81,8 @@ function isOptimisticMessage(
 
 export function ChatThread({
   conversationId,
-  patientName,
-  patientPhone,
+  customerName,
+  customerPhone,
   initialMessages,
   aiActive: initialAiActive,
   windowOpen: initialWindowOpen,
@@ -326,7 +326,7 @@ export function ChatThread({
       {
         id: `pending-${clientMutationId}`,
         clientMutationId,
-        role: 'pt',
+        role: 'account',
         content: body,
         createdAt,
         pending: true,
@@ -374,7 +374,7 @@ export function ChatThread({
   // Re-send a failed message under its ORIGINAL clientMutationId so the server
   // recovers idempotently (replays a stored success, or finishes the DB write
   // for an already-delivered Graph send) instead of minting a new id and sending
-  // the patient a duplicate WhatsApp message. The original body is resent
+  // the customer a duplicate WhatsApp message. The original body is resent
   // verbatim — no edit on retry — so the transcript matches what Graph delivered.
   function retryFailed(message: OptimisticMessage) {
     setOptimisticMessages((items) =>
@@ -448,11 +448,11 @@ export function ChatThread({
       <div className="bg-background sticky top-0 z-10">
         <NavBar
           backHref="/chat"
-          title={patientName}
+          title={customerName}
           right={
             <>
-              <RoundButton asChild aria-label={t.chat.callPatient}>
-                <a href={`tel:${patientPhone}`}>
+              <RoundButton asChild aria-label={t.chat.callCustomer}>
+                <a href={`tel:${customerPhone}`}>
                   <Phone className="h-[18px] w-[18px]" aria-hidden />
                 </a>
               </RoundButton>

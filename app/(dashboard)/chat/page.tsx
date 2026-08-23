@@ -20,7 +20,7 @@ export default async function ChatPage({
   const { rows, hasMore } = await getChatListPage(user.id, { status, query: q });
   return (
     <ChatList
-      ptId={user.id}
+      accountId={user.id}
       rows={rows}
       hasMore={hasMore}
       status={status}

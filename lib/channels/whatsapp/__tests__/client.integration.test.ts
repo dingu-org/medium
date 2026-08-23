@@ -13,7 +13,7 @@ import { db } from '@/lib/db';
 import {
   conversations,
   messageTemplates,
-  patients,
+  customers,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
@@ -35,7 +35,7 @@ import {
 const TOKEN = 'PT_TOKEN_supersecret_value';
 const WA_ID = '447700900111';
 
-let ptId = '';
+let accountId = '';
 let connectionId = '';
 let conversationId = '';
 let pniCounter = 0;
@@ -61,25 +61,25 @@ beforeAll(async () => {
   });
   if (error || !data.user)
     throw new Error(`createUser failed: ${error?.message}`);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
   await db
     .delete(whatsappConnections)
-    .where(eq(whatsappConnections.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId)); // cascades conversations + messages
-  await db.delete(messageTemplates).where(eq(messageTemplates.ptId, ptId));
+    .where(eq(whatsappConnections.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId)); // cascades conversations + messages
+  await db.delete(messageTemplates).where(eq(messageTemplates.accountId, accountId));
 
   const encrypted = await encryptToken(TOKEN);
   const [conn] = await db
     .insert(whatsappConnections)
     .values({
-      ptId,
+      accountId,
       phoneNumberId: nextPni(),
       wabaId: 'WABA_CLIENT',
       accessTokenEncrypted: encrypted,
@@ -88,16 +88,16 @@ beforeEach(async () => {
     .returning({ id: whatsappConnections.id });
   connectionId = conn.id;
 
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Pat', phone: WA_ID, waId: WA_ID })
-    .returning({ id: patients.id });
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Pat', phone: WA_ID, waId: WA_ID })
+    .returning({ id: customers.id });
 
   const [conv] = await db
     .insert(conversations)
     .values({
-      ptId,
-      patientId: patient.id,
+      accountId,
+      customerId: customer.id,
       channel: 'whatsapp',
       lastInboundAt: new Date(),
     })
@@ -170,7 +170,7 @@ describe('sendTemplate', () => {
 
   it('refuses when the template is still pending', async () => {
     await db.insert(messageTemplates).values({
-      ptId,
+      accountId,
       name: 'appointment_reminder_24h',
       language: 'en_US',
       status: 'pending',
@@ -187,7 +187,7 @@ describe('sendTemplate', () => {
 
   it('sends when the template is approved, with body parameters', async () => {
     await db.insert(messageTemplates).values({
-      ptId,
+      accountId,
       name: 'appointment_reminder_24h',
       language: 'en_US',
       status: 'approved',
@@ -325,7 +325,7 @@ describe('auth errors', () => {
       expect.objectContaining({
         id: expect.any(String),
         name: 'wa.connection.revoked',
-        data: { ptId, connectionId, reason: 'unauthorized' },
+        data: { accountId, connectionId, reason: 'unauthorized' },
       }),
     );
   });

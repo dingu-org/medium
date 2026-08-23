@@ -11,13 +11,13 @@ import { db } from '@/lib/db';
 import {
   conversations,
   messages,
-  patients,
+  customers,
   pwaMutations,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
-import { getPwaPtId } from '@/lib/pwa/auth';
+import { getPwaAccountId } from '@/lib/pwa/auth';
 import {
   beginPwaMutation,
   discardPwaMutation,
@@ -28,7 +28,7 @@ import {
 export const runtime = 'nodejs';
 // Keep an attempt shorter than the ledger's stale-processing window so a still
 // running send can never be reclaimed as abandoned and re-invoked concurrently
-// (mutation-store.ts) — a duplicate WhatsApp message for the patient.
+// (mutation-store.ts) — a duplicate WhatsApp message for the customer.
 export const maxDuration = 60;
 
 const schema = z.object({
@@ -72,15 +72,15 @@ function jsonError(error: string, status: number, code?: FailureCode) {
 }
 
 export async function POST(request: Request) {
-  const ptId = await getPwaPtId();
-  if (!ptId) return jsonError('Pa autorizim', 401);
+  const accountId = await getPwaAccountId();
+  if (!accountId) return jsonError('Pa autorizim', 401);
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return jsonError('Mesazhi nuk është i vlefshëm.', 400);
   const input = parsed.data;
 
   const started = await beginPwaMutation({
-    ptId,
+    accountId,
     clientMutationId: input.clientMutationId,
     type: 'message.send',
   });
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
       : null;
 
   const result = await sendMessage({
-    ptId,
+    accountId,
     clientMutationId: input.clientMutationId,
     conversationId: input.conversationId,
     body: input.body,
@@ -114,10 +114,10 @@ export async function POST(request: Request) {
   }
 
   if (result.disposition === 'discard') {
-    await discardPwaMutation({ ptId, clientMutationId: input.clientMutationId });
+    await discardPwaMutation({ accountId, clientMutationId: input.clientMutationId });
   } else if (result.disposition === 'fail') {
     await failPwaMutation({
-      ptId,
+      accountId,
       clientMutationId: input.clientMutationId,
       error: result.error,
     });
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
 }
 
 async function sendMessage(input: {
-  ptId: string;
+  accountId: string;
   clientMutationId: string;
   conversationId: string;
   body: string;
@@ -137,15 +137,15 @@ async function sendMessage(input: {
   const [conversation] = await db
     .select({
       id: conversations.id,
-      patientId: conversations.patientId,
-      waId: patients.waId,
+      customerId: conversations.customerId,
+      waId: customers.waId,
     })
     .from(conversations)
-    .innerJoin(patients, eq(conversations.patientId, patients.id))
+    .innerJoin(customers, eq(conversations.customerId, customers.id))
     .where(
       and(
         eq(conversations.id, input.conversationId),
-        eq(conversations.ptId, input.ptId),
+        eq(conversations.accountId, input.accountId),
       ),
     )
     .limit(1);
@@ -169,7 +169,7 @@ async function sendMessage(input: {
       .from(whatsappConnections)
       .where(
         and(
-          eq(whatsappConnections.ptId, input.ptId),
+          eq(whatsappConnections.accountId, input.accountId),
           eq(whatsappConnections.status, 'active'),
         ),
       )
@@ -203,7 +203,7 @@ async function sendMessage(input: {
     // unavailable -> retain (no re-send); see the residual-risk note.
     try {
       await markPwaMutationSent({
-        ptId: input.ptId,
+        accountId: input.accountId,
         clientMutationId: input.clientMutationId,
         externalMessageId,
       });
@@ -231,7 +231,7 @@ async function sendMessage(input: {
         .where(
           and(
             eq(conversations.id, conversation.id),
-            eq(conversations.ptId, input.ptId),
+            eq(conversations.accountId, input.accountId),
           ),
         )
         .for('update')
@@ -240,9 +240,9 @@ async function sendMessage(input: {
       const [inserted] = await tx
         .insert(messages)
         .values({
-          ptId: input.ptId,
+          accountId: input.accountId,
           conversationId: conversation.id,
-          role: 'pt',
+          role: 'account',
           channel: 'whatsapp',
           content: input.body,
           externalId: externalMessageId,
@@ -257,7 +257,7 @@ async function sendMessage(input: {
         .where(
           and(
             eq(conversations.id, conversation.id),
-            eq(conversations.ptId, input.ptId),
+            eq(conversations.accountId, input.accountId),
           ),
         );
 
@@ -265,9 +265,9 @@ async function sendMessage(input: {
         ? await appendBackgroundEvent(tx, {
             type: 'conversation.taken_over',
             data: {
-              ptId: input.ptId,
+              accountId: input.accountId,
               conversationId: conversation.id,
-              patientId: conversation.patientId,
+              customerId: conversation.customerId,
               takenOverAt: new Date().toISOString(),
             },
           })
@@ -302,7 +302,7 @@ async function sendMessage(input: {
         })
         .where(
           and(
-            eq(pwaMutations.ptId, input.ptId),
+            eq(pwaMutations.accountId, input.accountId),
             eq(pwaMutations.clientMutationId, input.clientMutationId),
           ),
         );

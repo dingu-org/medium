@@ -72,10 +72,10 @@ export type ToolResult<T = unknown> =
     };
 
 export type ToolExecutionContext = {
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   conversationId: string;
-  cancellationActor?: 'ai' | 'patient';
+  cancellationActor?: 'ai' | 'customer';
 };
 
 type Dispatch = (
@@ -106,35 +106,35 @@ export function createConversationTools(
     }),
     list_upcoming_appointments: tool({
       description:
-        "List the patient's upcoming appointments before choosing one to cancel or reschedule.",
+        "List the customer's upcoming appointments before choosing one to cancel or reschedule.",
       inputSchema: dispatchableSchema(toolSchemas.list_upcoming_appointments),
       execute: (input) => dispatch('list_upcoming_appointments', input, ctx),
     }),
     book_appointment: tool({
       description:
-        'Book a slot only after the patient has selected it and confirmed the appointment details.',
+        'Book a slot only after the customer has selected it and confirmed the appointment details.',
       inputSchema: dispatchableSchema(toolSchemas.book_appointment),
       execute: (input) => dispatch('book_appointment', input, ctx),
     }),
     reschedule_appointment: tool({
       description:
-        'Move one identified upcoming appointment to a new time selected by the patient.',
+        'Move one identified upcoming appointment to a new time selected by the customer.',
       inputSchema: dispatchableSchema(toolSchemas.reschedule_appointment),
       execute: (input) => dispatch('reschedule_appointment', input, ctx),
     }),
     cancel_appointment: tool({
       description:
-        "Cancel one identified upcoming appointment at the patient's request.",
+        "Cancel one identified upcoming appointment at the customer's request.",
       inputSchema: dispatchableSchema(toolSchemas.cancel_appointment),
       execute: (input) => dispatch('cancel_appointment', input, ctx),
     }),
     escalate_to_human: tool({
       description:
-        'Hand the conversation to the PT when the patient requests a human or scheduling cannot be resolved safely.',
+        'Hand the conversation to the PT when the customer requests a human or scheduling cannot be resolved safely.',
       inputSchema: dispatchableSchema(toolSchemas.escalate_to_human),
       execute: (input) => dispatch('escalate_to_human', input, ctx),
     }),
-    // Offering is not escalating: nothing is handed over until the patient
+    // Offering is not escalating: nothing is handed over until the customer
     // answers the offer, so this tool changes no conversation state. The engine
     // reads the successful call, sends its own fixed sentence, and remembers
     // that the offer is outstanding.

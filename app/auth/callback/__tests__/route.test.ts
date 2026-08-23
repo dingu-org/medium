@@ -38,7 +38,7 @@ function target(response: Response) {
 beforeEach(() => {
   exchangeMock.mockReset();
   exchangeMock.mockResolvedValue({
-    data: { user: { id: 'pt-a' } },
+    data: { user: { id: 'account-a' } },
     error: null,
   });
   cookieSetMock.mockReset();
@@ -71,7 +71,7 @@ describe('GET /auth/callback', () => {
     expect(target(response)).toBe('/reset-password');
     expect(cookieSetMock).toHaveBeenCalledWith(
       RECOVERY_COOKIE,
-      recoveryCookieValue('pt-a'),
+      recoveryCookieValue('account-a'),
       expect.objectContaining({ httpOnly: true, path: '/' }),
     );
   });

@@ -8,8 +8,8 @@ import {
   conversations,
   events,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderJobs,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -22,9 +22,9 @@ import { getTodaySnapshot } from '../queries';
 const DAY_ONE = new Date(testNow().getTime() - 30 * DAY);
 const DAY_TWO = new Date(testNow().getTime() + 10 * DAY);
 
-let ptId = '';
-let patientA = '';
-let patientB = '';
+let accountId = '';
+let customerA = '';
+let customerB = '';
 
 beforeAll(async () => {
   const { data, error } = await createServiceClient().auth.admin.createUser({
@@ -33,23 +33,23 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw error ?? new Error('Missing user');
-  ptId = data.user.id;
+  accountId = data.user.id;
   await db
-    .update(pts)
+    .update(accounts)
     .set({ timezone: 'Europe/Tirane' })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
   const rows = await db
-    .insert(patients)
+    .insert(customers)
     .values([
-      { ptId, name: 'Escalated Client', phone: '+355690000001' },
-      { ptId, name: 'Reminder Client', phone: '+355690000002' },
+      { accountId, name: 'Escalated Client', phone: '+355690000001' },
+      { accountId, name: 'Reminder Client', phone: '+355690000002' },
     ])
-    .returning({ id: patients.id });
-  [patientA, patientB] = rows.map((row) => row.id);
+    .returning({ id: customers.id });
+  [customerA, customerB] = rows.map((row) => row.id);
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('getTodaySnapshot', () => {
@@ -58,8 +58,8 @@ describe('getTodaySnapshot', () => {
     const [conversation] = await db
       .insert(conversations)
       .values({
-        ptId,
-        patientId: patientA,
+        accountId,
+        customerId: customerA,
         channel: 'whatsapp',
         escalationState: 'pending',
         lastInboundAt: now,
@@ -69,16 +69,16 @@ describe('getTodaySnapshot', () => {
       .insert(appointments)
       .values([
         {
-          ptId,
-          patientId: patientA,
+          accountId,
+          customerId: customerA,
           startsAt: zonedTime(DAY_ONE, 10),
           endsAt: zonedTime(DAY_ONE, 10, 45),
           serviceType: 'Vlerësim i parë',
           status: 'confirmed',
         },
         {
-          ptId,
-          patientId: patientB,
+          accountId,
+          customerId: customerB,
           startsAt: zonedTime(DAY_ONE, 14),
           endsAt: zonedTime(DAY_ONE, 14, 30),
           serviceType: 'Seancë vijuese',
@@ -86,11 +86,11 @@ describe('getTodaySnapshot', () => {
       ])
       .returning({ id: appointments.id });
     await db.insert(reminderJobs).values([
-      { ptId, appointmentId: appts[0].id, scheduledFor: now, status: 'sent' },
-      { ptId, appointmentId: appts[1].id, scheduledFor: now, status: 'sent' },
+      { accountId, appointmentId: appts[0].id, scheduledFor: now, status: 'sent' },
+      { accountId, appointmentId: appts[1].id, scheduledFor: now, status: 'sent' },
     ]);
 
-    const snapshot = await getTodaySnapshot(ptId, now);
+    const snapshot = await getTodaySnapshot(accountId, now);
     expect(snapshot.next).toMatchObject({
       id: appts[0].id,
       startLabel: '10:00',
@@ -99,10 +99,10 @@ describe('getTodaySnapshot', () => {
       appts[1].id,
     ]);
     expect(
-      snapshot.attention.map((item) => [item.patientId, item.kind]),
+      snapshot.attention.map((item) => [item.customerId, item.kind]),
     ).toEqual([
-      [patientA, 'escalation'],
-      [patientB, 'reminder'],
+      [customerA, 'escalation'],
+      [customerB, 'reminder'],
     ]);
     expect(conversation.id).toBeTruthy();
   });
@@ -112,8 +112,8 @@ describe('getTodaySnapshot', () => {
     const [appointment] = await db
       .insert(appointments)
       .values({
-        ptId,
-        patientId: patientB,
+        accountId,
+        customerId: customerB,
         startsAt: zonedTime(new Date(DAY_TWO.getTime() + DAY), 10),
         endsAt: zonedTime(new Date(DAY_TWO.getTime() + DAY), 10, 30),
         serviceType: 'Seancë vijuese',
@@ -121,17 +121,17 @@ describe('getTodaySnapshot', () => {
       })
       .returning({ id: appointments.id });
     await db.insert(reminderJobs).values({
-      ptId,
+      accountId,
       appointmentId: appointment.id,
       scheduledFor: zonedTime(DAY_TWO, 10),
       status: 'sent',
     });
 
-    const snapshot = await getTodaySnapshot(ptId, now);
+    const snapshot = await getTodaySnapshot(accountId, now);
     const reminder = snapshot.attention.find(
       (item) => item.kind === 'reminder',
     );
-    expect(reminder?.patientId).toBe(patientB);
+    expect(reminder?.customerId).toBe(customerB);
     expect(reminder?.appointment?.startLabel).toBe('Nesër 10:00');
     // Tomorrow's appointment never joins today's timeline.
     expect(snapshot.next).toBeNull();
@@ -151,9 +151,9 @@ describe('getTodaySnapshot', () => {
 
     const [conversation] = await db
       .insert(conversations)
-      .values({ ptId, patientId: patientA, channel: 'whatsapp' })
+      .values({ accountId, customerId: customerA, channel: 'whatsapp' })
       .onConflictDoNothing({
-        target: [conversations.patientId, conversations.channel],
+        target: [conversations.customerId, conversations.channel],
       })
       .returning({ id: conversations.id });
     const conversationId =
@@ -162,49 +162,49 @@ describe('getTodaySnapshot', () => {
         await db
           .select({ id: conversations.id })
           .from(conversations)
-          .where(eq(conversations.patientId, patientA))
+          .where(eq(conversations.customerId, customerA))
           .limit(1)
       )[0].id;
 
     await db.insert(messages).values([
       {
-        ptId,
+        accountId,
         conversationId,
-        role: 'patient',
+        role: 'customer',
         channel: 'whatsapp',
         content: 'in week',
         createdAt: inWeek,
       },
       {
-        ptId,
+        accountId,
         conversationId,
-        role: 'patient',
+        role: 'customer',
         channel: 'whatsapp',
         content: 'before week',
         createdAt: beforeWeek,
       },
       {
-        ptId,
+        accountId,
         conversationId,
-        role: 'patient',
+        role: 'customer',
         channel: 'whatsapp',
         content: 'after week',
         createdAt: afterWeek,
       },
       {
-        ptId,
+        accountId,
         conversationId,
-        role: 'pt',
+        role: 'account',
         channel: 'whatsapp',
-        content: 'pt reply in week (not a received message)',
+        content: 'account reply in week (not a received message)',
         createdAt: inWeek,
       },
     ]);
 
     await db.insert(appointments).values([
       {
-        ptId,
-        patientId: patientB,
+        accountId,
+        customerId: customerB,
         startsAt: new Date(inWeek.getTime() + 60 * 60_000),
         endsAt: new Date(inWeek.getTime() + 2 * 60 * 60_000),
         serviceType: 'Në javë',
@@ -212,8 +212,8 @@ describe('getTodaySnapshot', () => {
         createdAt: inWeek,
       },
       {
-        ptId,
-        patientId: patientB,
+        accountId,
+        customerId: customerB,
         startsAt: new Date(afterWeek.getTime() + 60 * 60_000),
         endsAt: new Date(afterWeek.getTime() + 2 * 60 * 60_000),
         serviceType: 'Jashtë javës',
@@ -223,16 +223,16 @@ describe('getTodaySnapshot', () => {
     ]);
 
     await db.insert(events).values([
-      { ptId, type: 'conversation.escalated', payload: {}, occurredAt: inWeek },
+      { accountId, type: 'conversation.escalated', payload: {}, occurredAt: inWeek },
       {
-        ptId,
+        accountId,
         type: 'conversation.escalated',
         payload: {},
         occurredAt: beforeWeek,
       },
     ]);
 
-    const snapshot = await getTodaySnapshot(ptId, now);
+    const snapshot = await getTodaySnapshot(accountId, now);
     expect(snapshot.week).toEqual({
       messagesReceived: 1,
       bookings: 1,

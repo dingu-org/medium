@@ -13,7 +13,7 @@ import {
 import { db } from '@/lib/db';
 import { encryptToken } from '@/lib/db/crypto';
 import { auditLog, whatsappConnections } from '@/lib/db/schema';
-import { deleteAccount, disconnectWhatsApp, exportPt } from '../actions';
+import { deleteAccount, disconnectWhatsApp, exportAccount } from '../actions';
 
 const {
   getUserMock,
@@ -21,7 +21,7 @@ const {
   deleteUserMock,
   recordArchiveMock,
   detachMock,
-  buildPtExportMock,
+  buildAccountExportMock,
   redirectMock,
 } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
@@ -31,17 +31,17 @@ const {
     return { error: null };
   }),
   recordArchiveMock: vi.fn(
-    async (input: { ptId: string; scope: string; [k: string]: unknown }) => {
+    async (input: { accountId: string; scope: string; [k: string]: unknown }) => {
       void input;
     },
   ),
-  detachMock: vi.fn(async (args: { ptId: string }) => {
+  detachMock: vi.fn(async (args: { accountId: string }) => {
     void args;
     return { detached: true };
   }),
-  buildPtExportMock: vi.fn(async () => ({
-    pt: { id: 'stub' },
-    patients: [],
+  buildAccountExportMock: vi.fn(async () => ({
+    account: { id: 'stub' },
+    customers: [],
     conversations: [],
     messages: [],
     appointments: [],
@@ -83,7 +83,7 @@ vi.mock('@/lib/gdpr/archive', () => ({ recordErasureArchive: recordArchiveMock }
 vi.mock('@/lib/channels/whatsapp/client', () => ({
   detachWabaSubscription: detachMock,
 }));
-vi.mock('@/lib/gdpr/export', () => ({ buildPtExport: buildPtExportMock }));
+vi.mock('@/lib/gdpr/export', () => ({ buildAccountExport: buildAccountExportMock }));
 
 // A real service client, independent of the `@/lib/supabase/service` mock
 // above, purely to seed/clean up a real auth user for these tests.
@@ -93,7 +93,7 @@ const realService = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-let ptId = '';
+let accountId = '';
 
 beforeAll(async () => {
   const { data, error } = await realService.auth.admin.createUser({
@@ -102,16 +102,16 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await realService.auth.admin.deleteUser(ptId);
+  if (accountId) await realService.auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
-  await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
-  getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  await db.delete(auditLog).where(eq(auditLog.accountId, accountId));
+  getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
 });
 
 afterEach(() => {
@@ -123,7 +123,7 @@ describe('disconnectWhatsApp', () => {
     const [inserted] = await db
       .insert(whatsappConnections)
       .values({
-        ptId,
+        accountId,
         phoneNumberId: `pn-disconnect-${Date.now()}-${Math.random()}`,
         wabaId: 'WABA_DISCONNECT',
         accessTokenEncrypted: await encryptToken('DISCONNECT_TOKEN'),
@@ -147,7 +147,7 @@ describe('disconnectWhatsApp', () => {
     const connectionId = await seedConnection();
     let statusAtDetach: string | null = null;
     detachMock.mockImplementationOnce(async (args) => {
-      expect(args).toEqual({ ptId });
+      expect(args).toEqual({ accountId });
       const [row] = await readConnection(connectionId);
       statusAtDetach = row.status;
       return { detached: true };
@@ -182,7 +182,7 @@ describe('disconnectWhatsApp', () => {
       expect(row.status).toBe('revoked');
       // Meta is still subscribed to this WABA, and the token is the only
       // credential that can unsubscribe it — dropping it here would leave the
-      // PT's patient messages arriving on our webhook with no way out.
+      // PT's customer messages arriving on our webhook with no way out.
       expect(row.accessTokenEncrypted).not.toBeNull();
     } finally {
       await db
@@ -211,7 +211,7 @@ describe('disconnectWhatsApp', () => {
   it('is a no-op when the PT never connected WhatsApp', async () => {
     await db
       .delete(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
 
     await disconnectWhatsApp();
     expect(detachMock).not.toHaveBeenCalled();
@@ -223,7 +223,7 @@ describe('deleteAccount', () => {
     const order: string[] = [];
     recordArchiveMock.mockImplementationOnce(async (input) => {
       order.push('archive');
-      expect(input).toMatchObject({ ptId, scope: 'account' });
+      expect(input).toMatchObject({ accountId, scope: 'account' });
     });
     detachMock.mockImplementationOnce(async () => {
       order.push('detach');
@@ -231,7 +231,7 @@ describe('deleteAccount', () => {
     });
     deleteUserMock.mockImplementationOnce(async (id: string) => {
       order.push('deleteUser');
-      expect(id).toBe(ptId);
+      expect(id).toBe(accountId);
       return { error: null };
     });
 
@@ -253,9 +253,9 @@ describe('deleteAccount', () => {
   });
 });
 
-describe('exportPt', () => {
-  it('returns the redacted-token export shape and writes an export.pt audit row', async () => {
-    const result = await exportPt();
+describe('exportAccount', () => {
+  it('returns the redacted-token export shape and writes an export.account audit row', async () => {
+    const result = await exportAccount();
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.whatsapp_connection).toMatchObject({
@@ -265,9 +265,9 @@ describe('exportPt', () => {
     const [row] = await db
       .select()
       .from(auditLog)
-      .where(and(eq(auditLog.ptId, ptId), eq(auditLog.action, 'export.pt')));
+      .where(and(eq(auditLog.accountId, accountId), eq(auditLog.action, 'export.account')));
     expect(row).toBeTruthy();
-    expect(row.targetId).toBe(ptId);
-    expect(row.targetTable).toBe('pts');
+    expect(row.targetId).toBe(accountId);
+    expect(row.targetTable).toBe('accounts');
   });
 });

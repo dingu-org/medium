@@ -7,7 +7,7 @@ const metadata = z
   })
   .passthrough();
 
-// A caption is text the patient typed, and WhatsApp carries it on the media
+// A caption is text the customer typed, and WhatsApp carries it on the media
 // object — never in `text`. Declared so it survives into the persisted
 // placeholder instead of being dropped with the body we cannot read. Image,
 // video and document are the three Cloud API types that have one.
@@ -27,7 +27,7 @@ const inboundMessage = z.object({
   document: captionedMedia,
 }).passthrough();
 
-/** The caption the patient typed on a media message, if any. */
+/** The caption the customer typed on a media message, if any. */
 export function inboundCaption(
   msg: z.infer<typeof inboundMessage>,
 ): string | null {

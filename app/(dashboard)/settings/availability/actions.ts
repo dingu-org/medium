@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { availabilityRules, blockedPeriods, pts } from '@/lib/db/schema';
+import { availabilityRules, blockedPeriods, accounts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 
@@ -24,7 +24,7 @@ const ruleSchema = z
 
 const rulesSchema = z.array(ruleSchema).max(7);
 
-async function requirePtId(): Promise<string> {
+async function requireAccountId(): Promise<string> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -39,18 +39,18 @@ export type AvailabilityResult = { ok: boolean; error?: string };
 async function saveAvailabilityImpl(input: {
   rules: { weekday: number; start: string; end: string }[];
 }): Promise<AvailabilityResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const parsed = rulesSchema.safeParse(input.rules);
   if (!parsed.success) {
     return { ok: false, error: 'Please check your working hours.' };
   }
 
   await db.transaction(async (tx) => {
-    await tx.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
+    await tx.delete(availabilityRules).where(eq(availabilityRules.accountId, accountId));
     if (parsed.data.length > 0) {
       await tx.insert(availabilityRules).values(
         parsed.data.map((r) => ({
-          ptId,
+          accountId,
           weekday: r.weekday,
           startTime: `${r.start}:00`,
           endTime: `${r.end}:00`,
@@ -85,15 +85,15 @@ const timezoneSchema = z.object({
 async function saveTimezoneImpl(input: {
   timezone: string;
 }): Promise<AvailabilityResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const parsed = timezoneSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid' };
   }
   await db
-    .update(pts)
+    .update(accounts)
     .set({ timezone: parsed.data.timezone })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
   revalidatePath('/settings/availability');
   return { ok: true };
 }
@@ -121,18 +121,18 @@ async function addBlockedPeriodImpl(input: {
   endTime: string;
   label?: string;
 }): Promise<AvailabilityResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const parsed = blockSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid' };
   }
 
-  const [pt] = await db
-    .select({ timezone: pts.timezone })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+  const [account] = await db
+    .select({ timezone: accounts.timezone })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  const timezone = pt?.timezone ?? 'Europe/Berlin';
+  const timezone = account?.timezone ?? 'Europe/Berlin';
 
   const [year, month, day] = parsed.data.date.split('-').map(Number);
   const toInstant = (time: string): Date => {
@@ -143,7 +143,7 @@ async function addBlockedPeriodImpl(input: {
   };
 
   await db.insert(blockedPeriods).values({
-    ptId,
+    accountId,
     startsAt: toInstant(parsed.data.startTime),
     endsAt: toInstant(parsed.data.endTime),
     label: parsed.data.label || null,
@@ -159,10 +159,10 @@ export const addBlockedPeriod = instrumentedAction(
 );
 
 async function deleteBlockedPeriodImpl(id: string): Promise<void> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   await db
     .delete(blockedPeriods)
-    .where(and(eq(blockedPeriods.id, id), eq(blockedPeriods.ptId, ptId)));
+    .where(and(eq(blockedPeriods.id, id), eq(blockedPeriods.accountId, accountId)));
   revalidatePath('/settings/availability');
 }
 

@@ -21,7 +21,7 @@ export default async function NotificationsSettingsPage() {
   return (
     <div className="-mx-4 -mt-4">
       <NavBar title={t.settings.sectionNotifications} backHref="/settings" />
-      <div className="space-y-6 px-5 pt-2 pb-4">
+      <div className="space-y-6 px-5 account-2 pb-4">
         <OfflineNote />
         <DevicePushCard />
         <NotificationPrefs prefs={snapshot.notificationPrefs} />

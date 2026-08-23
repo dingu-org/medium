@@ -160,7 +160,7 @@ function PhoneMock() {
       aria-hidden
     >
       <div className="bg-background relative flex h-[560px] flex-col overflow-hidden rounded-[28px]">
-        <div className="border-line bg-card flex items-center gap-3 border-b px-4 py-3 pt-7">
+        <div className="border-line bg-card flex items-center gap-3 border-b px-4 py-3 account-7">
           <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-500)]">
             <span className="font-heading text-sm font-semibold text-white">
               M

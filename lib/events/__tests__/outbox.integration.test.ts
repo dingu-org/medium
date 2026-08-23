@@ -21,7 +21,7 @@ import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
 import { excludeForeignRows } from '@/tests/support/isolation';
 
-let ptId = '';
+let accountId = '';
 
 beforeAll(async () => {
   const { data, error } = await createServiceClient().auth.admin.createUser({
@@ -31,20 +31,20 @@ beforeAll(async () => {
   });
   if (error || !data.user)
     throw new Error(`createUser failed: ${error?.message}`);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
-  await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
+  await db.delete(eventOutbox).where(eq(eventOutbox.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
   // The tallies below are absolute (`claimed: 2`), and the publisher claims
   // across every tenant, so any other suite's still-due row would be counted
   // here. Park the foreign rows as published so the scan only sees this file's.
-  await excludeForeignRows(eventOutbox, ptId, { publishedAt: new Date() });
+  await excludeForeignRows(eventOutbox, accountId, { publishedAt: new Date() });
   vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
@@ -63,12 +63,12 @@ async function seedOutboxRow(args: {
 }): Promise<{ eventId: string; outboxId: string }> {
   const [event] = await db
     .insert(events)
-    .values({ ptId, type: args.eventType, payload: args.payload })
+    .values({ accountId, type: args.eventType, payload: args.payload })
     .returning({ id: events.id });
   const [row] = await db
     .insert(eventOutbox)
     .values({
-      ptId,
+      accountId,
       eventId: event.id,
       eventType: args.eventType,
       payload: args.payload,
@@ -88,7 +88,7 @@ async function outboxRow(id: string) {
 describe('publishOutboxEvent', () => {
   it('publishes a known event whose payload carries the row tenant', async () => {
     const payload = {
-      ptId,
+      accountId,
       conversationId: randomUUID(),
       messageId: randomUUID(),
     };
@@ -114,8 +114,8 @@ describe('publishOutboxEvent', () => {
 
   it('drains an event type the app never emits without reaching Inngest', async () => {
     const { eventId, outboxId } = await seedOutboxRow({
-      eventType: 'pts.plan_granted',
-      payload: { ptId },
+      eventType: 'accounts.plan_granted',
+      payload: { accountId },
     });
 
     await expect(publishOutboxEvent(eventId)).resolves.toEqual({
@@ -129,14 +129,14 @@ describe('publishOutboxEvent', () => {
     expect(row.lastError).toBe('rejected: unknown_event_type');
   });
 
-  it('drains a payload whose ptId is another tenant without reaching Inngest', async () => {
+  it('drains a payload whose accountId is another tenant without reaching Inngest', async () => {
     const { eventId, outboxId } = await seedOutboxRow({
       eventType: 'notification.requested',
       payload: {
-        ptId: randomUUID(),
+        accountId: randomUUID(),
         kind: 'appointment.booked',
         appointmentId: randomUUID(),
-        patientId: randomUUID(),
+        customerId: randomUUID(),
         startsAt: new Date().toISOString(),
         previousStartsAt: null,
       },
@@ -150,7 +150,7 @@ describe('publishOutboxEvent', () => {
 
     const row = await outboxRow(outboxId);
     expect(row.publishedAt).not.toBeNull();
-    expect(row.lastError).toBe('rejected: payload_pt_id_mismatch');
+    expect(row.lastError).toBe('rejected: payload_account_id_mismatch');
   });
 
   it('drains a payload that is not an object without reaching Inngest', async () => {
@@ -182,10 +182,10 @@ describe('publishDueOutboxEvents', () => {
   it('counts a refused forgery apart from a transport failure', async () => {
     // Both used to land in `failed`, so a healthy run that drained one forged
     // row was indistinguishable from Inngest being unreachable.
-    await seedOutboxRow({ eventType: 'pts.plan_granted', payload: { ptId } });
+    await seedOutboxRow({ eventType: 'accounts.plan_granted', payload: { accountId } });
     await seedOutboxRow({
       eventType: 'message.received',
-      payload: { ptId, conversationId: randomUUID(), messageId: randomUUID() },
+      payload: { accountId, conversationId: randomUUID(), messageId: randomUUID() },
     });
     vi.mocked(inngest.send).mockRejectedValueOnce(new Error('inngest down'));
 
@@ -202,7 +202,7 @@ describe('publishDueOutboxEvents', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { outboxId } = await seedOutboxRow({
       eventType: 'message.received',
-      payload: { ptId, conversationId: randomUUID(), messageId: randomUUID() },
+      payload: { accountId, conversationId: randomUUID(), messageId: randomUUID() },
     });
     await db
       .update(eventOutbox)

@@ -53,7 +53,7 @@ export function ChatComposer({
 
   return (
     <div className="border-line bg-card fixed inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto max-w-md px-4 pt-3 pb-3.5">
+      <div className="mx-auto max-w-md px-4 account-3 pb-3.5">
         {state === 'windowClosed' ? (
           <>
             <div className="border-line mb-2.5 flex items-start gap-2.5 rounded-[18px] border bg-[#f4f4f1] px-3 py-[11px]">

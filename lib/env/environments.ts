@@ -6,7 +6,7 @@ import type { AppEnv } from './app-env';
  * Only one thing is declared here, and it is the one thing that must never be
  * wrong: which Supabase project an environment is allowed to talk to. Until
  * 2026-08-04 all three environments shared a single project, so a preview
- * deploy read and wrote live patient rows. Declaring the mapping in the repo
+ * deploy read and wrote live customer rows. Declaring the mapping in the repo
  * turns that from an invisible configuration state into a boot-time assertion
  * (`lib/env/guard.ts`).
  *

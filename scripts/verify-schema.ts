@@ -10,9 +10,9 @@ if (!url) throw new Error('DATABASE_URL missing');
 const sql = postgres(url, { prepare: false });
 
 const expectedTables = [
-  'pts',
+  'accounts',
   'whatsapp_connections',
-  'patients',
+  'customers',
   'conversations',
   'messages',
   'appointments',
@@ -55,9 +55,9 @@ async function main() {
 
   const fk = await sql<{ conname: string }[]>`
     SELECT conname FROM pg_constraint
-    WHERE conname='pts_id_auth_users_fk'
+    WHERE conname='accounts_id_auth_users_fk'
   `;
-  console.log(`pts→auth.users FK: ${fk.length === 1}`);
+  console.log(`accounts→auth.users FK: ${fk.length === 1}`);
 
   const policies = await sql<{ tablename: string; policyname: string }[]>`
     SELECT tablename, policyname

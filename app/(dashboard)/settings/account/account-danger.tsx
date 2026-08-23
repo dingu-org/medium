@@ -25,14 +25,14 @@ import { deleteAccount } from '../actions';
 /** "Zona e rrezikut" group + typed-practice-name delete confirmation
  *  (account-delete artboard). Delete only — WhatsApp disconnect lives on
  *  /settings/whatsapp. */
-export function AccountDanger({ practiceName }: { practiceName: string }) {
+export function AccountDanger({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, startDelete] = useTransition();
   const online = useOnlineStatus();
   // The practice name is unset until onboarding's profile step is completed, and
   // that step is skippable — so never compare against it raw.
-  const phrase = confirmPhrase(practiceName);
+  const phrase = confirmPhrase(name);
   const matches = confirmMatches(phrase, confirmText);
 
   function onOpenChange(next: boolean) {
@@ -76,7 +76,7 @@ export function AccountDanger({ practiceName }: { practiceName: string }) {
           showCloseButton={false}
           className="max-w-[340px] gap-0 rounded-[26px] p-0"
         >
-          <div className="px-[22px] pt-[22px] pb-4 text-center">
+          <div className="px-[22px] account-[22px] pb-4 text-center">
             <span className="mb-3.5 inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--danger-50)]">
               <X
                 className="h-6 w-6 text-destructive"

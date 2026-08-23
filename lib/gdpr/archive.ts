@@ -7,14 +7,14 @@ import { erasureArchive } from '@/lib/db/schema';
  * deny-all for authenticated). Metadata must never carry PII.
  */
 export async function recordErasureArchive(input: {
-  ptId: string;
-  scope: 'patient' | 'account';
+  accountId: string;
+  scope: 'customer' | 'account';
   targetId?: string | null;
   beforeStateHash?: string | null;
   metadata?: Record<string, unknown> | null;
 }): Promise<void> {
   await db.insert(erasureArchive).values({
-    ptId: input.ptId,
+    accountId: input.accountId,
     scope: input.scope,
     targetId: input.targetId ?? null,
     beforeStateHash: input.beforeStateHash ?? null,

@@ -4,8 +4,8 @@ import { appointments } from '@/lib/db/schema';
 import type { AppointmentRecord } from './types';
 
 export async function listUpcomingAppointments(args: {
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   now?: Date;
   limit?: number;
 }): Promise<AppointmentRecord[]> {
@@ -14,8 +14,8 @@ export async function listUpcomingAppointments(args: {
     .from(appointments)
     .where(
       and(
-        eq(appointments.ptId, args.ptId),
-        eq(appointments.patientId, args.patientId),
+        eq(appointments.accountId, args.accountId),
+        eq(appointments.customerId, args.customerId),
         inArray(appointments.status, ['pending', 'confirmed']),
         gte(appointments.startsAt, args.now ?? new Date()),
       ),

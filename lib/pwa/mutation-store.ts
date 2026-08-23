@@ -31,14 +31,14 @@ export type MutationStart =
   | { kind: 'processing' };
 
 export async function beginPwaMutation(input: {
-  ptId: string;
+  accountId: string;
   clientMutationId: string;
   type: string;
 }): Promise<MutationStart> {
   const [inserted] = await db
     .insert(pwaMutations)
     .values({
-      ptId: input.ptId,
+      accountId: input.accountId,
       clientMutationId: input.clientMutationId,
       type: input.type,
       status: 'processing',
@@ -59,7 +59,7 @@ export async function beginPwaMutation(input: {
     .from(pwaMutations)
     .where(
       and(
-        eq(pwaMutations.ptId, input.ptId),
+        eq(pwaMutations.accountId, input.accountId),
         eq(pwaMutations.clientMutationId, input.clientMutationId),
       ),
     )
@@ -70,7 +70,7 @@ export async function beginPwaMutation(input: {
       // Already retried once and died again: dead-end visibly rather than run
       // the side-effect a third time.
       await failPwaMutation({
-        ptId: input.ptId,
+        accountId: input.accountId,
         clientMutationId: input.clientMutationId,
         error: ABANDONED_ERROR,
       });
@@ -93,7 +93,7 @@ export async function beginPwaMutation(input: {
       })
       .where(
         and(
-          eq(pwaMutations.ptId, input.ptId),
+          eq(pwaMutations.accountId, input.accountId),
           eq(pwaMutations.clientMutationId, input.clientMutationId),
           eq(pwaMutations.status, 'processing'),
           lt(pwaMutations.updatedAt, staleBefore()),
@@ -103,7 +103,7 @@ export async function beginPwaMutation(input: {
       .returning({ id: pwaMutations.id });
 
     if (!reclaimed) return { kind: 'processing' };
-    // Surface whatever the dead attempt stashed (e.g. a patient it already
+    // Surface whatever the dead attempt stashed (e.g. a customer it already
     // created) so the caller can resume instead of redoing — and potentially
     // failing on — a side-effect that already succeeded.
     return { kind: 'new', id: reclaimed.id, priorProgress: readProgress(existing.result) };
@@ -169,7 +169,7 @@ function isStaleProcessing(existing: StoredMutation | undefined): existing is St
 }
 
 export async function completePwaMutation(input: {
-  ptId: string;
+  accountId: string;
   clientMutationId: string;
   result: unknown;
 }): Promise<void> {
@@ -183,14 +183,14 @@ export async function completePwaMutation(input: {
     })
     .where(
       and(
-        eq(pwaMutations.ptId, input.ptId),
+        eq(pwaMutations.accountId, input.accountId),
         eq(pwaMutations.clientMutationId, input.clientMutationId),
       ),
     );
 }
 
 export async function failPwaMutation(input: {
-  ptId: string;
+  accountId: string;
   clientMutationId: string;
   error: string;
 }): Promise<void> {
@@ -204,7 +204,7 @@ export async function failPwaMutation(input: {
     })
     .where(
       and(
-        eq(pwaMutations.ptId, input.ptId),
+        eq(pwaMutations.accountId, input.accountId),
         eq(pwaMutations.clientMutationId, input.clientMutationId),
       ),
     );
@@ -218,7 +218,7 @@ export async function failPwaMutation(input: {
  * row that already advanced to success/failed.
  */
 export async function markPwaMutationSent(input: {
-  ptId: string;
+  accountId: string;
   clientMutationId: string;
   externalMessageId: string | null;
 }): Promise<void> {
@@ -232,7 +232,7 @@ export async function markPwaMutationSent(input: {
     })
     .where(
       and(
-        eq(pwaMutations.ptId, input.ptId),
+        eq(pwaMutations.accountId, input.accountId),
         eq(pwaMutations.clientMutationId, input.clientMutationId),
         eq(pwaMutations.status, 'processing'),
       ),
@@ -243,17 +243,17 @@ export async function markPwaMutationSent(input: {
  * Stash a fragment of intermediate progress against a still-`processing` row,
  * for a handler whose work is a sequence of side effects that isn't (and
  * can't cheaply be made) one atomic transaction — e.g. appointment.manual_book
- * creates a patient record, then books the appointment. If the process dies
+ * creates a customer record, then books the appointment. If the process dies
  * between the two, MAX_RECLAIMS lets exactly one retry re-run the handler; the
  * stashed fragment (read back via `priorProgress` on the next `beginPwaMutation`
  * call) lets that retry resume from the completed step instead of redoing it
- * and dead-ending on its own leftover state (e.g. the patient it already
+ * and dead-ending on its own leftover state (e.g. the customer it already
  * created). Merged into the existing jsonb object so it survives the reclaim
  * counter update above. Guarded on 'processing' so it is a no-op once the
  * mutation has moved on to success/failed.
  */
 export async function recordPwaMutationProgress(input: {
-  ptId: string;
+  accountId: string;
   clientMutationId: string;
   progress: Record<string, unknown>;
 }): Promise<void> {
@@ -265,7 +265,7 @@ export async function recordPwaMutationProgress(input: {
     })
     .where(
       and(
-        eq(pwaMutations.ptId, input.ptId),
+        eq(pwaMutations.accountId, input.accountId),
         eq(pwaMutations.clientMutationId, input.clientMutationId),
         eq(pwaMutations.status, 'processing'),
       ),
@@ -279,14 +279,14 @@ export async function recordPwaMutationProgress(input: {
  * confirmed send ('sent'/'success') can never be discarded.
  */
 export async function discardPwaMutation(input: {
-  ptId: string;
+  accountId: string;
   clientMutationId: string;
 }): Promise<void> {
   await db
     .delete(pwaMutations)
     .where(
       and(
-        eq(pwaMutations.ptId, input.ptId),
+        eq(pwaMutations.accountId, input.accountId),
         eq(pwaMutations.clientMutationId, input.clientMutationId),
         eq(pwaMutations.status, 'processing'),
       ),

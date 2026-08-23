@@ -27,7 +27,7 @@ import {
 
 const META_TEMPLATE_ID = 'TEMPLATE_META_ID_123';
 
-let ptId = '';
+let accountId = '';
 let connectionId = '';
 let pniCounter = 0;
 const nextPni = () => `PNI_BOOT_${Date.now()}_${++pniCounter}`;
@@ -56,24 +56,24 @@ beforeAll(async () => {
   });
   if (error || !data.user)
     throw new Error(`createUser failed: ${error?.message}`);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
-  await db.delete(messageTemplates).where(eq(messageTemplates.ptId, ptId));
+  await db.delete(messageTemplates).where(eq(messageTemplates.accountId, accountId));
   await db
     .delete(whatsappConnections)
-    .where(eq(whatsappConnections.ptId, ptId));
+    .where(eq(whatsappConnections.accountId, accountId));
 
   const encrypted = await encryptToken('PT_TOKEN');
   const [conn] = await db
     .insert(whatsappConnections)
     .values({
-      ptId,
+      accountId,
       phoneNumberId: nextPni(),
       wabaId: 'WABA_BOOT',
       accessTokenEncrypted: encrypted,
@@ -92,13 +92,13 @@ afterEach(() => {
 
 describe('bootstrapWaConnectionCore', () => {
   it('submits the reminder template and inserts a pending row', async () => {
-    const result = await bootstrapWaConnectionCore({ ptId, connectionId });
+    const result = await bootstrapWaConnectionCore({ accountId, connectionId });
     expect(result.created).toBe(true);
 
     const [row] = await db
       .select()
       .from(messageTemplates)
-      .where(eq(messageTemplates.ptId, ptId));
+      .where(eq(messageTemplates.accountId, accountId));
     expect(row.name).toBe(REMINDER_TEMPLATE.name);
     expect(row.language).toBe(REMINDER_TEMPLATE.language);
     expect(row.status).toBe('pending');
@@ -107,9 +107,9 @@ describe('bootstrapWaConnectionCore', () => {
   });
 
   it('can submit the fallback reminder template after a primary rejection', async () => {
-    await bootstrapWaConnectionCore({ ptId, connectionId });
+    await bootstrapWaConnectionCore({ accountId, connectionId });
     const fallback = await bootstrapWaConnectionCore({
-      ptId,
+      accountId,
       connectionId,
       template: FALLBACK_REMINDER_TEMPLATE,
     });
@@ -120,7 +120,7 @@ describe('bootstrapWaConnectionCore', () => {
     const rows = await db
       .select()
       .from(messageTemplates)
-      .where(eq(messageTemplates.ptId, ptId));
+      .where(eq(messageTemplates.accountId, accountId));
     expect(rows.map((row) => row.name).sort()).toEqual([
       FALLBACK_REMINDER_TEMPLATE.name,
       REMINDER_TEMPLATE.name,
@@ -128,8 +128,8 @@ describe('bootstrapWaConnectionCore', () => {
   });
 
   it('is idempotent — a second run does not duplicate the template', async () => {
-    const first = await bootstrapWaConnectionCore({ ptId, connectionId });
-    const second = await bootstrapWaConnectionCore({ ptId, connectionId });
+    const first = await bootstrapWaConnectionCore({ accountId, connectionId });
+    const second = await bootstrapWaConnectionCore({ accountId, connectionId });
 
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
@@ -138,23 +138,23 @@ describe('bootstrapWaConnectionCore', () => {
     const rows = await db
       .select()
       .from(messageTemplates)
-      .where(eq(messageTemplates.ptId, ptId));
+      .where(eq(messageTemplates.accountId, accountId));
     expect(rows).toHaveLength(1);
   });
 
   it('normalizes Meta approval and rejection statuses', async () => {
-    const created = await bootstrapWaConnectionCore({ ptId, connectionId });
+    const created = await bootstrapWaConnectionCore({ accountId, connectionId });
 
     await expect(
       applyTemplateStatus({
-        ptId,
+        accountId,
         templateId: created.templateId,
         status: 'APPROVED',
       }),
     ).resolves.toBe('approved');
     await expect(
       applyTemplateStatus({
-        ptId,
+        accountId,
         templateId: created.templateId,
         status: 'REJECTED',
       }),
@@ -170,7 +170,7 @@ describe('bootstrapWaConnectionCore', () => {
 
   it('submits Albanian templates for an existing English-only connection', async () => {
     await db.insert(messageTemplates).values({
-      ptId,
+      accountId,
       name: ENGLISH_REMINDER_TEMPLATE.name,
       language: ENGLISH_REMINDER_TEMPLATE.language,
       status: 'approved',
@@ -201,13 +201,13 @@ describe('bootstrapWaConnectionCore', () => {
     );
 
     await expect(
-      reconcileAlbanianReminderTemplatesCore({ ptId, connectionId }),
+      reconcileAlbanianReminderTemplatesCore({ accountId, connectionId }),
     ).resolves.toEqual({ name: REMINDER_TEMPLATE.name, status: 'approved' });
 
     const rows = await db
       .select({ name: messageTemplates.name, status: messageTemplates.status })
       .from(messageTemplates)
-      .where(eq(messageTemplates.ptId, ptId));
+      .where(eq(messageTemplates.accountId, accountId));
     expect(rows).toEqual(
       expect.arrayContaining([
         { name: ENGLISH_REMINDER_TEMPLATE.name, status: 'approved' },
@@ -229,7 +229,7 @@ describe('reconcileAlbanianReminderTemplatesCore — rejected repair', () => {
 
   it('repairs a rejected template once — edits with examples, stamps body, re-enters review', async () => {
     await db.insert(messageTemplates).values({
-      ptId,
+      accountId,
       name: REMINDER_TEMPLATE.name,
       language: REMINDER_TEMPLATE.language,
       status: 'rejected',
@@ -241,7 +241,7 @@ describe('reconcileAlbanianReminderTemplatesCore — rejected repair', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     await expect(
-      reconcileAlbanianReminderTemplatesCore({ ptId, connectionId }),
+      reconcileAlbanianReminderTemplatesCore({ accountId, connectionId }),
     ).resolves.toEqual({ name: REMINDER_TEMPLATE.name, status: 'pending' });
 
     // Exactly one Graph call: the edit POST to the rejected template's id.
@@ -260,7 +260,7 @@ describe('reconcileAlbanianReminderTemplatesCore — rejected repair', () => {
     const [row] = await db
       .select()
       .from(messageTemplates)
-      .where(eq(messageTemplates.ptId, ptId));
+      .where(eq(messageTemplates.accountId, accountId));
     expect(row.status).toBe('pending');
     expect(row.body).toBe(repairedBody(REMINDER_TEMPLATE.body));
   });
@@ -268,7 +268,7 @@ describe('reconcileAlbanianReminderTemplatesCore — rejected repair', () => {
   it('does not re-edit a rejected template already carrying the repair marker', async () => {
     await db.insert(messageTemplates).values([
       {
-        ptId,
+        accountId,
         name: REMINDER_TEMPLATE.name,
         language: REMINDER_TEMPLATE.language,
         status: 'rejected',
@@ -276,7 +276,7 @@ describe('reconcileAlbanianReminderTemplatesCore — rejected repair', () => {
         body: repairedBody(REMINDER_TEMPLATE.body),
       },
       {
-        ptId,
+        accountId,
         name: FALLBACK_REMINDER_TEMPLATE.name,
         language: FALLBACK_REMINDER_TEMPLATE.language,
         status: 'rejected',
@@ -289,7 +289,7 @@ describe('reconcileAlbanianReminderTemplatesCore — rejected repair', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     await expect(
-      reconcileAlbanianReminderTemplatesCore({ ptId, connectionId }),
+      reconcileAlbanianReminderTemplatesCore({ accountId, connectionId }),
     ).resolves.toEqual({
       name: FALLBACK_REMINDER_TEMPLATE.name,
       status: 'rejected',
@@ -301,7 +301,7 @@ describe('reconcileAlbanianReminderTemplatesCore — rejected repair', () => {
     const rows = await db
       .select({ status: messageTemplates.status })
       .from(messageTemplates)
-      .where(eq(messageTemplates.ptId, ptId));
+      .where(eq(messageTemplates.accountId, accountId));
     expect(rows.every((r) => r.status === 'rejected')).toBe(true);
   });
 });

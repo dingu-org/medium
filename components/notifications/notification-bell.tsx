@@ -50,11 +50,11 @@ const ICON_TINTS: Record<NotificationView['icon'], string> = {
 };
 
 export function NotificationBell({
-  ptId,
+  accountId,
   unreadCount,
   items,
 }: {
-  ptId: string;
+  accountId: string;
   unreadCount: number;
   items: NotificationView[];
 }) {
@@ -63,7 +63,7 @@ export function NotificationBell({
   const [pending, startTransition] = useTransition();
 
   // New events for this PT refresh the layout so the badge + feed stay current.
-  useRealtimeRefresh('events', `pt_id=eq.${ptId}`);
+  useRealtimeRefresh('events', `account_id=eq.${accountId}`);
 
   function markRead() {
     startTransition(async () => {

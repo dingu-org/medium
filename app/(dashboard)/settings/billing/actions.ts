@@ -6,7 +6,7 @@ import { instrumentedAction } from '@/lib/actions/instrument';
 import { createCheckout, type BillingPeriod } from '@/lib/billing/payments';
 import { createServerClient } from '@/lib/supabase/server';
 
-async function requirePtId(): Promise<string> {
+async function requireAccountId(): Promise<string> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -28,11 +28,11 @@ async function createCheckoutActionImpl(
   period: BillingPeriod,
 ): Promise<{ confirmUrl: string }> {
   const value = periodSchema.parse(period);
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
   if (!base) throw new Error('NEXT_PUBLIC_APP_URL is required for checkout');
   const { confirmUrl } = await createCheckout(
-    ptId,
+    accountId,
     value,
     `${base}/settings/billing`,
   );

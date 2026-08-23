@@ -4,9 +4,9 @@ import { conversations } from '@/lib/db/schema';
 import { inngest } from '../client';
 
 export async function resumeBusinessAppAiCore(args: {
-  ptId: string;
+  accountId: string;
   conversationId: string;
-  patientId: string;
+  customerId: string;
   pausedUntil: string;
 }): Promise<
   | { resumed: true; conversationId: string }
@@ -31,8 +31,8 @@ export async function resumeBusinessAppAiCore(args: {
     .where(
       and(
         eq(conversations.id, args.conversationId),
-        eq(conversations.ptId, args.ptId),
-        eq(conversations.patientId, args.patientId),
+        eq(conversations.accountId, args.accountId),
+        eq(conversations.customerId, args.customerId),
         eq(conversations.aiActive, false),
         eq(conversations.aiPauseReason, 'whatsapp_business_app_echo'),
         eq(conversations.aiPausedUntil, pausedUntil),

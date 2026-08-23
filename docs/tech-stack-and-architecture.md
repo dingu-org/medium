@@ -1,6 +1,6 @@
 # Tech stack and architecture
 
-This document describes the recommended technical foundation for **Medium** — a multi-tenant SaaS where service businesses (starting with solo physical therapists in Europe) connect their own WhatsApp Business number, an AI autonomously handles patient conversations and bookings, and the business owner oversees everything via a mobile-first PWA.
+This document describes the recommended technical foundation for **Medium** — a multi-tenant SaaS where service businesses (starting with solo physical therapists in Europe) connect their own WhatsApp Business number, an AI autonomously handles customer conversations and bookings, and the business owner oversees everything via a mobile-first PWA.
 
 It is the technical counterpart to the product canvas in `medium-canvas/`.
 
@@ -16,7 +16,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 - **Event-driven** — domain events (`appointment.booked`, `reminder.sent`, `conversation.escalated`) are first-class so future features (waitlist, analytics, multi-location) subscribe without refactors.
 - **WhatsApp Cloud API direct** (not a BSP). Decided in `medium-canvas/blobs/decision-proceed-with-mvp/`.
 - **Meta webhook must respond within 20 seconds** → all real work is asynchronous.
-- **GDPR, EU residency** — patient data is healthcare-adjacent. Primary app data lives in the EU, tokens and sensitive columns are encrypted at rest, and any non-EU AI processing is explicitly disclosed.
+- **GDPR, EU residency** — customer data is healthcare-adjacent. Primary app data lives in the EU, tokens and sensitive columns are encrypted at rest, and any non-EU AI processing is explicitly disclosed.
 - **PWA, not native** — installable, offline read of cached calendar, web push notifications.
 - **Human escalation** is mandatory — WhatsApp terms require it, and PT trust depends on it.
 
@@ -34,7 +34,7 @@ The stack is optimized for the constraints stated across the canvas documents:
 | ORM                           | **Drizzle**                                                                                                          | TypeScript-native, lightweight, edge-compatible, straightforward with raw SQL for RLS policies                                                                                              |
 | Auth (PTs)                    | **Supabase Auth** (email+password, Google OAuth)                                                                     | Integrates with RLS through `auth.uid()`                                                                                                                                                    |
 | Background jobs & scheduling  | **Inngest**                                                                                                          | Delayed jobs (24h reminders), retries, event bus — matches the docs' event-driven principle; generous free tier                                                                             |
-| AI                            | **OpenRouter + AI SDK**, split per env: dev/preview → `nvidia/nemotron-3-ultra-550b-a55b:free`, prod → `anthropic/claude-haiku-4.5`; **no reasoning effort** in any environment | One model-agnostic API surface with strict privacy routing; free model keeps dev cost at €0, paid prod model gives reliable tool-calling and ZDR-compliant routing for patient-facing chat  |
+| AI                            | **OpenRouter + AI SDK**, split per env: dev/preview → `nvidia/nemotron-3-ultra-550b-a55b:free`, prod → `anthropic/claude-haiku-4.5`; **no reasoning effort** in any environment | One model-agnostic API surface with strict privacy routing; free model keeps dev cost at €0, paid prod model gives reliable tool-calling and ZDR-compliant routing for customer-facing chat  |
 | Hosting                       | **Vercel** (Next.js) + **Supabase EU** (DB/auth/realtime) + **Inngest Cloud** (jobs)                                 | No infrastructure to maintain; all have EU regions                                                                                                                                          |
 | Webhook runtime               | Next.js Route Handler on the **Node runtime** (not Edge)                                                             | Signature verification needs `crypto`; handler just verifies + enqueues and returns 200                                                                                                     |
 | Realtime (live calendar/chat) | **Supabase Realtime** (Postgres changefeeds)                                                                         | No extra infrastructure; scopes naturally to RLS                                                                                                                                            |
@@ -99,16 +99,16 @@ The **conversation engine** sees only "an inbound message on conversation X for 
 
 ## 4. Data model
 
-All tables storing patient-facing or PT-facing data carry a `pt_id` column and are covered by RLS policies. Tables:
+All tables storing customer-facing or PT-facing data carry a `account_id` column and are covered by RLS policies. Tables:
 
 | Table                  | Purpose                                                                                                                                                                                                  |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pts`                  | PT accounts (Supabase Auth user + profile)                                                                                                                                                               |
-| `whatsapp_connections` | `pt_id`, `phone_number_id`, `waba_id`, `access_token_encrypted`, `tier`, `quality_rating`, `connected_at`                                                                                                |
-| `patients`             | `pt_id`-scoped patients: name, phone (E.164), channel identifiers, notes                                                                                                                                 |
-| `conversations`        | One per (patient, channel); tracks `last_inbound_at` for the 24h window, `ai_active` flag, escalation state                                                                                              |
+| `accounts`                  | PT accounts (Supabase Auth user + profile)                                                                                                                                                               |
+| `whatsapp_connections` | `account_id`, `phone_number_id`, `waba_id`, `access_token_encrypted`, `tier`, `quality_rating`, `connected_at`                                                                                                |
+| `customers`             | `account_id`-scoped customers: name, phone (E.164), channel identifiers, notes                                                                                                                                 |
+| `conversations`        | One per (customer, channel); tracks `last_inbound_at` for the 24h window, `ai_active` flag, escalation state                                                                                              |
 | `messages`             | One row per inbound/outbound message; `external_id` deduplicates inbound delivery, `reply_to_message_id` allows one AI reply per inbound message, and AI rows capture token/model/provider/cost metadata |
-| `appointments`         | `pt_id`, `patient_id`, `starts_at`, `ends_at`, `service_type`, `status` (pending\|confirmed\|cancelled\|no_show\|completed\|rescheduled), `notes`, cancellation metadata                                 |
+| `appointments`         | `account_id`, `customer_id`, `starts_at`, `ends_at`, `service_type`, `status` (pending\|confirmed\|cancelled\|no_show\|completed\|rescheduled), `notes`, cancellation metadata                                 |
 | `availability_rules`   | Weekly availability per PT: weekday, start, end                                                                                                                                                          |
 | `blocked_periods`      | Ad-hoc unavailability (holidays, lunch)                                                                                                                                                                  |
 | `message_templates`    | Submitted WA templates per PT with approval status from Meta                                                                                                                                             |
@@ -116,9 +116,9 @@ All tables storing patient-facing or PT-facing data carry a `pt_id` column and a
 | `push_subscriptions`   | PT's registered Web Push endpoints                                                                                                                                                                       |
 | `events`               | Domain event log (audit + analytics), append-only                                                                                                                                                        |
 | `event_outbox`         | Durable delivery state for domain events; transactionally paired with `events`, leased/retried, and published to Inngest using the event UUID as the idempotency ID                                      |
-| `audit_log`            | Access log for GDPR (who read which patient record, when)                                                                                                                                                |
+| `audit_log`            | Access log for GDPR (who read which customer record, when)                                                                                                                                                |
 
-Every query through `lib/tenancy/` either uses the authenticated PT's session (RLS sets `auth.uid()`) or requires an explicit `pt_id` argument when running under the service role (webhooks, jobs). The helper rejects any call made without a tenant in scope.
+Every query through `lib/tenancy/` either uses the authenticated PT's session (RLS sets `auth.uid()`) or requires an explicit `account_id` argument when running under the service role (webhooks, jobs). The helper rejects any call made without a tenant in scope.
 
 ---
 
@@ -127,20 +127,20 @@ Every query through `lib/tenancy/` either uses the authenticated PT's session (R
 ### 5.1 Patient books an appointment on WhatsApp
 
 1. **Meta → `POST /api/webhooks/whatsapp`.** Handler verifies the Meta signature against the shared secret, inserts the raw payload into `messages` with `external_id` for idempotency, emits an `message.received` event to Inngest, and returns 200 in under a second.
-2. **Inngest function `handleInboundMessage`** loads PT context by `phone_number_id` via `whatsapp_connections`, upserts the `patients` row, opens or reuses the `conversations` row, updates `last_inbound_at`, and calls the conversation engine.
+2. **Inngest function `handleInboundMessage`** loads PT context by `phone_number_id` via `whatsapp_connections`, upserts the `customers` row, opens or reuses the `conversations` row, updates `last_inbound_at`, and calls the conversation engine.
 3. **Conversation engine** runs an AI SDK turn through OpenRouter with tools: `get_availability`, `book_appointment`, `reschedule_appointment`, `cancel_appointment`, `escalate_to_human`. Tool calls invoke `lib/appointments` and `lib/tenancy` directly (in-process, transactional).
-4. **`book_appointment` tool** writes the `appointments` row, emits an `appointment.booked` event tagged `origin: 'conversation'`, and returns the mutation effect to the engine. The engine ends the model loop there and composes the patient-facing confirmation itself from the shared deterministic copy in `lib/format/` — the model never writes its own.
+4. **`book_appointment` tool** writes the `appointments` row, emits an `appointment.booked` event tagged `origin: 'conversation'`, and returns the mutation effect to the engine. The engine ends the model loop there and composes the customer-facing confirmation itself from the shared deterministic copy in `lib/format/` — the model never writes its own.
 5. **That confirmation is the turn's single reply.** It is persisted as the AI reply to the inbound message and `lib/channels/whatsapp` sends it through the Graph API, exactly like any other AI turn.
 6. **Event subscribers react to `appointment.booked`:**
    - `lib/reminders` schedules a `sendReminder` Inngest job for `starts_at - 24h`.
    - `lib/notifications` pushes a Web Push notification to the PT's registered devices.
-   - The background appointment-event job confirms only PT-originated changes (`origin: 'pt'` — dashboard or PWA). A conversation-originated change was already confirmed by the turn itself, so the job stays silent and the patient gets one message per change.
+   - The background appointment-event job confirms only PT-originated changes (`origin: 'pt'` — dashboard or PWA). A conversation-originated change was already confirmed by the turn itself, so the job stays silent and the customer gets one message per change.
    - Supabase Realtime broadcasts the row insert, and the PT's PWA calendar updates without a refresh.
 
 ### 5.2 Reminder dispatch (24 hours before appointment)
 
 1. Inngest fires the scheduled `sendReminder` job. It re-reads the appointment to confirm it is still `pending` or `confirmed` and that the PT's number is still connected.
-2. `lib/channels/whatsapp` checks `conversations.last_inbound_at`. Because this is ≥24h after the last patient message, the free-form window is closed — the job uses the approved `appointment_reminder_24h` template with variables populated.
+2. `lib/channels/whatsapp` checks `conversations.last_inbound_at`. Because this is ≥24h after the last customer message, the free-form window is closed — the job uses the approved `appointment_reminder_24h` template with variables populated.
 3. If the PT's template is not yet approved, the job is requeued with backoff and the appointment is flagged in the PT dashboard as "Reminder pending — template not yet approved."
 4. Patient replies (CONFIRM / CANCEL / RESCHEDULE) flow through the normal webhook path; the conversation engine dispatches to the reminder response handler, which transitions the appointment state and emits `appointment.confirmed` / `appointment.cancelled` / `appointment.rescheduled`.
 
@@ -165,10 +165,10 @@ Implemented via Meta's current **JS-SDK popup** flow — not the legacy redirect
 
 ## 6. Multi-tenancy and security
 
-- **Database-layer isolation:** every tenant-scoped table has RLS enabled. Policies look like `pt_id = auth.uid()` for authenticated user queries. Service-role queries (webhooks, jobs) bypass RLS but flow through `lib/tenancy/` helpers that require an explicit `pt_id`.
+- **Database-layer isolation:** every tenant-scoped table has RLS enabled. Policies look like `account_id = auth.uid()` for authenticated user queries. Service-role queries (webhooks, jobs) bypass RLS but flow through `lib/tenancy/` helpers that require an explicit `account_id`.
 - **App-layer guardrail:** the tenancy helper is the only path to tenant-scoped tables. It refuses to run without a PT in scope. This is defense in depth — any future developer (including future-you at 11pm) cannot accidentally write a cross-tenant query.
 - **Token encryption:** WhatsApp access tokens are stored encrypted via pgcrypto with a key loaded from a Vercel env var. Tokens are decrypted only at the call site in `lib/channels/whatsapp` and never logged.
-- **Audit log:** every read/write of patient data through `lib/tenancy/` writes to `audit_log` — actor, action, target, timestamp. Required for GDPR subject access requests.
+- **Audit log:** every read/write of customer data through `lib/tenancy/` writes to `audit_log` — actor, action, target, timestamp. Required for GDPR subject access requests.
 - **Secrets:** no secrets in the repo. All production secrets in Vercel and Supabase; local development uses `.env.local` listed in `.gitignore`.
 - **TLS everywhere:** automatic on Vercel and Supabase.
 
@@ -210,15 +210,15 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
   Against the engine's `maxOutputTokens: 500` this shipped a 1024-token thinking
   budget inside a 500-token allowance; every turn on which the model actually
   thought returned no text and died as `empty_response`, three Inngest attempts
-  deep, leaving the patient with the technical-failure handoff. Raise
+  deep, leaving the customer with the technical-failure handoff. Raise
   `maxOutputTokens` in `lib/conversation/engine.ts` past the floor **first**.
-- **Production** uses strict privacy controls: ZDR on, provider data collection denied, parameter-safe routing, and same-model provider fallbacks. Development and preview deliberately run without ZDR — they never touch patient data (local stack / QA fixtures) and the free models publish no ZDR-compliant endpoint. The routing is resolved per environment in `lib/ai/models.ts`; `assertProductionPrivacy` fails the build if production ever loses it.
+- **Production** uses strict privacy controls: ZDR on, provider data collection denied, parameter-safe routing, and same-model provider fallbacks. Development and preview deliberately run without ZDR — they never touch customer data (local stack / QA fixtures) and the free models publish no ZDR-compliant endpoint. The routing is resolved per environment in `lib/ai/models.ts`; `assertProductionPrivacy` fails the build if production ever loses it.
 - Adding or swapping models is a **code** change (`lib/billing/plans.ts`), deliberately: the per-environment map is reviewable, diffable, and covered by tests, where a per-environment env var was not — a blank one silently resolved development to the paid production config. This table is the seam the config moves to the database behind; keep the shape identical across environments so that move is a data migration. Substantive changes to the routing logic remain documented planning decisions.
 
 **Structured interaction over free-form parsing:**
 
 - Availability, appointment discovery, booking, and state changes happen through **tool use** with well-typed schemas defined in `lib/ai/tools.ts`. The model never writes JSON that the app then parses from prose.
-- `pt_id` and `patient_id` are injected from validated engine context and are never accepted from model tool input. `list_upcoming_appointments` resolves safe appointment IDs before cancellation or rescheduling.
+- `account_id` and `customer_id` are injected from validated engine context and are never accepted from model tool input. `list_upcoming_appointments` resolves safe appointment IDs before cancellation or rescheduling.
 - Tool results are returned to the model so it can carry on the conversation, but the authoritative state change already happened in the transactional tool call. `book_appointment`, `reschedule_appointment`, and `cancel_appointment` are the exception: a successful call stops the turn and the engine sends deterministic confirmation copy, so the wording of an appointment change is never model-written.
 - Explicit human requests plus emergency, legal/billing, insurance, and severe-frustration phrases are handled by a deterministic pre-inference guard. These messages bypass OpenRouter and immediately disable AI handling for the conversation.
 - Each inbound message turn is serialized with a transaction-scoped Postgres advisory lock before model or tool execution. The reply unique index remains the persistence backstop, while the lock prevents concurrent retries from executing scheduling tools twice.
@@ -227,7 +227,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 **Prompt structure:**
 
 - Each PT's system prompt (AI name, greeting, escalation keyword, PT-specific facts) should stay factored and stable even though the current free-model guardrail does not rely on prompt caching.
-- Include both an absolute UTC timestamp and a human-readable practice-local timestamp. Do not place the patient-controlled WhatsApp profile name in the system prompt; patient identity stays in validated channel/database context.
+- Include both an absolute UTC timestamp and a human-readable practice-local timestamp. Do not place the customer-controlled WhatsApp profile name in the system prompt; customer identity stays in validated channel/database context.
 - Tool definitions stay in the static prompt section so a caching-capable paid model can be introduced later without a prompt rewrite.
 
 **Cost math per PT per month:**
@@ -244,7 +244,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 - **Installable:** the app manifest and icon set are generated from Next.js `metadata` and a static `public/manifest.json`. PWA install prompts surface on first meaningful engagement.
 - **Offline read:** Serwist service worker caches the app shell, the latest calendar, the latest messages per open conversation, and PT settings. Writes while offline are queued in IndexedDB and replayed when the connection returns. Banner pattern is described in `medium-canvas/documents/pt-admin-pwa-screens.md §Offline handling`.
 - **Realtime updates:** Supabase Realtime subscriptions scoped per PT — one each for `appointments`, `messages`, `conversations`. Because RLS is enforced on the channel, a PT can only subscribe to their own rows.
-- **Web Push:** PT registers a push subscription on first login (per browser). The `lib/notifications` module sends pushes via `web-push` with VAPID keys for: new bookings, cancellations, reschedules, explicit human-escalation requests, and rule-based alerts (e.g., patient sent a message that requires attention).
+- **Web Push:** PT registers a push subscription on first login (per browser). The `lib/notifications` module sends pushes via `web-push` with VAPID keys for: new bookings, cancellations, reschedules, explicit human-escalation requests, and rule-based alerts (e.g., customer sent a message that requires attention).
 - **Performance budget:** ≤3 second first load on 3G, per the PWA requirements. Supports this by using the Next.js App Router's partial hydration and by keeping the calendar custom (no heavy third-party calendar bundle); the calendar route still code-splits on its own chunk.
 
 ---
@@ -252,13 +252,13 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 ## 10. GDPR
 
 - **EU residency:** Supabase project in Frankfurt (or another EU region). Vercel defaults to edge distribution but origin functions run in Frankfurt. Inngest supports EU processing. OpenRouter is accepted for MVP without guaranteed EU-only inference on the current plan.
-- **Encryption at rest:** access tokens via pgcrypto; sensitive patient columns via pgcrypto or Supabase Vault. Transport encryption via TLS (automatic).
-- **AI inference and disclosures:** Production AI inference runs on **`anthropic/claude-haiku-4.5`** via OpenRouter; Anthropic is the production AI sub-processor and its infrastructure is US-based, so cross-border processing is acknowledged in the privacy policy. OpenAI remains disclosed as the configured fallback provider (`lib/billing/plans.ts`). Production requests carry ZDR + denied provider data collection. Development and preview run a free model without ZDR and are never exposed to patient data. OpenRouter does not retain prompt/response content unless logging or product-use opt-ins are enabled, but it does retain request metadata.
+- **Encryption at rest:** access tokens via pgcrypto; sensitive customer columns via pgcrypto or Supabase Vault. Transport encryption via TLS (automatic).
+- **AI inference and disclosures:** Production AI inference runs on **`anthropic/claude-haiku-4.5`** via OpenRouter; Anthropic is the production AI sub-processor and its infrastructure is US-based, so cross-border processing is acknowledged in the privacy policy. OpenAI remains disclosed as the configured fallback provider (`lib/billing/plans.ts`). Production requests carry ZDR + denied provider data collection. Development and preview run a free model without ZDR and are never exposed to customer data. OpenRouter does not retain prompt/response content unless logging or product-use opt-ins are enabled, but it does retain request metadata.
 - **Retention:** daily Inngest job purges `messages` older than the PT's configured retention window (default 90 days). Aggregate anonymized metrics are kept indefinitely.
-- **Right to erasure:** per-patient cascade delete surfaced in the PWA patient detail view. Deleting a patient removes their patient row, their conversations, their messages, and their appointments (completed and future).
-- **Data export:** a Server Action generates a JSON bundle of a patient's data or a full PT export on request.
-- **Audit log:** every access to patient data is logged via `lib/tenancy/` to `audit_log`. Retained for the minimum period required by GDPR.
-- **Controller/processor boundaries:** PT is the data controller (collects patient consent for WhatsApp communication); Medium is the processor (processes under the PT's instructions). Terms reflect this.
+- **Right to erasure:** per-customer cascade delete surfaced in the PWA customer detail view. Deleting a customer removes their customer row, their conversations, their messages, and their appointments (completed and future).
+- **Data export:** a Server Action generates a JSON bundle of a customer's data or a full PT export on request.
+- **Audit log:** every access to customer data is logged via `lib/tenancy/` to `audit_log`. Retained for the minimum period required by GDPR.
+- **Controller/processor boundaries:** PT is the data controller (collects customer consent for WhatsApp communication); Medium is the processor (processes under the PT's instructions). Terms reflect this.
 
 ---
 
@@ -269,7 +269,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 3. **BullMQ + self-hosted Redis for jobs.** _Rejected:_ more infrastructure to maintain; Inngest's delay and retry primitives fit "schedule reminder in 23h 47m" natively.
 4. **Python + FastAPI for the backend** (natural home for AI). _Rejected:_ forces two languages across PWA and backend, doubling cognitive load on a 2–3h/day project.
 5. **Roll our own OAuth and auth service.** _Rejected:_ Supabase Auth plus RLS is 1–2 days of setup versus multiple weeks of rolling a secure auth service from scratch.
-6. **Skip RLS, rely on app-layer tenancy checks only.** _Rejected:_ one missed `WHERE pt_id = ?` in a future query leaks another PT's patients. Unacceptable in a healthcare-adjacent context. RLS is the backstop.
+6. **Skip RLS, rely on app-layer tenancy checks only.** _Rejected:_ one missed `WHERE account_id = ?` in a future query leaks another PT's customers. Unacceptable in a healthcare-adjacent context. RLS is the backstop.
 7. **BSP (360dialog, Twilio) instead of direct Meta API.** _Already rejected_ in `medium-canvas/blobs/decision-proceed-with-mvp/` on cost grounds; respecting that decision here.
 
 ---
@@ -294,7 +294,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 - PT PWA: calendar (week/month), appointment detail, chat view, manual takeover, availability settings, settings screen.
 - Automated 24h reminder with CONFIRM/CANCEL/RESCHEDULE response handling.
 - Web Push notifications for bookings, cancellations, reschedules, and escalation requests.
-- GDPR baseline: EU region, token encryption, retention job, per-patient deletion, audit log.
+- GDPR baseline: EU region, token encryption, retention job, per-customer deletion, audit log.
 - Basic observability: structured logs + a couple of internal dashboards.
 
 **Deferred, with the architectural seam that enables each:**
@@ -305,7 +305,7 @@ This section translates `medium-canvas/documents/whatsapp-cloud-api-architecture
 - **Multi-location** → `locations` table; `availability_rules` gets `location_id`; availability resolver filters on location.
 - **Recurring appointments** → `appointments.series_id` and a background job materializing future instances.
 - **Service types and pricing** → `service_types` table referenced by `appointments`; availability resolver accounts for per-service duration.
-- **Team/clinic scheduling** → introduces a `clinic` layer above `pts`. Requires an RLS-policy pass but does not require re-architecting channels or AI.
+- **Team/clinic scheduling** → introduces a `clinic` layer above `accounts`. Requires an RLS-policy pass but does not require re-architecting channels or AI.
 - **Analytics dashboards** → subscribers on existing domain events populate a reporting schema; no changes to the write path.
 - **Patient-facing portal** → a second frontend on the same API; already possible because the backend is API-first.
 - **EMR integrations (Cliniko, Jane App, etc.)** → adapters in `lib/integrations/` that sync appointments in or out. Requires decisions about source of truth per integration.
@@ -354,9 +354,9 @@ Before any product code is shipped:
 7. **Local dev loop**
    - `.env` mirrors production env var names with local-stack dev values.
    - ngrok or Cloudflare Tunnel for local webhook testing with a separate Meta test app.
-   - Seed script creates a test PT and a test patient for fast iteration.
+   - Seed script creates a test PT and a test customer for fast iteration.
 
-Once this is in place, the first production milestone is: one real PT connects via Embedded Signup, receives a real patient message on WhatsApp, and sees the appointment in the PWA. Everything else compounds from there.
+Once this is in place, the first production milestone is: one real PT connects via Embedded Signup, receives a real customer message on WhatsApp, and sees the appointment in the PWA. Everything else compounds from there.
 
 ---
 
@@ -379,12 +379,12 @@ Local Supabase via `supabase start` (Docker-backed). The integration runner appl
 ### What we test, by priority
 
 1. **RLS isolation** — for every tenant-scoped table, prove that PT A's authenticated session cannot read or mutate PT B's rows. Cases are generated from the schema's tenant-table list, so adding a new table without coverage fails the suite. This is the single most important test surface in the project.
-2. **Tenancy helpers** — `getServiceClient()` throws without a `pt_id`; `withAuditLog()` writes one `audit_log` row on success and zero on thrown error.
+2. **Tenancy helpers** — `getServiceClient()` throws without a `account_id`; `withAuditLog()` writes one `audit_log` row on success and zero on thrown error.
 3. **Idempotency** — duplicate webhooks with the same `external_id` insert one row, not two (Phase 2).
 4. **Tool schemas** — Zod schemas reject malformed model outputs, while dispatcher-owned validation returns recoverable tool errors to the model (Phase 3).
 5. **Conversation engine** — `runTurn` against AI SDK's mock model verifies multi-step tool dispatch, persistence metadata, safety bypasses, and replay idempotency (Phase 3).
 
-A CI assertion introspects `pg_class.relrowsecurity` to confirm RLS is enabled on every `pt_id`-bearing table. This catches the "added a tenant table, forgot to enable RLS" failure mode at PR time.
+A CI assertion introspects `pg_class.relrowsecurity` to confirm RLS is enabled on every `account_id`-bearing table. This catches the "added a tenant table, forgot to enable RLS" failure mode at PR time.
 
 ### What we don't test for MVP
 

@@ -1,12 +1,12 @@
 /**
  * Read models for the billing surfaces (Phase 16 C6). Owner-connection reads
- * scoped by ptId — never PII from POK, never model names or cost-of-goods. All
+ * scoped by accountId — never PII from POK, never model names or cost-of-goods. All
  * usage math reuses the shipped primitives (getConversationUsage /
  * getReminderUsage / warnThreshold); all limits/prices come from plans.ts.
  */
 import { desc, eq, inArray, and, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { billingOrders, pts } from '@/lib/db/schema';
+import { billingOrders, accounts } from '@/lib/db/schema';
 import type { ApplyOrderResult } from './payments';
 import { resolveEffectivePlan } from './entitlements';
 import {
@@ -65,20 +65,20 @@ export type BillingSnapshot = {
 
 /** The grace-aware effective plan for a PT — used by the upgrade-gate guards. */
 export async function loadEffectivePlan(
-  ptId: string,
+  accountId: string,
   now: Date = new Date(),
 ): Promise<PlanId> {
-  const [pt] = await db
+  const [account] = await db
     .select({
-      plan: pts.plan,
-      planLifetime: pts.planLifetime,
-      planExpiresAt: pts.planExpiresAt,
+      plan: accounts.plan,
+      planLifetime: accounts.planLifetime,
+      planExpiresAt: accounts.planExpiresAt,
     })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  if (!pt) return 'free';
-  return resolveEffectivePlan(pt, now);
+  if (!account) return 'free';
+  return resolveEffectivePlan(account, now);
 }
 
 function daysCeil(fromMs: number, toMs: number): number {
@@ -86,26 +86,26 @@ function daysCeil(fromMs: number, toMs: number): number {
 }
 
 export async function getBillingSnapshot(
-  ptId: string,
+  accountId: string,
   now: Date = new Date(),
 ): Promise<BillingSnapshot> {
-  const [pt] = await db
+  const [account] = await db
     .select({
-      plan: pts.plan,
-      planLifetime: pts.planLifetime,
-      planExpiresAt: pts.planExpiresAt,
-      planDowngradedAt: pts.planDowngradedAt,
-      timezone: pts.timezone,
+      plan: accounts.plan,
+      planLifetime: accounts.planLifetime,
+      planExpiresAt: accounts.planExpiresAt,
+      planDowngradedAt: accounts.planDowngradedAt,
+      timezone: accounts.timezone,
     })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
 
-  const storedPlan: PlanId = pt?.plan ?? 'free';
-  const planLifetime = pt?.planLifetime ?? false;
-  const planExpiresAt = pt?.planExpiresAt ?? null;
-  const effective = pt
-    ? resolveEffectivePlan(pt, now)
+  const storedPlan: PlanId = account?.plan ?? 'free';
+  const planLifetime = account?.planLifetime ?? false;
+  const planExpiresAt = account?.planExpiresAt ?? null;
+  const effective = account
+    ? resolveEffectivePlan(account, now)
     : 'free';
 
   let state: BillingLifecycleState;
@@ -136,8 +136,8 @@ export async function getBillingSnapshot(
   }
 
   const [conversations, reminders, receiptRows, paidPeriodRows] = await Promise.all([
-    getConversationUsage(ptId, now),
-    getReminderUsage(ptId, now),
+    getConversationUsage(accountId, now),
+    getReminderUsage(accountId, now),
     db
       .select({
         id: billingOrders.id,
@@ -152,7 +152,7 @@ export async function getBillingSnapshot(
       // "Dështoi" next to a price reads as a charge that failed.
       .where(
         and(
-          eq(billingOrders.ptId, ptId),
+          eq(billingOrders.accountId, accountId),
           inArray(billingOrders.status, ['paid', 'failed']),
         ),
       )
@@ -163,7 +163,7 @@ export async function getBillingSnapshot(
     db
       .select({ period: billingOrders.period })
       .from(billingOrders)
-      .where(and(eq(billingOrders.ptId, ptId), eq(billingOrders.status, 'paid')))
+      .where(and(eq(billingOrders.accountId, accountId), eq(billingOrders.status, 'paid')))
       .orderBy(
         sql`${billingOrders.paidAt} desc nulls last`,
         desc(billingOrders.createdAt),
@@ -202,13 +202,13 @@ export async function getBillingSnapshot(
   const currentPeriod = paidPeriodRows[0]?.period ?? null;
 
   return {
-    timezone: pt?.timezone ?? 'Europe/Berlin',
+    timezone: account?.timezone ?? 'Europe/Berlin',
     plan: effective,
     storedPlan,
     planLifetime,
     planExpiresAt: planExpiresAt ? planExpiresAt.toISOString() : null,
-    planDowngradedAt: pt?.planDowngradedAt
-      ? pt.planDowngradedAt.toISOString()
+    planDowngradedAt: account?.planDowngradedAt
+      ? account.planDowngradedAt.toISOString()
       : null,
     state,
     daysLeft,

@@ -1,8 +1,8 @@
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 
 export function withAppointmentLock<T>(
-  ptId: string,
+  accountId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  return withAdvisoryLock(`appointments:${ptId}`, fn);
+  return withAdvisoryLock(`appointments:${accountId}`, fn);
 }

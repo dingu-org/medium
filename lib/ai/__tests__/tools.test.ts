@@ -20,17 +20,17 @@ describe('AI tool schemas', () => {
     ).toBe(false);
   });
 
-  it('keeps patient and tenant IDs out of booking input', () => {
+  it('keeps customer and tenant IDs out of booking input', () => {
     const parsed = toolSchemas.book_appointment.safeParse({
       starts_at: '2026-06-12T10:00:00+02:00',
       service_type: 'Initial consultation',
-      patient_id: '11111111-2222-3333-4444-555555555555',
-      pt_id: '66666666-7777-8888-9999-000000000000',
+      customer_id: '11111111-2222-3333-4444-555555555555',
+      account_id: '66666666-7777-8888-9999-000000000000',
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data).not.toHaveProperty('patient_id');
-      expect(parsed.data).not.toHaveProperty('pt_id');
+      expect(parsed.data).not.toHaveProperty('customer_id');
+      expect(parsed.data).not.toHaveProperty('account_id');
     }
   });
 

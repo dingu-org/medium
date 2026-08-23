@@ -31,8 +31,8 @@ vi.mock('@/lib/supabase/server', () => ({
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL!;
 const BIZ_TOKEN = 'BIZ_TOKEN_abc123';
 
-let ptId = '';
-let otherPtId = '';
+let accountId = '';
+let otherAccountId = '';
 let pniCounter = 0;
 const nextPni = () => `PNI_${Date.now()}_${++pniCounter}`;
 
@@ -99,7 +99,7 @@ beforeAll(async () => {
   });
   if (a.error || !a.data.user)
     throw new Error(`createUser failed: ${a.error?.message}`);
-  ptId = a.data.user.id;
+  accountId = a.data.user.id;
 
   const b = await supabase.auth.admin.createUser({
     email: `embed-other-${Date.now()}@example.com`,
@@ -108,23 +108,23 @@ beforeAll(async () => {
   });
   if (b.error || !b.data.user)
     throw new Error(`createUser failed: ${b.error?.message}`);
-  otherPtId = b.data.user.id;
+  otherAccountId = b.data.user.id;
 });
 
 afterAll(async () => {
   const supabase = createServiceClient();
-  if (ptId) await supabase.auth.admin.deleteUser(ptId);
-  if (otherPtId) await supabase.auth.admin.deleteUser(otherPtId);
+  if (accountId) await supabase.auth.admin.deleteUser(accountId);
+  if (otherAccountId) await supabase.auth.admin.deleteUser(otherAccountId);
 });
 
 beforeEach(async () => {
   await db
     .delete(whatsappConnections)
-    .where(inArray(whatsappConnections.ptId, [ptId, otherPtId]));
+    .where(inArray(whatsappConnections.accountId, [accountId, otherAccountId]));
   await db
     .delete(auditLog)
-    .where(inArray(auditLog.ptId, [ptId, otherPtId]));
-  getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+    .where(inArray(auditLog.accountId, [accountId, otherAccountId]));
+  getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
   vi.stubGlobal('fetch', okFetch());
 });
 
@@ -172,7 +172,7 @@ describe('POST /api/auth/meta-embedded — auth & CSRF', () => {
     const rows = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(rows).toHaveLength(0);
   });
 });
@@ -255,7 +255,7 @@ describe('POST /api/auth/meta-embedded — mode per finish event', () => {
       const rows = await db
         .select()
         .from(whatsappConnections)
-        .where(eq(whatsappConnections.ptId, ptId));
+        .where(eq(whatsappConnections.accountId, accountId));
 
       if (!persisted) {
         expect(mode).toBeNull();
@@ -296,7 +296,7 @@ describe('POST /api/auth/meta-embedded — mode per finish event', () => {
     const rows = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(rows).toHaveLength(0);
   });
 
@@ -314,7 +314,7 @@ describe('POST /api/auth/meta-embedded — mode per finish event', () => {
     const rows = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(rows).toHaveLength(0);
   });
 });
@@ -334,7 +334,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     const [row] = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(row.phoneNumberId).toBe(phoneNumberId);
     expect(row.wabaId).toBe('WABA_123');
     expect(row.mode).toBe('coexistence');
@@ -354,7 +354,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
         id: expect.any(String),
         name: 'wa.connection.created',
         data: {
-          ptId,
+          accountId,
           connectionId: row.id,
           phoneNumberId,
           wabaId: 'WABA_123',
@@ -369,7 +369,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
       .select()
       .from(auditLog)
       .where(
-        and(eq(auditLog.ptId, ptId), eq(auditLog.action, 'wa.token.issued')),
+        and(eq(auditLog.accountId, accountId), eq(auditLog.action, 'wa.token.issued')),
       );
     expect(audit).toBeTruthy();
     expect(audit.targetTable).toBe('whatsapp_connections');
@@ -425,7 +425,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     const [row] = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(row.phoneNumberId).toBe(phoneNumberId);
     expect(row.mode).toBe('coexistence');
     expect(row.displayPhoneNumber).toBe('+15551234567');
@@ -454,7 +454,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     const rows = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(rows).toHaveLength(1);
   });
 
@@ -489,7 +489,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     const [row] = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(row.displayPhoneNumber).toBe('+15559998888');
   });
 
@@ -508,7 +508,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     const [row] = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(row.displayPhoneNumber).toBeNull();
   });
 
@@ -525,7 +525,7 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     const rows = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(rows).toHaveLength(1);
     expect(rows[0].mode).toBe('cloud_api');
     expect(rows[0].coexistenceSyncStatus).toBe('not_applicable');
@@ -556,7 +556,7 @@ describe('POST /api/auth/meta-embedded — failures', () => {
   it('returns 409 duplicate_number when another PT owns the number', async () => {
     const phoneNumberId = nextPni();
     await db.insert(whatsappConnections).values({
-      ptId: otherPtId,
+      accountId: otherAccountId,
       phoneNumberId,
       wabaId: 'WABA_OTHER',
       status: 'active',

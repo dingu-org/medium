@@ -37,7 +37,7 @@ type AvailabilityQueryRow = {
 // ever decides how long a slot is (`durationMinutes`). Accepting a service name
 // here would promise a filter the query cannot honour.
 type GetFreeSlotsInput = {
-  ptId: string;
+  accountId: string;
   start: Date;
   end: Date;
   durationMinutes?: number;
@@ -48,7 +48,7 @@ type InternalGetFreeSlotsInput = GetFreeSlotsInput & {
 };
 
 type IsSlotBookableInput = {
-  ptId: string;
+  accountId: string;
   startsAt: Date;
   endsAt: Date;
   excludeAppointmentId?: string;
@@ -141,7 +141,7 @@ function wallDateTime(
 
 /**
  * A wall time that exists, or null. Offers are built from this: a slot whose
- * start does not exist locally would be announced at a time the patient's clock
+ * start does not exist locally would be announced at a time the customer's clock
  * never shows, so it is dropped rather than moved.
  */
 function localDateTime(
@@ -172,7 +172,7 @@ function overlaps(
 }
 
 async function loadSnapshot(args: {
-  ptId: string;
+  accountId: string;
   start: Date;
   end: Date;
   excludeAppointmentId?: string;
@@ -190,7 +190,7 @@ async function loadSnapshot(args: {
           'endTime', r.end_time::text
         ) ORDER BY r.weekday, r.start_time)
         FROM availability_rules r
-        WHERE r.pt_id = p.id
+        WHERE r.account_id = p.id
       ), '[]'::jsonb) AS rules,
       COALESCE((
         SELECT jsonb_agg(jsonb_build_object(
@@ -198,7 +198,7 @@ async function loadSnapshot(args: {
           'endsAt', b.ends_at
         ) ORDER BY b.starts_at)
         FROM blocked_periods b
-        WHERE b.pt_id = p.id
+        WHERE b.account_id = p.id
           AND b.starts_at < ${endIso}::timestamptz
           AND b.ends_at > ${startIso}::timestamptz
       ), '[]'::jsonb) AS blocked,
@@ -208,14 +208,14 @@ async function loadSnapshot(args: {
           'endsAt', a.ends_at
         ) ORDER BY a.starts_at)
         FROM appointments a
-        WHERE a.pt_id = p.id
+        WHERE a.account_id = p.id
           AND a.status IN ('pending', 'confirmed')
           AND a.starts_at < ${endIso}::timestamptz
           AND a.ends_at > ${startIso}::timestamptz
           AND (${exclude}::uuid IS NULL OR a.id <> ${exclude}::uuid)
       ), '[]'::jsonb) AS appointments
-    FROM pts p
-    WHERE p.id = ${args.ptId}
+    FROM accounts p
+    WHERE p.id = ${args.accountId}
     LIMIT 1
   `);
 
@@ -338,7 +338,7 @@ export async function isSlotBookable(
   assertValidRange(input.startsAt, input.endsAt, durationMinutes);
 
   const snapshot = await loadSnapshot({
-    ptId: input.ptId,
+    accountId: input.accountId,
     start: input.startsAt,
     end: input.endsAt,
     excludeAppointmentId: input.excludeAppointmentId,

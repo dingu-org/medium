@@ -21,7 +21,7 @@ export type SettingsState = {
   error: string | null;
   success: boolean;
   fieldErrors: {
-    practiceName?: string[];
+    name?: string[];
     fullName?: string[];
     title?: string[];
     address?: string[];

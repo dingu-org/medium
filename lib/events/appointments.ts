@@ -3,24 +3,24 @@ import type { DBTransaction } from '@/lib/db';
 import { appendStoredEvent } from './store';
 
 const isoDateTime = z.iso.datetime({ offset: true });
-const cancellationActor = z.enum(['patient', 'pt', 'ai']);
+const cancellationActor = z.enum(['customer', 'account', 'ai']);
 
 // Optional request-edge trace id (Phase 11). Optional so old outbox rows still
 // validate; declared explicitly because z.object().parse() strips undeclared
 // keys.
 const traceId = z.uuid().optional();
 
-// Which side of the product produced the change, and so whether the patient was
+// Which side of the product produced the change, and so whether the customer was
 // already answered inside the originating turn. Distinct from `cancelledBy`,
 // which records who decided, not who speaks. Optional so old outbox rows still
 // validate; declared explicitly because z.object().parse() strips undeclared
 // keys.
-const mutationOrigin = z.enum(['conversation', 'pt']).optional();
+const mutationOrigin = z.enum(['conversation', 'account']).optional();
 
 const appointmentSummary = z.object({
-  ptId: z.uuid(),
+  accountId: z.uuid(),
   appointmentId: z.uuid(),
-  patientId: z.uuid(),
+  customerId: z.uuid(),
   startsAt: isoDateTime,
   endsAt: isoDateTime,
   serviceType: z.string().nullable(),
@@ -41,9 +41,9 @@ export const appointmentEventSchemas = {
     reason: z.string().nullable(),
   }),
   'appointment.rescheduled': z.object({
-    ptId: z.uuid(),
+    accountId: z.uuid(),
     appointmentId: z.uuid(),
-    patientId: z.uuid(),
+    customerId: z.uuid(),
     serviceType: z.string().nullable(),
     status: z.enum(['pending', 'confirmed']),
     from: z.object({ startsAt: isoDateTime, endsAt: isoDateTime }),
@@ -80,7 +80,7 @@ export async function appendAppointmentEvent(
   const payload = schema.parse(event.data);
 
   return appendStoredEvent(tx, {
-    ptId: payload.ptId,
+    accountId: payload.accountId,
     type: event.type,
     payload,
   });
@@ -88,15 +88,15 @@ export async function appendAppointmentEvent(
 
 export const eventPayloadFromAppointment = (appointment: {
   id: string;
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   startsAt: Date;
   endsAt: Date;
   serviceType: string | null;
 }) => ({
-  ptId: appointment.ptId,
+  accountId: appointment.accountId,
   appointmentId: appointment.id,
-  patientId: appointment.patientId,
+  customerId: appointment.customerId,
   startsAt: appointment.startsAt.toISOString(),
   endsAt: appointment.endsAt.toISOString(),
   serviceType: appointment.serviceType,

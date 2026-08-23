@@ -20,7 +20,7 @@ export default async function ProfileSettingsPage() {
       <ProfileForm
         fullName={snapshot.fullName}
         title={snapshot.title}
-        practiceName={snapshot.practiceName}
+        name={snapshot.name}
         address={snapshot.address}
         phone={snapshot.whatsappDisplayPhoneNumber}
         email={user.email ?? ''}

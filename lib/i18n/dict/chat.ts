@@ -28,7 +28,7 @@ export const chat = {
   handBack: 'Ktheja Medium-it',
   resume: 'Aktivizo tani',
   letMedium: 'Lër Medium-in',
-  callPatient: 'Telefono pacientin',
+  callCustomer: 'Telefono pacientin',
   closeConversation: 'Mbyll bisedën',
   reopenConversation: 'Rihap bisedën',
 

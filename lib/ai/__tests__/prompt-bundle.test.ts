@@ -12,7 +12,7 @@ describe('buildSystemPrompt bundle safety', () => {
     const { buildSystemPrompt } = await import('../prompt');
 
     const prompt = buildSystemPrompt({
-      practiceName: 'Example PT',
+      name: 'Example PT',
       timezone: 'Europe/Tirane',
       aiName: null,
       aiGreeting: null,

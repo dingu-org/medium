@@ -57,7 +57,7 @@ export type PlanPrice = {
 };
 
 export type PlanConfig = {
-  /** Conversations = active patient-days per calendar month (PT timezone). */
+  /** Conversations = active customer-days per calendar month (PT timezone). */
   conversationsPerMonth: number;
   /** Reminders counted only on Meta delivery confirmation. */
   remindersPerMonth: number;
@@ -90,7 +90,7 @@ const FREE_MODEL: PlanModelConfig = {
   fallbacks: [],
 };
 
-/** Production. Paid primary + paid fallback; the only environment that sees patient data. */
+/** Production. Paid primary + paid fallback; the only environment that sees customer data. */
 const PRODUCTION_MODEL: PlanModelConfig = {
   primary: 'anthropic/claude-haiku-4.5',
   fallbacks: ['openai/gpt-5-mini'],

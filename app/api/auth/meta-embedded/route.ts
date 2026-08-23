@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return new Response('Unauthorized', { status: 401 });
   }
-  const ptId = user.id;
+  const accountId = user.id;
 
   let payload: z.infer<typeof bodySchema>;
   try {
@@ -108,15 +108,15 @@ export async function POST(req: NextRequest) {
     );
     const { eventId } = await withAuditLog(
       {
-        ptId,
-        actor: 'pt',
+        accountId,
+        actor: 'account',
         action: 'wa.token.issued',
         targetTable: 'whatsapp_connections',
         metadata: { phone_number_id: phoneNumberId, waba_id: wabaId },
       },
       () =>
         persistConnection({
-          ptId,
+          accountId,
           phoneNumberId,
           displayPhoneNumber,
           wabaId,
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof MetaSignupError) {
       log.warn('meta_embedded.signup_failed', 'Embedded Signup failed', {
         kind: err.kind,
-        pt_id: ptId,
+        account_id: accountId,
       });
       return Response.json(
         { ok: false, error: err.kind },
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
       );
     }
     log.error('meta_embedded.unexpected_error', 'Unexpected Embedded Signup error', {
-      pt_id: ptId,
+      account_id: accountId,
       ...serializeError(err),
     });
     return Response.json({ ok: false, error: 'graph_error' }, { status: 502 });
@@ -318,7 +318,7 @@ function isUniqueViolation(err: unknown): boolean {
  * updates their row (token refresh); a different PT is a duplicate-number conflict.
  */
 async function persistConnection(args: {
-  ptId: string;
+  accountId: string;
   phoneNumberId: string;
   displayPhoneNumber: string | null;
   wabaId: string;
@@ -328,7 +328,7 @@ async function persistConnection(args: {
   traceId: string;
 }): Promise<{ connectionId: string; eventId: string }> {
   const {
-    ptId,
+    accountId,
     phoneNumberId,
     displayPhoneNumber,
     wabaId,
@@ -337,7 +337,7 @@ async function persistConnection(args: {
     tokenExpiresAt,
     traceId,
   } = args;
-  const svc = getServiceClient(ptId);
+  const svc = getServiceClient(accountId);
   const coexistence = mode === 'coexistence';
 
   try {
@@ -345,7 +345,7 @@ async function persistConnection(args: {
       const [row] = await tx
         .insert(whatsappConnections)
         .values({
-          ptId,
+          accountId,
           phoneNumberId,
           displayPhoneNumber,
           wabaId,
@@ -367,7 +367,7 @@ async function persistConnection(args: {
       const eventId = await appendBackgroundEvent(tx, {
         type: 'wa.connection.created',
         data: {
-          ptId,
+          accountId,
           connectionId: row.id,
           phoneNumberId,
           wabaId,
@@ -381,12 +381,12 @@ async function persistConnection(args: {
     if (!isUniqueViolation(err)) throw err;
 
     const [existing] = await db
-      .select({ id: whatsappConnections.id, ptId: whatsappConnections.ptId })
+      .select({ id: whatsappConnections.id, accountId: whatsappConnections.accountId })
       .from(whatsappConnections)
       .where(eq(whatsappConnections.phoneNumberId, phoneNumberId))
       .limit(1);
 
-    if (!existing || existing.ptId !== ptId) {
+    if (!existing || existing.accountId !== accountId) {
       throw new MetaSignupError('duplicate_number');
     }
 
@@ -416,7 +416,7 @@ async function persistConnection(args: {
       const eventId = await appendBackgroundEvent(tx, {
         type: 'wa.connection.created',
         data: {
-          ptId,
+          accountId,
           connectionId: existing.id,
           phoneNumberId,
           wabaId,

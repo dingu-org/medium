@@ -32,13 +32,13 @@ async function executeTool(
   if (toolName === 'get_availability') {
     const requestedName = input.service_type as string | undefined;
     const service = requestedName
-      ? await getActiveServiceByName(ctx.ptId, requestedName)
+      ? await getActiveServiceByName(ctx.accountId, requestedName)
       : null;
     if (requestedName && !service) {
       return invalidInput('Ky shërbim nuk është i disponueshëm.');
     }
     const availability = await getFreeSlots({
-      ptId: ctx.ptId,
+      accountId: ctx.accountId,
       start: new Date(input.start as string),
       end: new Date(input.end as string),
       durationMinutes: service?.durationMinutes ?? 60,
@@ -57,8 +57,8 @@ async function executeTool(
 
   if (toolName === 'list_upcoming_appointments') {
     const upcoming = await listUpcomingAppointments({
-      ptId: ctx.ptId,
-      patientId: ctx.patientId,
+      accountId: ctx.accountId,
+      customerId: ctx.customerId,
     });
     return {
       ok: true,
@@ -76,15 +76,15 @@ async function executeTool(
 
   if (toolName === 'book_appointment') {
     const service = await getActiveServiceByName(
-      ctx.ptId,
+      ctx.accountId,
       input.service_type as string,
     );
     if (!service) {
       return invalidInput('Ky shërbim nuk është i disponueshëm.');
     }
     const appointment = await bookAppointment({
-      ptId: ctx.ptId,
-      patientId: ctx.patientId,
+      accountId: ctx.accountId,
+      customerId: ctx.customerId,
       startsAt: new Date(input.starts_at as string),
       serviceType: service.name,
       durationMinutes: service.durationMinutes,
@@ -110,8 +110,8 @@ async function executeTool(
 
   if (toolName === 'reschedule_appointment') {
     const appointment = await rescheduleAppointment({
-      ptId: ctx.ptId,
-      patientId: ctx.patientId,
+      accountId: ctx.accountId,
+      customerId: ctx.customerId,
       appointmentId: input.appointment_id as string,
       newStartsAt: new Date(input.new_starts_at as string),
       origin: 'conversation',
@@ -137,8 +137,8 @@ async function executeTool(
 
   if (toolName === 'cancel_appointment') {
     const appointment = await cancelAppointment({
-      ptId: ctx.ptId,
-      patientId: ctx.patientId,
+      accountId: ctx.accountId,
+      customerId: ctx.customerId,
       appointmentId: input.appointment_id as string,
       reason: input.reason as string | undefined,
       cancelledBy: ctx.cancellationActor ?? 'ai',
@@ -162,8 +162,8 @@ async function executeTool(
   }
 
   // Pure signal, no side effect. The offer changes nothing on its own — the
-  // conversation stays with the AI until the patient accepts — and the state it
-  // does need (which patient message the offer answered) belongs to the engine,
+  // conversation stays with the AI until the customer accepts — and the state it
+  // does need (which customer message the offer answered) belongs to the engine,
   // which is the only place that knows it.
   if (toolName === 'offer_human_handoff') {
     return { ok: true, data: { offered: true } };
@@ -227,7 +227,7 @@ function appointmentErrorResult(error: AppointmentError): ToolResult {
       error: {
         code: 'conflict',
         // The appointment is in a terminal state (cancelled/completed/no_show),
-        // not a booking conflict — don't tell the patient the slot is taken.
+        // not a booking conflict — don't tell the customer the slot is taken.
         message: 'Ky takim nuk mund të ndryshohet më.',
         retryable: false,
       },
@@ -259,7 +259,7 @@ export async function dispatchTool(
   try {
     return await withAuditLog(
       {
-        ptId: ctx.ptId,
+        accountId: ctx.accountId,
         actor: 'ai',
         action: `ai.tool.${toolName}`,
         targetTable: target.table,
@@ -272,7 +272,7 @@ export async function dispatchTool(
       return appointmentErrorResult(error);
     }
     logger.error('ai.tool_failed', 'AI tool dispatch failed', {
-      pt_id: ctx.ptId,
+      account_id: ctx.accountId,
       conversation_id: ctx.conversationId,
       tool_name: toolName,
       ...serializeError(error),

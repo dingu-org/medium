@@ -7,8 +7,8 @@ import {
   eventOutbox,
   events,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderDeliveries,
   reminderJobs,
   waMessageStatuses,
@@ -40,8 +40,8 @@ const PRIOR_MONTH = new Date(NOW.getTime() - 25 * DAY);
 // Sent-but-unconfirmed only holds a quota slot for an hour after the send.
 const JUST_SENT = new Date(NOW.getTime() - 5 * 60_000);
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let apptOffset = 0;
 
@@ -65,8 +65,8 @@ async function seedReminderJob(opts: {
   const [appt] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt,
       endsAt: new Date(startsAt.getTime() + 30 * 60_000),
       status: opts.apptStatus ?? 'confirmed',
@@ -79,7 +79,7 @@ async function seedReminderJob(opts: {
     const [message] = await db
       .insert(messages)
       .values({
-        ptId,
+        accountId,
         conversationId,
         externalId,
         role: 'ai',
@@ -89,7 +89,7 @@ async function seedReminderJob(opts: {
       .returning({ id: messages.id });
     messageId = message.id;
     await db.insert(waMessageStatuses).values({
-      ptId,
+      accountId,
       externalId,
       lastStatus: 'failed',
       failedAt: opts.metaFailedAt,
@@ -97,7 +97,7 @@ async function seedReminderJob(opts: {
   }
 
   await db.insert(reminderJobs).values({
-    ptId,
+    accountId,
     appointmentId: appt.id,
     scheduledFor: new Date(NOW.getTime() + 1_800_000),
     status: opts.status,
@@ -108,7 +108,7 @@ async function seedReminderJob(opts: {
 
   if (opts.deliveredAt) {
     await db.insert(reminderDeliveries).values({
-      ptId,
+      accountId,
       appointmentId: appt.id,
       externalId: `wamid.delivered-${apptOffset}-${Date.now()}`,
       deliveredAt: opts.deliveredAt,
@@ -120,7 +120,7 @@ async function reminderEvents(type: string, kind: string) {
   const rows = await db
     .select({ payload: events.payload })
     .from(events)
-    .where(and(eq(events.ptId, ptId), eq(events.type, type)));
+    .where(and(eq(events.accountId, accountId), eq(events.type, type)));
   return rows.filter(
     (r) => (r.payload as { kind?: string }).kind === kind,
   );
@@ -133,39 +133,39 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(reminderJobs).where(eq(reminderJobs.ptId, ptId));
+  await db.delete(reminderJobs).where(eq(reminderJobs.accountId, accountId));
   // Deliberately outlives its appointment (ON DELETE SET NULL), so deleting the
   // appointments below leaves it behind — it needs its own cleanup.
-  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.ptId, ptId));
-  await db.delete(appointments).where(eq(appointments.ptId, ptId));
-  await db.delete(whatsappConnections).where(eq(whatsappConnections.ptId, ptId));
-  await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
-  await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
+  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.accountId, accountId));
+  await db.delete(appointments).where(eq(appointments.accountId, accountId));
+  await db.delete(whatsappConnections).where(eq(whatsappConnections.accountId, accountId));
+  await db.delete(eventOutbox).where(eq(eventOutbox.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
+  await db.delete(waMessageStatuses).where(eq(waMessageStatuses.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
   await db
-    .update(pts)
+    .update(accounts)
     .set({ plan: 'free', planLifetime: false, planExpiresAt: null, timezone: 'UTC' })
-    .where(eq(pts.id, ptId));
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Rem', phone: `+15550${Date.now()}`, waId: `wa-${Date.now()}` })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+    .where(eq(accounts.id, accountId));
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Rem', phone: `+15550${Date.now()}`, waId: `wa-${Date.now()}` })
+    .returning({ id: customers.id });
+  customerId = customer.id;
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId, channel: 'whatsapp' })
+    .values({ accountId, customerId, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   conversationId = conversation.id;
   apptOffset = 0;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('getReminderUsage', () => {
@@ -181,7 +181,7 @@ describe('getReminderUsage', () => {
       sentAt: PRIOR_MONTH,
     });
 
-    const usage = await getReminderUsage(ptId, NOW);
+    const usage = await getReminderUsage(accountId, NOW);
     expect(usage.delivered).toBe(2);
     expect(usage.inFlight).toBe(1);
     expect(usage.used).toBe(3);
@@ -206,7 +206,7 @@ describe('getReminderUsage', () => {
       sentAt: new Date(NOW.getTime() - 90 * 60_000),
     });
 
-    const usage = await getReminderUsage(ptId, NOW);
+    const usage = await getReminderUsage(accountId, NOW);
     expect(usage.inFlight).toBe(2);
     expect(usage.used).toBe(2);
     expect(usage.remaining).toBe(FREE_REMINDERS - 2);
@@ -225,10 +225,10 @@ describe('getReminderUsage', () => {
     const [job] = await db
       .select({ appointmentId: reminderJobs.appointmentId })
       .from(reminderJobs)
-      .where(eq(reminderJobs.ptId, ptId));
+      .where(eq(reminderJobs.accountId, accountId));
     const secondDelivery = new Date(IN_MONTH.getTime() + 86_400_000);
     await db.insert(reminderDeliveries).values({
-      ptId,
+      accountId,
       appointmentId: job.appointmentId,
       externalId: `wamid.cycle2-${Date.now()}`,
       deliveredAt: secondDelivery,
@@ -236,9 +236,9 @@ describe('getReminderUsage', () => {
     await db
       .update(reminderJobs)
       .set({ sentAt: secondDelivery, deliveredAt: secondDelivery })
-      .where(eq(reminderJobs.ptId, ptId));
+      .where(eq(reminderJobs.accountId, accountId));
 
-    const usage = await getReminderUsage(ptId, NOW);
+    const usage = await getReminderUsage(accountId, NOW);
     expect(usage.delivered).toBe(2);
     expect(usage.inFlight).toBe(0);
     expect(usage.used).toBe(2);
@@ -253,20 +253,20 @@ describe('getReminderUsage', () => {
     const [delivery] = await db
       .select()
       .from(reminderDeliveries)
-      .where(eq(reminderDeliveries.ptId, ptId));
+      .where(eq(reminderDeliveries.accountId, accountId));
 
     // The unique wamid is what makes the count idempotent, whatever the webhook
     // does; a second row for the same template must be impossible.
     await expect(
       db.insert(reminderDeliveries).values({
-        ptId,
+        accountId,
         appointmentId: delivery.appointmentId,
         externalId: delivery.externalId,
         deliveredAt: new Date(IN_MONTH.getTime() + 60_000),
       }),
     ).rejects.toThrow();
 
-    expect((await getReminderUsage(ptId, NOW)).delivered).toBe(1);
+    expect((await getReminderUsage(accountId, NOW)).delivered).toBe(1);
   });
 
   it('frees the slot of a send Meta reported undeliverable', async () => {
@@ -277,7 +277,7 @@ describe('getReminderUsage', () => {
       metaFailedAt: new Date(NOW.getTime() - 60_000),
     });
 
-    const usage = await getReminderUsage(ptId, NOW);
+    const usage = await getReminderUsage(accountId, NOW);
     expect(usage.inFlight).toBe(0);
     expect(usage.used).toBe(0);
     expect(usage.remaining).toBe(FREE_REMINDERS);
@@ -289,12 +289,12 @@ describe('reminderQuotaAvailable (send-time gate)', () => {
     for (let i = 0; i < FREE_REMINDERS; i += 1) {
       await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
     }
-    expect(await reminderQuotaAvailable(ptId, NOW)).toBe(false);
+    expect(await reminderQuotaAvailable(accountId, NOW)).toBe(false);
   });
 
   it('allows a send while under the limit', async () => {
     await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
-    expect(await reminderQuotaAvailable(ptId, NOW)).toBe(true);
+    expect(await reminderQuotaAvailable(accountId, NOW)).toBe(true);
   });
 
   it('still blocks at the limit when the last slot is a fresh in-flight send', async () => {
@@ -302,7 +302,7 @@ describe('reminderQuotaAvailable (send-time gate)', () => {
       await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
     }
     await seedReminderJob({ status: 'sent', deliveredAt: null, sentAt: JUST_SENT });
-    expect(await reminderQuotaAvailable(ptId, NOW)).toBe(false);
+    expect(await reminderQuotaAvailable(accountId, NOW)).toBe(false);
   });
 
   it('still blocks when the last slot is an unconfirmed send from days ago', async () => {
@@ -314,7 +314,7 @@ describe('reminderQuotaAvailable (send-time gate)', () => {
       deliveredAt: null,
       sentAt: new Date(NOW.getTime() - 3 * 86_400_000),
     });
-    expect(await reminderQuotaAvailable(ptId, NOW)).toBe(false);
+    expect(await reminderQuotaAvailable(accountId, NOW)).toBe(false);
   });
 
   it('re-opens the last slot once Meta reports that send failed', async () => {
@@ -327,7 +327,7 @@ describe('reminderQuotaAvailable (send-time gate)', () => {
       sentAt: new Date(NOW.getTime() - 3 * 86_400_000),
       metaFailedAt: new Date(NOW.getTime() - 2 * 86_400_000),
     });
-    expect(await reminderQuotaAvailable(ptId, NOW)).toBe(true);
+    expect(await reminderQuotaAvailable(accountId, NOW)).toBe(true);
   });
 });
 
@@ -336,8 +336,8 @@ describe('emitReminderLimitReachedOnce', () => {
     for (let i = 0; i < FREE_REMINDERS; i += 1) {
       await seedReminderJob({ status: 'sent', deliveredAt: IN_MONTH, sentAt: IN_MONTH });
     }
-    await emitReminderLimitReachedOnce(ptId, NOW);
-    await emitReminderLimitReachedOnce(ptId, NOW);
+    await emitReminderLimitReachedOnce(accountId, NOW);
+    await emitReminderLimitReachedOnce(accountId, NOW);
 
     const rows = await reminderEvents('billing.limit_reached', 'reminders');
     expect(rows).toHaveLength(1);
@@ -382,14 +382,14 @@ describe('countScheduledRemindersInMonth', () => {
       apptStatus: 'confirmed',
     });
 
-    expect(await countScheduledRemindersInMonth(ptId, NOW)).toBe(2);
+    expect(await countScheduledRemindersInMonth(accountId, NOW)).toBe(2);
   });
 });
 
 describe('billing-usage-monitor (predictive reminder warning)', () => {
   async function seedActiveConnection() {
     await db.insert(whatsappConnections).values({
-      ptId,
+      accountId,
       phoneNumberId: `pni-${Date.now()}`,
       wabaId: `waba-${Date.now()}`,
       status: 'active',
@@ -452,7 +452,7 @@ describe('billing-usage-monitor (predictive reminder warning)', () => {
 describe('emitReminderPredictiveWarningOnce', () => {
   it('carries used/limit/remaining/upcoming in the payload', async () => {
     await emitReminderPredictiveWarningOnce({
-      ptId,
+      accountId,
       monthKey: MONTH_KEY,
       used: 8,
       limit: FREE_REMINDERS,

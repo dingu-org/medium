@@ -2,17 +2,17 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import type { ChatListRowSnapshot } from '@/lib/pwa/read-models';
 
-export async function getUnreadChatCount(ptId: string): Promise<number> {
+export async function getUnreadChatCount(accountId: string): Promise<number> {
   const rows = await db.execute<{ value: number }>(sql`
     SELECT count(*)::integer AS value
     FROM conversations c
-    WHERE c.pt_id = ${ptId}
+    WHERE c.account_id = ${accountId}
       AND c.closed_at IS NULL
       AND EXISTS (
         SELECT 1
         FROM messages m
         WHERE m.conversation_id = c.id
-          AND m.role = 'patient'
+          AND m.role = 'customer'
           AND m.created_at > COALESCE(c.last_read_at, '-infinity'::timestamptz)
       )
   `);
@@ -53,7 +53,7 @@ function toIso(value: unknown): string | null {
 /**
  * One OFFSET-based page of the PT's conversation list, newest activity first with
  * needs-you (escalated / AI-off) conversations floated to the top. Pure and
- * `ptId`-parameterized so it is directly unit-testable; the "load more" server
+ * `accountId`-parameterized so it is directly unit-testable; the "load more" server
  * action wraps it after resolving the PT via auth.
  *
  * OFFSET pagination can shift rows across page boundaries when new activity
@@ -65,7 +65,7 @@ function toIso(value: unknown): string | null {
  * Fetches one extra row to derive `hasMore` without a second COUNT query.
  */
 export async function getChatListPage(
-  ptId: string,
+  accountId: string,
   input: { status?: 'active' | 'closed'; query?: string; page?: number } = {},
 ): Promise<ChatListPage> {
   const closed = input.status === 'closed';
@@ -80,7 +80,7 @@ export async function getChatListPage(
       c.id,
       c.ai_active,
       c.escalation_state,
-      p.name AS patient_name,
+      p.name AS customer_name,
       m.content AS last_content,
       m.role AS last_role,
       m.created_at AS last_at,
@@ -91,11 +91,11 @@ export async function getChatListPage(
         SELECT count(*)::integer
         FROM messages unread
         WHERE unread.conversation_id = c.id
-          AND unread.role = 'patient'
+          AND unread.role = 'customer'
           AND unread.created_at > COALESCE(c.last_read_at, '-infinity'::timestamptz)
       ) AS unread_count
     FROM conversations c
-    JOIN patients p ON p.id = c.patient_id
+    JOIN customers p ON p.id = c.customer_id
     LEFT JOIN LATERAL (
       SELECT content, role, created_at
       FROM messages
@@ -103,7 +103,7 @@ export async function getChatListPage(
       ORDER BY created_at DESC, id DESC
       LIMIT 1
     ) m ON true
-    WHERE c.pt_id = ${ptId}
+    WHERE c.account_id = ${accountId}
       AND ${closed ? sql`c.closed_at IS NOT NULL` : sql`c.closed_at IS NULL`}
       ${
         query

@@ -174,7 +174,7 @@ export function AvailabilityEditor({
         backHref="/settings"
         right={<SaveAction onClick={onSave} disabled={saving || offline} />}
       />
-      <div className="space-y-6 px-5 pt-2 pb-6">
+      <div className="space-y-6 px-5 account-2 pb-6">
         <OfflineNote />
         <div className={cn('space-y-6', offline && 'pointer-events-none opacity-55')}>
           {/* Weekly hours */}

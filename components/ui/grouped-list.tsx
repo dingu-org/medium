@@ -26,7 +26,7 @@ export function GroupedList({
         {children}
       </div>
       {footer && (
-        <p className="px-2 pt-2 text-[12.5px] leading-relaxed text-ink-3">
+        <p className="px-2 account-2 text-[12.5px] leading-relaxed text-ink-3">
           {footer}
         </p>
       )}

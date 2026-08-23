@@ -7,7 +7,7 @@ import { db } from '@/lib/db';
 import { whatsappConnections } from '@/lib/db/schema';
 import { detachWabaSubscription } from '@/lib/channels/whatsapp/client';
 import { recordErasureArchive } from '@/lib/gdpr/archive';
-import { buildPtExport, type PtExport } from '@/lib/gdpr/export';
+import { buildAccountExport, type AccountExport } from '@/lib/gdpr/export';
 import { logger } from '@/lib/log';
 import { withAuditLog } from '@/lib/tenancy';
 import { instrumentedAction } from '@/lib/actions/instrument';
@@ -28,17 +28,17 @@ async function disconnectWhatsAppImpl(): Promise<void> {
   const [latest] = await db
     .select({ id: whatsappConnections.id, status: whatsappConnections.status })
     .from(whatsappConnections)
-    .where(eq(whatsappConnections.ptId, user.id))
+    .where(eq(whatsappConnections.accountId, user.id))
     .orderBy(desc(whatsappConnections.createdAt))
     .limit(1);
 
   if (latest) {
     // Detach Medium's app from the WABA first — while the row is still active,
     // which is what detachWabaSubscription requires — so Meta stops POSTing the
-    // PT's patient messages to our webhook once they have disconnected.
+    // PT's customer messages to our webhook once they have disconnected.
     let detached = false;
     try {
-      ({ detached } = await detachWabaSubscription({ ptId: user.id }));
+      ({ detached } = await detachWabaSubscription({ accountId: user.id }));
     } catch {
       // Best-effort: a Meta-side detach failure must never block the disconnect.
     }
@@ -47,7 +47,7 @@ async function disconnectWhatsAppImpl(): Promise<void> {
     // token that outlived the PT's disconnect. Reconnecting writes a fresh one.
     // It survives only while Meta still has us subscribed, because it is the
     // sole credential that can finish the detach — dropping it there would
-    // leave Medium receiving this WABA's patient messages with no way out.
+    // leave Medium receiving this WABA's customer messages with no way out.
     await db
       .update(whatsappConnections)
       .set({
@@ -57,17 +57,17 @@ async function disconnectWhatsAppImpl(): Promise<void> {
       .where(
         and(
           eq(whatsappConnections.id, latest.id),
-          eq(whatsappConnections.ptId, user.id),
+          eq(whatsappConnections.accountId, user.id),
         ),
       );
 
     if (!detached && latest.status === 'active') {
-      // Meta may still POST this WABA's patient messages to our webhook, so the
+      // Meta may still POST this WABA's customer messages to our webhook, so the
       // failure needs to be visible — the client-side detach only console.warns.
       logger.warn(
         'settings.waba_detach_failed',
         'WhatsApp disconnected locally but Meta still has the app subscribed',
-        { ptId: user.id, connectionId: latest.id },
+        { accountId: user.id, connectionId: latest.id },
       );
     }
   }
@@ -96,7 +96,7 @@ async function deleteAccountImpl(): Promise<void> {
 
   try {
     await recordErasureArchive({
-      ptId: user.id,
+      accountId: user.id,
       scope: 'account',
       metadata: { deletedAt: new Date().toISOString() },
     });
@@ -105,7 +105,7 @@ async function deleteAccountImpl(): Promise<void> {
   }
 
   try {
-    await detachWabaSubscription({ ptId: user.id });
+    await detachWabaSubscription({ accountId: user.id });
   } catch {
     // Best-effort: a Meta-side detach failure must never block account deletion.
   }
@@ -125,22 +125,22 @@ export const deleteAccount = instrumentedAction(
   deleteAccountImpl,
 );
 
-/** Full-account GDPR export: settings, patients, conversations, everything scoped to this PT. */
-async function exportPtImpl(): Promise<
-  { ok: true; data: PtExport } | { ok: false }
+/** Full-account GDPR export: settings, customers, conversations, everything scoped to this PT. */
+async function exportAccountImpl(): Promise<
+  { ok: true; data: AccountExport } | { ok: false }
 > {
   const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
-  const ptId = user.id;
+  const accountId = user.id;
 
   const data = await withAuditLog(
-    { ptId, actor: 'pt', action: 'export.pt', targetTable: 'pts', targetId: ptId },
-    () => buildPtExport(ptId),
+    { accountId, actor: 'account', action: 'export.account', targetTable: 'accounts', targetId: accountId },
+    () => buildAccountExport(accountId),
   );
   return { ok: true, data };
 }
 
-export const exportPt = instrumentedAction('settings.exportPt', exportPtImpl);
+export const exportAccount = instrumentedAction('settings.exportAccount', exportAccountImpl);

@@ -11,13 +11,13 @@ import {
 } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { conversations, events, patients } from '@/lib/db/schema';
+import { conversations, events, customers } from '@/lib/db/schema';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
 import { escalateConversationToHuman } from '../escalation';
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 
 beforeAll(async () => {
@@ -27,25 +27,25 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(events).where(eq(events.ptId, ptId)); // cascades event_outbox
-  await db.delete(patients).where(eq(patients.ptId, ptId)); // cascades conversations
-  const [patient] = await db
-    .insert(patients)
+  await db.delete(events).where(eq(events.accountId, accountId)); // cascades event_outbox
+  await db.delete(customers).where(eq(customers.accountId, accountId)); // cascades conversations
+  const [customer] = await db
+    .insert(customers)
     .values({
-      ptId,
-      name: 'Alex Patient',
+      accountId,
+      name: 'Alex Customer',
       phone: '447700900600',
       waId: '447700900600',
     })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+    .returning({ id: customers.id });
+  customerId = customer.id;
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId, channel: 'whatsapp' })
+    .values({ accountId, customerId, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   conversationId = conversation.id;
 });
@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('escalateConversationToHuman', () => {
@@ -65,8 +65,8 @@ describe('escalateConversationToHuman', () => {
       .mockResolvedValue({ ids: [] } as never);
 
     const escalated = await escalateConversationToHuman({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       conversationId,
     });
     expect(escalated).toBe(true);
@@ -86,13 +86,13 @@ describe('escalateConversationToHuman', () => {
     const rows = await db
       .select({ type: events.type })
       .from(events)
-      .where(eq(events.ptId, ptId));
+      .where(eq(events.accountId, accountId));
     expect(rows).toEqual([{ type: 'conversation.escalated' }]);
 
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'conversation.escalated',
-        data: expect.objectContaining({ ptId, conversationId, patientId }),
+        data: expect.objectContaining({ accountId, conversationId, customerId }),
       }),
     );
   });
@@ -103,17 +103,17 @@ describe('escalateConversationToHuman', () => {
       .mockResolvedValue({ ids: [] } as never);
 
     expect(
-      await escalateConversationToHuman({ ptId, patientId, conversationId }),
+      await escalateConversationToHuman({ accountId, customerId, conversationId }),
     ).toBe(true);
     // Second call on the now-escalated conversation must not re-emit.
     expect(
-      await escalateConversationToHuman({ ptId, patientId, conversationId }),
+      await escalateConversationToHuman({ accountId, customerId, conversationId }),
     ).toBe(false);
 
     const rows = await db
       .select({ type: events.type })
       .from(events)
-      .where(eq(events.ptId, ptId));
+      .where(eq(events.accountId, accountId));
     expect(rows).toEqual([{ type: 'conversation.escalated' }]);
     expect(send).toHaveBeenCalledTimes(1);
   });
@@ -124,13 +124,13 @@ describe('escalateConversationToHuman', () => {
       .mockResolvedValue({ ids: [] } as never);
 
     const escalated = await escalateConversationToHuman({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       conversationId: randomUUID(),
     });
     expect(escalated).toBe(false);
 
-    const rows = await db.select().from(events).where(eq(events.ptId, ptId));
+    const rows = await db.select().from(events).where(eq(events.accountId, accountId));
     expect(rows).toHaveLength(0);
     expect(send).not.toHaveBeenCalled();
   });

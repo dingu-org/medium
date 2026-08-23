@@ -21,7 +21,7 @@ export function SignOutRow() {
         if (pending) return;
         startTransition(async () => {
           // Revoke push first: it needs the still-valid session, and leaving the
-          // subscription alive keeps patient names arriving on a signed-out
+          // subscription alive keeps customer names arriving on a signed-out
           // device.
           await unsubscribeFromPush().catch(() => undefined);
           await clearPwaData().catch(() => undefined);

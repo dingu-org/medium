@@ -7,8 +7,8 @@ import {
   availabilityRules,
   conversations,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderJobs,
 } from '@/lib/db/schema';
 import type { InboundMessage } from '@/lib/conversation/types';
@@ -17,8 +17,8 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { handleReminderResponse } from '../response-handler';
 import { testNowUtc } from '@/tests/support/clock';
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let appointmentId = '';
 let reminderMessageId = '';
@@ -35,33 +35,33 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(patients).where(eq(patients.ptId, ptId));
-  await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
+  await db.delete(availabilityRules).where(eq(availabilityRules.accountId, accountId));
   await db
-    .update(pts)
-    .set({ timezone: 'Europe/Tirane', practiceName: 'Move Well' })
-    .where(eq(pts.id, ptId));
+    .update(accounts)
+    .set({ timezone: 'Europe/Tirane', name: 'Move Well' })
+    .where(eq(accounts.id, accountId));
 
-  const [patient] = await db
-    .insert(patients)
+  const [customer] = await db
+    .insert(customers)
     .values({
-      ptId,
-      name: 'Alex Patient',
+      accountId,
+      name: 'Alex Customer',
       phone: `4477009${Date.now()}${++sequence}`,
       waId: `4477009${Date.now()}${sequence}`,
     })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+    .returning({ id: customers.id });
+  customerId = customer.id;
 
   const [conversation] = await db
     .insert(conversations)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       channel: 'whatsapp',
       lastInboundAt: now,
     })
@@ -72,8 +72,8 @@ beforeEach(async () => {
   const [appointment] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt,
       endsAt: addHours(startsAt, 1),
       status: 'pending',
@@ -85,7 +85,7 @@ beforeEach(async () => {
   const [reminderMessage] = await db
     .insert(messages)
     .values({
-      ptId,
+      accountId,
       conversationId,
       externalId: `wamid.REMINDER.${Date.now()}.${sequence}`,
       role: 'ai',
@@ -98,7 +98,7 @@ beforeEach(async () => {
   reminderMessageId = reminderMessage.id;
 
   await db.insert(reminderJobs).values({
-    ptId,
+    accountId,
     appointmentId,
     scheduledFor: subHours(startsAt, 24),
     inngestRunId: `run-${sequence}`,
@@ -109,7 +109,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 async function inbound(
@@ -119,10 +119,10 @@ async function inbound(
   const [message] = await db
     .insert(messages)
     .values({
-      ptId,
+      accountId,
       conversationId,
       externalId: `wamid.IN.${Date.now()}.${++sequence}`,
-      role: 'patient',
+      role: 'customer',
       channel: 'whatsapp',
       content,
       createdAt: occurredAt,
@@ -131,8 +131,8 @@ async function inbound(
   return {
     id: message.id,
     conversationId,
-    ptId,
-    patientId,
+    accountId,
+    customerId,
     content,
     channel: 'whatsapp',
     externalId: null,
@@ -180,7 +180,7 @@ describe('handleReminderResponse', () => {
     expect(job.responseType).toBe('confirm');
     expect(job.responseMessageId).toBe(inboundMessage.id);
     expect(replies).toHaveLength(1);
-    // One renderer for every patient-facing appointment time: the reminder that
+    // One renderer for every customer-facing appointment time: the reminder that
     // asked the question and this answer have to name the same instant the same
     // way.
     if (first.kind !== 'outbound') return;
@@ -190,7 +190,7 @@ describe('handleReminderResponse', () => {
   });
 
   // A retry after the transition committed but the reply did not: without it the
-  // candidate query no longer matches and the patient is never answered.
+  // candidate query no longer matches and the customer is never answered.
   it('re-answers a confirmation whose reply was lost after the transition', async () => {
     const inboundMessage = await inbound('KONFIRMO');
     await handleReminderResponse({ inbound: inboundMessage, now });
@@ -232,10 +232,10 @@ describe('handleReminderResponse', () => {
       .from(appointments)
       .where(eq(appointments.id, appointmentId));
     expect(appointment.status).toBe('cancelled');
-    expect(appointment.cancelledBy).toBe('patient');
+    expect(appointment.cancelledBy).toBe('customer');
   });
 
-  it('cancels with patient metadata and avoids duplicate replies', async () => {
+  it('cancels with customer metadata and avoids duplicate replies', async () => {
     const inboundMessage = await inbound('ANULO');
 
     await handleReminderResponse({ inbound: inboundMessage, now });
@@ -255,29 +255,29 @@ describe('handleReminderResponse', () => {
       .where(eq(messages.replyToMessageId, inboundMessage.id));
 
     expect(appointment.status).toBe('cancelled');
-    expect(appointment.cancelledBy).toBe('patient');
+    expect(appointment.cancelledBy).toBe('customer');
     expect(job.responseType).toBe('cancel');
     expect(replies).toHaveLength(1);
   });
 
-  it('opts the patient out of future reminders', async () => {
+  it('opts the customer out of future reminders', async () => {
     const inboundMessage = await inbound('STOP');
 
     await handleReminderResponse({ inbound: inboundMessage, now });
 
-    const [patient] = await db
+    const [customer] = await db
       .select()
-      .from(patients)
-      .where(eq(patients.id, patientId));
+      .from(customers)
+      .where(eq(customers.id, customerId));
     const [job] = await db
       .select()
       .from(reminderJobs)
       .where(eq(reminderJobs.appointmentId, appointmentId));
-    expect(patient.reminderOptedOutAt).not.toBeNull();
+    expect(customer.reminderOptedOutAt).not.toBeNull();
     expect(job.responseType).toBe('opt_out');
   });
 
-  it('lets the patient opt back in after NDAL and tells them how', async () => {
+  it('lets the customer opt back in after NDAL and tells them how', async () => {
     const optOut = await inbound('NDAL');
     const optOutResult = await handleReminderResponse({ inbound: optOut, now });
 
@@ -289,8 +289,8 @@ describe('handleReminderResponse', () => {
 
     const [optedOut] = await db
       .select()
-      .from(patients)
-      .where(eq(patients.id, patientId));
+      .from(customers)
+      .where(eq(customers.id, customerId));
     expect(optedOut.reminderOptedOutAt).not.toBeNull();
 
     const optIn = await inbound('AKTIVIZO');
@@ -299,11 +299,11 @@ describe('handleReminderResponse', () => {
     expect(optInResult.kind).toBe('outbound');
     const [optedIn] = await db
       .select()
-      .from(patients)
-      .where(eq(patients.id, patientId));
+      .from(customers)
+      .where(eq(customers.id, customerId));
     expect(optedIn.reminderOptedOutAt).toBeNull();
 
-    // The opt-in is about the patient, not about the reminder, so the job keeps
+    // The opt-in is about the customer, not about the reminder, so the job keeps
     // the opt-out it recorded and stays out of the unanswered list.
     const [job] = await db
       .select()
@@ -312,7 +312,7 @@ describe('handleReminderResponse', () => {
     expect(job.responseType).toBe('opt_out');
   });
 
-  it('answers AKTIVIZO from a patient who never opted out without writing', async () => {
+  it('answers AKTIVIZO from a customer who never opted out without writing', async () => {
     const inboundMessage = await inbound('AKTIVIZO');
 
     const result = await handleReminderResponse({
@@ -324,11 +324,11 @@ describe('handleReminderResponse', () => {
     if (result.kind !== 'outbound') return;
     expect(result.outbound.content).toContain('NDAL');
 
-    const [patient] = await db
+    const [customer] = await db
       .select()
-      .from(patients)
-      .where(eq(patients.id, patientId));
-    expect(patient.reminderOptedOutAt).toBeNull();
+      .from(customers)
+      .where(eq(customers.id, customerId));
+    expect(customer.reminderOptedOutAt).toBeNull();
 
     // Replays reuse the stored reply rather than inserting a second one.
     await handleReminderResponse({ inbound: inboundMessage, now });
@@ -340,8 +340,8 @@ describe('handleReminderResponse', () => {
   });
 
   // Inngest bounds per-conversation parallelism but promises no FIFO, so the
-  // older message can reach the handler last. The patient's newest instruction
-  // has to win either way — otherwise a patient who opted back in stays silent
+  // older message can reach the handler last. The customer's newest instruction
+  // has to win either way — otherwise a customer who opted back in stays silent
   // forever because the stale NDAL ran second.
   it('keeps a newer AKTIVIZO from being undone by an NDAL handled after it', async () => {
     const optOut = await inbound('NDAL');
@@ -350,34 +350,34 @@ describe('handleReminderResponse', () => {
     const result = await handleReminderResponse({ inbound: optOut, now });
 
     expect(result.kind).toBe('outbound');
-    const [patient] = await db
+    const [customer] = await db
       .select()
-      .from(patients)
-      .where(eq(patients.id, patientId));
-    expect(patient.reminderOptedOutAt).toBeNull();
+      .from(customers)
+      .where(eq(customers.id, customerId));
+    expect(customer.reminderOptedOutAt).toBeNull();
   });
 
   it('keeps a newer NDAL from being undone by an AKTIVIZO handled after it', async () => {
     await db
-      .update(patients)
+      .update(customers)
       .set({ reminderOptedOutAt: subHours(now, 1) })
-      .where(eq(patients.id, patientId));
+      .where(eq(customers.id, customerId));
     const optIn = await inbound('AKTIVIZO');
     await inbound('NDAL', addHours(now, 1));
 
     await handleReminderResponse({ inbound: optIn, now });
 
-    const [patient] = await db
+    const [customer] = await db
       .select()
-      .from(patients)
-      .where(eq(patients.id, patientId));
-    expect(patient.reminderOptedOutAt).not.toBeNull();
+      .from(customers)
+      .where(eq(customers.id, customerId));
+    expect(customer.reminderOptedOutAt).not.toBeNull();
   });
 
   it('offers real available slots for a reschedule request', async () => {
     await db.insert(availabilityRules).values(
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-        ptId,
+        accountId,
         weekday,
         startTime: '09:00:00',
         endTime: '12:00:00',

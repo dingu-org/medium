@@ -42,7 +42,7 @@ export default function EnglishTermsPage() {
       <LegalSection title="Who may use Medium">
         <p>
           Medium is for practices and business users, not for consumer or
-          patient self-service use. You must be allowed to act for the practice
+          customer self-service use. You must be allowed to act for the practice
           you register and to connect the WhatsApp Business account you use with
           Medium.
         </p>
@@ -59,7 +59,7 @@ export default function EnglishTermsPage() {
             access.
           </li>
           <li>
-            Obtain any patient permissions needed to communicate over WhatsApp.
+            Obtain any customer permissions needed to communicate over WhatsApp.
           </li>
           <li>
             Review appointments, conversations, reminders, and escalations for
@@ -99,10 +99,10 @@ export default function EnglishTermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="Patient data">
+      <LegalSection title="Customer data">
         <p>
-          For patient data, the practice is the controller and Medium is the
-          processor. You instruct Medium to process patient data only as needed
+          For customer data, the practice is the controller and Medium is the
+          processor. You instruct Medium to process customer data only as needed
           to provide the scheduling assistant, dashboard, reminders, support,
           security, retention, and audit-log functions.
         </p>
@@ -187,7 +187,7 @@ export default function EnglishTermsPage() {
           Each plan includes a monthly limit on the number of conversations and
           the number of reminders. When usage reaches 100% of a limit, the
           assistant stops sending automated replies, sends a single handoff
-          message telling the patient that someone will follow up, and flags the
+          message telling the customer that someone will follow up, and flags the
           conversation for review. The practice&apos;s own inbox and manual
           replies are never blocked by these limits.
         </p>
@@ -205,7 +205,7 @@ export default function EnglishTermsPage() {
           You may stop using Medium at any time. We may suspend or terminate
           access if you breach these terms, create security or legal risk,
           violate WhatsApp policies, or use the product in a way that could harm
-          patients, practices, Medium, or third-party platforms.
+          customers, practices, Medium, or third-party platforms.
         </p>
       </LegalSection>
 

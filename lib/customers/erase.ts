@@ -5,7 +5,7 @@ import {
   appointments,
   auditLog,
   conversationDays,
-  patients,
+  customers,
   reminderDeliveries,
   whatsappContacts,
 } from '@/lib/db/schema';
@@ -16,9 +16,9 @@ import {
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { recordErasureArchive } from '@/lib/gdpr/archive';
 import { logger, serializeError } from '@/lib/log';
-import { patientWhatsappContactsFilter } from './whatsapp-contacts';
+import { customerWhatsappContactsFilter } from './whatsapp-contacts';
 
-export type ErasePatientResult = { erased: boolean };
+export type EraseCustomerResult = { erased: boolean };
 
 /** Stable (key-sorted) hash of a row for a tamper-evident before-state proof. */
 function canonicalHash(row: Record<string, unknown>): string {
@@ -32,47 +32,47 @@ function canonicalHash(row: Record<string, unknown>): string {
 }
 
 /**
- * Right-to-erasure for one patient. Cancels scheduled reminders by emitting
+ * Right-to-erasure for one customer. Cancels scheduled reminders by emitting
  * `appointment.cancelled` (which trips sendReminder's cancelOn) inside the tx,
- * then cascade-deletes the patient (conversations → messages, appointments →
+ * then cascade-deletes the customer (conversations → messages, appointments →
  * reminder_jobs go via FK). Events are published only after the tx commits, and
  * the audit row is written in-tx so the proof and the delete share one boundary.
  * The same proof is mirrored into erasure_archive after the commit because
  * audit_log is cascade-deleted with the PT, and the compliance record has to
  * outlive an account closure.
  * NOT deleted: the metering facts, `conversation_days` (0025) and
- * `reminder_deliveries` (0026). Their patient/appointment references are ON
+ * `reminder_deliveries` (0026). Their customer/appointment references are ON
  * DELETE SET NULL, so the billed days and deliveries survive anonymised —
- * otherwise erasing a patient would retroactively lower the month's metered
+ * otherwise erasing a customer would retroactively lower the month's metered
  * usage (lib/billing/usage.ts counts these rows) and hand back free quota that
- * was already spent. Anything on those rows that still points at the patient is
+ * was already spent. Anything on those rows that still points at the customer is
  * scrubbed in-tx below, because SET NULL only reaches declared foreign keys.
- * Idempotent: a missing patient is a no-op that writes and publishes nothing.
+ * Idempotent: a missing customer is a no-op that writes and publishes nothing.
  */
-export async function erasePatient(input: {
-  patientId: string;
-  ptId: string;
-}): Promise<ErasePatientResult> {
-  const { patientId, ptId } = input;
+export async function eraseCustomer(input: {
+  customerId: string;
+  accountId: string;
+}): Promise<EraseCustomerResult> {
+  const { customerId, accountId } = input;
 
   const erasure = await db.transaction(async (tx) => {
-    const [patient] = await tx
+    const [customer] = await tx
       .select()
-      .from(patients)
-      .where(and(eq(patients.id, patientId), eq(patients.ptId, ptId)))
+      .from(customers)
+      .where(and(eq(customers.id, customerId), eq(customers.accountId, accountId)))
       .limit(1)
       .for('update');
-    if (!patient) {
+    if (!customer) {
       return { erased: false, eventIds: [] as string[], beforeStateHash: '' };
     }
 
-    const beforeStateHash = canonicalHash(patient);
+    const beforeStateHash = canonicalHash(customer);
 
-    const patientAppointments = await tx
+    const customerAppointments = await tx
       .select({
         id: appointments.id,
-        ptId: appointments.ptId,
-        patientId: appointments.patientId,
+        accountId: appointments.accountId,
+        customerId: appointments.customerId,
         startsAt: appointments.startsAt,
         endsAt: appointments.endsAt,
         serviceType: appointments.serviceType,
@@ -80,9 +80,9 @@ export async function erasePatient(input: {
       })
       .from(appointments)
       .where(
-        and(eq(appointments.ptId, ptId), eq(appointments.patientId, patientId)),
+        and(eq(appointments.accountId, accountId), eq(appointments.customerId, customerId)),
       );
-    const activeAppointments = patientAppointments.filter(
+    const activeAppointments = customerAppointments.filter(
       (appt) => appt.status === 'pending' || appt.status === 'confirmed',
     );
 
@@ -93,9 +93,9 @@ export async function erasePatient(input: {
         data: {
           ...eventPayloadFromAppointment(appt),
           status: 'cancelled',
-          cancelledBy: 'pt',
-          reason: 'patient_erased',
-          origin: 'pt',
+          cancelledBy: 'account',
+          reason: 'customer_erased',
+          origin: 'account',
         },
       });
       eventIds.push(eventId);
@@ -103,19 +103,19 @@ export async function erasePatient(input: {
 
     await tx
       .delete(whatsappContacts)
-      .where(patientWhatsappContactsFilter(patient));
+      .where(customerWhatsappContactsFilter(customer));
 
     // Scrub the surviving metering rows. `first_message_id` is a bare uuid with
     // no FK, so nothing nulls it for us, and it would leave a message id for a
-    // deleted message on a row that also carries pt_id + local_day — a residual
+    // deleted message on a row that also carries account_id + local_day — a residual
     // identifier the moment that id shows up in a log or an earlier export.
     await tx
       .update(conversationDays)
       .set({ firstMessageId: null })
       .where(
         and(
-          eq(conversationDays.ptId, ptId),
-          eq(conversationDays.patientId, patientId),
+          eq(conversationDays.accountId, accountId),
+          eq(conversationDays.customerId, customerId),
         ),
       );
 
@@ -123,31 +123,31 @@ export async function erasePatient(input: {
     // keep it. Rewriting to `erased:<row id>` destroys the identifier while
     // preserving the NOT NULL unique key the row is counted through; the
     // appointment link itself goes to NULL via the FK when the cascade lands.
-    const appointmentIds = patientAppointments.map((appt) => appt.id);
+    const appointmentIds = customerAppointments.map((appt) => appt.id);
     if (appointmentIds.length > 0) {
       await tx
         .update(reminderDeliveries)
         .set({ externalId: sql`'erased:' || ${reminderDeliveries.id}::text` })
         .where(
           and(
-            eq(reminderDeliveries.ptId, ptId),
+            eq(reminderDeliveries.accountId, accountId),
             inArray(reminderDeliveries.appointmentId, appointmentIds),
           ),
         );
     }
 
     await tx.insert(auditLog).values({
-      ptId,
-      actor: 'pt',
+      accountId,
+      actor: 'account',
       action: 'erasure',
-      targetTable: 'patients',
-      targetId: patientId,
+      targetTable: 'customers',
+      targetId: customerId,
       metadata: { beforeStateHash },
     });
 
     await tx
-      .delete(patients)
-      .where(and(eq(patients.id, patientId), eq(patients.ptId, ptId)));
+      .delete(customers)
+      .where(and(eq(customers.id, customerId), eq(customers.accountId, accountId)));
 
     return { erased: true, eventIds, beforeStateHash };
   });
@@ -158,17 +158,17 @@ export async function erasePatient(input: {
     // not turn a completed erasure into an error for the PT.
     try {
       await recordErasureArchive({
-        ptId,
-        scope: 'patient',
-        targetId: patientId,
+        accountId,
+        scope: 'customer',
+        targetId: customerId,
         beforeStateHash,
         metadata: { erasedAt: new Date().toISOString() },
       });
     } catch (error) {
       logger.error(
-        'patient.erasure_archive_failed',
+        'customer.erasure_archive_failed',
         'Erasure archive write failed after commit',
-        { pt_id: ptId, patient_id: patientId, ...serializeError(error) },
+        { account_id: accountId, customer_id: customerId, ...serializeError(error) },
       );
     }
   }

@@ -14,7 +14,7 @@ const globalForLock = globalThis as unknown as { __mediumPgLockClient?: Sql };
 
 // Every lock reserves a whole pooled connection for the lifetime of its
 // transaction, and locks nest (an AI turn holds `ai-turn:<id>` while its tool
-// calls take `appointments:<ptId>`), so the pool must be comfortably wider than
+// calls take `appointments:<accountId>`), so the pool must be comfortably wider than
 // the number of concurrent turns. connect_timeout/max_lifetime mirror
 // lib/db/index.ts — postgres-js queues forever on a dead socket otherwise.
 const lockClient =
@@ -39,7 +39,7 @@ const activeLock = new AsyncLocalStorage<LockAcquirer>();
  * Upper bound on how long a waiter blocks for a contended key. Postgres waits on
  * an advisory lock FOREVER by default, and a reentrant hold outlives its own
  * critical section: engine.ts keeps `ai-turn:<id>` open across the turn's LLM
- * round-trips, so the nested `appointments:<ptId>` stays held for the whole turn.
+ * round-trips, so the nested `appointments:<accountId>` stays held for the whole turn.
  * Without a bound, a same-PT booking from another conversation (or the PT's own
  * calendar action) parks on the lock indefinitely while occupying one of the 10
  * pooled connections, and the caller just hangs. Generous enough to sit out a
@@ -58,7 +58,7 @@ export async function withAdvisoryLock<T>(
   if (outer) {
     // Reentrant call: piggyback on the enclosing transaction instead of
     // reserving a second connection. Nesting is unavoidable (engine.ts holds
-    // `ai-turn:<id>` around tool calls that take `appointments:<ptId>`), and a
+    // `ai-turn:<id>` around tool calls that take `appointments:<accountId>`), and a
     // nested `begin` waits on a pool whose connections are all held by outer
     // locks — a deadlock postgres-js never times out of. Advisory locks are
     // reentrant per transaction, so re-taking the same key is a no-op.

@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import {
   conversations,
   messageTemplates,
-  patients,
+  customers,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { decryptToken } from '@/lib/db/crypto';
@@ -22,7 +22,7 @@ const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 type ActiveConnection = {
   id: string;
-  ptId: string;
+  accountId: string;
   phoneNumberId: string;
   wabaId: string;
   token: string;
@@ -48,7 +48,7 @@ async function getConnection(connectionId: string): Promise<ActiveConnection> {
   const token = await decryptToken(row.accessTokenEncrypted);
   return {
     id: row.id,
-    ptId: row.ptId,
+    accountId: row.accountId,
     phoneNumberId: row.phoneNumberId,
     wabaId: row.wabaId,
     token,
@@ -58,7 +58,7 @@ async function getConnection(connectionId: string): Promise<ActiveConnection> {
 /** Flip the connection to revoked and notify the PT (PWA shows "Reconnect"). */
 async function markRevoked(
   connectionId: string,
-  ptId: string,
+  accountId: string,
   reason: RevocationReason,
 ): Promise<void> {
   const eventId = await db.transaction(async (tx) => {
@@ -76,7 +76,7 @@ async function markRevoked(
 
     return appendBackgroundEvent(tx, {
       type: 'wa.connection.revoked',
-      data: { ptId, connectionId, reason },
+      data: { accountId, connectionId, reason },
     });
   });
   if (eventId) await tryPublishOutboxEvent(eventId);
@@ -84,10 +84,10 @@ async function markRevoked(
 
 export async function markConnectionRevoked(args: {
   connectionId: string;
-  ptId: string;
+  accountId: string;
   reason: RevocationReason;
 }): Promise<void> {
-  await markRevoked(args.connectionId, args.ptId, args.reason);
+  await markRevoked(args.connectionId, args.accountId, args.reason);
 }
 
 /**
@@ -96,14 +96,14 @@ export async function markConnectionRevoked(args: {
  * home for the token). Never throws — a failed detach must not block deletion.
  */
 export async function detachWabaSubscription(args: {
-  ptId: string;
+  accountId: string;
 }): Promise<{ detached: boolean }> {
   const [row] = await db
     .select()
     .from(whatsappConnections)
     .where(
       and(
-        eq(whatsappConnections.ptId, args.ptId),
+        eq(whatsappConnections.accountId, args.accountId),
         eq(whatsappConnections.status, 'active'),
       ),
     )
@@ -121,7 +121,7 @@ export async function detachWabaSubscription(args: {
     return { detached: true };
   } catch (err) {
     console.warn('[gdpr] waba detach failed', {
-      ptId: args.ptId,
+      accountId: args.accountId,
       errorName: err instanceof Error ? err.name : typeof err,
     });
     return { detached: false };
@@ -144,7 +144,7 @@ async function authedGraph<T>(
     if (err instanceof GraphApiError && err.isAuthError) {
       await markRevoked(
         conn.id,
-        conn.ptId,
+        conn.accountId,
         err.status === 401 ? 'unauthorized' : 'forbidden',
       );
       throw new ConnectionRevokedError();
@@ -157,7 +157,7 @@ type SendResponse = { messages?: { id: string }[] };
 
 /**
  * Send a free-form text message. Refuses if the 24h customer-service window is
- * closed — checked at send time against the patient's last inbound message,
+ * closed — checked at send time against the customer's last inbound message,
  * because by the time a background job runs the window may have lapsed.
  */
 export async function sendFreeForm(
@@ -170,12 +170,12 @@ export async function sendFreeForm(
   const [conversation] = await db
     .select({ lastInboundAt: conversations.lastInboundAt })
     .from(conversations)
-    .innerJoin(patients, eq(conversations.patientId, patients.id))
+    .innerJoin(customers, eq(conversations.customerId, customers.id))
     .where(
       and(
-        eq(conversations.ptId, conn.ptId),
+        eq(conversations.accountId, conn.accountId),
         eq(conversations.channel, 'whatsapp'),
-        eq(patients.waId, to),
+        eq(customers.waId, to),
       ),
     )
     .limit(1);
@@ -214,7 +214,7 @@ export async function sendTemplate(
     .from(messageTemplates)
     .where(
       and(
-        eq(messageTemplates.ptId, conn.ptId),
+        eq(messageTemplates.accountId, conn.accountId),
         eq(messageTemplates.name, templateName),
         eq(messageTemplates.language, language),
       ),

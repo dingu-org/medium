@@ -16,7 +16,7 @@ export const MAX_PUBLISH_ATTEMPTS = 25;
 
 type OutboxRow = {
   id: string;
-  ptId: string;
+  accountId: string;
   eventId: string;
   eventType: string;
   payload: unknown;
@@ -26,8 +26,8 @@ type OutboxRow = {
 // Inngest consumers treat the event name and payload as trusted input, so the
 // publisher is the trust boundary between the `event_outbox` table and the job
 // runner: only names we actually emit are forwarded, and the payload must carry
-// the outbox row's own pt_id (every schema in the two maps requires ptId, and
-// appendStoredEvent derives the row's pt_id from it). A row failing either check
+// the outbox row's own account_id (every schema in the two maps requires accountId, and
+// appendStoredEvent derives the row's account_id from it). A row failing either check
 // can never be published, so it is stamped published so it drains instead of
 // being reclaimed and retried forever.
 const KNOWN_EVENT_TYPES = new Set<string>([
@@ -40,8 +40,8 @@ function rejectionReason(row: OutboxRow): string | null {
   const payload = row.payload;
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload))
     return 'payload_not_object';
-  if ((payload as { ptId?: unknown }).ptId !== row.ptId)
-    return 'payload_pt_id_mismatch';
+  if ((payload as { accountId?: unknown }).accountId !== row.accountId)
+    return 'payload_account_id_mismatch';
   return null;
 }
 
@@ -87,7 +87,7 @@ async function claimOutboxRows(args: {
     WHERE outbox.id = candidates.id
     RETURNING
       outbox.id,
-      outbox.pt_id AS "ptId",
+      outbox.account_id AS "accountId",
       outbox.event_id AS "eventId",
       outbox.event_type AS "eventType",
       outbox.payload,

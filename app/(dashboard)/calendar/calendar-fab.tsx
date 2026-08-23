@@ -22,7 +22,7 @@ import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
 import { cn } from '@/lib/utils';
 import type { ServiceRecord } from '@/lib/services/queries';
-import { type PatientOption, searchPatients } from './actions';
+import { type CustomerOption, searchCustomers } from './actions';
 
 type Mode = 'menu' | 'block' | 'appointment';
 
@@ -222,8 +222,8 @@ function AppointmentForm({
 }) {
   const [tab, setTab] = useState<'existing' | 'new'>('existing');
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<PatientOption[]>([]);
-  const [selected, setSelected] = useState<PatientOption | null>(null);
+  const [results, setResults] = useState<CustomerOption[]>([]);
+  const [selected, setSelected] = useState<CustomerOption | null>(null);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [date, setDate] = useState(defaultDate);
@@ -240,18 +240,18 @@ function AppointmentForm({
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       startSearch(async () => {
-        setResults(await searchPatients(value));
+        setResults(await searchCustomers(value));
       });
     }, 300);
   }
 
   function submit() {
     if (tab === 'existing' && !selected) {
-      toast.error(t.calendar.pickPatient);
+      toast.error(t.calendar.pickCustomer);
       return;
     }
     if (tab === 'new' && (!newName.trim() || !newPhone.trim())) {
-      toast.error(t.calendar.enterPatientDetails);
+      toast.error(t.calendar.enterCustomerDetails);
       return;
     }
     if (!serviceId) {
@@ -262,8 +262,8 @@ function AppointmentForm({
       try {
         const res = await queueAppointmentMutation({
           action: 'manual_book',
-          patientId: tab === 'existing' ? selected?.id : undefined,
-          newPatient:
+          customerId: tab === 'existing' ? selected?.id : undefined,
+          newCustomer:
             tab === 'new'
               ? { name: newName.trim(), phone: newPhone.trim() }
               : undefined,
@@ -305,7 +305,7 @@ function AppointmentForm({
               : 'text-muted-foreground',
           )}
         >
-          {t.calendar.existingPatient}
+          {t.calendar.existingCustomer}
         </button>
         <button
           type="button"
@@ -317,7 +317,7 @@ function AppointmentForm({
               : 'text-muted-foreground',
           )}
         >
-          {t.calendar.newPatient}
+          {t.calendar.newCustomer}
         </button>
       </div>
 
@@ -377,7 +377,7 @@ function AppointmentForm({
       ) : (
         <div className="space-y-2">
           <div className="space-y-2">
-            <Label htmlFor="fab-new-name">{t.appointment.patientName}</Label>
+            <Label htmlFor="fab-new-name">{t.appointment.customerName}</Label>
             <Input
               id="fab-new-name"
               value={newName}
@@ -385,7 +385,7 @@ function AppointmentForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="fab-new-phone">{t.appointment.patientPhone}</Label>
+            <Label htmlFor="fab-new-phone">{t.appointment.customerPhone}</Label>
             <Input
               id="fab-new-phone"
               type="tel"

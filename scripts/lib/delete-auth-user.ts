@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { createServiceClient } from '@/lib/supabase/service';
 
 /**
- * Deletes the auth user with `email` (and, via FK cascade from `pts`, every row
+ * Deletes the auth user with `email` (and, via FK cascade from `accounts`, every row
  * scoped to it). No-op if absent.
  *
  * The address is resolved against `auth.users` directly rather than by scanning

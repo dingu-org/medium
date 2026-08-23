@@ -5,7 +5,7 @@
  * through the two exported entry points here.
  *
  * No internal subscription state machine: a payment is a single one-off POK
- * order. On success we set `pts.plan='solo'` and extend `plan_expires_at` by the
+ * order. On success we set `accounts.plan='solo'` and extend `plan_expires_at` by the
  * purchased period FROM max(now, current expiry), so renewing early loses no
  * days. Truth is server-side: the webhook is only a trigger; every settle
  * RE-FETCHES the order from POK and acts on the authoritative status, and the
@@ -15,7 +15,7 @@
  * TODO(pok-subscriptions): when POK ships native recurring plans, POK becomes
  * the renewal source of truth. At that point: `applyOrderOutcome` stays the
  * single period-extension entry point (recurring charges settle through it too);
- * `pts` gains a `pok_subscription_id`; and the C6 renewal/expiry crons skip PTs
+ * `accounts` gains a `pok_subscription_id`; and the C6 renewal/expiry crons skip PTs
  * backed by a POK subscription (POK renews them) rather than downgrading on
  * `plan_expires_at`. Nothing here needs to change shape — this is a seam, not a
  * rewrite.
@@ -24,7 +24,7 @@ import { TZDate } from '@date-fns/tz';
 import { addMonths, addYears } from 'date-fns';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { billingOrders, pts } from '@/lib/db/schema';
+import { billingOrders, accounts } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { createLogger, newTraceId } from '@/lib/log';
@@ -147,7 +147,7 @@ export function computeExtendedExpiry(
  * and record a 'created' ledger row. Expiry columns stay null until settle.
  */
 export async function createCheckout(
-  ptId: string,
+  accountId: string,
   period: BillingPeriod,
   returnUrl: string,
 ): Promise<{ pokOrderId: string; confirmUrl?: string; amountMinor: number }> {
@@ -167,7 +167,7 @@ export async function createCheckout(
   });
 
   await db.insert(billingOrders).values({
-    ptId,
+    accountId,
     pokOrderId: order.id,
     plan: 'solo',
     period,
@@ -286,12 +286,12 @@ async function settleOrder(
       return { applied: false as const };
     }
 
-    const [pt] = await tx
-      .select({ planExpiresAt: pts.planExpiresAt })
-      .from(pts)
-      .where(eq(pts.id, row.ptId))
+    const [account] = await tx
+      .select({ planExpiresAt: accounts.planExpiresAt })
+      .from(accounts)
+      .where(eq(accounts.id, row.accountId))
       .for('update');
-    const previousExpiresAt = pt?.planExpiresAt ?? null;
+    const previousExpiresAt = account?.planExpiresAt ?? null;
     const newExpiresAt = computeExtendedExpiry(previousExpiresAt, row.period, now);
 
     await tx
@@ -306,14 +306,14 @@ async function settleOrder(
       .where(eq(billingOrders.id, row.id));
 
     await tx
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planExpiresAt: newExpiresAt, planDowngradedAt: null })
-      .where(eq(pts.id, row.ptId));
+      .where(eq(accounts.id, row.accountId));
 
     const eventId = await appendBackgroundEvent(tx, {
       type: 'billing.payment_received',
       data: {
-        ptId: row.ptId,
+        accountId: row.accountId,
         orderId: row.id,
         period: row.period,
         newExpiresAt: newExpiresAt.toISOString(),

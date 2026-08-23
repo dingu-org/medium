@@ -21,16 +21,16 @@ const TITLES: Record<string, string> = {
 
 export function DashboardChrome({
   children,
-  ptId,
-  practiceName,
+  accountId,
+  name,
   email,
   notificationCount,
   notifications,
   unreadChats,
 }: {
   children: ReactNode;
-  ptId: string;
-  practiceName: string | null;
+  accountId: string;
+  name: string | null;
   email: string;
   notificationCount: number;
   notifications: NotificationView[];
@@ -79,8 +79,8 @@ export function DashboardChrome({
       {topLevel && (
         <TopHeader
           title={title}
-          ptId={ptId}
-          practiceName={practiceName}
+          accountId={accountId}
+          name={name}
           email={email}
           unreadCount={notificationCount}
           notifications={notifications}
@@ -100,7 +100,7 @@ export function DashboardChrome({
       <main
         className={cn(
           'mx-auto max-w-md px-4',
-          topLevel ? 'pt-2 pb-28' : 'pt-4 pb-6',
+          topLevel ? 'account-2 pb-28' : 'account-4 pb-6',
         )}
       >
         {children}

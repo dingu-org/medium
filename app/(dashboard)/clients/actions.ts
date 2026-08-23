@@ -5,11 +5,11 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { patients } from '@/lib/db/schema';
+import { customers } from '@/lib/db/schema';
 import { createServerClient } from '@/lib/supabase/server';
-import { createManualPatient } from '@/lib/clients/mutations';
-import { erasePatient as erasePatientData } from '@/lib/patients/erase';
-import { buildPatientExport, type PatientExport } from '@/lib/gdpr/export';
+import { createManualCustomer } from '@/lib/clients/mutations';
+import { eraseCustomer as eraseCustomerData } from '@/lib/customers/erase';
+import { buildCustomerExport, type CustomerExport } from '@/lib/gdpr/export';
 import { withAuditLog } from '@/lib/tenancy';
 import { instrumentedAction } from '@/lib/actions/instrument';
 
@@ -21,7 +21,7 @@ export type ClientActionResult =
       error: string;
     };
 
-async function requirePtId(): Promise<string> {
+async function requireAccountId(): Promise<string> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -41,7 +41,7 @@ async function createManualClientImpl(input: {
   phone: string;
   notes?: string;
 }): Promise<ClientActionResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -50,7 +50,7 @@ async function createManualClientImpl(input: {
       error: 'Kontrollo emrin dhe telefonin.',
     };
   }
-  const created = await createManualPatient({ ptId, ...parsed.data });
+  const created = await createManualCustomer({ accountId, ...parsed.data });
   if ('failure' in created && created.failure === 'INVALID_PHONE') {
     return {
       ok: false,
@@ -69,10 +69,10 @@ async function createManualClientImpl(input: {
 
   await withAuditLog(
     {
-      ptId,
-      actor: 'pt',
-      action: 'patient.created',
-      targetTable: 'patients',
+      accountId,
+      actor: 'account',
+      action: 'customer.created',
+      targetTable: 'customers',
       targetId: created.id,
     },
     async () => created,
@@ -91,7 +91,7 @@ async function updateClientNotesImpl(
   clientId: string,
   notes: string,
 ): Promise<ClientActionResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const value = z.string().trim().max(1000).safeParse(notes);
   if (!value.success) {
     return {
@@ -102,18 +102,18 @@ async function updateClientNotesImpl(
   }
   const updated = await withAuditLog(
     {
-      ptId,
-      actor: 'pt',
-      action: 'patient.notes_updated',
-      targetTable: 'patients',
+      accountId,
+      actor: 'account',
+      action: 'customer.notes_updated',
+      targetTable: 'customers',
       targetId: clientId,
     },
     async () => {
       const [row] = await db
-        .update(patients)
+        .update(customers)
         .set({ notes: value.data || null })
-        .where(and(eq(patients.id, clientId), eq(patients.ptId, ptId)))
-        .returning({ id: patients.id });
+        .where(and(eq(customers.id, clientId), eq(customers.accountId, accountId)))
+        .returning({ id: customers.id });
       return row;
     },
   );
@@ -128,39 +128,39 @@ export const updateClientNotes = instrumentedAction(
   updateClientNotesImpl,
 );
 
-/** Right-to-erasure: delegates the transactional cascade + audit write to lib/patients/erase. */
-async function erasePatientImpl(patientId: string): Promise<{ ok: boolean }> {
-  const ptId = await requirePtId();
-  await erasePatientData({ patientId, ptId });
+/** Right-to-erasure: delegates the transactional cascade + audit write to lib/customers/erase. */
+async function eraseCustomerImpl(customerId: string): Promise<{ ok: boolean }> {
+  const accountId = await requireAccountId();
+  await eraseCustomerData({ customerId, accountId });
   revalidatePath('/clients');
   return { ok: true };
 }
 
-export const erasePatient = instrumentedAction(
-  'clients.erasePatient',
-  erasePatientImpl,
+export const eraseCustomer = instrumentedAction(
+  'clients.eraseCustomer',
+  eraseCustomerImpl,
 );
 
-/** Per-patient GDPR data export (DSAR shape). */
-async function exportPatientImpl(
-  patientId: string,
-): Promise<{ ok: true; data: PatientExport } | { ok: false }> {
-  const ptId = await requirePtId();
+/** Per-customer GDPR data export (DSAR shape). */
+async function exportCustomerImpl(
+  customerId: string,
+): Promise<{ ok: true; data: CustomerExport } | { ok: false }> {
+  const accountId = await requireAccountId();
   const data = await withAuditLog(
     {
-      ptId,
-      actor: 'pt',
-      action: 'export.patient',
-      targetTable: 'patients',
-      targetId: patientId,
+      accountId,
+      actor: 'account',
+      action: 'export.customer',
+      targetTable: 'customers',
+      targetId: customerId,
     },
-    () => buildPatientExport({ ptId, patientId }),
+    () => buildCustomerExport({ accountId, customerId }),
   );
   if (!data) return { ok: false };
   return { ok: true, data };
 }
 
-export const exportPatient = instrumentedAction(
-  'clients.exportPatient',
-  exportPatientImpl,
+export const exportCustomer = instrumentedAction(
+  'clients.exportCustomer',
+  exportCustomerImpl,
 );

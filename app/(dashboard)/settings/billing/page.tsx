@@ -58,7 +58,7 @@ export default async function BillingSettingsPage({
       .where(
         and(
           eq(billingOrders.pokOrderId, orderId),
-          eq(billingOrders.ptId, user.id),
+          eq(billingOrders.accountId, user.id),
         ),
       )
       .limit(1);
@@ -71,7 +71,7 @@ export default async function BillingSettingsPage({
   return (
     <div className="-mx-4 -mt-4">
       <NavBar title={t.billing.navTitle} backHref="/settings" />
-      <div className="space-y-6 px-5 pt-2 pb-8">
+      <div className="space-y-6 px-5 account-2 pb-8">
         {checkoutResult && <CheckoutResultBanner result={checkoutResult} />}
         <PlanCard snapshot={snapshot} />
 

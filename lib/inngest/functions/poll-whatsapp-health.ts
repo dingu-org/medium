@@ -16,7 +16,7 @@ export async function pollConnectionQuality(args: {
 }): Promise<
   | {
       kind: 'updated';
-      ptId: string;
+      accountId: string;
       qualityRating: string;
       tier: string | null;
       warning: boolean;
@@ -25,7 +25,7 @@ export async function pollConnectionQuality(args: {
 > {
   const [connection] = await db
     .select({
-      ptId: whatsappConnections.ptId,
+      accountId: whatsappConnections.accountId,
       qualityRating: whatsappConnections.qualityRating,
     })
     .from(whatsappConnections)
@@ -69,7 +69,7 @@ export async function pollConnectionQuality(args: {
     return appendBackgroundEvent(tx, {
       type: 'wa.quality_warning',
       data: {
-        ptId: connection.ptId,
+        accountId: connection.accountId,
         connectionId: args.connectionId,
         qualityRating: health.qualityRating,
         tier: health.tier,
@@ -80,7 +80,7 @@ export async function pollConnectionQuality(args: {
 
   return {
     kind: 'updated',
-    ptId: connection.ptId,
+    accountId: connection.accountId,
     qualityRating: health.qualityRating,
     tier: health.tier,
     warning,
@@ -88,7 +88,7 @@ export async function pollConnectionQuality(args: {
 }
 
 export type TokenExpiryWarning = {
-  ptId: string;
+  accountId: string;
   connectionId: string;
   expiresAt: string;
   daysRemaining: number;
@@ -100,7 +100,7 @@ export async function claimTokenExpiryWarnings(
   const candidates = await db
     .select({
       id: whatsappConnections.id,
-      ptId: whatsappConnections.ptId,
+      accountId: whatsappConnections.accountId,
       expiresAt: whatsappConnections.tokenExpiresAt,
     })
     .from(whatsappConnections)
@@ -116,7 +116,7 @@ export async function claimTokenExpiryWarnings(
   for (const candidate of candidates) {
     if (!candidate.expiresAt) continue;
     const warning: TokenExpiryWarning = {
-      ptId: candidate.ptId,
+      accountId: candidate.accountId,
       connectionId: candidate.id,
       expiresAt: candidate.expiresAt.toISOString(),
       daysRemaining: Math.max(

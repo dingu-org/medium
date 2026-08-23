@@ -28,21 +28,21 @@ vi.mock('@/lib/billing/pok/client', () => ({
 }));
 
 import { db } from '@/lib/db';
-import { billingOrders, eventOutbox, events, pts } from '@/lib/db/schema';
+import { billingOrders, eventOutbox, events, accounts } from '@/lib/db/schema';
 import { reconcilePokOrdersCore } from '@/lib/inngest/functions/reconcile-pok-orders';
 import { createServiceClient } from '@/lib/supabase/service';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
 
-let ptId = '';
+let accountId = '';
 let seq = 0;
 
 async function seedOrder(ageMs: number, now: Date): Promise<string> {
   seq += 1;
   const pokOrderId = `pok-recon-${Date.now()}-${seq}`;
   await db.insert(billingOrders).values({
-    ptId,
+    accountId,
     pokOrderId,
     plan: 'solo',
     period: 'monthly',
@@ -66,7 +66,7 @@ async function seedOrders(
   });
   await db.insert(billingOrders).values(
     ids.map((pokOrderId, index) => ({
-      ptId,
+      accountId,
       pokOrderId,
       plan: 'solo' as const,
       period: 'monthly' as const,
@@ -95,23 +95,23 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
   mockGetOrder.mockReset();
   // Global scan: wipe the ledger so only this test's rows are visible.
   await db.delete(billingOrders);
-  await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
+  await db.delete(eventOutbox).where(eq(eventOutbox.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
   await db
-    .update(pts)
+    .update(accounts)
     .set({ plan: 'free', planExpiresAt: null, planLifetime: false })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('reconcilePokOrdersCore', () => {
@@ -207,11 +207,11 @@ describe('reconcilePokOrdersCore', () => {
 
     // The captured order flipped the PT to solo; only the too-fresh order
     // skipped the POK fetch — expiry is never decided on age alone.
-    const [pt] = await db
-      .select({ plan: pts.plan })
-      .from(pts)
-      .where(eq(pts.id, ptId));
-    expect(pt.plan).toBe('solo');
+    const [account] = await db
+      .select({ plan: accounts.plan })
+      .from(accounts)
+      .where(eq(accounts.id, accountId));
+    expect(account.plan).toBe('solo');
     expect(mockGetOrder).toHaveBeenCalledTimes(3);
   });
 
@@ -236,17 +236,17 @@ describe('reconcilePokOrdersCore', () => {
     });
     expect(await statusOf(lateCapture)).toBe('paid');
 
-    const [pt] = await db
-      .select({ plan: pts.plan, planExpiresAt: pts.planExpiresAt })
-      .from(pts)
-      .where(eq(pts.id, ptId));
-    expect(pt.plan).toBe('solo');
-    expect(pt.planExpiresAt).not.toBeNull();
+    const [account] = await db
+      .select({ plan: accounts.plan, planExpiresAt: accounts.planExpiresAt })
+      .from(accounts)
+      .where(eq(accounts.id, accountId));
+    expect(account.plan).toBe('solo');
+    expect(account.planExpiresAt).not.toBeNull();
 
     const paymentEvents = await db
       .select({ type: events.type })
       .from(events)
-      .where(eq(events.ptId, ptId));
+      .where(eq(events.accountId, accountId));
     expect(paymentEvents.map((e) => e.type)).toEqual(['billing.payment_received']);
   });
 

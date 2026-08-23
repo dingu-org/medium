@@ -76,7 +76,7 @@ export const settings = {
 
   // Assistant identity fields (assistant screen)
   // PTs copy the placeholder verbatim, so it has to model the formal 'Ju' the
-  // assistant is required to use with patients.
+  // assistant is required to use with customers.
   aiGreetingPlaceholder:
     'Përshëndetje! Faleminderit që na shkruat. Si mund t’ju ndihmojmë?',
 

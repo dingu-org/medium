@@ -106,7 +106,7 @@ describe('parseReplyIntent', () => {
   // Cancelling destroys the booking, so a bare particle only cancels when the
   // message IS that particle. Keywords cannot tell "Jo, nuk mundem" ("no, I
   // can't") from "Jo, ndryshoj orën" ("no, I'll change the time"), so both go to
-  // the AI turn rather than risk cancelling an appointment the patient is moving.
+  // the AI turn rather than risk cancelling an appointment the customer is moving.
   it.each(['Jo, nuk mundem', 'Jo, ndryshoj orën', 'Jo, dua ricaktim'])(
     'does not cancel on the qualified negative %s',
     (input) => {
@@ -128,7 +128,7 @@ describe('parseReplyIntent', () => {
   );
 
   // "Ok, anuloj" is "OK, I'm cancelling", not the confirmation a bare "Ok"
-  // would be. Confirming it books a slot nobody will use and tells the patient
+  // would be. Confirming it books a slot nobody will use and tells the customer
   // the appointment they just cancelled is on.
   it.each([
     'Ok anuloj',
@@ -189,8 +189,8 @@ describe('parseReplyIntent', () => {
     expect(parseReplyIntent(decomposed)).toBe('opt_out');
   });
 
-  // The patient's own way back into reminders: NDAL is only reversible by the
-  // patient, so AKTIVIZO has to resolve as reliably as NDAL does.
+  // The customer's own way back into reminders: NDAL is only reversible by the
+  // customer, so AKTIVIZO has to resolve as reliably as NDAL does.
   it.each([
     ['AKTIVIZO', 'opt_in'],
     ['aktivizo', 'opt_in'],
@@ -201,9 +201,9 @@ describe('parseReplyIntent', () => {
     expect(parseReplyIntent(input)).toBe(intent);
   });
 
-  // The polite 2pl imperative is the register a patient writes a business in,
+  // The polite 2pl imperative is the register a customer writes a business in,
   // and both switches have to answer to it — an unrecognised AKTIVIZO leaves
-  // the patient with no way back.
+  // the customer with no way back.
   it.each([
     ['Aktivizoni', 'opt_in'],
     ['aktivizoni kujtesat', 'opt_in'],
@@ -242,7 +242,7 @@ describe('parseReplyIntent', () => {
     expect(parseReplyIntent(input)).toBeNull();
   });
 
-  // A patient describing something they are stopping is not asking us to stop
+  // A customer describing something they are stopping is not asking us to stop
   // texting them: "Po e ndal" is "I'm stopping it", "do ta ndal" is "I'll stop
   // it". Unsubscribing them there loses every future reminder silently.
   it.each(['Po e ndal', 'do ta ndal'])(
@@ -284,7 +284,7 @@ describe('isAffirmative', () => {
     'KONFIRMO',
     // 'po' plus exactly one word still reads as the answer — and this is the
     // shape the offer rejected while the reminder accepted it, which is how a
-    // patient's real question got dropped for an appointment they were never
+    // customer's real question got dropped for an appointment they were never
     // asked about.
     'po faleminderit',
     'Po, vij',

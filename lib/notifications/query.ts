@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gt, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { events, patients, pts } from '@/lib/db/schema';
+import { events, customers, accounts } from '@/lib/db/schema';
 import { privacyName } from '@/lib/format/name';
 import {
   formatNotification,
@@ -16,19 +16,19 @@ export type NotificationData = {
 };
 
 export async function getNotificationData(
-  ptId: string,
+  accountId: string,
 ): Promise<NotificationData> {
-  const [pt] = await db
+  const [account] = await db
     .select({
-      timezone: pts.timezone,
-      seenAt: pts.notificationsSeenAt,
+      timezone: accounts.timezone,
+      seenAt: accounts.notificationsSeenAt,
     })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
 
-  const timezone = pt?.timezone ?? 'Europe/Berlin';
-  const seenAt = pt?.seenAt ?? null;
+  const timezone = account?.timezone ?? 'Europe/Berlin';
+  const seenAt = account?.seenAt ?? null;
 
   const rows = await db
     .select({
@@ -40,7 +40,7 @@ export async function getNotificationData(
     .from(events)
     .where(
       and(
-        eq(events.ptId, ptId),
+        eq(events.accountId, accountId),
         inArray(events.type, [...NOTIFICATION_TYPES]),
       ),
     )
@@ -54,20 +54,20 @@ export async function getNotificationData(
     .from(events)
     .where(
       and(
-        eq(events.ptId, ptId),
+        eq(events.accountId, accountId),
         inArray(events.type, [...NOTIFICATION_TYPES]),
         seenAt ? gt(events.occurredAt, seenAt) : undefined,
       ),
     );
 
-  // Enrich with patient names (privacy-trimmed) via a single lookup.
-  const patientIds = [
+  // Enrich with customer names (privacy-trimmed) via a single lookup.
+  const customerIds = [
     ...new Set(
       rows
         .map((r) => {
           const payload = r.payload as Record<string, unknown>;
-          return typeof payload.patientId === 'string'
-            ? payload.patientId
+          return typeof payload.customerId === 'string'
+            ? payload.customerId
             : null;
         })
         .filter((v): v is string => v !== null),
@@ -75,20 +75,20 @@ export async function getNotificationData(
   ];
 
   const nameById = new Map<string, string>();
-  if (patientIds.length > 0) {
-    const patientRows = await db
-      .select({ id: patients.id, name: patients.name })
-      .from(patients)
+  if (customerIds.length > 0) {
+    const customerRows = await db
+      .select({ id: customers.id, name: customers.name })
+      .from(customers)
       .where(
-        and(eq(patients.ptId, ptId), inArray(patients.id, patientIds)),
+        and(eq(customers.accountId, accountId), inArray(customers.id, customerIds)),
       );
-    for (const p of patientRows) nameById.set(p.id, privacyName(p.name));
+    for (const p of customerRows) nameById.set(p.id, privacyName(p.name));
   }
 
   const items = rows.map((r) => {
     const payload = r.payload as Record<string, unknown>;
-    const patientId =
-      typeof payload.patientId === 'string' ? payload.patientId : undefined;
+    const customerId =
+      typeof payload.customerId === 'string' ? payload.customerId : undefined;
     return formatNotification(
       {
         id: r.id,
@@ -96,7 +96,7 @@ export async function getNotificationData(
         payload,
         occurredAt: r.occurredAt.toISOString(),
       },
-      { timezone, patientName: patientId ? nameById.get(patientId) : undefined },
+      { timezone, customerName: customerId ? nameById.get(customerId) : undefined },
     );
   });
 

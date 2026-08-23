@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
-import { billingOrders, pts } from '@/lib/db/schema';
+import { billingOrders, accounts } from '@/lib/db/schema';
 import { getBillingSnapshot } from '@/lib/billing/read-model';
 import { createServiceClient } from '@/lib/supabase/service';
 import { testNowUtc } from '@/tests/support/clock';
@@ -10,7 +10,7 @@ const DAY = 86_400_000;
 // Derived: `seedOrder` places every order at an age in days behind NOW, so a
 // written-down date bought nothing and drifted from the DB's own clock forever.
 const NOW = testNowUtc();
-let ptId = '';
+let accountId = '';
 let seq = 0;
 
 async function seedOrder(args: {
@@ -23,7 +23,7 @@ async function seedOrder(args: {
   seq += 1;
   const createdAt = new Date(NOW.getTime() - args.ageDays * DAY);
   await db.insert(billingOrders).values({
-    ptId,
+    accountId,
     pokOrderId: `pok-rm-${Date.now()}-${seq}`,
     plan: 'solo',
     period: args.period,
@@ -42,17 +42,17 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
-  await db.delete(billingOrders).where(eq(billingOrders.ptId, ptId));
+  await db.delete(billingOrders).where(eq(billingOrders.accountId, accountId));
   await db
-    .update(pts)
+    .update(accounts)
     .set({
       plan: 'free',
       planLifetime: false,
@@ -60,17 +60,17 @@ beforeEach(async () => {
       planDowngradedAt: null,
       timezone: 'Europe/Tirane',
     })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 });
 
 describe('getBillingSnapshot', () => {
   it('reports an active Solo plan with days-to-expiry and VAT-inclusive price', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planExpiresAt: new Date(NOW.getTime() + 20 * DAY) })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
-    const snap = await getBillingSnapshot(ptId, NOW);
+    const snap = await getBillingSnapshot(accountId, NOW);
     expect(snap.plan).toBe('solo');
     expect(snap.state).toBe('active');
     expect(snap.daysLeft).toBe(20);
@@ -81,11 +81,11 @@ describe('getBillingSnapshot', () => {
 
   it('reports the grace state with days left to renew', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planExpiresAt: new Date(NOW.getTime() - 1 * DAY) })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
-    const snap = await getBillingSnapshot(ptId, NOW);
+    const snap = await getBillingSnapshot(accountId, NOW);
     // Past expiry but inside the 3-day grace → still effectively Solo.
     expect(snap.plan).toBe('solo');
     expect(snap.state).toBe('grace');
@@ -94,17 +94,17 @@ describe('getBillingSnapshot', () => {
 
   it('reports lifetime pilots as a lifetime plan', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planLifetime: true })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
-    const snap = await getBillingSnapshot(ptId, NOW);
+    const snap = await getBillingSnapshot(accountId, NOW);
     expect(snap.state).toBe('lifetime');
     expect(snap.planLifetime).toBe(true);
   });
 
   it('reports Free with the Free limits', async () => {
-    const snap = await getBillingSnapshot(ptId, NOW);
+    const snap = await getBillingSnapshot(accountId, NOW);
     expect(snap.plan).toBe('free');
     expect(snap.state).toBe('free');
     expect(snap.conversations.limit).toBe(30);
@@ -113,20 +113,20 @@ describe('getBillingSnapshot', () => {
 
   it('derives currentPeriod from the most recent PAID order, ignoring failed ones', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planExpiresAt: new Date(NOW.getTime() + 20 * DAY) })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
     await seedOrder({ period: 'monthly', status: 'paid', ageDays: 40 });
     await seedOrder({ period: 'yearly', status: 'paid', ageDays: 5 });
     await seedOrder({ period: 'monthly', status: 'failed', ageDays: 1 });
 
-    const snap = await getBillingSnapshot(ptId, NOW);
+    const snap = await getBillingSnapshot(accountId, NOW);
     // Most recent PAID order is the yearly one; the newer failed order is ignored.
     expect(snap.currentPeriod).toBe('yearly');
   });
 
   it('reports currentPeriod null when the PT has no orders', async () => {
-    const snap = await getBillingSnapshot(ptId, NOW);
+    const snap = await getBillingSnapshot(accountId, NOW);
     expect(snap.currentPeriod).toBeNull();
   });
 
@@ -149,7 +149,7 @@ describe('getBillingSnapshot', () => {
     // Abandoned checkout the cron expired — never a payment attempt.
     await seedOrder({ period: 'yearly', status: 'expired', ageDays: 2 });
 
-    const snap = await getBillingSnapshot(ptId, NOW);
+    const snap = await getBillingSnapshot(accountId, NOW);
     expect(snap.receipts).toHaveLength(2);
     // Newest first: the failed yearly precedes the paid monthly.
     expect(snap.receipts[0]).toMatchObject({
@@ -168,15 +168,15 @@ describe('getBillingSnapshot', () => {
 
   it('resolves currentPeriod from the paid order even behind a full page of failures', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planExpiresAt: new Date(NOW.getTime() + 200 * DAY) })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
     await seedOrder({ period: 'yearly', status: 'paid', ageDays: 100 });
     for (let i = 0; i < 51; i += 1) {
       await seedOrder({ period: 'monthly', status: 'failed', ageDays: 50 - i / 100 });
     }
 
-    const snap = await getBillingSnapshot(ptId, NOW);
+    const snap = await getBillingSnapshot(accountId, NOW);
     // The paid order fell out of the 50-row receipt window …
     expect(snap.receipts).toHaveLength(50);
     expect(snap.receipts.every((r) => r.status === 'failed')).toBe(true);

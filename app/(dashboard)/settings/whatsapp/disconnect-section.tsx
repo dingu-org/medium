@@ -60,7 +60,7 @@ export function DisconnectSection() {
           showCloseButton={false}
           className="max-w-[340px] gap-0 rounded-[26px] p-0"
         >
-          <div className="px-[22px] pt-[22px] pb-[18px] text-center">
+          <div className="px-[22px] account-[22px] pb-[18px] text-center">
             <span className="mb-3.5 inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--danger-50)]">
               <Phone className="h-6 w-6 text-destructive" />
             </span>

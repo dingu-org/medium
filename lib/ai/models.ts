@@ -7,9 +7,9 @@ type ModelEnvironment = Readonly<Record<string, string | undefined>>;
  * OpenRouter provider-routing constraints, resolved per environment.
  *
  * `zdr` + `data_collection: 'deny'` are a **production** requirement: it is the
- * only environment that processes patient data, so it is the only one bound by
+ * only environment that processes customer data, so it is the only one bound by
  * the privacy commitments in the policy and DPA. Development and preview run
- * against a local Supabase stack and QA fixtures respectively — no patient data
+ * against a local Supabase stack and QA fixtures respectively — no customer data
  * ever reaches them — and the free models they use publish no ZDR-compliant
  * endpoint, so requiring it there would simply 404 every turn.
  *
@@ -29,7 +29,7 @@ const PRIVACY_BY_ENV: Record<AppEnv, ProviderPrivacy> = {
 
 /**
  * Production must never lose its privacy routing. Called at module load so a
- * bad edit fails the build and every test run, not a patient conversation.
+ * bad edit fails the build and every test run, not a customer conversation.
  */
 export function assertProductionPrivacy(
   privacy: ProviderPrivacy = PRIVACY_BY_ENV.production,
@@ -37,7 +37,7 @@ export function assertProductionPrivacy(
   if (privacy.zdr !== true || privacy.data_collection !== 'deny') {
     throw new Error(
       'Production provider routing must set zdr: true and data_collection: ' +
-        "'deny' — patient conversations may not be retained or trained on.",
+        "'deny' — customer conversations may not be retained or trained on.",
     );
   }
 }

@@ -38,16 +38,16 @@ export function ClientsDirectory({
   return (
     <div className="space-y-4">
       <RealtimeRefresher
-        table="patients"
-        filter={`pt_id=eq.${snapshot.ptId}`}
+        table="customers"
+        filter={`account_id=eq.${snapshot.accountId}`}
       />
       <RealtimeRefresher
         table="appointments"
-        filter={`pt_id=eq.${snapshot.ptId}`}
+        filter={`account_id=eq.${snapshot.accountId}`}
       />
       <RealtimeRefresher
         table="conversations"
-        filter={`pt_id=eq.${snapshot.ptId}`}
+        filter={`account_id=eq.${snapshot.accountId}`}
       />
 
       {/* Always-visible directory search (canvas SearchBar). */}
@@ -84,7 +84,7 @@ export function ClientsDirectory({
               ? 'Provo një emër ose numër tjetër.'
               : 'Sapo një pacient të shkruajë në WhatsApp, shtohet këtu vetë. Ose shto një me dorë.'
           }
-          className="pt-14"
+          className="account-14"
           action={
             !query && (
               <Button asChild variant="tinted" className="h-11">

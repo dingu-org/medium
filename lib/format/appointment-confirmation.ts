@@ -3,11 +3,11 @@ import { formatAppointmentTime } from './appointment-time';
 export type AppointmentConfirmationKind = 'booked' | 'rescheduled' | 'cancelled';
 
 /**
- * The single patient-facing wording of an appointment change, whichever side
+ * The single customer-facing wording of an appointment change, whichever side
  * produced it: the conversation turn says it inline, the background job says it
  * for PT-side changes. It routes the instant through the shared
  * {@link formatAppointmentTime} for the same reason that formatter exists — a
- * patient comparing this line against a reminder for the same booking must not
+ * customer comparing this line against a reminder for the same booking must not
  * be shown two different times.
  *
  * The bodies are shaped so they can be submitted to Meta as template bodies

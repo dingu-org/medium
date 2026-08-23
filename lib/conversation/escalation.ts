@@ -5,15 +5,15 @@ import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { getServiceClient } from '@/lib/tenancy';
 
 export type ConversationEscalationContext = {
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   conversationId: string;
 };
 
 export async function escalateConversationToHuman(
   context: ConversationEscalationContext,
 ): Promise<boolean> {
-  const svc = getServiceClient(context.ptId);
+  const svc = getServiceClient(context.accountId);
 
   // Flip to human handling and emit the escalation event in one transaction so
   // the PT push (Phase 9) and bell feed only fire when the state actually
@@ -25,8 +25,8 @@ export async function escalateConversationToHuman(
       .where(
         and(
           eq(conversations.id, context.conversationId),
-          eq(conversations.ptId, context.ptId),
-          eq(conversations.patientId, context.patientId),
+          eq(conversations.accountId, context.accountId),
+          eq(conversations.customerId, context.customerId),
           // Guard on the source state (AI still handling) so a repeat
           // escalate_to_human call can't re-emit the event/push. Mirrors
           // markRevoked's `status = 'active'` transition guard.
@@ -39,9 +39,9 @@ export async function escalateConversationToHuman(
     return appendBackgroundEvent(tx, {
       type: 'conversation.escalated',
       data: {
-        ptId: context.ptId,
+        accountId: context.accountId,
         conversationId: context.conversationId,
-        patientId: context.patientId,
+        customerId: context.customerId,
       },
     });
   });

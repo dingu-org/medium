@@ -17,7 +17,7 @@ import {
 import { t } from '@/lib/i18n';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { cn } from '@/lib/utils';
-import { exportPt } from '../actions';
+import { exportAccount } from '../actions';
 import { RETENTION_OPTIONS } from '../constants';
 import { updateRetention } from './actions';
 
@@ -62,7 +62,7 @@ export function DataGroup({
     }
     startTransition(async () => {
       try {
-        const result = await exportPt();
+        const result = await exportAccount();
         if (!result.ok) {
           toast.error(t.settings.exportFailed);
           return;

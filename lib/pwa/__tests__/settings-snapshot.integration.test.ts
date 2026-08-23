@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { messageTemplates, pts, whatsappConnections } from '@/lib/db/schema';
+import { messageTemplates, accounts, whatsappConnections } from '@/lib/db/schema';
 import {
   FALLBACK_REMINDER_TEMPLATE,
   REMINDER_TEMPLATE,
@@ -9,8 +9,8 @@ import {
 import { createServiceClient } from '@/lib/supabase/service';
 import { getSettingsSnapshot } from '../read-models';
 
-let ptId = '';
-let freshPtId = '';
+let accountId = '';
+let freshAccountId = '';
 
 async function makeUser(stamp: string): Promise<string> {
   const sb = createServiceClient();
@@ -24,23 +24,23 @@ async function makeUser(stamp: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  ptId = await makeUser(`a-${Date.now()}`);
-  freshPtId = await makeUser(`b-${Date.now()}`);
+  accountId = await makeUser(`a-${Date.now()}`);
+  freshAccountId = await makeUser(`b-${Date.now()}`);
 
-  // The pts row itself comes from the signup trigger; set the Phase 15
+  // The accounts row itself comes from the signup trigger; set the Phase 15
   // profile fields + pause flag on it.
   await db
-    .update(pts)
+    .update(accounts)
     .set({
       fullName: 'Dr. Snapshot',
       title: 'Fizioterapeut',
       address: 'Rr. Snapshot 2, Tiranë',
       assistantPaused: true,
     })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 
   await db.insert(whatsappConnections).values({
-    ptId,
+    accountId,
     phoneNumberId: `pn-snapshot-${Date.now()}`,
     wabaId: 'WABA_SNAPSHOT',
     displayPhoneNumber: '+355 69 765 4321',
@@ -50,13 +50,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const sb = createServiceClient();
-  if (ptId) await sb.auth.admin.deleteUser(ptId);
-  if (freshPtId) await sb.auth.admin.deleteUser(freshPtId);
+  if (accountId) await sb.auth.admin.deleteUser(accountId);
+  if (freshAccountId) await sb.auth.admin.deleteUser(freshAccountId);
 });
 
 describe('getSettingsSnapshot', () => {
   it('returns the Phase 15 fields alongside the existing ones', async () => {
-    const snap = await getSettingsSnapshot(ptId);
+    const snap = await getSettingsSnapshot(accountId);
 
     expect(snap.fullName).toBe('Dr. Snapshot');
     expect(snap.title).toBe('Fizioterapeut');
@@ -72,7 +72,7 @@ describe('getSettingsSnapshot', () => {
   });
 
   it('returns defaults for a fresh PT with nothing set', async () => {
-    const snap = await getSettingsSnapshot(freshPtId);
+    const snap = await getSettingsSnapshot(freshAccountId);
 
     expect(snap.fullName).toBe('');
     expect(snap.title).toBe('');
@@ -91,46 +91,46 @@ describe('getSettingsSnapshot · whatsappTemplateStatus', () => {
   ) {
     return db
       .insert(messageTemplates)
-      .values({ ptId, name, language: 'sq', status, body: 'x' });
+      .values({ accountId, name, language: 'sq', status, body: 'x' });
   }
 
   beforeEach(async () => {
-    await db.delete(messageTemplates).where(eq(messageTemplates.ptId, ptId));
+    await db.delete(messageTemplates).where(eq(messageTemplates.accountId, accountId));
   });
 
   it('is null with no message_templates rows', async () => {
-    const snap = await getSettingsSnapshot(ptId);
+    const snap = await getSettingsSnapshot(accountId);
     expect(snap.whatsappTemplateStatus).toBeNull();
   });
 
   it('reports approved for an approved priority template', async () => {
     await seedTemplate(REMINDER_TEMPLATE.name, 'approved');
-    const snap = await getSettingsSnapshot(ptId);
+    const snap = await getSettingsSnapshot(accountId);
     expect(snap.whatsappTemplateStatus).toBe('approved');
   });
 
   it('reports pending when only a pending row exists', async () => {
     await seedTemplate(REMINDER_TEMPLATE.name, 'pending');
-    const snap = await getSettingsSnapshot(ptId);
+    const snap = await getSettingsSnapshot(accountId);
     expect(snap.whatsappTemplateStatus).toBe('pending');
   });
 
   it('reports rejected when only a rejected row exists', async () => {
     await seedTemplate(REMINDER_TEMPLATE.name, 'rejected');
-    const snap = await getSettingsSnapshot(ptId);
+    const snap = await getSettingsSnapshot(accountId);
     expect(snap.whatsappTemplateStatus).toBe('rejected');
   });
 
   it('best-wins: approved beats rejected across priority names', async () => {
     await seedTemplate(REMINDER_TEMPLATE.name, 'rejected');
     await seedTemplate(FALLBACK_REMINDER_TEMPLATE.name, 'approved');
-    const snap = await getSettingsSnapshot(ptId);
+    const snap = await getSettingsSnapshot(accountId);
     expect(snap.whatsappTemplateStatus).toBe('approved');
   });
 
   it('ignores non-priority template names', async () => {
     await seedTemplate('some_marketing_tpl', 'approved');
-    const snap = await getSettingsSnapshot(ptId);
+    const snap = await getSettingsSnapshot(accountId);
     expect(snap.whatsappTemplateStatus).toBeNull();
   });
 });

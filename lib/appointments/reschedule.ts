@@ -11,11 +11,11 @@ import { withAppointmentLock } from './lock';
 import type { AppointmentMutationResult } from './types';
 
 export async function rescheduleAppointment(input: {
-  ptId: string;
+  accountId: string;
   appointmentId: string;
-  patientId?: string;
+  customerId?: string;
   newStartsAt: Date;
-  origin?: 'conversation' | 'pt';
+  origin?: 'conversation' | 'account';
 }): Promise<AppointmentMutationResult> {
   if (Number.isNaN(input.newStartsAt.getTime())) {
     throw new AppointmentError(
@@ -24,14 +24,14 @@ export async function rescheduleAppointment(input: {
     );
   }
 
-  return withAppointmentLock(input.ptId, async () => {
+  return withAppointmentLock(input.accountId, async () => {
     const conditions = [
       eq(appointments.id, input.appointmentId),
-      eq(appointments.ptId, input.ptId),
+      eq(appointments.accountId, input.accountId),
       inArray(appointments.status, ['pending', 'confirmed']),
     ];
-    if (input.patientId) {
-      conditions.push(eq(appointments.patientId, input.patientId));
+    if (input.customerId) {
+      conditions.push(eq(appointments.customerId, input.customerId));
     }
 
     const [existing] = await db
@@ -60,7 +60,7 @@ export async function rescheduleAppointment(input: {
     }
     const newEndsAt = addMinutes(input.newStartsAt, durationMinutes);
     const bookable = await isSlotBookable({
-      ptId: input.ptId,
+      accountId: input.accountId,
       startsAt: input.newStartsAt,
       endsAt: newEndsAt,
       excludeAppointmentId: existing.id,
@@ -99,9 +99,9 @@ export async function rescheduleAppointment(input: {
         const eventId = await appendAppointmentEvent(tx, {
           type: 'appointment.rescheduled',
           data: {
-            ptId: appointment.ptId,
+            accountId: appointment.accountId,
             appointmentId: appointment.id,
-            patientId: appointment.patientId,
+            customerId: appointment.customerId,
             serviceType: appointment.serviceType,
             status: appointment.status as 'pending' | 'confirmed',
             from: {

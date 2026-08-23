@@ -38,7 +38,7 @@ import {
   pollConnectionQuality,
 } from '../poll-whatsapp-health';
 
-let ptId = '';
+let accountId = '';
 let connectionId = '';
 let sequence = 0;
 
@@ -49,28 +49,28 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(events).where(eq(events.ptId, ptId));
+  await db.delete(events).where(eq(events.accountId, accountId));
   await db
     .delete(whatsappConnections)
-    .where(eq(whatsappConnections.ptId, ptId));
+    .where(eq(whatsappConnections.accountId, accountId));
   // `claimTokenExpiryWarnings` is a cron: it sweeps every active connection in
   // the database. Another tenant's connection with a near expiry would be
   // claimed alongside this one — inflating the returned list, and worse,
   // absorbing the one-shot `appendBackgroundEvent` rejection the rollback test
   // arms. Stamp the foreign rows so this suite's connection is the only
   // candidate.
-  await excludeForeignRows(whatsappConnections, ptId, {
+  await excludeForeignRows(whatsappConnections, accountId, {
     expiryWarningSentAt: new Date(),
   });
 
   const [connection] = await db
     .insert(whatsappConnections)
     .values({
-      ptId,
+      accountId,
       phoneNumberId: `PNI_HEALTH_${Date.now()}_${++sequence}`,
       wabaId: 'WABA_HEALTH',
       accessTokenEncrypted: await encryptToken('HEALTH_TOKEN'),
@@ -87,7 +87,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('pollConnectionQuality', () => {
@@ -114,10 +114,10 @@ describe('pollConnectionQuality', () => {
     const stored = await db
       .select()
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'wa.quality_warning')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'wa.quality_warning')));
     expect(stored).toHaveLength(1);
     expect(stored[0].payload).toMatchObject({
-      ptId,
+      accountId,
       connectionId,
       qualityRating: 'RED',
       tier: 'TIER_1K',
@@ -150,7 +150,7 @@ describe('pollConnectionQuality', () => {
       .where(eq(whatsappConnections.id, connectionId));
     expect(connection.tier).toBe('TIER_10K');
     expect(
-      await db.select().from(events).where(eq(events.ptId, ptId)),
+      await db.select().from(events).where(eq(events.accountId, accountId)),
     ).toHaveLength(0);
   });
 });
@@ -164,14 +164,14 @@ describe('claimTokenExpiryWarnings', () => {
 
     const warnings = await claimTokenExpiryWarnings();
     expect(warnings).toEqual([
-      expect.objectContaining({ ptId, connectionId, daysRemaining: 3 }),
+      expect.objectContaining({ accountId, connectionId, daysRemaining: 3 }),
     ]);
 
     const stored = await db
       .select()
       .from(events)
       .where(
-        and(eq(events.ptId, ptId), eq(events.type, 'wa.connection.expiring')),
+        and(eq(events.accountId, accountId), eq(events.type, 'wa.connection.expiring')),
       );
     expect(stored).toHaveLength(1);
     expect(stored[0].payload).toMatchObject({ connectionId, daysRemaining: 3 });
@@ -188,7 +188,7 @@ describe('claimTokenExpiryWarnings', () => {
         .select()
         .from(events)
         .where(
-          and(eq(events.ptId, ptId), eq(events.type, 'wa.connection.expiring')),
+          and(eq(events.accountId, accountId), eq(events.type, 'wa.connection.expiring')),
         ),
     ).toHaveLength(1);
   });
@@ -224,7 +224,7 @@ describe('claimTokenExpiryWarnings', () => {
         .select()
         .from(events)
         .where(
-          and(eq(events.ptId, ptId), eq(events.type, 'wa.connection.expiring')),
+          and(eq(events.accountId, accountId), eq(events.type, 'wa.connection.expiring')),
         ),
     ).toHaveLength(1);
   });

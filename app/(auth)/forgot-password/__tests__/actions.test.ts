@@ -13,7 +13,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 const initial = { error: null, fieldErrors: null, success: false };
 
-function form(email = 'pt@biznesi.al') {
+function form(email = 'account@biznesi.al') {
   const data = new FormData();
   data.set('email', email);
   return data;
@@ -33,7 +33,7 @@ describe('requestPasswordReset', () => {
   it('sends the PT to the token-hash route, which works in any browser', async () => {
     await requestPasswordReset(initial, form());
 
-    expect(resetMock).toHaveBeenCalledWith('pt@biznesi.al', {
+    expect(resetMock).toHaveBeenCalledWith('account@biznesi.al', {
       redirectTo: 'https://app.example.com/auth/confirm?next=/reset-password',
     });
   });

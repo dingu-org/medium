@@ -22,14 +22,14 @@ const FORM_ID = 'profile-form';
 export function ProfileForm({
   fullName,
   title,
-  practiceName,
+  name,
   address,
   phone,
   email,
 }: {
   fullName: string;
   title: string;
-  practiceName: string;
+  name: string;
   address: string;
   phone: string | null;
   email: string;
@@ -48,7 +48,7 @@ export function ProfileForm({
     toast.error(t.settings.settingsRequireConnection);
   }
 
-  const avatarName = fullName || practiceName || email;
+  const avatarName = fullName || name || email;
 
   return (
     <>
@@ -57,9 +57,9 @@ export function ProfileForm({
         backHref="/settings"
         right={<SaveAction form={FORM_ID} disabled={pending || !online} />}
       />
-      <div className="px-5 pt-2 pb-7">
+      <div className="px-5 account-2 pb-7">
         <OfflineNote />
-        <div className="mb-[26px] flex justify-center pt-1">
+        <div className="mb-[26px] flex justify-center account-1">
           <InitialsAvatar name={avatarName} fallback={email} size={76} />
         </div>
         <form
@@ -85,10 +85,10 @@ export function ProfileForm({
           />
           <SetField
             label={t.settings.profilePracticeLabel}
-            name="practiceName"
-            defaultValue={practiceName}
+            name="name"
+            defaultValue={name}
             disabled={!online}
-            error={state.fieldErrors?.practiceName?.[0]}
+            error={state.fieldErrors?.name?.[0]}
           />
           <SetField
             label={t.settings.profileAddressLabel}

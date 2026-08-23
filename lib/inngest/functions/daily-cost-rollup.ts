@@ -10,7 +10,7 @@ import { logger } from '@/lib/log';
 import { inngest } from '../client';
 
 export type CostRollupRow = {
-  ptId: string;
+  accountId: string;
   aiCostMicrousd: number;
   aiCachedTokens: number;
   metaConversations: number;
@@ -20,14 +20,14 @@ export type CostRollupRow = {
 };
 
 type AggregateRow = {
-  ptId: string;
+  accountId: string;
   aiCost: number | string;
   aiCached: number | string;
   metaConvos: number | string;
 };
 
 type StatusAggregateRow = {
-  ptId: string;
+  accountId: string;
   category: string;
   rows: number | string;
   billable: number | string;
@@ -46,7 +46,7 @@ function utcDayBounds(day: Date): { start: Date; end: Date; dayStr: string } {
 
 /**
  * Aggregate one UTC day of per-PT AI + Meta cost and upsert into `cost_daily`.
- * Idempotent on (pt_id, day): re-running overwrites the row (and advances
+ * Idempotent on (account_id, day): re-running overwrites the row (and advances
  * `computed_at`) rather than duplicating. `day` defaults to yesterday (UTC).
  *
  * AI cost/cached tokens come from persisted OpenRouter accounting on `messages`
@@ -77,34 +77,34 @@ export async function aggregateCostDailyCore(
 
   const aggregated = await db.execute<AggregateRow>(sql`
     SELECT
-      pt_id AS "ptId",
+      account_id AS "accountId",
       COALESCE(SUM(ai_cost_microusd) FILTER (WHERE role = 'ai' AND model IS NOT NULL), 0)::bigint AS "aiCost",
       COALESCE(SUM(cached_tokens) FILTER (WHERE role = 'ai' AND model IS NOT NULL), 0)::bigint AS "aiCached",
-      COUNT(DISTINCT conversation_id) FILTER (WHERE role = 'patient')::int AS "metaConvos"
+      COUNT(DISTINCT conversation_id) FILTER (WHERE role = 'customer')::int AS "metaConvos"
     FROM messages
     WHERE created_at >= ${startIso}::timestamptz
       AND created_at < ${endIso}::timestamptz
-    GROUP BY pt_id
+    GROUP BY account_id
   `);
 
   // Meta delivery truth for the same UTC day, bucketed by send time. One row per
   // (PT, normalized pricing category) with the total and billable-only counts.
   const statusAggregated = await db.execute<StatusAggregateRow>(sql`
     SELECT
-      pt_id AS "ptId",
+      account_id AS "accountId",
       lower(coalesce(pricing_category, '')) AS "category",
       count(*)::int AS "rows",
       count(*) FILTER (WHERE billable IS TRUE)::int AS "billable"
     FROM wa_message_statuses
     WHERE coalesce(sent_at, created_at) >= ${startIso}::timestamptz
       AND coalesce(sent_at, created_at) < ${endIso}::timestamptz
-    GROUP BY pt_id, category
+    GROUP BY account_id, category
   `);
 
   type StatusFold = { hasRows: boolean; billableByCategory: Map<string, number> };
-  const statusByPt = new Map<string, StatusFold>();
+  const statusByAccount = new Map<string, StatusFold>();
   for (const row of statusAggregated) {
-    const fold = statusByPt.get(row.ptId) ?? {
+    const fold = statusByAccount.get(row.accountId) ?? {
       hasRows: false,
       billableByCategory: new Map<string, number>(),
     };
@@ -116,34 +116,34 @@ export async function aggregateCostDailyCore(
         (fold.billableByCategory.get(row.category) ?? 0) + billable,
       );
     }
-    statusByPt.set(row.ptId, fold);
+    statusByAccount.set(row.accountId, fold);
   }
 
-  const messagesByPt = new Map<
+  const messagesByAccount = new Map<
     string,
     { aiCost: number; aiCached: number; metaConvos: number }
   >();
   for (const row of aggregated) {
-    messagesByPt.set(row.ptId, {
+    messagesByAccount.set(row.accountId, {
       aiCost: Number(row.aiCost),
       aiCached: Number(row.aiCached),
       metaConvos: Number(row.metaConvos),
     });
   }
 
-  const ptIds = new Set<string>([
-    ...messagesByPt.keys(),
-    ...statusByPt.keys(),
+  const accountIds = new Set<string>([
+    ...messagesByAccount.keys(),
+    ...statusByAccount.keys(),
   ]);
 
   const rows: CostRollupRow[] = [];
-  for (const ptId of ptIds) {
-    const msg = messagesByPt.get(ptId) ?? {
+  for (const accountId of accountIds) {
+    const msg = messagesByAccount.get(accountId) ?? {
       aiCost: 0,
       aiCached: 0,
       metaConvos: 0,
     };
-    const status = statusByPt.get(ptId);
+    const status = statusByAccount.get(accountId);
 
     let metaCostSource: 'actual' | 'estimated';
     let metaBillableMessages: number;
@@ -155,7 +155,7 @@ export async function aggregateCostDailyCore(
         logger.warn(
           'cost_rollup.unknown_pricing_category',
           'Billable Meta message with unknown pricing category priced at the utility fallback rate',
-          { pt_id: ptId, day: dayStr, categories: unknownCategories },
+          { account_id: accountId, day: dayStr, categories: unknownCategories },
         );
       }
       metaCostSource = 'actual';
@@ -168,7 +168,7 @@ export async function aggregateCostDailyCore(
     }
 
     rows.push({
-      ptId,
+      accountId,
       aiCostMicrousd: msg.aiCost,
       aiCachedTokens: msg.aiCached,
       metaConversations: msg.metaConvos,
@@ -180,7 +180,7 @@ export async function aggregateCostDailyCore(
 
   for (const row of rows) {
     const values = {
-      ptId: row.ptId,
+      accountId: row.accountId,
       day: dayStr,
       aiCostMicrousd: row.aiCostMicrousd,
       aiCachedTokens: row.aiCachedTokens,
@@ -194,7 +194,7 @@ export async function aggregateCostDailyCore(
       .insert(costDaily)
       .values(values)
       .onConflictDoUpdate({
-        target: [costDaily.ptId, costDaily.day],
+        target: [costDaily.accountId, costDaily.day],
         set: {
           aiCostMicrousd: values.aiCostMicrousd,
           aiCachedTokens: values.aiCachedTokens,

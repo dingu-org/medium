@@ -3,7 +3,7 @@ import {
   effectiveAssistantIdentity,
   effectiveRetentionDays,
   resolveEffectivePlan,
-  type BillingPt,
+  type BillingAccount,
 } from '@/lib/billing/entitlements';
 import { testNowUtc } from '@/tests/support/clock';
 
@@ -12,7 +12,7 @@ const DAY_MS = 86_400_000;
 // never mattered — only that it stays a stable instant across the file.
 const NOW = testNowUtc();
 
-function pt(overrides: Partial<BillingPt> = {}): BillingPt {
+function account(overrides: Partial<BillingAccount> = {}): BillingAccount {
   return {
     plan: 'free',
     planLifetime: false,
@@ -25,13 +25,13 @@ describe('resolveEffectivePlan', () => {
   it('lifetime → solo regardless of stored plan and expiry', () => {
     expect(
       resolveEffectivePlan(
-        pt({ plan: 'free', planLifetime: true, planExpiresAt: null }),
+        account({ plan: 'free', planLifetime: true, planExpiresAt: null }),
         NOW,
       ),
     ).toBe('solo');
     expect(
       resolveEffectivePlan(
-        pt({
+        account({
           plan: 'solo',
           planLifetime: true,
           planExpiresAt: new Date(NOW.getTime() - 100 * DAY_MS),
@@ -44,7 +44,7 @@ describe('resolveEffectivePlan', () => {
   it('solo with a future expiry → solo', () => {
     expect(
       resolveEffectivePlan(
-        pt({ plan: 'solo', planExpiresAt: new Date(NOW.getTime() + DAY_MS) }),
+        account({ plan: 'solo', planExpiresAt: new Date(NOW.getTime() + DAY_MS) }),
         NOW,
       ),
     ).toBe('solo');
@@ -53,7 +53,7 @@ describe('resolveEffectivePlan', () => {
   it('solo exactly at the grace boundary (now == expiry + 3d) → solo', () => {
     expect(
       resolveEffectivePlan(
-        pt({
+        account({
           plan: 'solo',
           planExpiresAt: new Date(NOW.getTime() - 3 * DAY_MS),
         }),
@@ -65,7 +65,7 @@ describe('resolveEffectivePlan', () => {
   it('solo past the grace window (now > expiry + 3d) → free', () => {
     expect(
       resolveEffectivePlan(
-        pt({
+        account({
           plan: 'solo',
           planExpiresAt: new Date(NOW.getTime() - 3 * DAY_MS - 1),
         }),
@@ -74,7 +74,7 @@ describe('resolveEffectivePlan', () => {
     ).toBe('free');
     expect(
       resolveEffectivePlan(
-        pt({
+        account({
           plan: 'solo',
           planExpiresAt: new Date(NOW.getTime() - 4 * DAY_MS),
         }),
@@ -84,25 +84,25 @@ describe('resolveEffectivePlan', () => {
   });
 
   it('non-lifetime solo without an expiry → free (anomalous row, no entitlement)', () => {
-    expect(resolveEffectivePlan(pt({ plan: 'solo' }), NOW)).toBe('free');
+    expect(resolveEffectivePlan(account({ plan: 'solo' }), NOW)).toBe('free');
   });
 
   it('free stays free', () => {
-    expect(resolveEffectivePlan(pt(), NOW)).toBe('free');
+    expect(resolveEffectivePlan(account(), NOW)).toBe('free');
   });
 });
 
 describe('effectiveRetentionDays', () => {
   it('returns the stored setting when never downgraded', () => {
     expect(
-      effectiveRetentionDays(pt({ retentionDays: 90 }), NOW),
+      effectiveRetentionDays(account({ retentionDays: 90 }), NOW),
     ).toBe(90);
   });
 
   it('returns the stored setting during the 30-day post-downgrade grace', () => {
     expect(
       effectiveRetentionDays(
-        pt({
+        account({
           retentionDays: 90,
           planDowngradedAt: new Date(NOW.getTime() - 29 * DAY_MS),
         }),
@@ -114,7 +114,7 @@ describe('effectiveRetentionDays', () => {
   it('clamps to the plan max once the grace window has elapsed', () => {
     expect(
       effectiveRetentionDays(
-        pt({
+        account({
           retentionDays: 90,
           planDowngradedAt: new Date(NOW.getTime() - 30 * DAY_MS),
         }),
@@ -126,7 +126,7 @@ describe('effectiveRetentionDays', () => {
   it('never raises a stored setting below the plan max', () => {
     expect(
       effectiveRetentionDays(
-        pt({
+        account({
           retentionDays: 20,
           planDowngradedAt: new Date(NOW.getTime() - 45 * DAY_MS),
         }),
@@ -138,7 +138,7 @@ describe('effectiveRetentionDays', () => {
   it('clamps against the effective plan (lifetime solo keeps 365-day max)', () => {
     expect(
       effectiveRetentionDays(
-        pt({
+        account({
           retentionDays: 300,
           planLifetime: true,
           planDowngradedAt: new Date(NOW.getTime() - 45 * DAY_MS),
@@ -153,7 +153,7 @@ describe('effectiveAssistantIdentity', () => {
   it('nulls the identity on free even when the PT has one stored', () => {
     expect(
       effectiveAssistantIdentity(
-        pt({ aiName: 'Vita', aiGreeting: 'Përshëndetje!' }),
+        account({ aiName: 'Vita', aiGreeting: 'Përshëndetje!' }),
         NOW,
       ),
     ).toEqual({ aiName: null, aiGreeting: null });
@@ -162,7 +162,7 @@ describe('effectiveAssistantIdentity', () => {
   it('passes the identity through on solo', () => {
     expect(
       effectiveAssistantIdentity(
-        pt({
+        account({
           plan: 'solo',
           planExpiresAt: new Date(NOW.getTime() + DAY_MS),
           aiName: 'Vita',
@@ -175,11 +175,11 @@ describe('effectiveAssistantIdentity', () => {
 
   it('passes the identity through on lifetime and normalizes missing fields to null', () => {
     expect(
-      effectiveAssistantIdentity(pt({ planLifetime: true }), NOW),
+      effectiveAssistantIdentity(account({ planLifetime: true }), NOW),
     ).toEqual({ aiName: null, aiGreeting: null });
     expect(
       effectiveAssistantIdentity(
-        pt({ planLifetime: true, aiName: 'Vita' }),
+        account({ planLifetime: true, aiName: 'Vita' }),
         NOW,
       ),
     ).toEqual({ aiName: 'Vita', aiGreeting: null });

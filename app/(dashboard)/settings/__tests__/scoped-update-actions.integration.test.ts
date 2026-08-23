@@ -11,7 +11,7 @@ import {
   vi,
 } from 'vitest';
 import { db } from '@/lib/db';
-import { pts } from '@/lib/db/schema';
+import { accounts } from '@/lib/db/schema';
 import type { SettingsState } from '../constants';
 import { updateRetention } from '../account/actions';
 import { updateAssistantIdentity } from '../assistant/actions';
@@ -44,7 +44,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 // A real service client, independent of the mocks above, purely to seed/clean
-// up a real auth user (the trigger creates the pts row) for these tests.
+// up a real auth user (the trigger creates the accounts row) for these tests.
 const realService = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -57,7 +57,7 @@ const initialState: SettingsState = {
   fieldErrors: null,
 };
 
-let ptId = '';
+let accountId = '';
 
 beforeAll(async () => {
   const { data, error } = await realService.auth.admin.createUser({
@@ -66,46 +66,46 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await realService.auth.admin.deleteUser(ptId);
+  if (accountId) await realService.auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
-  getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
   // These cases exercise the non-gated behavior of the retention / identity
   // actions; the Phase 16 C6 plan gates (retention > 30d, custom identity) are
   // Solo-only and covered by their own suites. Grant lifetime Solo so the core
   // behavior under test isn't blocked by the entitlement check.
-  await db.update(pts).set({ planLifetime: true }).where(eq(pts.id, ptId));
+  await db.update(accounts).set({ planLifetime: true }).where(eq(accounts.id, accountId));
 });
 
 afterEach(() => {
   vi.clearAllMocks();
 });
 
-async function readPt() {
+async function readAccount() {
   const [row] = await db
     .select({
-      practiceName: pts.practiceName,
-      fullName: pts.fullName,
-      title: pts.title,
-      address: pts.address,
-      retentionDays: pts.retentionDays,
-      notificationPrefs: pts.notificationPrefs,
-      aiName: pts.aiName,
-      aiGreeting: pts.aiGreeting,
+      name: accounts.name,
+      fullName: accounts.fullName,
+      title: accounts.title,
+      address: accounts.address,
+      retentionDays: accounts.retentionDays,
+      notificationPrefs: accounts.notificationPrefs,
+      aiName: accounts.aiName,
+      aiGreeting: accounts.aiGreeting,
     })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
   return row;
 }
 
 async function resetPrefs() {
-  await db.update(pts).set({ notificationPrefs: null }).where(eq(pts.id, ptId));
+  await db.update(accounts).set({ notificationPrefs: null }).where(eq(accounts.id, accountId));
 }
 
 describe('setNotificationPref', () => {
@@ -114,7 +114,7 @@ describe('setNotificationPref', () => {
     await setNotificationPref('booking', false);
     await setNotificationPref('escalation', false);
 
-    const row = await readPt();
+    const row = await readAccount();
     // atomic jsonb merge: only the two touched keys are written, the rest stay
     // absent (absent → treated as opted-in `true` by resolveNotificationPrefs
     // on read).
@@ -127,7 +127,7 @@ describe('setNotificationPref', () => {
     await setNotificationPref('escalation', false);
     await setNotificationPref('escalation', true);
 
-    const row = await readPt();
+    const row = await readAccount();
     expect(row.notificationPrefs).toEqual({ booking: false, escalation: true });
   });
 
@@ -140,7 +140,7 @@ describe('setNotificationPref', () => {
       setNotificationPref('totally-not-a-key' as never, true),
     ).rejects.toThrow();
 
-    const row = await readPt();
+    const row = await readAccount();
     expect(row.notificationPrefs).toEqual({ booking: false });
   });
 });
@@ -149,16 +149,16 @@ describe('updateRetention', () => {
   it('persists a retention period from RETENTION_OPTIONS', async () => {
     await updateRetention(180);
 
-    const row = await readPt();
+    const row = await readAccount();
     expect(row.retentionDays).toBe(180);
   });
 
   it('rejects a retention period outside RETENTION_OPTIONS without writing', async () => {
-    const before = await readPt();
+    const before = await readAccount();
 
     await expect(updateRetention(7)).rejects.toThrow();
 
-    const after = await readPt();
+    const after = await readAccount();
     expect(after.retentionDays).toBe(before.retentionDays);
   });
 });
@@ -166,18 +166,18 @@ describe('updateRetention', () => {
 describe('updateProfile', () => {
   it('persists the practice name', async () => {
     const formData = new FormData();
-    formData.set('practiceName', 'Fizioterapi Hoxha');
+    formData.set('name', 'Fizioterapi Hoxha');
 
     const result = await updateProfile(initialState, formData);
     expect(result).toEqual({ error: null, success: true, fieldErrors: null });
 
-    const row = await readPt();
-    expect(row.practiceName).toBe('Fizioterapi Hoxha');
+    const row = await readAccount();
+    expect(row.name).toBe('Fizioterapi Hoxha');
   });
 
   it('persists full name, title, and address', async () => {
     const fd = new FormData();
-    fd.set('practiceName', 'Fizioterapi Hoxha');
+    fd.set('name', 'Fizioterapi Hoxha');
     fd.set('fullName', 'Arta Hoxha');
     fd.set('title', 'Fizioterapiste');
     fd.set('address', 'Rr. Sami Frashëri 4, Tiranë');
@@ -185,7 +185,7 @@ describe('updateProfile', () => {
     const result = await updateProfile(initialState, fd);
     expect(result).toEqual({ error: null, success: true, fieldErrors: null });
 
-    const row = await readPt();
+    const row = await readAccount();
     expect(row.fullName).toBe('Arta Hoxha');
     expect(row.title).toBe('Fizioterapiste');
     expect(row.address).toBe('Rr. Sami Frashëri 4, Tiranë');
@@ -193,14 +193,14 @@ describe('updateProfile', () => {
 
   it('clears optional profile fields to null when submitted empty', async () => {
     const seed = new FormData();
-    seed.set('practiceName', 'Fizioterapi Hoxha');
+    seed.set('name', 'Fizioterapi Hoxha');
     seed.set('fullName', 'Arta Hoxha');
     seed.set('title', 'Fizioterapiste');
     seed.set('address', 'Rr. Sami Frashëri 4, Tiranë');
     await updateProfile(initialState, seed);
 
     const fd = new FormData();
-    fd.set('practiceName', 'Fizioterapi Hoxha');
+    fd.set('name', 'Fizioterapi Hoxha');
     fd.set('fullName', '');
     fd.set('title', '');
     fd.set('address', '');
@@ -208,28 +208,28 @@ describe('updateProfile', () => {
     const result = await updateProfile(initialState, fd);
     expect(result.success).toBe(true);
 
-    const row = await readPt();
+    const row = await readAccount();
     expect(row.fullName).toBeNull();
     expect(row.title).toBeNull();
     expect(row.address).toBeNull();
   });
 
   it('rejects an empty practice name without writing', async () => {
-    const before = await readPt();
+    const before = await readAccount();
 
     const formData = new FormData();
-    formData.set('practiceName', '   ');
+    formData.set('name', '   ');
 
     const result = await updateProfile(initialState, formData);
     expect(result.success).toBe(false);
-    expect(result.fieldErrors?.practiceName).toBeTruthy();
+    expect(result.fieldErrors?.name).toBeTruthy();
 
-    const after = await readPt();
-    expect(after.practiceName).toBe(before.practiceName);
+    const after = await readAccount();
+    expect(after.name).toBe(before.name);
   });
 });
 
-// These tests mutate the shared seeded pts row; keep them sequential and
+// These tests mutate the shared seeded accounts row; keep them sequential and
 // assert only against values set in-test, never the initial column state.
 describe('updateAssistantIdentity', () => {
   it('partial update leaves sibling fields intact', async () => {
@@ -245,7 +245,7 @@ describe('updateAssistantIdentity', () => {
     const result = await updateAssistantIdentity(initialState, one);
     expect(result).toEqual({ error: null, success: true, fieldErrors: null });
 
-    const row = await readPt();
+    const row = await readAccount();
     expect(row.aiName).toBe('Mia');
     expect(row.aiGreeting).toBe('Përshëndetje nga Fizioterapi Hoxha.'); // untouched
   });
@@ -256,13 +256,13 @@ describe('updateAssistantIdentity', () => {
     const result = await updateAssistantIdentity(initialState, fd);
     expect(result.success).toBe(true);
 
-    const row = await readPt();
+    const row = await readAccount();
     expect(row.aiGreeting).toBeNull();
     expect(row.aiName).toBe('Mia'); // sibling still untouched
   });
 
   it('rejects an over-max aiName without writing', async () => {
-    const before = await readPt();
+    const before = await readAccount();
 
     const fd = new FormData();
     fd.set('aiName', 'x'.repeat(61));
@@ -270,7 +270,7 @@ describe('updateAssistantIdentity', () => {
     expect(result.success).toBe(false);
     expect(result.fieldErrors?.aiName).toBeTruthy();
 
-    const after = await readPt();
+    const after = await readAccount();
     expect(after.aiName).toBe(before.aiName); // unchanged
   });
 });

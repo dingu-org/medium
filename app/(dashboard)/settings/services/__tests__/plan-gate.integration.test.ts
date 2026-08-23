@@ -11,7 +11,7 @@ import {
   vi,
 } from 'vitest';
 import { db } from '@/lib/db';
-import { pts } from '@/lib/db/schema';
+import { accounts } from '@/lib/db/schema';
 import { getServices } from '@/lib/services/queries';
 import { createService, setServiceActive } from '../actions';
 
@@ -41,7 +41,7 @@ const realService = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-let ptId = '';
+let accountId = '';
 
 beforeAll(async () => {
   const { data, error } = await realService.auth.admin.createUser({
@@ -50,15 +50,15 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await realService.auth.admin.deleteUser(ptId);
+  if (accountId) await realService.auth.admin.deleteUser(accountId);
 });
 
 beforeEach(() => {
-  getUserMock.mockResolvedValue({ data: { user: { id: ptId } } });
+  getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -66,13 +66,13 @@ afterEach(() => vi.clearAllMocks());
 describe('services plan gate (Free = 1 active)', () => {
   it('blocks a second active service on Free but allows a swap', async () => {
     // Free by default. Reduce the seeded services to exactly one active.
-    let all = await getServices(ptId);
+    let all = await getServices(accountId);
     const active = all.filter((s) => s.active);
     for (const s of active.slice(1)) {
       const r = await setServiceActive(s.id, false);
       expect(r).toEqual({ ok: true });
     }
-    all = await getServices(ptId);
+    all = await getServices(accountId);
     expect(all.filter((s) => s.active)).toHaveLength(1);
 
     // Creating a second active service is capped.
@@ -92,15 +92,15 @@ describe('services plan gate (Free = 1 active)', () => {
     // ...but the swap works: free the slot, then take it.
     expect(await setServiceActive(activeOne.id, false)).toEqual({ ok: true });
     expect(await setServiceActive(inactiveOne.id, true)).toEqual({ ok: true });
-    expect((await getServices(ptId)).filter((s) => s.active)).toHaveLength(1);
+    expect((await getServices(accountId)).filter((s) => s.active)).toHaveLength(1);
   });
 
   it('lifts the cap on an effective Solo plan', async () => {
     // Lifetime → effective Solo (unlimited active services).
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'solo', planLifetime: true })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
 
     const created = await createService({
       name: 'Shërbim Solo',
@@ -110,8 +110,8 @@ describe('services plan gate (Free = 1 active)', () => {
     expect(created).toEqual({ ok: true });
 
     await db
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'free', planLifetime: false })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
   });
 });

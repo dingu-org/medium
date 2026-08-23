@@ -1,6 +1,6 @@
 /**
  * Albanian (sq) UI dictionary — the canonical practitioner-facing copy, composed
- * from per-area modules in ./dict. Practitioner UI is informal ("ti"); AI→patient
+ * from per-area modules in ./dict. Practitioner UI is informal ("ti"); AI→customer
  * copy stays formal ("Ju") and lives in the AI prompts, not here.
  *
  * One locale ships today, so screens import `t` directly (no runtime locale

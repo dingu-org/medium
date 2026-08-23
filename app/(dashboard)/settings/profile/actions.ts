@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { pts } from '@/lib/db/schema';
+import { accounts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { sanitizePromptField } from '@/lib/ai/prompt';
 import { t } from '@/lib/i18n';
@@ -15,14 +15,14 @@ import type { SettingsState } from '../constants';
 const emptyToUndefined = (v: unknown) =>
   typeof v === 'string' && v.trim() === '' ? undefined : v;
 
-// practiceName, title and address are interpolated into the system prompt as
+// name, title and address are interpolated into the system prompt as
 // context bullets, so a line break in them would render as a bullet of its own
 // and read as a practice-authored rule (lib/ai/prompt.ts).
 const promptSafe = (v: unknown) =>
   emptyToUndefined(typeof v === 'string' ? sanitizePromptField(v) : v);
 
 const schema = z.object({
-  practiceName: z.preprocess(
+  name: z.preprocess(
     (v) => (typeof v === 'string' ? sanitizePromptField(v) : v),
     z.string().min(1, t.settings.profilePracticeRequired).max(120),
   ),
@@ -43,7 +43,7 @@ async function updateProfileImpl(
 
   // Optional fields stay untouched when the form does not submit them.
   const parsed = schema.safeParse({
-    practiceName: formData.get('practiceName'),
+    name: formData.get('name'),
     fullName: formData.get('fullName') ?? undefined,
     title: formData.get('title') ?? undefined,
     address: formData.get('address') ?? undefined,
@@ -57,14 +57,14 @@ async function updateProfileImpl(
   }
 
   await db
-    .update(pts)
+    .update(accounts)
     .set({
-      practiceName: parsed.data.practiceName,
+      name: parsed.data.name,
       ...(formData.has('fullName') ? { fullName: parsed.data.fullName ?? null } : {}),
       ...(formData.has('title') ? { title: parsed.data.title ?? null } : {}),
       ...(formData.has('address') ? { address: parsed.data.address ?? null } : {}),
     })
-    .where(eq(pts.id, user.id));
+    .where(eq(accounts.id, user.id));
 
   revalidatePath('/settings');
   revalidatePath('/settings/profile');

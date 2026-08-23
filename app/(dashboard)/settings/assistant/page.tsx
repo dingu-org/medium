@@ -22,7 +22,7 @@ export default async function AssistantSettingsPage() {
   return (
     <div className="-mx-4 -mt-4">
       <NavBar title={t.settings.assistant} backHref="/settings" />
-      <div className="space-y-4 px-5 pt-2 pb-4">
+      <div className="space-y-4 px-5 account-2 pb-4">
         <OfflineNote />
         <AssistantCard
           big

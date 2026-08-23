@@ -17,7 +17,7 @@ import { backfillDisplayNumbers } from '../backfill-display-number';
 
 const TOKEN = 'PT_TOKEN_backfill_me';
 
-let ptId = '';
+let accountId = '';
 let seq = 0;
 const nextPni = () => `PNI_BACKFILL_${Date.now()}_${++seq}`;
 
@@ -27,7 +27,7 @@ async function seedConnection(
   const [row] = await db
     .insert(whatsappConnections)
     .values({
-      ptId,
+      accountId,
       phoneNumberId: nextPni(),
       wabaId: 'WABA_BACKFILL',
       accessTokenEncrypted: await encryptToken(TOKEN),
@@ -53,11 +53,11 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {

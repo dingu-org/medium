@@ -20,13 +20,13 @@ import type { ChatListRowSnapshot } from '@/lib/pwa/read-models';
 import { loadMoreConversations } from './pagination-actions';
 
 export function ChatList({
-  ptId,
+  accountId,
   rows,
   hasMore: initialHasMore,
   status,
   query: initialQuery,
 }: {
-  ptId: string;
+  accountId: string;
   rows: ChatListRowSnapshot[];
   hasMore: boolean;
   status: 'active' | 'closed';
@@ -114,7 +114,7 @@ export function ChatList({
       {/* conversations is subscribed app-wide in the dashboard layout; here we
           only need messages, since AI replies insert message rows without
           touching conversations. */}
-      <RealtimeRefresher table="messages" filter={`pt_id=eq.${ptId}`} />
+      <RealtimeRefresher table="messages" filter={`account_id=eq.${accountId}`} />
       <SegmentedControl
         ariaLabel="Gjendja e bisedave"
         value={status}
@@ -163,7 +163,7 @@ export function ChatList({
                 : t.chat.emptyTitle
           }
           description={query ? t.chat.searchEmptyText : t.chat.emptyText}
-          className="pt-16"
+          className="account-16"
         />
       ) : (
         <>
@@ -234,12 +234,12 @@ function ConversationGroup({
                 : 'ai';
           const emphasized = alert || row.unread_count > 0;
           // Sender marker on the preview line: the PT's own replies and the
-          // assistant's replies are prefixed; patient messages stay bare. Kept as
+          // assistant's replies are prefixed; customer messages stay bare. Kept as
           // plain text inside the truncating span so it shares the one clipped line.
           const previewPrefix =
             row.last_content == null
               ? ''
-              : row.last_role === 'pt'
+              : row.last_role === 'account'
                 ? t.chat.youPrefix
                 : row.last_role === 'ai'
                   ? t.chat.aiPrefix
@@ -251,7 +251,7 @@ function ConversationGroup({
               className="hover:bg-muted/50 flex items-center gap-[13px] px-4 py-[13px]"
             >
               <InitialsAvatar
-                name={privacyName(row.patient_name)}
+                name={privacyName(row.customer_name)}
                 size={44}
                 dotTone={
                   alert
@@ -266,7 +266,7 @@ function ConversationGroup({
               <span className="min-w-0 flex-1">
                 <span className="mb-[3px] flex items-baseline justify-between gap-2">
                   <span className="truncate text-[15px] font-semibold tracking-[-0.005em]">
-                    {privacyName(row.patient_name)}
+                    {privacyName(row.customer_name)}
                   </span>
                   {row.last_at && (
                     <span className="text-ink-3 shrink-0 font-mono text-[11.5px] whitespace-nowrap">

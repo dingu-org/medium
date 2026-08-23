@@ -3,7 +3,7 @@ import { auditLog } from '@/lib/db/schema';
 import { TenancyError } from './errors';
 
 export type AuditInput = {
-  ptId: string;
+  accountId: string;
   actor: string;
   action: string;
   targetTable: string;
@@ -15,12 +15,12 @@ export async function withAuditLog<T>(
   input: AuditInput,
   fn: () => Promise<T>,
 ): Promise<T> {
-  if (!input.ptId) {
-    throw new TenancyError('withAuditLog requires a ptId');
+  if (!input.accountId) {
+    throw new TenancyError('withAuditLog requires a accountId');
   }
   const result = await fn();
   await db.insert(auditLog).values({
-    ptId: input.ptId,
+    accountId: input.accountId,
     actor: input.actor,
     action: input.action,
     targetTable: input.targetTable,

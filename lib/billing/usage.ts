@@ -1,11 +1,11 @@
 /**
  * Conversation metering + cap enforcement (Phase 16 C2). A "conversation" for
- * billing is an active patient-day: the first inbound patient message the
- * assistant processes for a given patient on a given calendar day (in the PT's
+ * billing is an active customer-day: the first inbound customer message the
+ * assistant processes for a given customer on a given calendar day (in the PT's
  * timezone) inserts one `conversation_days` fact and counts once. Every limit
  * read here comes from `lib/billing/plans.ts` — never hardcoded.
  *
- * The gate runs under a per-PT advisory lock so two different patients hitting
+ * The gate runs under a per-PT advisory lock so two different customers hitting
  * the boundary at the same moment can't both slip past the cap. Warning/reached
  * events are emitted at most once per (PT, type, kind, month) via an
  * events-exists check that C3's belt-and-braces monitor cron shares.
@@ -31,7 +31,7 @@ import {
   conversationDays,
   events,
   messages,
-  pts,
+  accounts,
   reminderDeliveries,
   reminderJobs,
   waMessageStatuses,
@@ -68,7 +68,7 @@ export type ConversationGateResult =
 
 async function countConversationDays(
   executor: DB | DBTransaction,
-  ptId: string,
+  accountId: string,
   monthKey: string,
 ): Promise<number> {
   const [row] = await executor
@@ -76,7 +76,7 @@ async function countConversationDays(
     .from(conversationDays)
     .where(
       and(
-        eq(conversationDays.ptId, ptId),
+        eq(conversationDays.accountId, accountId),
         eq(conversationDays.monthKey, monthKey),
       ),
     );
@@ -88,7 +88,7 @@ type BillingEventArgs =
       type: 'billing.limit_reached';
       /** Defaults to 'conversations' (C2). C3 passes 'reminders'. */
       kind?: 'conversations' | 'reminders';
-      ptId: string;
+      accountId: string;
       monthKey: string;
       used: number;
       limit: number;
@@ -98,7 +98,7 @@ type BillingEventArgs =
       type: 'billing.limit_warning';
       /** Defaults to 'conversations' (C2). C3 passes 'reminders_predictive'. */
       kind?: 'conversations' | 'reminders' | 'reminders_predictive';
-      ptId: string;
+      accountId: string;
       monthKey: string;
       used: number;
       limit: number;
@@ -126,7 +126,7 @@ async function emitBillingEventOnce(
     .from(events)
     .where(
       and(
-        eq(events.ptId, args.ptId),
+        eq(events.accountId, args.accountId),
         eq(events.type, args.type),
         sql`${events.payload}->>'kind' = ${dedupeKind}`,
         sql`${events.payload}->>'monthKey' = ${args.monthKey}`,
@@ -140,7 +140,7 @@ async function emitBillingEventOnce(
     return appendBackgroundEvent(tx, {
       type: 'billing.limit_reached',
       data: {
-        ptId: args.ptId,
+        accountId: args.accountId,
         kind,
         used: args.used,
         limit: args.limit,
@@ -153,7 +153,7 @@ async function emitBillingEventOnce(
   return appendBackgroundEvent(tx, {
     type: 'billing.limit_warning',
     data: {
-      ptId: args.ptId,
+      accountId: args.accountId,
       kind,
       used: args.used,
       limit: args.limit,
@@ -179,10 +179,10 @@ async function emitBillingLimitEventOnce(args: BillingEventArgs): Promise<void> 
 
 /**
  * Record this inbound as a metered conversation-day and decide whether it may
- * proceed. Idempotent: a repeat for the same (PT, patient, local day) — an
+ * proceed. Idempotent: a repeat for the same (PT, customer, local day) — an
  * Inngest retry or a later same-day message — returns `counted:false` and
  * always flows, even once the month is at cap (mid-conversation replies are
- * never cut off). Only a fresh patient-day that would exceed the cap is turned
+ * never cut off). Only a fresh customer-day that would exceed the cap is turned
  * away with `at_cap`.
  *
  * The whole insert → count → (compensating delete | event) sequence runs in one
@@ -190,8 +190,8 @@ async function emitBillingLimitEventOnce(args: BillingEventArgs): Promise<void> 
  * over-limit row that a retry would then wave through.
  */
 export async function checkAndRecordConversation(args: {
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   conversationId: string;
   plan: PlanId;
   timezone: string;
@@ -206,14 +206,14 @@ export async function checkAndRecordConversation(args: {
   );
 
   const { result, publishEventId } = await withAdvisoryLock(
-    `usage:conv:${args.ptId}`,
+    `usage:conv:${args.accountId}`,
     () =>
       db.transaction(async (tx) => {
         const inserted = await tx
           .insert(conversationDays)
           .values({
-            ptId: args.ptId,
-            patientId: args.patientId,
+            accountId: args.accountId,
+            customerId: args.customerId,
             conversationId: args.conversationId,
             localDay,
             monthKey,
@@ -221,16 +221,16 @@ export async function checkAndRecordConversation(args: {
           })
           .onConflictDoNothing({
             target: [
-              conversationDays.ptId,
-              conversationDays.patientId,
+              conversationDays.accountId,
+              conversationDays.customerId,
               conversationDays.localDay,
             ],
           })
           .returning({ id: conversationDays.id });
 
-        // This patient-day is already paid for → always allowed, never re-counts.
+        // This customer-day is already paid for → always allowed, never re-counts.
         if (inserted.length === 0) {
-          const used = await countConversationDays(tx, args.ptId, monthKey);
+          const used = await countConversationDays(tx, args.accountId, monthKey);
           return {
             result: {
               status: 'allowed' as const,
@@ -242,10 +242,10 @@ export async function checkAndRecordConversation(args: {
           };
         }
 
-        const count = await countConversationDays(tx, args.ptId, monthKey);
+        const count = await countConversationDays(tx, args.accountId, monthKey);
 
         // Over cap: undo the day-fact so the month total stays at the limit and
-        // hand off. Nothing is counted for a turned-away patient-day.
+        // hand off. Nothing is counted for a turned-away customer-day.
         if (limit > 0 && count > limit) {
           await tx
             .delete(conversationDays)
@@ -260,7 +260,7 @@ export async function checkAndRecordConversation(args: {
         if (limit > 0 && count >= limit) {
           publishEventId = await emitBillingEventOnce(tx, {
             type: 'billing.limit_reached',
-            ptId: args.ptId,
+            accountId: args.accountId,
             monthKey,
             used: count,
             limit,
@@ -269,7 +269,7 @@ export async function checkAndRecordConversation(args: {
         } else if (limit > 0 && count >= warnThreshold(limit)) {
           publishEventId = await emitBillingEventOnce(tx, {
             type: 'billing.limit_warning',
-            ptId: args.ptId,
+            accountId: args.accountId,
             monthKey,
             used: count,
             limit,
@@ -302,25 +302,25 @@ export async function checkAndRecordConversation(args: {
  * Solo shows Free limits.
  */
 export async function getConversationUsage(
-  ptId: string,
+  accountId: string,
   now: Date = new Date(),
 ): Promise<{ used: number; limit: number; monthKey: string; atCap: boolean }> {
-  const [pt] = await db
+  const [account] = await db
     .select({
-      plan: pts.plan,
-      planLifetime: pts.planLifetime,
-      planExpiresAt: pts.planExpiresAt,
-      timezone: pts.timezone,
+      plan: accounts.plan,
+      planLifetime: accounts.planLifetime,
+      planExpiresAt: accounts.planExpiresAt,
+      timezone: accounts.timezone,
     })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  if (!pt) return { used: 0, limit: 0, monthKey: '', atCap: false };
+  if (!account) return { used: 0, limit: 0, monthKey: '', atCap: false };
 
-  const plan = resolveEffectivePlan(pt, now);
+  const plan = resolveEffectivePlan(account, now);
   const limit = getPlan(plan).conversationsPerMonth;
-  const { monthKey } = conversationDayKeys(now, pt.timezone);
-  const used = await countConversationDays(db, ptId, monthKey);
+  const { monthKey } = conversationDayKeys(now, account.timezone);
+  const used = await countConversationDays(db, accountId, monthKey);
   return { used, limit, monthKey, atCap: limit > 0 && used >= limit };
 }
 
@@ -356,10 +356,10 @@ function reminderMonthBounds(
  * from `reminder_jobs.delivered_at`: that column is a single scalar on a row
  * unique per appointment, so a rescheduled appointment's second — separately
  * billed — template was never counted, and the whole history vanished with the
- * patient when erasure cascaded the job rows away.
+ * customer when erasure cascaded the job rows away.
  */
 async function countDeliveredReminders(
-  ptId: string,
+  accountId: string,
   start: Date,
   end: Date,
 ): Promise<number> {
@@ -368,7 +368,7 @@ async function countDeliveredReminders(
     .from(reminderDeliveries)
     .where(
       and(
-        eq(reminderDeliveries.ptId, ptId),
+        eq(reminderDeliveries.accountId, accountId),
         gte(reminderDeliveries.deliveredAt, start),
         lt(reminderDeliveries.deliveredAt, end),
       ),
@@ -400,7 +400,7 @@ const IN_FLIGHT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
  * `delivered_at` in place and the new cycle would be invisible to the gate.
  */
 async function countInFlightReminders(
-  ptId: string,
+  accountId: string,
   start: Date,
   end: Date,
   now: Date,
@@ -416,13 +416,13 @@ async function countInFlightReminders(
     .leftJoin(
       waMessageStatuses,
       and(
-        eq(waMessageStatuses.ptId, reminderJobs.ptId),
+        eq(waMessageStatuses.accountId, reminderJobs.accountId),
         eq(waMessageStatuses.externalId, messages.externalId),
       ),
     )
     .where(
       and(
-        eq(reminderJobs.ptId, ptId),
+        eq(reminderJobs.accountId, accountId),
         eq(reminderJobs.status, 'sent'),
         isNotNull(reminderJobs.sentAt),
         gte(reminderJobs.sentAt, sentSince),
@@ -458,20 +458,20 @@ export type ReminderUsage = {
  * `delivered` alone is the authoritative figure for reporting.
  */
 export async function getReminderUsage(
-  ptId: string,
+  accountId: string,
   now: Date = new Date(),
 ): Promise<ReminderUsage> {
-  const [pt] = await db
+  const [account] = await db
     .select({
-      plan: pts.plan,
-      planLifetime: pts.planLifetime,
-      planExpiresAt: pts.planExpiresAt,
-      timezone: pts.timezone,
+      plan: accounts.plan,
+      planLifetime: accounts.planLifetime,
+      planExpiresAt: accounts.planExpiresAt,
+      timezone: accounts.timezone,
     })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  if (!pt) {
+  if (!account) {
     return {
       delivered: 0,
       inFlight: 0,
@@ -482,12 +482,12 @@ export async function getReminderUsage(
     };
   }
 
-  const plan = resolveEffectivePlan(pt, now);
+  const plan = resolveEffectivePlan(account, now);
   const limit = getPlan(plan).remindersPerMonth;
-  const { monthKey, start, end } = reminderMonthBounds(now, pt.timezone);
+  const { monthKey, start, end } = reminderMonthBounds(now, account.timezone);
   const [delivered, inFlight] = await Promise.all([
-    countDeliveredReminders(ptId, start, end),
-    countInFlightReminders(ptId, start, end, now),
+    countDeliveredReminders(accountId, start, end),
+    countInFlightReminders(accountId, start, end, now),
   ]);
   const used = delivered + inFlight;
   return {
@@ -502,14 +502,14 @@ export async function getReminderUsage(
 
 /**
  * Whether the PT may send another reminder now. Fails open when the limit can't
- * be resolved (pt missing → limit 0), matching the conversation gate's
+ * be resolved (account missing → limit 0), matching the conversation gate's
  * `limit > 0` guards.
  */
 export async function reminderQuotaAvailable(
-  ptId: string,
+  accountId: string,
   now: Date = new Date(),
 ): Promise<boolean> {
-  const { used, limit } = await getReminderUsage(ptId, now);
+  const { used, limit } = await getReminderUsage(accountId, now);
   return limit <= 0 ? true : used < limit;
 }
 
@@ -519,23 +519,23 @@ export async function reminderQuotaAvailable(
  * compares this to `remaining`.
  */
 export async function countScheduledRemindersInMonth(
-  ptId: string,
+  accountId: string,
   now: Date = new Date(),
 ): Promise<number> {
-  const [pt] = await db
-    .select({ timezone: pts.timezone })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+  const [account] = await db
+    .select({ timezone: accounts.timezone })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  if (!pt) return 0;
-  const { end } = reminderMonthBounds(now, pt.timezone);
+  if (!account) return 0;
+  const { end } = reminderMonthBounds(now, account.timezone);
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(reminderJobs)
     .innerJoin(appointments, eq(appointments.id, reminderJobs.appointmentId))
     .where(
       and(
-        eq(reminderJobs.ptId, ptId),
+        eq(reminderJobs.accountId, accountId),
         inArray(reminderJobs.status, ['scheduled', 'requeued']),
         inArray(appointments.status, ['pending', 'confirmed']),
         gt(appointments.startsAt, now),
@@ -551,16 +551,16 @@ export async function countScheduledRemindersInMonth(
  * never silent (in addition to the flagged appointment badge).
  */
 export async function emitReminderLimitReachedOnce(
-  ptId: string,
+  accountId: string,
   now: Date = new Date(),
   traceId?: string,
 ): Promise<void> {
-  const { used, limit, monthKey } = await getReminderUsage(ptId, now);
+  const { used, limit, monthKey } = await getReminderUsage(accountId, now);
   if (!monthKey || limit <= 0) return;
   await emitBillingLimitEventOnce({
     type: 'billing.limit_reached',
     kind: 'reminders',
-    ptId,
+    accountId,
     monthKey,
     used,
     limit,
@@ -573,7 +573,7 @@ export async function emitReminderLimitReachedOnce(
  * upcoming scheduled reminders would exhaust the remaining quota.
  */
 export async function emitReminderPredictiveWarningOnce(args: {
-  ptId: string;
+  accountId: string;
   monthKey: string;
   used: number;
   limit: number;
@@ -584,7 +584,7 @@ export async function emitReminderPredictiveWarningOnce(args: {
   await emitBillingLimitEventOnce({
     type: 'billing.limit_warning',
     kind: 'reminders_predictive',
-    ptId: args.ptId,
+    accountId: args.accountId,
     monthKey: args.monthKey,
     used: args.used,
     limit: args.limit,
@@ -600,17 +600,17 @@ export async function emitReminderPredictiveWarningOnce(args: {
  * so this never double-fires with `checkAndRecordConversation`.
  */
 export async function emitConversationUsageEventIfCrossed(
-  ptId: string,
+  accountId: string,
   now: Date = new Date(),
   traceId?: string,
 ): Promise<'reached' | 'warned' | 'none'> {
-  const { used, limit, monthKey } = await getConversationUsage(ptId, now);
+  const { used, limit, monthKey } = await getConversationUsage(accountId, now);
   if (!monthKey || limit <= 0) return 'none';
   if (used >= limit) {
     await emitBillingLimitEventOnce({
       type: 'billing.limit_reached',
       kind: 'conversations',
-      ptId,
+      accountId,
       monthKey,
       used,
       limit,
@@ -622,7 +622,7 @@ export async function emitConversationUsageEventIfCrossed(
     await emitBillingLimitEventOnce({
       type: 'billing.limit_warning',
       kind: 'conversations',
-      ptId,
+      accountId,
       monthKey,
       used,
       limit,

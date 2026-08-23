@@ -16,7 +16,7 @@ import {
   conversations,
   events,
   messages,
-  patients,
+  customers,
   reminderDeliveries,
   reminderJobs,
   waMessageStatuses,
@@ -34,7 +34,7 @@ const WA_ID = '447700900000';
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN!;
 const APP_SECRET = process.env.META_APP_SECRET!;
 
-let ptId = '';
+let accountId = '';
 let externalIdCounter = 0;
 const nextExternalId = () => `wamid.${Date.now()}-${++externalIdCounter}`;
 
@@ -176,7 +176,7 @@ function buildAppStatePayload() {
                   type: 'contact',
                   action: 'add',
                   contact: {
-                    full_name: 'Jane Patient',
+                    full_name: 'Jane Customer',
                     first_name: 'Jane',
                     phone_number: WA_ID,
                   },
@@ -347,10 +347,10 @@ beforeAll(async () => {
   });
   if (error || !data.user)
     throw new Error(`createUser failed: ${error?.message}`);
-  ptId = data.user.id;
+  accountId = data.user.id;
 
   await db.insert(whatsappConnections).values({
-    ptId,
+    accountId,
     phoneNumberId: PHONE_NUMBER_ID,
     displayPhoneNumber: '15551234567',
     wabaId: 'WABA_ID',
@@ -359,19 +359,19 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (ptId) {
-    await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) {
+    await createServiceClient().auth.admin.deleteUser(accountId);
   }
 });
 
 beforeEach(async () => {
   // Survives its appointment by design (ON DELETE SET NULL), so deleting the
-  // patients below does not take it with them.
-  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
-  await db.delete(whatsappContacts).where(eq(whatsappContacts.ptId, ptId));
-  await db.delete(waMessageStatuses).where(eq(waMessageStatuses.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
+  // customers below does not take it with them.
+  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
+  await db.delete(whatsappContacts).where(eq(whatsappContacts.accountId, accountId));
+  await db.delete(waMessageStatuses).where(eq(waMessageStatuses.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
   await db
     .update(whatsappConnections)
     .set({
@@ -381,7 +381,7 @@ beforeEach(async () => {
       coexistenceLastProgress: null,
       coexistenceLastError: null,
     })
-    .where(eq(whatsappConnections.ptId, ptId));
+    .where(eq(whatsappConnections.accountId, accountId));
   vi.restoreAllMocks();
 });
 
@@ -416,7 +416,7 @@ describe('POST /api/webhooks/whatsapp — signature failures', () => {
     const rows = await db
       .select()
       .from(messages)
-      .where(eq(messages.ptId, ptId));
+      .where(eq(messages.accountId, accountId));
     expect(rows).toHaveLength(0);
     expect(sendSpy).not.toHaveBeenCalled();
   });
@@ -428,7 +428,7 @@ describe('POST /api/webhooks/whatsapp — signature failures', () => {
 });
 
 describe('POST /api/webhooks/whatsapp — happy path', () => {
-  it('persists patient, conversation, and message; emits message.received', async () => {
+  it('persists customer, conversation, and message; emits message.received', async () => {
     const sendSpy = vi
       .spyOn(inngest, 'send')
       .mockResolvedValue({ ids: [] } as never);
@@ -441,23 +441,23 @@ describe('POST /api/webhooks/whatsapp — happy path', () => {
 
     const ps = await db
       .select()
-      .from(patients)
-      .where(and(eq(patients.ptId, ptId), eq(patients.waId, WA_ID)));
+      .from(customers)
+      .where(and(eq(customers.accountId, accountId), eq(customers.waId, WA_ID)));
     expect(ps).toHaveLength(1);
     expect(ps[0].name).toBe('Jane');
 
     const cs = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(cs).toHaveLength(1);
     expect(cs[0].lastInboundAt).toBeInstanceOf(Date);
 
-    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const ms = await db.select().from(messages).where(eq(messages.accountId, accountId));
     expect(ms).toHaveLength(1);
     expect(ms[0].externalId).toBe(externalId);
     expect(ms[0].content).toBe('first ping');
-    expect(ms[0].role).toBe('patient');
+    expect(ms[0].role).toBe('customer');
     expect(ms[0].channel).toBe('whatsapp');
 
     expect(sendSpy).toHaveBeenCalledTimes(1);
@@ -467,7 +467,7 @@ describe('POST /api/webhooks/whatsapp — happy path', () => {
         name: 'message.received',
         data: {
           messageId: ms[0].id,
-          ptId,
+          accountId,
           conversationId: cs[0].id,
           traceId: expect.any(String),
         },
@@ -475,16 +475,16 @@ describe('POST /api/webhooks/whatsapp — happy path', () => {
     );
   });
 
-  it('links an existing manual patient by normalized phone instead of duplicating it', async () => {
+  it('links an existing manual customer by normalized phone instead of duplicating it', async () => {
     vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
     const [manual] = await db
-      .insert(patients)
+      .insert(customers)
       .values({
-        ptId,
+        accountId,
         name: 'Manual Jane',
         phone: '+44 7700 900000',
       })
-      .returning({ id: patients.id });
+      .returning({ id: customers.id });
 
     const res = await POST(
       makePost(
@@ -495,8 +495,8 @@ describe('POST /api/webhooks/whatsapp — happy path', () => {
 
     const rows = await db
       .select()
-      .from(patients)
-      .where(eq(patients.ptId, ptId));
+      .from(customers)
+      .where(eq(customers.accountId, accountId));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: manual.id, waId: WA_ID });
   });
@@ -507,7 +507,7 @@ describe('POST /api/webhooks/whatsapp — happy path', () => {
     const [conversation] = await db
       .select({ id: conversations.id })
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     await db
       .update(conversations)
       .set({
@@ -543,7 +543,7 @@ describe('POST /api/webhooks/whatsapp — idempotency', () => {
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
 
-    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const ms = await db.select().from(messages).where(eq(messages.accountId, accountId));
     expect(ms).toHaveLength(1);
     expect(sendSpy).toHaveBeenCalledTimes(1);
   });
@@ -555,7 +555,7 @@ describe('POST /api/webhooks/whatsapp — idempotency', () => {
     const [conversation] = await db
       .select({ id: conversations.id })
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     await db
       .update(conversations)
       .set({ closedAt: new Date(), aiActive: false })
@@ -588,7 +588,7 @@ describe('POST /api/webhooks/whatsapp — unknown phone_number_id', () => {
     const rows = await db
       .select()
       .from(messages)
-      .where(eq(messages.ptId, ptId));
+      .where(eq(messages.accountId, accountId));
     expect(rows).toHaveLength(0);
     expect(sendSpy).not.toHaveBeenCalled();
   });
@@ -609,34 +609,34 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
     const rows = await db
       .select()
       .from(messages)
-      .where(eq(messages.ptId, ptId));
+      .where(eq(messages.accountId, accountId));
     expect(rows).toHaveLength(1);
-    expect(rows[0].role).toBe('patient');
+    expect(rows[0].role).toBe('customer');
     expect(rows[0].content).toBe('[mesazh zanor]');
 
-    const [row] = await getChatListSnapshot(ptId);
+    const [row] = await getChatListSnapshot(accountId);
     expect(row.last_content).toBe('[mesazh zanor]');
     expect(row.unread_count).toBe(1);
 
     // The job has to know the stored content is our placeholder and not the
-    // patient's words, or the model would be asked to answer a voice note it
+    // customer's words, or the model would be asked to answer a voice note it
     // cannot hear.
     const [received] = await db
       .select()
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'message.received')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'message.received')));
     expect(received.payload).toMatchObject({ nonText: true });
 
     const ps = await db
       .select()
-      .from(patients)
-      .where(and(eq(patients.ptId, ptId), eq(patients.waId, WA_ID)));
+      .from(customers)
+      .where(and(eq(customers.accountId, accountId), eq(customers.waId, WA_ID)));
     expect(ps).toHaveLength(1);
 
     const cs = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(cs).toHaveLength(1);
     // The window belongs to the inbound, not to the moment Meta happened to
     // deliver it to us.
@@ -646,7 +646,7 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
   it('moves the preview and the unread count on an existing conversation', async () => {
     vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
     await POST(makePost(buildPayload({ text: 'a kam takim nesër?' })));
-    const [beforeMedia] = await getChatListSnapshot(ptId);
+    const [beforeMedia] = await getChatListSnapshot(accountId);
     expect(beforeMedia.last_content).toBe('a kam takim nesër?');
     expect(beforeMedia.unread_count).toBe(1);
 
@@ -654,14 +654,14 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
       makePost(buildPayload({ messageType: 'image', timestamp: nowSeconds() })),
     );
 
-    const [afterMedia] = await getChatListSnapshot(ptId);
+    const [afterMedia] = await getChatListSnapshot(accountId);
     expect(afterMedia.last_content).toBe('[foto]');
     expect(afterMedia.unread_count).toBe(2);
   });
 
-  // A caption IS text the patient typed, carried on the media object and never
+  // A caption IS text the customer typed, carried on the media object and never
   // in `text` — dropping the message dropped their words with it.
-  it('keeps the caption the patient typed alongside the placeholder', async () => {
+  it('keeps the caption the customer typed alongside the placeholder', async () => {
     vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
     await POST(
       makePost(
@@ -673,7 +673,7 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
       ),
     );
 
-    const [row] = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const [row] = await db.select().from(messages).where(eq(messages.accountId, accountId));
     expect(row.content).toBe('[foto] a mund të vij të mërkurën?');
   });
 
@@ -689,12 +689,12 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
     const rows = await db
       .select()
       .from(messages)
-      .where(eq(messages.ptId, ptId));
+      .where(eq(messages.accountId, accountId));
     expect(rows).toHaveLength(1);
     const received = await db
       .select()
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'message.received')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'message.received')));
     expect(received).toHaveLength(1);
   });
 
@@ -703,7 +703,7 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
     const fresh = nowSeconds();
     await POST(makePost(buildPayload({ messageType: 'image', timestamp: fresh })));
 
-    // Meta redelivers a batch containing an image the patient sent two days ago
+    // Meta redelivers a batch containing an image the customer sent two days ago
     // (an unpersisted inbound has no external_id dedupe of its own). Bumping to
     // now() re-opened a service window that has in fact expired, so the PT's
     // free-form reply would be rejected by Meta or billed as a new conversation.
@@ -713,7 +713,7 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
     const [conversation] = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(conversation.lastInboundAt?.getTime()).toBe(Number(fresh) * 1000);
   });
 
@@ -723,7 +723,7 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
     const [conversation] = await db
       .select({ id: conversations.id })
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     await db
       .update(conversations)
       .set({ closedAt: new Date(Date.now() - 60_000), aiActive: false })
@@ -748,7 +748,7 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
     const [conversation] = await db
       .select({ id: conversations.id })
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     // The PT closes the conversation after the media arrived; Meta then
     // redelivers the whole batch (an unpersisted inbound has no external_id
     // dedupe of its own).
@@ -786,14 +786,14 @@ describe('POST /api/webhooks/whatsapp — non-text message type', () => {
 
       const ps = await db
         .select()
-        .from(patients)
-        .where(eq(patients.ptId, ptId));
+        .from(customers)
+        .where(eq(customers.accountId, accountId));
       expect(ps).toHaveLength(0);
 
       const cs = await db
         .select()
         .from(conversations)
-        .where(eq(conversations.ptId, ptId));
+        .where(eq(conversations.accountId, accountId));
       expect(cs).toHaveLength(0);
       expect(sendSpy).not.toHaveBeenCalled();
     },
@@ -808,7 +808,7 @@ describe('POST /api/webhooks/whatsapp — conversation bump', () => {
     const cs1 = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(cs1).toHaveLength(1);
     const firstStamp = cs1[0].lastInboundAt!.getTime();
 
@@ -818,7 +818,7 @@ describe('POST /api/webhooks/whatsapp — conversation bump', () => {
     const cs2 = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(cs2).toHaveLength(1);
     expect(cs2[0].id).toBe(cs1[0].id);
     expect(cs2[0].lastInboundAt!.getTime()).toBeGreaterThan(firstStamp);
@@ -833,11 +833,11 @@ describe('POST /api/webhooks/whatsapp — coexistence history', () => {
     const [connection] = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(connection.coexistenceSyncStatus).toBe('complete');
     expect(connection.coexistenceLastProgress).toBe(100);
 
-    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const ms = await db.select().from(messages).where(eq(messages.accountId, accountId));
     expect(ms).toHaveLength(0);
   });
 
@@ -859,7 +859,7 @@ describe('POST /api/webhooks/whatsapp — coexistence history', () => {
     const [connection] = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(connection.coexistenceSyncStatus).toBe('history_declined');
     expect(connection.coexistenceLastError).toContain(
       'History sync is turned off',
@@ -875,12 +875,12 @@ describe('POST /api/webhooks/whatsapp — smb_app_state_sync', () => {
     const contacts = await db
       .select()
       .from(whatsappContacts)
-      .where(eq(whatsappContacts.ptId, ptId));
+      .where(eq(whatsappContacts.accountId, accountId));
     expect(contacts).toHaveLength(1);
     expect(contacts[0]).toMatchObject({
       phone: WA_ID,
       waId: WA_ID,
-      fullName: 'Jane Patient',
+      fullName: 'Jane Customer',
       firstName: 'Jane',
       sourceAction: 'add',
     });
@@ -888,7 +888,7 @@ describe('POST /api/webhooks/whatsapp — smb_app_state_sync', () => {
     const cs = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(cs).toHaveLength(0);
   });
 
@@ -920,7 +920,7 @@ describe('POST /api/webhooks/whatsapp — smb_app_state_sync', () => {
     const contacts = await db
       .select()
       .from(whatsappContacts)
-      .where(eq(whatsappContacts.ptId, ptId));
+      .where(eq(whatsappContacts.accountId, accountId));
     expect(contacts).toHaveLength(1);
     expect(contacts[0]).toMatchObject({
       waId: WA_ID,
@@ -929,7 +929,7 @@ describe('POST /api/webhooks/whatsapp — smb_app_state_sync', () => {
     });
 
     // The `messages` change after the colliding contact must still be applied.
-    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const ms = await db.select().from(messages).where(eq(messages.accountId, accountId));
     expect(ms).toHaveLength(1);
     expect(ms[0].externalId).toBe(messageId);
   });
@@ -958,11 +958,11 @@ describe('POST /api/webhooks/whatsapp — smb_app_state_sync', () => {
     const contacts = await db
       .select()
       .from(whatsappContacts)
-      .where(eq(whatsappContacts.ptId, ptId));
+      .where(eq(whatsappContacts.accountId, accountId));
     expect(contacts).toHaveLength(1);
     expect(contacts[0]).toMatchObject({ waId: WA_ID, fullName: 'Jane First' });
 
-    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const ms = await db.select().from(messages).where(eq(messages.accountId, accountId));
     expect(ms).toHaveLength(1);
   });
 
@@ -980,19 +980,19 @@ describe('POST /api/webhooks/whatsapp — smb_app_state_sync', () => {
     const contacts = await db
       .select()
       .from(whatsappContacts)
-      .where(eq(whatsappContacts.ptId, ptId));
+      .where(eq(whatsappContacts.accountId, accountId));
     expect(contacts).toHaveLength(1);
     expect(contacts[0]).toMatchObject({ waId: WA_ID, fullName: 'Jane Two' });
   });
 });
 
-/** Create the patient + conversation for WA_ID via one inbound text message. */
+/** Create the customer + conversation for WA_ID via one inbound text message. */
 async function seedConversationForWaId(): Promise<string> {
   await POST(makePost(buildPayload({ messageId: nextExternalId() })));
   const [conversation] = await db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(eq(conversations.ptId, ptId));
+    .where(eq(conversations.accountId, accountId));
   return conversation.id;
 }
 
@@ -1001,7 +1001,7 @@ function pauseEvents() {
     .select({ id: events.id })
     .from(events)
     .where(
-      and(eq(events.ptId, ptId), eq(events.type, 'conversation.ai_paused')),
+      and(eq(events.accountId, accountId), eq(events.type, 'conversation.ai_paused')),
     );
 }
 
@@ -1019,15 +1019,15 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
 
     const ps = await db
       .select()
-      .from(patients)
-      .where(and(eq(patients.ptId, ptId), eq(patients.waId, WA_ID)));
+      .from(customers)
+      .where(and(eq(customers.accountId, accountId), eq(customers.waId, WA_ID)));
     expect(ps).toHaveLength(1);
-    expect(ps[0].name).toBe('Jane Patient');
+    expect(ps[0].name).toBe('Jane Customer');
 
     const cs = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(cs).toHaveLength(1);
     expect(cs[0].aiActive).toBe(false);
     expect(cs[0].aiPauseReason).toBe('whatsapp_business_app_echo');
@@ -1038,11 +1038,11 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
       before + 2 * 60 * 60 * 1000 + 10_000,
     );
 
-    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const ms = await db.select().from(messages).where(eq(messages.accountId, accountId));
     expect(ms).toHaveLength(1);
     expect(ms[0]).toMatchObject({
       externalId: messageId,
-      role: 'pt',
+      role: 'account',
       channel: 'whatsapp',
       content: 'manual app reply',
     });
@@ -1052,9 +1052,9 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
       expect.objectContaining({
         name: 'conversation.ai_paused',
         data: expect.objectContaining({
-          ptId,
+          accountId,
           conversationId: cs[0].id,
-          patientId: ps[0].id,
+          customerId: ps[0].id,
           reason: 'whatsapp_business_app_echo',
         }),
       }),
@@ -1074,7 +1074,7 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
     await POST(makePost(payload));
     await POST(makePost(payload));
 
-    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
+    const ms = await db.select().from(messages).where(eq(messages.accountId, accountId));
     expect(ms).toHaveLength(1);
     expect(sendSpy).toHaveBeenCalledTimes(1);
   });
@@ -1087,7 +1087,7 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
     const [first] = await db
       .select({ aiPausedUntil: conversations.aiPausedUntil })
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(first.aiPausedUntil).toBeInstanceOf(Date);
 
     await new Promise((r) => setTimeout(r, 15));
@@ -1096,7 +1096,7 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
     const [second] = await db
       .select({ aiPausedUntil: conversations.aiPausedUntil })
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(second.aiPausedUntil!.getTime()).toBe(
       first.aiPausedUntil!.getTime(),
     );
@@ -1128,7 +1128,7 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
     const ms = await db
       .select({ role: messages.role })
       .from(messages)
-      .where(and(eq(messages.ptId, ptId), eq(messages.role, 'pt')));
+      .where(and(eq(messages.accountId, accountId), eq(messages.role, 'account')));
     expect(ms).toHaveLength(1);
   });
 
@@ -1163,7 +1163,7 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
     const [first] = await db
       .select({ aiPausedUntil: conversations.aiPausedUntil })
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
 
     await new Promise((r) => setTimeout(r, 15));
     await POST(makePost(buildEchoPayload(nextExternalId())));
@@ -1174,7 +1174,7 @@ describe('POST /api/webhooks/whatsapp — smb_message_echoes', () => {
         aiPauseReason: conversations.aiPauseReason,
       })
       .from(conversations)
-      .where(eq(conversations.ptId, ptId));
+      .where(eq(conversations.accountId, accountId));
     expect(second.aiPausedUntil!.getTime()).toBeGreaterThan(
       first.aiPausedUntil!.getTime(),
     );
@@ -1200,13 +1200,13 @@ describe('POST /api/webhooks/whatsapp — account_update', () => {
     const [connection] = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(connection.status).toBe('revoked');
     expect(sendSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'wa.connection.revoked',
         data: expect.objectContaining({
-          ptId,
+          accountId,
           connectionId: connection.id,
           reason,
         }),
@@ -1230,7 +1230,7 @@ describe('POST /api/webhooks/whatsapp — account_update', () => {
       const [connection] = await db
         .select()
         .from(whatsappConnections)
-        .where(eq(whatsappConnections.ptId, ptId));
+        .where(eq(whatsappConnections.accountId, accountId));
       expect(connection.status).toBe('active');
       expect(sendSpy).not.toHaveBeenCalled();
     },
@@ -1252,7 +1252,7 @@ describe('POST /api/webhooks/whatsapp — account_update', () => {
     const [connection] = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(connection.status).toBe('revoked');
     expect(sendSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1277,7 +1277,7 @@ describe('POST /api/webhooks/whatsapp — account_update', () => {
     const [connection] = await db
       .select()
       .from(whatsappConnections)
-      .where(eq(whatsappConnections.ptId, ptId));
+      .where(eq(whatsappConnections.accountId, accountId));
     expect(connection.status).toBe('active');
     expect(sendSpy).not.toHaveBeenCalled();
   });
@@ -1324,7 +1324,7 @@ function buildStatusesPayload(statuses: StatusFixture[]) {
   };
 }
 
-/** Seed a delivered/failed-ready reminder: patient + appointment + AI reminder
+/** Seed a delivered/failed-ready reminder: customer + appointment + AI reminder
  *  message carrying `wamid`, plus a reminder_jobs row pointing at it. */
 async function seedReminderForWamid(opts: {
   wamid: string;
@@ -1338,19 +1338,19 @@ async function seedReminderForWamid(opts: {
   conversationId: string;
 }> {
   const suffix = `${Date.now()}-${++externalIdCounter}`;
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Reminder Pat', phone: `+1666${suffix}`, waId: `rem-${suffix}` })
-    .returning({ id: patients.id });
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Reminder Pat', phone: `+1666${suffix}`, waId: `rem-${suffix}` })
+    .returning({ id: customers.id });
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId: patient.id, channel: 'whatsapp' })
+    .values({ accountId, customerId: customer.id, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   const [appointment] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId: patient.id,
+      accountId,
+      customerId: customer.id,
       startsAt: new Date(Date.now() + 86_400_000),
       endsAt: new Date(Date.now() + 90_000_000),
       status: 'confirmed',
@@ -1359,7 +1359,7 @@ async function seedReminderForWamid(opts: {
   const [message] = await db
     .insert(messages)
     .values({
-      ptId,
+      accountId,
       conversationId: conversation.id,
       externalId: opts.wamid,
       role: 'ai',
@@ -1373,13 +1373,13 @@ async function seedReminderForWamid(opts: {
   // the plan quota counts.
   if (opts.deliveredAt) {
     await db.insert(waMessageStatuses).values({
-      ptId,
+      accountId,
       externalId: opts.wamid,
       lastStatus: 'delivered',
       deliveredAt: opts.deliveredAt,
     });
     await db.insert(reminderDeliveries).values({
-      ptId,
+      accountId,
       appointmentId: appointment.id,
       externalId: opts.wamid,
       deliveredAt: opts.deliveredAt,
@@ -1388,7 +1388,7 @@ async function seedReminderForWamid(opts: {
   const [job] = await db
     .insert(reminderJobs)
     .values({
-      ptId,
+      accountId,
       appointmentId: appointment.id,
       scheduledFor: new Date(Date.now() + 3_600_000),
       status: opts.jobStatus ?? 'sent',
@@ -1520,7 +1520,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
     const [message] = await db
       .insert(messages)
       .values({
-        ptId,
+        accountId,
         conversationId,
         externalId: wamid,
         role: 'ai',
@@ -1577,7 +1577,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
     const deliveries = await db
       .select({ externalId: reminderDeliveries.externalId })
       .from(reminderDeliveries)
-      .where(eq(reminderDeliveries.ptId, ptId));
+      .where(eq(reminderDeliveries.accountId, accountId));
     expect(deliveries.map((d) => d.externalId).sort()).toEqual(
       [firstWamid, secondWamid].sort(),
     );
@@ -1613,7 +1613,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
     const failEvents = await db
       .select({ payload: events.payload })
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'reminder.failed')));
     expect(failEvents).toHaveLength(1);
     expect(failEvents[0].payload).toMatchObject({ appointmentId });
   });
@@ -1652,7 +1652,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
     const failEvents = await db
       .select({ payload: events.payload })
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'reminder.failed')));
     expect(failEvents).toHaveLength(1);
     expect(failEvents[0].payload).toMatchObject({ appointmentId });
   });
@@ -1677,7 +1677,7 @@ describe('POST /api/webhooks/whatsapp — statuses (delivery truth)', () => {
     const failEvents = await db
       .select({ id: events.id })
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'reminder.failed')));
     expect(failEvents).toHaveLength(0);
   });
 });
@@ -1690,8 +1690,8 @@ describe('POST /api/webhooks/whatsapp — unsupported coexistence errors', () =>
     const res = await POST(makePost(buildUnsupportedErrorPayload()));
     expect(res.status).toBe(200);
 
-    const ms = await db.select().from(messages).where(eq(messages.ptId, ptId));
-    const evs = await db.select().from(events).where(eq(events.ptId, ptId));
+    const ms = await db.select().from(messages).where(eq(messages.accountId, accountId));
+    const evs = await db.select().from(events).where(eq(events.accountId, accountId));
     expect(ms).toHaveLength(0);
     expect(evs).toHaveLength(0);
     expect(sendSpy).not.toHaveBeenCalled();

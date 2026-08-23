@@ -9,7 +9,7 @@ import {
 } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { conversations, messages, patients, pts } from '@/lib/db/schema';
+import { conversations, messages, customers, accounts } from '@/lib/db/schema';
 import type { InboundMessage } from '@/lib/conversation/types';
 
 const sendPush = vi.hoisted(() => vi.fn());
@@ -33,8 +33,8 @@ import { DAY, HOUR, testNow } from '@/tests/support/clock';
 // same UTC day.
 const DAY_ONE = testNow();
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let seq = 0;
 
@@ -43,10 +43,10 @@ async function seedInbound(content: string): Promise<InboundMessage> {
   const [row] = await db
     .insert(messages)
     .values({
-      ptId,
+      accountId,
       conversationId,
       externalId: `wamid.CAP.${Date.now()}.${seq}`,
-      role: 'patient',
+      role: 'customer',
       channel: 'whatsapp',
       content,
     })
@@ -54,8 +54,8 @@ async function seedInbound(content: string): Promise<InboundMessage> {
   return {
     id: row.id,
     conversationId,
-    ptId,
-    patientId,
+    accountId,
+    customerId,
     content,
     channel: row.channel,
     externalId: null,
@@ -67,7 +67,7 @@ async function countHandoffReplies(): Promise<number> {
   const rows = await db
     .select({ id: messages.id })
     .from(messages)
-    .where(and(eq(messages.ptId, ptId), eq(messages.model, CAP_HANDOFF_MODEL)));
+    .where(and(eq(messages.accountId, accountId), eq(messages.model, CAP_HANDOFF_MODEL)));
   return rows.length;
 }
 
@@ -78,23 +78,23 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(messages).where(eq(messages.ptId, ptId));
-  await db.delete(conversations).where(eq(conversations.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
-  await db.update(pts).set({ timezone: 'UTC' }).where(eq(pts.id, ptId));
+  await db.delete(messages).where(eq(messages.accountId, accountId));
+  await db.delete(conversations).where(eq(conversations.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
+  await db.update(accounts).set({ timezone: 'UTC' }).where(eq(accounts.id, accountId));
 
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Pat', phone: '447700900999', waId: '447700900999' })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Pat', phone: '447700900999', waId: '447700900999' })
+    .returning({ id: customers.id });
+  customerId = customer.id;
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId, channel: 'whatsapp' })
+    .values({ accountId, customerId, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   conversationId = conversation.id;
 
@@ -103,7 +103,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('cap handoff', () => {
@@ -121,7 +121,7 @@ describe('cap handoff', () => {
     if (first.action !== 'send') throw new Error('expected send');
     expect(first.outbound.replyToMessageId).toBe(inbound1.id);
 
-    await markCapHandoff({ ptId, conversationId, instant: day1a });
+    await markCapHandoff({ accountId, conversationId, instant: day1a });
 
     const inbound2 = await seedInbound('Message two same day');
     const second = await prepareCapHandoff({
@@ -146,7 +146,7 @@ describe('cap handoff', () => {
       instant: DAY_ONE,
     });
     await markCapHandoff({
-      ptId,
+      accountId,
       conversationId,
       instant: DAY_ONE,
     });
@@ -193,11 +193,11 @@ describe('cap handoff — telling the professional', () => {
     return row;
   }
 
-  it('hands the thread to the professional and pushes that a patient is waiting', async () => {
+  it('hands the thread to the professional and pushes that a customer is waiting', async () => {
     const result = await handOffCappedConversation({
-      ptId,
+      accountId,
       conversationId,
-      patientId,
+      customerId,
     });
 
     expect(result.flagged).toBe(true);
@@ -209,21 +209,21 @@ describe('cap handoff — telling the professional', () => {
     });
 
     expect(sendPush).toHaveBeenCalledTimes(1);
-    const [pushedPtId, payload] = sendPush.mock.calls[0];
-    expect(pushedPtId).toBe(ptId);
+    const [pushedAccountId, payload] = sendPush.mock.calls[0];
+    expect(pushedAccountId).toBe(accountId);
     expect(payload).toMatchObject({
       url: `/chat/${conversationId}`,
       tag: `conversation-${conversationId}-reply`,
     });
-    // "A patient wrote", not "a patient asked to speak with you": at the cap
-    // the patient asked for nothing.
+    // "A customer wrote", not "a customer asked to speak with you": at the cap
+    // the customer asked for nothing.
     expect(payload.title).toBe('Mesazh i ri');
   });
 
-  // The gate compensates its day-fact away when it turns a patient away, so
+  // The gate compensates its day-fact away when it turns a customer away, so
   // every later message that day hits the cap afresh and the once-a-day handoff
   // throttle returns `skip`. That used to mean silence for everyone; the flag is
-  // what keeps the professional seeing a waiting patient.
+  // what keeps the professional seeing a waiting customer.
   it('leaves the professional owning the thread for the rest of a capped day', async () => {
     const first = await seedInbound('Message one');
     await prepareCapHandoff({
@@ -231,8 +231,8 @@ describe('cap handoff — telling the professional', () => {
       timezone: 'UTC',
       instant: DAY_ONE,
     });
-    await handOffCappedConversation({ ptId, conversationId, patientId });
-    await markCapHandoff({ ptId, conversationId, instant: DAY_ONE });
+    await handOffCappedConversation({ accountId, conversationId, customerId });
+    await markCapHandoff({ accountId, conversationId, instant: DAY_ONE });
 
     const second = await seedInbound('Message two, same day');
     const repeat = await prepareCapHandoff({
@@ -250,15 +250,15 @@ describe('cap handoff — telling the professional', () => {
   });
 
   it('is a no-op flag once the thread is already human-owned, and still pushes', async () => {
-    await handOffCappedConversation({ ptId, conversationId, patientId });
+    await handOffCappedConversation({ accountId, conversationId, customerId });
     const again = await handOffCappedConversation({
-      ptId,
+      accountId,
       conversationId,
-      patientId,
+      customerId,
     });
 
     expect(again.flagged).toBe(false);
-    // A patient is waiting either way, and the per-conversation push tag
+    // A customer is waiting either way, and the per-conversation push tag
     // collapses the burst on the device.
     expect(sendPush).toHaveBeenCalledTimes(2);
   });

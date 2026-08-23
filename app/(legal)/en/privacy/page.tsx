@@ -5,7 +5,7 @@ import { LanguageSwitch, LegalSection } from '../../legal-section';
 export const metadata: Metadata = {
   title: 'Privacy policy · Medium',
   description:
-    'How Medium handles account, patient, WhatsApp, and scheduling data.',
+    'How Medium handles account, customer, WhatsApp, and scheduling data.',
   alternates: {
     canonical: '/en/privacy',
     languages: {
@@ -32,7 +32,7 @@ export default function EnglishPrivacyPolicyPage() {
           Privacy policy
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Medium helps physical therapists manage patient conversations and
+          Medium helps physical therapists manage customer conversations and
           appointments over WhatsApp. This policy explains what data we process,
           why we process it, and how privacy requests are handled.
         </p>
@@ -42,7 +42,7 @@ export default function EnglishPrivacyPolicyPage() {
       <LegalSection title="Roles">
         <p>
           Each physical therapist or practice using Medium is the controller for
-          their patient data. Medium acts as a processor and handles that data
+          their customer data. Medium acts as a processor and handles that data
           under instructions from the practice.
         </p>
         <p>
@@ -63,7 +63,7 @@ export default function EnglishPrivacyPolicyPage() {
             status, and template status.
           </li>
           <li>
-            Patient and appointment data, such as names, phone numbers,
+            Customer and appointment data, such as names, phone numbers,
             conversations, messages, appointment times, appointment status,
             notes, and reminder responses.
           </li>
@@ -113,7 +113,7 @@ export default function EnglishPrivacyPolicyPage() {
           Production AI requests are routed through OpenRouter to{' '}
           {disclosedAiProviderNames()} for scheduling-related responses, and any
           of them may serve a given request. The app sends only the conversation
-          and scheduling context needed to answer the patient. The AI is
+          and scheduling context needed to answer the customer. The AI is
           instructed not to diagnose, provide medical advice, handle
           emergencies, or discuss legal, billing, or insurance matters.
         </p>
@@ -166,7 +166,7 @@ export default function EnglishPrivacyPolicyPage() {
         <p>
           Message retention is controlled per practice. The default retention
           period is 90 days, and older messages are purged by a scheduled job.
-          Appointment, patient, account, and audit data are kept while needed to
+          Appointment, customer, account, and audit data are kept while needed to
           provide the service, meet legal obligations, resolve disputes, and
           maintain security. Aggregate anonymized metrics may be kept
           indefinitely.
@@ -176,7 +176,7 @@ export default function EnglishPrivacyPolicyPage() {
       <LegalSection title="Security">
         <p>
           Medium uses tenant-scoped database rules, TLS in transit, encrypted
-          WhatsApp access tokens, audit logging for patient-data access, and
+          WhatsApp access tokens, audit logging for customer-data access, and
           least-privilege application paths. Primary app data is hosted in
           EU-region infrastructure where available.
         </p>
@@ -185,9 +185,9 @@ export default function EnglishPrivacyPolicyPage() {
       <LegalSection title="Your choices and rights">
         <p>
           Practices can update account and retention settings in the dashboard.
-          Patients should first contact their practice for access, correction,
+          Customers should first contact their practice for access, correction,
           deletion, or objection requests because the practice controls the
-          patient relationship.
+          customer relationship.
         </p>
         <p>
           Privacy requests can also be sent to klaididingu@gmail.com. During

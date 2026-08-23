@@ -7,7 +7,7 @@ export default function NewClientPage() {
   return (
     <div className="-mx-4 -mt-4">
       <NavBar backHref="/clients" title="Klient i ri" />
-      <div className="px-5 pt-2 pb-4">
+      <div className="px-5 account-2 pb-4">
         <NewClientForm />
       </div>
     </div>

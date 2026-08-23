@@ -5,7 +5,7 @@ import {
   type BillingMetrics,
   type FunnelWindow,
   type PaymentRow,
-  type PtCostRow,
+  type AccountCostRow,
 } from '@/lib/metrics/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { createServerClient } from '@/lib/supabase/server';
@@ -54,7 +54,7 @@ export default async function AdminPage() {
             {(metrics.cohort.pct * 100).toFixed(1)}%
           </p>
           <p className="text-muted-foreground text-sm">
-            {metrics.cohort.connectedWithin24h} / {metrics.cohort.totalPts} PTs
+            {metrics.cohort.connectedWithin24h} / {metrics.cohort.totalAccounts} PTs
           </p>
         </CardContent>
       </Card>
@@ -91,7 +91,7 @@ export default async function AdminPage() {
         rows={metrics.cost.today}
       />
 
-      <h2 className="pt-2 text-lg font-bold">Monetization</h2>
+      <h2 className="account-2 text-lg font-bold">Monetization</h2>
 
       <div className="grid gap-6 md:grid-cols-2">
         <PlanDistributionCard billing={billing} />
@@ -155,7 +155,7 @@ function ConversionCard({ billing }: { billing: BillingMetrics }) {
       <CardContent>
         <p className="text-2xl font-semibold">{pct(c.rate)}</p>
         <p className="text-muted-foreground text-sm">
-          {c.paidPts} / {c.eligiblePts} eligible PTs have ever paid
+          {c.paidAccounts} / {c.eligibleAccounts} eligible PTs have ever paid
         </p>
         <div className="mt-3 grid grid-cols-3 gap-4 text-sm">
           <Stat label="New this month" value={String(c.newThisMonth)} />
@@ -207,8 +207,8 @@ function RenewalChurnCard({ billing }: { billing: BillingMetrics }) {
         </div>
         <p className="text-muted-foreground mt-2 text-xs">
           Ledger-only: a due boundary renews when a later paid order lands within
-          the grace window. {d.distinctPtsThisMonth} distinct PT
-          {d.distinctPtsThisMonth === 1 ? '' : 's'} downgraded this month.
+          the grace window. {d.distinctAccountsThisMonth} distinct PT
+          {d.distinctAccountsThisMonth === 1 ? '' : 's'} downgraded this month.
         </p>
       </CardContent>
     </Card>
@@ -228,14 +228,14 @@ function CapHitsCard({ billing }: { billing: BillingMetrics }) {
             <p className="text-muted-foreground">Conversations</p>
             <p className="text-lg font-semibold">{pct(conversations.rate)}</p>
             <p className="text-muted-foreground text-xs">
-              {conversations.pts} / {conversations.activePts} active PTs
+              {conversations.accounts} / {conversations.activeAccounts} active PTs
             </p>
           </div>
           <div>
             <p className="text-muted-foreground">Reminders</p>
             <p className="text-lg font-semibold">{pct(reminders.rate)}</p>
             <p className="text-muted-foreground text-xs">
-              {reminders.pts} / {reminders.activePts} active PTs
+              {reminders.accounts} / {reminders.activeAccounts} active PTs
             </p>
           </div>
         </div>
@@ -259,7 +259,7 @@ function FreeCogsCard({ billing }: { billing: BillingMetrics }) {
         <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
           <Stat label="AI cost" value={formatMicro(f.aiCostMicrousd, '$')} />
           <Stat label="Meta cost" value={formatMicro(f.metaCostMicroEur, '€')} />
-          <Stat label="Free PTs" value={String(f.freePtCount)} />
+          <Stat label="Free PTs" value={String(f.freeAccountCount)} />
           <Stat label="Meta source" value={metaSourceLabel(f.metaCostSource)} />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
@@ -274,7 +274,7 @@ function FreeCogsCard({ billing }: { billing: BillingMetrics }) {
           <Stat label="Billable msgs" value={String(f.metaBillableMessages)} />
           <Stat
             label="Actual / est. PT-days"
-            value={`${f.actualPtDays} / ${f.estimatedPtDays}`}
+            value={`${f.actualAccountDays} / ${f.estimatedAccountDays}`}
           />
         </div>
         <p className="text-muted-foreground mt-2 text-xs">
@@ -397,7 +397,7 @@ function FunnelCard({
   );
 }
 
-function CostCard({ title, rows }: { title: string; rows: PtCostRow[] }) {
+function CostCard({ title, rows }: { title: string; rows: AccountCostRow[] }) {
   return (
     <Card>
       <CardHeader>
@@ -418,7 +418,7 @@ function CostCard({ title, rows }: { title: string; rows: PtCostRow[] }) {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.ptId} className="border-t">
+                  <tr key={row.accountId} className="border-t">
                     <td className="py-1 pr-4">{row.email}</td>
                     <td className="py-1 pr-4">
                       {formatMicro(row.aiCostMicrousd, '$')}
@@ -462,6 +462,6 @@ function formatMicro(micro: number, symbol: string): string {
 }
 
 /** Short operator-facing label for the Meta cost provenance. */
-function metaSourceLabel(source: PtCostRow['metaCostSource']): string {
+function metaSourceLabel(source: AccountCostRow['metaCostSource']): string {
   return source === 'estimated' ? 'est.' : source;
 }

@@ -19,7 +19,7 @@ describe('non-text placeholders', () => {
   });
 
   // The map is also the webhook's allowlist. A `text` entry would route a real
-  // patient sentence into the fixed "I can only read text" reply instead of the
+  // customer sentence into the fixed "I can only read text" reply instead of the
   // model — the one mapping that must never exist.
   it('has no entry for text', () => {
     expect(nonTextPlaceholder('text')).toBeNull();
@@ -35,7 +35,7 @@ describe('non-text placeholders', () => {
     },
   );
 
-  it('names the media the patient actually sent', () => {
+  it('names the media the customer actually sent', () => {
     expect(nonTextPlaceholder('audio')).toBe('[mesazh zanor]');
     expect(nonTextPlaceholder('image')).toBe('[foto]');
     expect(nonTextPlaceholder('document')).toBe('[dokument]');
@@ -50,7 +50,7 @@ describe('nonTextContent', () => {
     expect(nonTextContent('[foto]', '   ')).toBe('[foto]');
   });
 
-  // A caption is text the patient typed. It rides on the media object and never
+  // A caption is text the customer typed. It rides on the media object and never
   // in `text`, so before this it was dropped along with the body.
   it('keeps a caption after the placeholder', () => {
     expect(nonTextContent('[foto]', 'a mund të vij nesër?')).toBe(
@@ -86,7 +86,7 @@ describe('nonTextNoticeMessage', () => {
   });
 
   // Medium books appointments for barbers and nail salons as much as for
-  // physiotherapists, and it is not an emergency channel: no patient-facing
+  // physiotherapists, and it is not an emergency channel: no customer-facing
   // sentence may name a discipline or hand out urgent-care advice.
   it('names no vertical and gives no emergency guidance', () => {
     expect(nonTextNoticeMessage('Studio Bella')).not.toMatch(

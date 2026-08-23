@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { patients, pts } from '@/lib/db/schema';
+import { customers, accounts } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { privacyName } from '@/lib/format/name';
 import { logger, serializeError } from '@/lib/log';
@@ -16,48 +16,48 @@ export type DispatchResult =
     };
 
 /**
- * Resolve the PT's preferences + patient name, build the push payload, and fan
+ * Resolve the PT's preferences + customer name, build the push payload, and fan
  * it out. Pure enough to test directly without the Inngest runtime.
  */
 export async function dispatchPushForEvent(
   event: PushEvent,
 ): Promise<DispatchResult> {
-  const { ptId } = event.data;
+  const { accountId } = event.data;
 
-  const [pt] = await db
+  const [account] = await db
     .select({
-      timezone: pts.timezone,
-      notificationPrefs: pts.notificationPrefs,
+      timezone: accounts.timezone,
+      notificationPrefs: accounts.notificationPrefs,
     })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  if (!pt) return { status: 'skipped', reason: 'pt_not_found' };
+  if (!account) return { status: 'skipped', reason: 'pt_not_found' };
 
-  const prefs = resolveNotificationPrefs(pt.notificationPrefs);
+  const prefs = resolveNotificationPrefs(account.notificationPrefs);
   if (!prefs[pushPrefKey(event)]) {
     return { status: 'skipped', reason: 'pref_disabled' };
   }
 
-  const patientId =
-    'patientId' in event.data ? event.data.patientId : undefined;
-  let patientName: string | undefined;
-  if (patientId) {
-    const [patient] = await db
-      .select({ name: patients.name })
-      .from(patients)
-      .where(and(eq(patients.id, patientId), eq(patients.ptId, ptId)))
+  const customerId =
+    'customerId' in event.data ? event.data.customerId : undefined;
+  let customerName: string | undefined;
+  if (customerId) {
+    const [customer] = await db
+      .select({ name: customers.name })
+      .from(customers)
+      .where(and(eq(customers.id, customerId), eq(customers.accountId, accountId)))
       .limit(1);
-    if (patient) patientName = privacyName(patient.name);
+    if (customer) customerName = privacyName(customer.name);
   }
 
   const payload = buildPushPayload(event, {
-    patientName,
-    timezone: pt.timezone ?? 'Europe/Berlin',
+    customerName,
+    timezone: account.timezone ?? 'Europe/Berlin',
   });
   if (!payload) return { status: 'skipped', reason: 'no_payload' };
 
-  const { sent, removed } = await sendPush(ptId, payload);
+  const { sent, removed } = await sendPush(accountId, payload);
 
   // Persist a counts-only `push.dispatched` event so Phase 11 delivery-rate
   // metrics can see silent Web Push churn. No Inngest consumer — the outbox row
@@ -66,14 +66,14 @@ export async function dispatchPushForEvent(
     await db.transaction((tx) =>
       appendBackgroundEvent(tx, {
         type: 'push.dispatched',
-        data: { ptId, sourceEvent: event.name, sent, removed },
+        data: { accountId, sourceEvent: event.name, sent, removed },
       }),
     );
   } catch (error) {
     logger.warn(
       'push.dispatched_record_failed',
       'Failed to record push.dispatched metric event',
-      { pt_id: ptId, source_event: event.name, ...serializeError(error) },
+      { account_id: accountId, source_event: event.name, ...serializeError(error) },
     );
   }
 
@@ -84,7 +84,7 @@ export async function dispatchPushForEvent(
     logger.warn(
       'push.dispatch_no_live_subscriptions',
       'Push dispatch reached no live subscriptions',
-      { pt_id: ptId, source_event: event.name, removed },
+      { account_id: accountId, source_event: event.name, removed },
     );
   }
   return { status: 'sent', sent, removed };

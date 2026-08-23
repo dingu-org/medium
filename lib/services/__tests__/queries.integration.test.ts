@@ -5,7 +5,7 @@ import { services } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getActiveServiceByName, getServices } from '../queries';
 
-let ptId = '';
+let accountId = '';
 
 beforeAll(async () => {
   const { data, error } = await createServiceClient().auth.admin.createUser({
@@ -14,16 +14,16 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw error ?? new Error('Missing user');
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('services schema and defaults', () => {
   it('seeds the three design presets with the first two active', async () => {
-    const rows = await getServices(ptId);
+    const rows = await getServices(accountId);
     expect(
       rows.map(({ name, durationMinutes, active }) => ({
         name,
@@ -41,23 +41,23 @@ describe('services schema and defaults', () => {
 
   it('resolves only active names and enforces case-insensitive uniqueness', async () => {
     await expect(
-      getActiveServiceByName(ptId, 'vlerësim I PARË'),
+      getActiveServiceByName(accountId, 'vlerësim I PARË'),
     ).resolves.toMatchObject({ durationMinutes: 45 });
     await expect(
       db.insert(services).values({
-        ptId,
+        accountId,
         name: '  VLERËSIM I PARË ',
         durationMin: 30,
       }),
     ).rejects.toMatchObject({ cause: { code: '23505' } });
     await expect(
-      getActiveServiceByName(ptId, 'Terapi manuale'),
+      getActiveServiceByName(accountId, 'Terapi manuale'),
     ).resolves.toBeNull();
   });
 
   it('enforces duration bounds and realtime publication membership', async () => {
     await expect(
-      db.insert(services).values({ ptId, name: 'Invalid', durationMin: 4 }),
+      db.insert(services).values({ accountId, name: 'Invalid', durationMin: 4 }),
     ).rejects.toMatchObject({ cause: { code: '23514' } });
 
     const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 1 });
@@ -65,12 +65,12 @@ describe('services schema and defaults', () => {
       SELECT tablename
       FROM pg_publication_tables
       WHERE pubname = 'supabase_realtime'
-        AND tablename IN ('patients', 'reminder_jobs', 'services')
+        AND tablename IN ('customers', 'reminder_jobs', 'services')
       ORDER BY tablename
     `;
     await sql.end({ timeout: 1 });
     expect(rows.map((row) => row.tablename)).toEqual([
-      'patients',
+      'customers',
       'reminder_jobs',
       'services',
     ]);

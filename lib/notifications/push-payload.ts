@@ -53,15 +53,15 @@ export function pushPrefKey(event: PushEvent): keyof NotificationPrefs {
 }
 
 /**
- * Build the push payload for an event. Patient names are kept out of the title
+ * Build the push payload for an event. Customer names are kept out of the title
  * (iOS lock-screen privacy) and surfaced in the body instead. `tag`
  * deduplicates repeat pushes for the same subject on the device.
  */
 export function buildPushPayload(
   event: PushEvent,
-  opts: { patientName?: string; timezone: string },
+  opts: { customerName?: string; timezone: string },
 ): PushPayload | null {
-  const who = opts.patientName ?? 'Një klient';
+  const who = opts.customerName ?? 'Një klient';
 
   switch (event.name) {
     case 'notification.requested': {
@@ -100,7 +100,7 @@ export function buildPushPayload(
         tag: `conversation-${event.data.conversationId}-escalated`,
       };
     // Manual-reply nudge. The tag is per-conversation (not per-message) so a
-    // burst of patient messages collapses into one on-device notification.
+    // burst of customer messages collapses into one on-device notification.
     case 'conversation.needs_reply':
       return {
         title: 'Mesazh i ri',

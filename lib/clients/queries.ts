@@ -5,8 +5,8 @@ import { db } from '@/lib/db';
 import {
   appointments,
   conversations,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderJobs,
 } from '@/lib/db/schema';
 
@@ -49,7 +49,7 @@ export type ClientDirectoryRow = {
 };
 
 export type ClientDirectorySnapshot = {
-  ptId: string;
+  accountId: string;
   timezone: string;
   query: string;
   total: number;
@@ -59,7 +59,7 @@ export type ClientDirectorySnapshot = {
 
 export type ClientDetailSnapshot = {
   id: string;
-  ptId: string;
+  accountId: string;
   name: string;
   phone: string;
   waId: string | null;
@@ -75,14 +75,14 @@ export type ClientDetailSnapshot = {
 };
 
 export async function getClientDirectory(
-  ptId: string,
+  accountId: string,
   query = '',
 ): Promise<ClientDirectorySnapshot> {
   const normalized = query.trim();
-  const [pt] = await db
-    .select({ timezone: pts.timezone })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+  const [account] = await db
+    .select({ timezone: accounts.timezone })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
 
   const digits = normalized.replace(/\D/g, '');
@@ -95,49 +95,49 @@ export async function getClientDirectory(
     : [];
   const filter = normalized
     ? and(
-        eq(patients.ptId, ptId),
+        eq(customers.accountId, accountId),
         or(
-          sql`translate(lower(${patients.name}), ${ACCENTED_CHARS}, ${PLAIN_CHARS}) like ${`%${escapeLike(foldAccents(normalized))}%`}`,
+          sql`translate(lower(${customers.name}), ${ACCENTED_CHARS}, ${PLAIN_CHARS}) like ${`%${escapeLike(foldAccents(normalized))}%`}`,
           ...phoneCandidates.map(
             (candidate) =>
-              sql`regexp_replace(${patients.phone}, '[^0-9]', '', 'g') like ${`%${candidate}%`}`,
+              sql`regexp_replace(${customers.phone}, '[^0-9]', '', 'g') like ${`%${candidate}%`}`,
           ),
         ),
       )
-    : eq(patients.ptId, ptId);
+    : eq(customers.accountId, accountId);
 
   // Counted separately: `rows` is capped, so its length is not the total.
   const [totals] = await db
     .select({ value: count() })
-    .from(patients)
+    .from(customers)
     .where(filter);
-  const patientRows = await db
+  const customerRows = await db
     .select({
-      id: patients.id,
-      name: patients.name,
-      phone: patients.phone,
-      waId: patients.waId,
+      id: customers.id,
+      name: customers.name,
+      phone: customers.phone,
+      waId: customers.waId,
       conversationId: conversations.id,
     })
-    .from(patients)
+    .from(customers)
     .leftJoin(
       conversations,
       and(
-        eq(conversations.patientId, patients.id),
+        eq(conversations.customerId, customers.id),
         eq(conversations.channel, 'whatsapp'),
       ),
     )
     .where(filter)
-    .orderBy(asc(patients.name))
+    .orderBy(asc(customers.name))
     .limit(DIRECTORY_LIMIT);
 
   const historyFrom = new Date();
   historyFrom.setMonth(historyFrom.getMonth() - DIRECTORY_HISTORY_MONTHS);
-  const ids = patientRows.map((patient) => patient.id);
+  const ids = customerRows.map((customer) => customer.id);
   const appointmentRows = ids.length
     ? await db
         .select({
-          patientId: appointments.patientId,
+          customerId: appointments.customerId,
           startsAt: appointments.startsAt,
           serviceType: appointments.serviceType,
           status: appointments.status,
@@ -145,8 +145,8 @@ export async function getClientDirectory(
         .from(appointments)
         .where(
           and(
-            eq(appointments.ptId, ptId),
-            inArray(appointments.patientId, ids),
+            eq(appointments.accountId, accountId),
+            inArray(appointments.customerId, ids),
             gte(appointments.startsAt, historyFrom),
           ),
         )
@@ -154,15 +154,15 @@ export async function getClientDirectory(
     : [];
 
   const now = Date.now();
-  const byPatient = new Map<string, typeof appointmentRows>();
+  const byCustomer = new Map<string, typeof appointmentRows>();
   for (const appointment of appointmentRows) {
-    const list = byPatient.get(appointment.patientId) ?? [];
+    const list = byCustomer.get(appointment.customerId) ?? [];
     list.push(appointment);
-    byPatient.set(appointment.patientId, list);
+    byCustomer.set(appointment.customerId, list);
   }
 
-  const rows = patientRows.map((patient) => {
-    const list = byPatient.get(patient.id) ?? [];
+  const rows = customerRows.map((customer) => {
+    const list = byCustomer.get(customer.id) ?? [];
     const next = list
       .filter(
         (appointment) =>
@@ -175,11 +175,11 @@ export async function getClientDirectory(
       (appointment) => appointment.startsAt.getTime() < now,
     );
     return {
-      id: patient.id,
-      name: patient.name,
-      phone: patient.phone,
-      manual: !patient.waId,
-      conversationId: patient.conversationId,
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      manual: !customer.waId,
+      conversationId: customer.conversationId,
       nextAppointment: next
         ? {
             startsAt: next.startsAt.toISOString(),
@@ -196,8 +196,8 @@ export async function getClientDirectory(
   });
 
   return {
-    ptId,
-    timezone: pt?.timezone ?? 'Europe/Tirane',
+    accountId,
+    timezone: account?.timezone ?? 'Europe/Tirane',
     query: normalized,
     total: totals?.value ?? rows.length,
     truncated: (totals?.value ?? rows.length) > rows.length,
@@ -206,35 +206,35 @@ export async function getClientDirectory(
 }
 
 export async function getClientDetail(
-  ptId: string,
-  patientId: string,
+  accountId: string,
+  customerId: string,
 ): Promise<ClientDetailSnapshot | null> {
-  const [patient] = await db
+  const [customer] = await db
     .select({
-      id: patients.id,
-      ptId: patients.ptId,
-      name: patients.name,
-      phone: patients.phone,
-      waId: patients.waId,
-      notes: patients.notes,
-      reminderOptedOutAt: patients.reminderOptedOutAt,
-      createdAt: patients.createdAt,
+      id: customers.id,
+      accountId: customers.accountId,
+      name: customers.name,
+      phone: customers.phone,
+      waId: customers.waId,
+      notes: customers.notes,
+      reminderOptedOutAt: customers.reminderOptedOutAt,
+      createdAt: customers.createdAt,
       conversationId: conversations.id,
       aiActive: conversations.aiActive,
-      timezone: pts.timezone,
+      timezone: accounts.timezone,
     })
-    .from(patients)
-    .innerJoin(pts, eq(patients.ptId, pts.id))
+    .from(customers)
+    .innerJoin(accounts, eq(customers.accountId, accounts.id))
     .leftJoin(
       conversations,
       and(
-        eq(conversations.patientId, patients.id),
+        eq(conversations.customerId, customers.id),
         eq(conversations.channel, 'whatsapp'),
       ),
     )
-    .where(and(eq(patients.id, patientId), eq(patients.ptId, ptId)))
+    .where(and(eq(customers.id, customerId), eq(customers.accountId, accountId)))
     .limit(1);
-  if (!patient) return null;
+  if (!customer) return null;
 
   const rows = await db
     .select({
@@ -250,16 +250,16 @@ export async function getClientDetail(
     .from(appointments)
     .leftJoin(reminderJobs, eq(reminderJobs.appointmentId, appointments.id))
     .where(
-      and(eq(appointments.ptId, ptId), eq(appointments.patientId, patientId)),
+      and(eq(appointments.accountId, accountId), eq(appointments.customerId, customerId)),
     )
     .orderBy(desc(appointments.startsAt));
 
   const mapped: AppointmentView[] = rows.map((row) => ({
     id: row.id,
-    patientName: patient.name,
-    patientPhone: patient.phone,
-    patientWaId: patient.waId,
-    conversationId: patient.conversationId,
+    customerName: customer.name,
+    customerPhone: customer.phone,
+    customerWaId: customer.waId,
+    conversationId: customer.conversationId,
     startsAt: row.startsAt.toISOString(),
     endsAt: row.endsAt.toISOString(),
     serviceType: row.serviceType,
@@ -283,18 +283,18 @@ export async function getClientDetail(
   const upcomingIds = new Set(upcoming.map((appointment) => appointment.id));
 
   return {
-    id: patient.id,
-    ptId: patient.ptId,
-    name: patient.name,
-    phone: patient.phone,
-    waId: patient.waId,
-    manual: !patient.waId,
-    notes: patient.notes,
-    reminderOptedOutAt: patient.reminderOptedOutAt?.toISOString() ?? null,
-    createdAt: patient.createdAt.toISOString(),
-    conversationId: patient.conversationId,
-    aiActive: patient.aiActive,
-    timezone: patient.timezone,
+    id: customer.id,
+    accountId: customer.accountId,
+    name: customer.name,
+    phone: customer.phone,
+    waId: customer.waId,
+    manual: !customer.waId,
+    notes: customer.notes,
+    reminderOptedOutAt: customer.reminderOptedOutAt?.toISOString() ?? null,
+    createdAt: customer.createdAt.toISOString(),
+    conversationId: customer.conversationId,
+    aiActive: customer.aiActive,
+    timezone: customer.timezone,
     upcoming,
     history: mapped.filter((appointment) => !upcomingIds.has(appointment.id)),
   };

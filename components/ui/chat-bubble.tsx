@@ -4,7 +4,7 @@ import { t } from '@/lib/i18n';
 import type { WaDeliveryStatus } from '@/lib/pwa/read-models';
 import { cn } from '@/lib/utils';
 
-export type ChatBubbleRole = 'patient' | 'ai' | 'pt';
+export type ChatBubbleRole = 'customer' | 'ai' | 'account';
 
 /**
  * WhatsApp-style delivery indicator for the PT's own outbound messages: one
@@ -57,7 +57,7 @@ export function ChatBubble({
   failed?: boolean;
   grouped?: boolean;
 }) {
-  const mine = role === 'pt';
+  const mine = role === 'account';
   const ai = role === 'ai';
 
   return (
@@ -79,7 +79,7 @@ export function ChatBubble({
               'bg-primary text-primary-foreground rounded-br-[5px]',
             ai &&
               'rounded-bl-[5px] bg-[var(--brand-50)] text-[var(--brand-600)]',
-            role === 'patient' &&
+            role === 'customer' &&
               'border-border bg-card text-foreground rounded-bl-[5px] border',
             pending && 'opacity-70',
             failed &&

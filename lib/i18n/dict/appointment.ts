@@ -56,12 +56,12 @@ export const appointment = {
 
   // manual booking
   newTitle: 'Takim i ri',
-  patient: 'Pacienti',
+  customer: 'Pacienti',
   service: 'Shërbimi',
   date: 'Data',
   time: 'Ora',
-  searchPatient: 'Kërko pacient…',
-  addPatient: 'Shto pacient',
-  patientName: 'Emri',
-  patientPhone: 'Telefoni',
+  searchCustomer: 'Kërko pacient…',
+  addCustomer: 'Shto pacient',
+  customerName: 'Emri',
+  customerPhone: 'Telefoni',
 } as const;

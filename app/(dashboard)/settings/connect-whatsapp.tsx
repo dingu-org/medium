@@ -233,7 +233,7 @@ export function ConnectWhatsApp({
 
   if (pending) {
     return (
-      <div className="flex flex-col items-center pt-[90px] text-center">
+      <div className="flex flex-col items-center account-[90px] text-center">
         <div className="mb-[22px] inline-flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[var(--brand-50)]">
           <Loader2
             className="h-[30px] w-[30px] animate-spin text-primary"

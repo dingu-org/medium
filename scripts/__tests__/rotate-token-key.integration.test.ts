@@ -10,7 +10,7 @@ const OLD_KEY = process.env.TOKEN_ENCRYPTION_KEY!;
 const NEW_KEY = 'rotation-test-new-key-9f3a';
 const TOKEN = 'PT_TOKEN_rotate_me';
 
-let ptId = '';
+let accountId = '';
 let seq = 0;
 const nextPni = () => `PNI_ROTATE_${Date.now()}_${++seq}`;
 
@@ -29,11 +29,11 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
@@ -46,7 +46,7 @@ describe('rotateTokenKey', () => {
     const [row] = await db
       .insert(whatsappConnections)
       .values({
-        ptId,
+        accountId,
         phoneNumberId: nextPni(),
         wabaId: 'WABA_ROT',
         accessTokenEncrypted: await encryptToken(TOKEN),
@@ -65,7 +65,7 @@ describe('rotateTokenKey', () => {
     const [good] = await db
       .insert(whatsappConnections)
       .values({
-        ptId,
+        accountId,
         phoneNumberId: nextPni(),
         wabaId: 'WABA_GOOD',
         accessTokenEncrypted: await encryptToken(TOKEN),
@@ -76,7 +76,7 @@ describe('rotateTokenKey', () => {
     const [bad] = await db
       .insert(whatsappConnections)
       .values({
-        ptId,
+        accountId,
         phoneNumberId: nextPni(),
         wabaId: 'WABA_BAD',
         accessTokenEncrypted: await encryptToken(TOKEN),

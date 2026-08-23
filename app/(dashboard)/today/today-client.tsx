@@ -32,7 +32,7 @@ import { formatWeekdayDate, t } from '@/lib/i18n';
 
 export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
   const [selected, setSelected] = useState<TodayAppointment | null>(null);
-  // Cancelling is irreversible and WhatsApps the patient, so the card's "Anulo"
+  // Cancelling is irreversible and WhatsApps the customer, so the card's "Anulo"
   // only opens this confirmation — same gate (and reason field) as the sheet.
   const [cancelTarget, setCancelTarget] = useState<TodayAppointment | null>(
     null,
@@ -70,12 +70,12 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
     <div>
       <RealtimeRefresher
         table="appointments"
-        filter={`pt_id=eq.${snapshot.ptId}`}
+        filter={`account_id=eq.${snapshot.accountId}`}
       />
       {/* conversations is subscribed app-wide in the dashboard layout. */}
       <RealtimeRefresher
         table="reminder_jobs"
-        filter={`pt_id=eq.${snapshot.ptId}`}
+        filter={`account_id=eq.${snapshot.accountId}`}
       />
 
       {/* Canvas TopBar sub line — sits right under the chrome title. */}
@@ -119,7 +119,7 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
               </p>
             </div>
           </div>
-          <div className="px-7 pt-8 pb-2 text-center">
+          <div className="px-7 account-8 pb-2 text-center">
             <span className="mx-auto flex h-[60px] w-[60px] items-center justify-center rounded-full bg-[#ecece7]">
               <CalendarDays className="text-ink-3 h-7 w-7" aria-hidden />
             </span>
@@ -145,7 +145,7 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
               <div className="space-y-3">
                 {snapshot.attention.map((item) => (
                   <div
-                    key={`${item.kind}-${item.patientId}`}
+                    key={`${item.kind}-${item.customerId}`}
                     className="rounded-lg bg-card px-[18px] py-4 shadow-[var(--shadow-card)]"
                   >
                     <div className="flex gap-[13px]">
@@ -159,8 +159,8 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
                       <div className="min-w-0 flex-1">
                         <p className="text-[15.5px] leading-[1.35] font-semibold tracking-[-0.01em]">
                           {item.kind === 'escalation'
-                            ? `${item.patientName} kërkon ndihmën tënde`
-                            : `${item.patientName} nuk iu përgjigj kujtesës`}
+                            ? `${item.customerName} kërkon ndihmën tënde`
+                            : `${item.customerName} nuk iu përgjigj kujtesës`}
                         </p>
                         {item.appointment && (
                           <p className="text-ink-2 mt-1 text-[13.5px]">
@@ -244,7 +244,7 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
 
 /**
  * Confirmation step for the attention card's "Anulo" (stateless so the gate is
- * unit-testable): patient + time to catch a mis-tap, plus the optional reason
+ * unit-testable): customer + time to catch a mis-tap, plus the optional reason
  * the appointment audit trail records.
  */
 export function CancelAppointmentDialog({
@@ -274,7 +274,7 @@ export function CancelAppointmentDialog({
         </DialogHeader>
         {appointment && (
           <p className="text-[14.5px] font-semibold tracking-[-0.005em]">
-            {appointment.patientName} · {appointment.startLabel}
+            {appointment.customerName} · {appointment.startLabel}
           </p>
         )}
         <div className="space-y-2">
@@ -342,7 +342,7 @@ function NextAppointment({
       <span className="w-[3px] self-stretch rounded-full bg-[var(--success-500)]" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[16.5px] font-semibold tracking-[-0.01em]">
-          {appointment.patientName}
+          {appointment.customerName}
         </span>
         <span className="text-ink-2 mt-0.5 block truncate text-[13.5px]">
           {appointment.serviceType ?? 'Takim'}
@@ -372,7 +372,7 @@ function LaterRow({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-semibold tracking-[-0.005em]">
-          {appointment.patientName}
+          {appointment.customerName}
         </span>
         <span className="text-ink-3 block truncate text-[13px]">
           {appointment.serviceType ?? 'Takim'} · {appointment.durationMinutes}{' '}

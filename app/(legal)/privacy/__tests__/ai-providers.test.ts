@@ -28,7 +28,7 @@ const subprocessorAnnex = readFileSync(
 );
 
 // Production only, deliberately: it is the sole environment that processes
-// patient data, so it is the sole environment whose upstream providers belong
+// customer data, so it is the sole environment whose upstream providers belong
 // in the privacy policy and the DPA subprocessor annex. Development and
 // preview run a free model against local/QA fixtures and disclose nothing.
 function configuredModelIds(): string[] {

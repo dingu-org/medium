@@ -7,8 +7,8 @@ import {
   auditLog,
   conversations,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderJobs,
   whatsappConnections,
 } from '@/lib/db/schema';
@@ -20,10 +20,10 @@ import {
   claimTokenExpiryWarnings,
   pollConnectionQuality,
 } from '../poll-whatsapp-health';
-import { purgePtExpiredMessages } from '../purge-expired-messages';
+import { purgeAccountExpiredMessages } from '../purge-expired-messages';
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let appointmentId = '';
 let connectionId = '';
@@ -36,27 +36,27 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
+  await db.delete(auditLog).where(eq(auditLog.accountId, accountId));
   await db
     .delete(whatsappConnections)
-    .where(eq(whatsappConnections.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
-  await db.update(pts).set({ retentionDays: 30 }).where(eq(pts.id, ptId));
+    .where(eq(whatsappConnections.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
+  await db.update(accounts).set({ retentionDays: 30 }).where(eq(accounts.id, accountId));
   // `claimTokenExpiryWarnings` sweeps every active connection in the database,
   // so stamp the other tenants' rows as already warned and leave this suite's
   // connection as the only candidate.
-  await excludeForeignRows(whatsappConnections, ptId, {
+  await excludeForeignRows(whatsappConnections, accountId, {
     expiryWarningSentAt: new Date(),
   });
 
   const [connection] = await db
     .insert(whatsappConnections)
     .values({
-      ptId,
+      accountId,
       phoneNumberId: `PNI_MAINT_${Date.now()}_${++sequence}`,
       wabaId: 'WABA_MAINT',
       accessTokenEncrypted: await encryptToken('MAINT_TOKEN'),
@@ -67,22 +67,22 @@ beforeEach(async () => {
     .returning({ id: whatsappConnections.id });
   connectionId = connection.id;
 
-  const [patient] = await db
-    .insert(patients)
+  const [customer] = await db
+    .insert(customers)
     .values({
-      ptId,
-      name: 'Maintenance Patient',
+      accountId,
+      name: 'Maintenance Customer',
       phone: '447700900102',
       waId: '447700900102',
     })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+    .returning({ id: customers.id });
+  customerId = customer.id;
 
   const [conversation] = await db
     .insert(conversations)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       channel: 'whatsapp',
       aiActive: false,
     })
@@ -93,8 +93,8 @@ beforeEach(async () => {
   const [appointment] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt,
       endsAt: addHours(startsAt, 1),
       status: 'pending',
@@ -104,7 +104,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('retention purge', () => {
@@ -114,23 +114,23 @@ describe('retention purge', () => {
       .insert(messages)
       .values([
         {
-          ptId,
+          accountId,
           conversationId,
-          role: 'patient',
+          role: 'customer',
           channel: 'whatsapp',
           content: 'expired',
           createdAt: subDays(now, 31),
         },
         {
-          ptId,
+          accountId,
           conversationId,
-          role: 'patient',
+          role: 'customer',
           channel: 'whatsapp',
           content: 'recent',
           createdAt: subDays(now, 29),
         },
         {
-          ptId,
+          accountId,
           conversationId,
           role: 'ai',
           channel: 'whatsapp',
@@ -140,15 +140,15 @@ describe('retention purge', () => {
       ])
       .returning({ id: messages.id });
     await db.insert(reminderJobs).values({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: subDays(now, 31),
       status: 'sent',
       messageId: protectedReminder.id,
     });
 
-    const result = await purgePtExpiredMessages({
-      ptId,
+    const result = await purgeAccountExpiredMessages({
+      accountId,
       retentionDays: 30,
       now,
     });
@@ -166,7 +166,7 @@ describe('retention purge', () => {
     const [audit] = await db
       .select()
       .from(auditLog)
-      .where(eq(auditLog.ptId, ptId));
+      .where(eq(auditLog.accountId, accountId));
     expect(audit).toMatchObject({
       action: 'messages.retention_purge',
       metadata: {
@@ -180,26 +180,26 @@ describe('retention purge', () => {
 describe('conversation inactivity', () => {
   it('offers resume only while AI is inactive and the PT has been quiet', async () => {
     await expect(
-      checkResumeOffer({ ptId, conversationId, patientId }),
+      checkResumeOffer({ accountId, conversationId, customerId }),
     ).resolves.toEqual({ offer: true });
 
     // A PT reply inside the idle window defers the offer rather than dropping
     // it: the caller re-arms at `retryAt` (the reply + the 1h idle window).
-    const ptReplyAt = subMinutes(new Date(), 10);
+    const accountReplyAt = subMinutes(new Date(), 10);
     await db.insert(messages).values({
-      ptId,
+      accountId,
       conversationId,
-      role: 'pt',
+      role: 'account',
       channel: 'whatsapp',
       content: 'I am handling this',
-      createdAt: ptReplyAt,
+      createdAt: accountReplyAt,
     });
     await expect(
-      checkResumeOffer({ ptId, conversationId, patientId }),
+      checkResumeOffer({ accountId, conversationId, customerId }),
     ).resolves.toEqual({
       offer: false,
-      reason: 'recent_pt_activity',
-      retryAt: addHours(ptReplyAt, 1).toISOString(),
+      reason: 'recent_account_activity',
+      retryAt: addHours(accountReplyAt, 1).toISOString(),
     });
 
     await db
@@ -207,7 +207,7 @@ describe('conversation inactivity', () => {
       .set({ aiActive: true })
       .where(eq(conversations.id, conversationId));
     await expect(
-      checkResumeOffer({ ptId, conversationId, patientId }),
+      checkResumeOffer({ accountId, conversationId, customerId }),
     ).resolves.toEqual({ offer: false, reason: 'ai_active' });
   });
 });
@@ -248,7 +248,7 @@ describe('WhatsApp health monitoring', () => {
 
     expect(first).toEqual([
       expect.objectContaining({
-        ptId,
+        accountId,
         connectionId,
         daysRemaining: 5,
       }),

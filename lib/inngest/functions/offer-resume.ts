@@ -14,12 +14,12 @@ const MAX_REARMS = 12;
 type ResumeOfferDecision =
   | { offer: true }
   | { offer: false; reason: 'not_found' | 'ai_active' }
-  | { offer: false; reason: 'recent_pt_activity'; retryAt: string };
+  | { offer: false; reason: 'recent_account_activity'; retryAt: string };
 
 export async function checkResumeOffer(args: {
-  ptId: string;
+  accountId: string;
   conversationId: string;
-  patientId: string;
+  customerId: string;
   now?: Date;
 }): Promise<ResumeOfferDecision> {
   const now = args.now ?? new Date();
@@ -29,40 +29,40 @@ export async function checkResumeOffer(args: {
     .where(
       and(
         eq(conversations.id, args.conversationId),
-        eq(conversations.ptId, args.ptId),
-        eq(conversations.patientId, args.patientId),
+        eq(conversations.accountId, args.accountId),
+        eq(conversations.customerId, args.customerId),
       ),
     )
     .limit(1);
   if (!conversation) return { offer: false, reason: 'not_found' };
   if (conversation.aiActive) return { offer: false, reason: 'ai_active' };
 
-  const [recentPtMessage] = await db
+  const [recentAccountMessage] = await db
     .select({ createdAt: messages.createdAt })
     .from(messages)
     .where(
       and(
-        eq(messages.ptId, args.ptId),
+        eq(messages.accountId, args.accountId),
         eq(messages.conversationId, args.conversationId),
-        eq(messages.role, 'pt'),
+        eq(messages.role, 'account'),
         gte(messages.createdAt, subHours(now, IDLE_HOURS)),
       ),
     )
     .orderBy(desc(messages.createdAt))
     .limit(1);
-  if (recentPtMessage) {
+  if (recentAccountMessage) {
     return {
       offer: false,
-      reason: 'recent_pt_activity',
-      retryAt: addHours(recentPtMessage.createdAt, IDLE_HOURS).toISOString(),
+      reason: 'recent_account_activity',
+      retryAt: addHours(recentAccountMessage.createdAt, IDLE_HOURS).toISOString(),
     };
   }
   return { offer: true };
 }
 
-export const offerResumeAfterPtInactivity = inngest.createFunction(
+export const offerResumeAfterAccountInactivity = inngest.createFunction(
   {
-    id: 'offer-resume-after-pt-inactivity',
+    id: 'offer-resume-after-account-inactivity',
     retries: 2,
     // One run per emitted event (both emitters guard on a real aiActive
     // true -> false transition, so that is one run per handoff). Keyed on the
@@ -72,24 +72,24 @@ export const offerResumeAfterPtInactivity = inngest.createFunction(
   },
   // An escalation hands the thread to the PT exactly like a manual takeover, so
   // it has to arm the same offer — otherwise the assistant stays off for good the
-  // moment a patient asks for a human. Both payloads carry the three ids
+  // moment a customer asks for a human. Both payloads carry the three ids
   // checkResumeOffer needs.
   [{ event: 'conversation.taken_over' }, { event: 'conversation.escalated' }],
   async ({ event, step }) => {
-    await step.sleep('wait-for-pt-inactivity', `${IDLE_HOURS}h`);
+    await step.sleep('wait-for-account-inactivity', `${IDLE_HOURS}h`);
 
-    let decision = await step.run('check-pt-inactivity', () =>
+    let decision = await step.run('check-account-inactivity', () =>
       checkResumeOffer(event.data),
     );
     for (
       let rearm = 0;
       !decision.offer &&
-      decision.reason === 'recent_pt_activity' &&
+      decision.reason === 'recent_account_activity' &&
       rearm < MAX_REARMS;
       rearm += 1
     ) {
       await step.sleepUntil(`re-arm-${rearm}`, decision.retryAt);
-      decision = await step.run(`check-pt-inactivity-${rearm + 1}`, () =>
+      decision = await step.run(`check-account-inactivity-${rearm + 1}`, () =>
         checkResumeOffer(event.data),
       );
     }
@@ -98,9 +98,9 @@ export const offerResumeAfterPtInactivity = inngest.createFunction(
     await step.sendEvent('emit-resume-offered', {
       name: 'conversation.resume_offered',
       data: {
-        ptId: event.data.ptId,
+        accountId: event.data.accountId,
         conversationId: event.data.conversationId,
-        patientId: event.data.patientId,
+        customerId: event.data.customerId,
       },
     });
     return decision;

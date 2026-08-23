@@ -5,8 +5,8 @@ import {
   appointments,
   availabilityRules,
   blockedPeriods,
-  patients,
-  pts,
+  customers,
+  accounts,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { DAY, testNow, zonedTime } from '@/tests/support/clock';
@@ -22,8 +22,8 @@ const mondayAt = (hour: number, minute = 0) => zonedTime(MONDAY, hour, minute);
 const tuesdayAt = (hour: number, minute = 0) => zonedTime(TUESDAY, hour, minute);
 const sundayAt = (hour: number, minute = 0) => zonedTime(SUNDAY, hour, minute);
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 
 beforeAll(async () => {
   const supabase = createServiceClient();
@@ -35,53 +35,53 @@ beforeAll(async () => {
   if (error || !data.user) {
     throw new Error(`createUser failed: ${error?.message}`);
   }
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(patients).where(eq(patients.ptId, ptId));
-  await db.delete(availabilityRules).where(eq(availabilityRules.ptId, ptId));
-  await db.delete(blockedPeriods).where(eq(blockedPeriods.ptId, ptId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
+  await db.delete(availabilityRules).where(eq(availabilityRules.accountId, accountId));
+  await db.delete(blockedPeriods).where(eq(blockedPeriods.accountId, accountId));
   await db
-    .update(pts)
+    .update(accounts)
     .set({ timezone: 'Europe/Tirane' })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Alex', phone: `+35569${Date.now()}` })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Alex', phone: `+35569${Date.now()}` })
+    .returning({ id: customers.id });
+  customerId = customer.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('getFreeSlots', () => {
   it('subtracts blocked periods and active appointments from weekly rules', async () => {
     await db.insert(availabilityRules).values({
-      ptId,
+      accountId,
       weekday: 1,
       startTime: '09:00:00',
       endTime: '13:00:00',
     });
     await db.insert(blockedPeriods).values({
-      ptId,
+      accountId,
       startsAt: mondayAt(10),
       endsAt: mondayAt(11),
       label: 'Admin',
     });
     await db.insert(appointments).values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: mondayAt(11),
       endsAt: mondayAt(12),
       status: 'confirmed',
     });
 
     const result = await getFreeSlots({
-      ptId,
+      accountId,
       start: mondayAt(9),
       end: mondayAt(13),
       durationMinutes: 60,
@@ -105,7 +105,7 @@ describe('getFreeSlots', () => {
   it('returns no slots when the practice has no availability rules', async () => {
     await expect(
       getFreeSlots({
-        ptId,
+        accountId,
         start: mondayAt(9),
         end: tuesdayAt(9),
       }),
@@ -131,18 +131,18 @@ describe('getFreeSlots', () => {
   // not exist and the first bookable hour of the rule is 03:00 CEST.
   it('skips a nonexistent spring-forward wall time', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ timezone: 'Europe/Berlin' })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
     await db.insert(availabilityRules).values({
-      ptId,
+      accountId,
       weekday: 0,
       startTime: '02:00:00',
       endTime: '04:00:00',
     });
 
     const result = await getFreeSlots({
-      ptId,
+      accountId,
       start: new Date('2026-03-29T00:00:00.000Z'),
       end: new Date('2026-03-29T03:00:00.000Z'),
       durationMinutes: 60,
@@ -160,18 +160,18 @@ describe('getFreeSlots', () => {
   // two instants and only one of them may be offered.
   it('returns one usable occurrence of a duplicated fall-back wall time', async () => {
     await db
-      .update(pts)
+      .update(accounts)
       .set({ timezone: 'Europe/Berlin' })
-      .where(eq(pts.id, ptId));
+      .where(eq(accounts.id, accountId));
     await db.insert(availabilityRules).values({
-      ptId,
+      accountId,
       weekday: 0,
       startTime: '02:00:00',
       endTime: '04:00:00',
     });
 
     const result = await getFreeSlots({
-      ptId,
+      accountId,
       start: new Date('2026-10-24T23:00:00.000Z'),
       end: new Date('2026-10-25T04:00:00.000Z'),
       durationMinutes: 60,
@@ -191,14 +191,14 @@ describe('getFreeSlots', () => {
 
   it('handles a request window crossing local midnight', async () => {
     await db.insert(availabilityRules).values({
-      ptId,
+      accountId,
       weekday: 2,
       startTime: '09:00:00',
       endTime: '10:00:00',
     });
 
     const result = await getFreeSlots({
-      ptId,
+      accountId,
       start: mondayAt(23, 30),
       end: tuesdayAt(11),
     });
@@ -213,14 +213,14 @@ describe('getFreeSlots', () => {
 
   it('supports an availability rule ending at 24:00', async () => {
     await db.insert(availabilityRules).values({
-      ptId,
+      accountId,
       weekday: 1,
       startTime: '23:00:00',
       endTime: '24:00:00',
     });
 
     const result = await getFreeSlots({
-      ptId,
+      accountId,
       start: mondayAt(22),
       end: tuesdayAt(0),
     });
@@ -236,7 +236,7 @@ describe('getFreeSlots', () => {
 
 const workingMonday = () =>
   db.insert(availabilityRules).values({
-    ptId,
+    accountId,
     weekday: 1,
     startTime: '09:00:00',
     endTime: '17:00:00',
@@ -248,7 +248,7 @@ describe('isSlotBookable', () => {
 
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: mondayAt(11),
         endsAt: mondayAt(11, 45),
       }),
@@ -260,7 +260,7 @@ describe('isSlotBookable', () => {
 
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: mondayAt(16, 15),
         endsAt: mondayAt(17), // exactly when the rule ends
       }),
@@ -272,7 +272,7 @@ describe('isSlotBookable', () => {
 
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: mondayAt(16, 30),
         endsAt: mondayAt(17, 15), // past the end of the rule
       }),
@@ -281,20 +281,20 @@ describe('isSlotBookable', () => {
 
   it('rejects a slot spanning two adjacent rules and days without rules', async () => {
     await db.insert(availabilityRules).values([
-      { ptId, weekday: 1, startTime: '09:00:00', endTime: '12:00:00' },
-      { ptId, weekday: 1, startTime: '12:00:00', endTime: '17:00:00' },
+      { accountId, weekday: 1, startTime: '09:00:00', endTime: '12:00:00' },
+      { accountId, weekday: 1, startTime: '12:00:00', endTime: '17:00:00' },
     ]);
 
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: mondayAt(11, 45),
         endsAt: mondayAt(12, 30), // spans the seam between the two rules
       }),
     ).resolves.toBe(false);
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: sundayAt(11), // Sunday: no rule at all
         endsAt: sundayAt(11, 45),
       }),
@@ -308,7 +308,7 @@ describe('isSlotBookable', () => {
   // transition instant is the subject, and nothing here reads the wall clock.
   it('keeps a rule that starts inside the spring-forward gap', async () => {
     await db.insert(availabilityRules).values({
-      ptId,
+      accountId,
       weekday: 0,
       startTime: '02:00:00',
       endTime: '10:00:00',
@@ -316,7 +316,7 @@ describe('isSlotBookable', () => {
 
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: new Date('2026-03-29T07:00:00.000Z'), // 09:00 CEST
         endsAt: new Date('2026-03-29T08:00:00.000Z'), // 10:00 CEST
       }),
@@ -324,7 +324,7 @@ describe('isSlotBookable', () => {
     // The gap itself still has no bookable instant before the clock jumps.
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: new Date('2026-03-29T00:30:00.000Z'), // 01:30 CET
         endsAt: new Date('2026-03-29T01:30:00.000Z'), // 03:30 CEST
       }),
@@ -334,7 +334,7 @@ describe('isSlotBookable', () => {
   it('rejects overlaps with blocked periods and keeps its own appointment out of the way', async () => {
     await workingMonday();
     await db.insert(blockedPeriods).values({
-      ptId,
+      accountId,
       startsAt: mondayAt(11, 30),
       endsAt: mondayAt(12),
       label: 'Admin',
@@ -342,8 +342,8 @@ describe('isSlotBookable', () => {
     const [appointment] = await db
       .insert(appointments)
       .values({
-        ptId,
-        patientId,
+        accountId,
+        customerId,
         startsAt: mondayAt(13),
         endsAt: mondayAt(14),
         status: 'confirmed',
@@ -352,21 +352,21 @@ describe('isSlotBookable', () => {
 
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: mondayAt(11),
         endsAt: mondayAt(11, 45),
       }),
     ).resolves.toBe(false);
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: mondayAt(13, 15),
         endsAt: mondayAt(14),
       }),
     ).resolves.toBe(false);
     await expect(
       isSlotBookable({
-        ptId,
+        accountId,
         startsAt: mondayAt(13, 15),
         endsAt: mondayAt(14),
         excludeAppointmentId: appointment.id,

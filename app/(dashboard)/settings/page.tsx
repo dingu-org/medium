@@ -69,7 +69,7 @@ export default async function SettingsPage() {
   ]);
   const activeCount = services.filter((s) => s.active).length;
   const email = user.email ?? '';
-  const profileName = snapshot.fullName || snapshot.practiceName || email;
+  const profileName = snapshot.fullName || snapshot.name || email;
   const profileSubtitle = [snapshot.title, cityOf(snapshot.address)]
     .filter(Boolean)
     .join(' · ');

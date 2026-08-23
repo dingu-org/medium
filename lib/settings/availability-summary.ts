@@ -4,11 +4,11 @@ import { availabilityRules } from '@/lib/db/schema';
 import { t } from '@/lib/i18n';
 
 /** Distinct enabled weekdays (JS getDay(): 0=Sun … 6=Sat). */
-export async function getAvailabilityWeekdays(ptId: string): Promise<number[]> {
+export async function getAvailabilityWeekdays(accountId: string): Promise<number[]> {
   const rows = await db
     .select({ weekday: availabilityRules.weekday })
     .from(availabilityRules)
-    .where(eq(availabilityRules.ptId, ptId))
+    .where(eq(availabilityRules.accountId, accountId))
     .orderBy(asc(availabilityRules.weekday));
   return [...new Set(rows.map((r) => r.weekday))];
 }

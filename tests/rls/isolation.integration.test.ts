@@ -17,8 +17,8 @@ import {
   events,
   messageTemplates,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   pushSubscriptions,
   pwaMutations,
   reminderDeliveries,
@@ -31,8 +31,8 @@ import {
 import { createServiceClient } from '@/lib/supabase/service';
 
 type SeedDeps = {
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   conversationId: string;
   appointmentId: string;
   eventId: string;
@@ -42,115 +42,115 @@ const seedFactories: Record<
   string,
   (deps: SeedDeps) => Record<string, unknown>
 > = {
-  whatsapp_connections: ({ ptId }) => ({
-    pt_id: ptId,
-    phone_number_id: `pn-${ptId.slice(0, 6)}`,
-    waba_id: `w-${ptId.slice(0, 6)}`,
+  whatsapp_connections: ({ accountId }) => ({
+    account_id: accountId,
+    phone_number_id: `pn-${accountId.slice(0, 6)}`,
+    waba_id: `w-${accountId.slice(0, 6)}`,
   }),
-  whatsapp_contacts: ({ ptId }) => ({
-    pt_id: ptId,
+  whatsapp_contacts: ({ accountId }) => ({
+    account_id: accountId,
     phone: `+1555${Date.now()}`,
     wa_id: `1555${Date.now()}`,
   }),
-  patients: ({ ptId }) => ({
-    pt_id: ptId,
+  customers: ({ accountId }) => ({
+    account_id: accountId,
     name: 'P',
     phone: `+49${Date.now()}`,
   }),
-  services: ({ ptId }) => ({
-    pt_id: ptId,
+  services: ({ accountId }) => ({
+    account_id: accountId,
     name: `service-${Date.now()}-${Math.random()}`,
     duration_min: 30,
   }),
-  conversations: ({ ptId, patientId }) => ({
-    pt_id: ptId,
-    patient_id: patientId,
+  conversations: ({ accountId, customerId }) => ({
+    account_id: accountId,
+    customer_id: customerId,
     channel: 'whatsapp',
   }),
-  messages: ({ ptId, conversationId }) => ({
-    pt_id: ptId,
+  messages: ({ accountId, conversationId }) => ({
+    account_id: accountId,
     conversation_id: conversationId,
-    role: 'patient',
+    role: 'customer',
     channel: 'whatsapp',
     content: 'hello',
   }),
-  appointments: ({ ptId, patientId }) => ({
-    pt_id: ptId,
-    patient_id: patientId,
+  appointments: ({ accountId, customerId }) => ({
+    account_id: accountId,
+    customer_id: customerId,
     starts_at: new Date(Date.now() + 86_400_000).toISOString(),
     ends_at: new Date(Date.now() + 90_000_000).toISOString(),
   }),
-  availability_rules: ({ ptId }) => ({
-    pt_id: ptId,
+  availability_rules: ({ accountId }) => ({
+    account_id: accountId,
     weekday: 1,
     start_time: '09:00:00',
     end_time: '17:00:00',
   }),
-  blocked_periods: ({ ptId }) => ({
-    pt_id: ptId,
+  blocked_periods: ({ accountId }) => ({
+    account_id: accountId,
     starts_at: new Date().toISOString(),
     ends_at: new Date(Date.now() + 3_600_000).toISOString(),
   }),
-  message_templates: ({ ptId }) => ({
-    pt_id: ptId,
+  message_templates: ({ accountId }) => ({
+    account_id: accountId,
     name: `t-${Date.now()}`,
     language: 'en',
     body: 'hello',
   }),
-  reminder_jobs: ({ ptId, appointmentId }) => ({
-    pt_id: ptId,
+  reminder_jobs: ({ accountId, appointmentId }) => ({
+    account_id: accountId,
     appointment_id: appointmentId,
     scheduled_for: new Date().toISOString(),
   }),
-  reminder_deliveries: ({ ptId, appointmentId }) => ({
-    pt_id: ptId,
+  reminder_deliveries: ({ accountId, appointmentId }) => ({
+    account_id: accountId,
     appointment_id: appointmentId,
     external_id: `wamid-rls-${Date.now()}-${Math.random()}`,
     delivered_at: new Date().toISOString(),
   }),
-  push_subscriptions: ({ ptId }) => ({
-    pt_id: ptId,
+  push_subscriptions: ({ accountId }) => ({
+    account_id: accountId,
     endpoint: `https://example.test/${Date.now()}`,
     keys: { p256dh: 'x', auth: 'y' },
   }),
-  pwa_mutations: ({ ptId }) => ({
-    pt_id: ptId,
+  pwa_mutations: ({ accountId }) => ({
+    account_id: accountId,
     client_mutation_id: `rls-${Date.now()}-${Math.random()}`,
     type: 'test',
     status: 'success',
   }),
-  events: ({ ptId }) => ({ pt_id: ptId, type: 'test', payload: {} }),
-  event_outbox: ({ ptId, eventId }) => ({
-    pt_id: ptId,
+  events: ({ accountId }) => ({ account_id: accountId, type: 'test', payload: {} }),
+  event_outbox: ({ accountId, eventId }) => ({
+    account_id: accountId,
     event_id: eventId,
     event_type: 'test',
     payload: {},
   }),
-  audit_log: ({ ptId }) => ({
-    pt_id: ptId,
+  audit_log: ({ accountId }) => ({
+    account_id: accountId,
     actor: 'service',
     action: 'a',
-    target_table: 'patients',
+    target_table: 'customers',
   }),
-  cost_daily: ({ ptId }) => ({
-    pt_id: ptId,
+  cost_daily: ({ accountId }) => ({
+    account_id: accountId,
     day: new Date().toISOString().slice(0, 10),
   }),
-  conversation_days: ({ ptId, patientId, conversationId }) => ({
-    pt_id: ptId,
-    patient_id: patientId,
+  conversation_days: ({ accountId, customerId, conversationId }) => ({
+    account_id: accountId,
+    customer_id: customerId,
     conversation_id: conversationId,
     local_day: new Date().toISOString().slice(0, 10),
     month_key: new Date().toISOString().slice(0, 7),
   }),
-  erasure_archive: ({ ptId }) => ({ pt_id: ptId, scope: 'account' }),
-  wa_message_statuses: ({ ptId }) => ({
-    pt_id: ptId,
+  erasure_archive: ({ accountId }) => ({ account_id: accountId, scope: 'account' }),
+  wa_message_statuses: ({ accountId }) => ({
+    account_id: accountId,
     external_id: `wamid-${Date.now()}-${Math.random()}`,
     last_status: 'sent',
   }),
-  billing_orders: ({ ptId }) => ({
-    pt_id: ptId,
+  billing_orders: ({ accountId }) => ({
+    account_id: accountId,
     pok_order_id: `pok-${Date.now()}-${Math.random()}`,
     plan: 'solo',
     period: 'monthly',
@@ -167,7 +167,7 @@ const seedFactories: Record<
 const UPDATE_COL: Record<string, Record<string, unknown>> = {
   whatsapp_connections: { tier: 'rls-probe' },
   whatsapp_contacts: { full_name: 'rls-probe' },
-  patients: { notes: 'rls-probe' },
+  customers: { notes: 'rls-probe' },
   services: { active: false },
   conversations: { escalation_state: 'rls-probe' },
   messages: { model: 'rls-probe' },
@@ -200,16 +200,16 @@ const DENY_ALL = new Set([
   'reminder_deliveries',
 ]);
 
-const TENANT_ID_COL: Record<string, 'pt_id' | 'id'> = { pts: 'id' };
+const TENANT_ID_COL: Record<string, 'account_id' | 'id'> = { accounts: 'id' };
 
 // Mirrors the allowlist in coverage.integration.test.ts: tables in `public` that
-// legitimately carry no tenant column. Enumerating "has a pt_id column" instead
+// legitimately carry no tenant column. Enumerating "has a account_id column" instead
 // would let a future shared table skip this whole matrix unnoticed.
 const NON_TENANT_TABLES = new Set<string>();
 
 let sql: ReturnType<typeof postgres>;
-let ptIdA = '';
-let ptIdB = '';
+let accountIdA = '';
+let accountIdB = '';
 let depsA: SeedDeps;
 let userClientA: SupabaseClient;
 
@@ -225,20 +225,20 @@ async function makeUser(stamp: string): Promise<string> {
   return data.user.id;
 }
 
-async function seedFor(ptId: string): Promise<SeedDeps> {
+async function seedFor(accountId: string): Promise<SeedDeps> {
   const [pat] = await db
-    .insert(patients)
-    .values({ ptId, name: 'seed', phone: `+49${Date.now()}${Math.random()}` })
-    .returning({ id: patients.id });
+    .insert(customers)
+    .values({ accountId, name: 'seed', phone: `+49${Date.now()}${Math.random()}` })
+    .returning({ id: customers.id });
   const [conv] = await db
     .insert(conversations)
-    .values({ ptId, patientId: pat.id, channel: 'whatsapp' })
+    .values({ accountId, customerId: pat.id, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   const [appt] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId: pat.id,
+      accountId,
+      customerId: pat.id,
       startsAt: new Date(Date.now() + 86_400_000),
       endsAt: new Date(Date.now() + 90_000_000),
     })
@@ -246,101 +246,101 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
 
   // Seed one row per other tenant-scoped table for B (so SELECT/UPDATE/DELETE have something to filter against).
   await db.insert(whatsappConnections).values({
-    ptId,
-    phoneNumberId: `pn-${ptId.slice(0, 6)}`,
-    wabaId: `w-${ptId.slice(0, 6)}`,
+    accountId,
+    phoneNumberId: `pn-${accountId.slice(0, 6)}`,
+    wabaId: `w-${accountId.slice(0, 6)}`,
   });
   await db.insert(whatsappContacts).values({
-    ptId,
+    accountId,
     phone: `+1555${Date.now()}${Math.random()}`,
     waId: `1555${Date.now()}${Math.random()}`,
   });
   await db.insert(availabilityRules).values({
-    ptId,
+    accountId,
     weekday: 1,
     startTime: '09:00:00',
     endTime: '17:00:00',
   });
   await db.insert(blockedPeriods).values({
-    ptId,
+    accountId,
     startsAt: new Date(),
     endsAt: new Date(Date.now() + 3_600_000),
   });
   await db.insert(messageTemplates).values({
-    ptId,
+    accountId,
     name: `t-${Date.now()}-${Math.random()}`,
     language: 'en',
     body: 'hi',
   });
   await db.insert(reminderJobs).values({
-    ptId,
+    accountId,
     appointmentId: appt.id,
     scheduledFor: new Date(),
   });
   await db.insert(reminderDeliveries).values({
-    ptId,
+    accountId,
     appointmentId: appt.id,
     externalId: `wamid-seed-${Date.now()}-${Math.random()}`,
     deliveredAt: new Date(),
   });
   await db.insert(services).values({
-    ptId,
+    accountId,
     name: `service-${Date.now()}-${Math.random()}`,
     durationMin: 30,
   });
   await db.insert(messages).values({
-    ptId,
+    accountId,
     conversationId: conv.id,
-    role: 'patient',
+    role: 'customer',
     channel: 'whatsapp',
     content: 'seed',
   });
   await db.insert(pushSubscriptions).values({
-    ptId,
+    accountId,
     endpoint: `https://example.test/${Date.now()}-${Math.random()}`,
     keys: { p256dh: 'x', auth: 'y' },
   });
   await db.insert(pwaMutations).values({
-    ptId,
+    accountId,
     clientMutationId: `seed-${Date.now()}-${Math.random()}`,
     type: 'seed',
     status: 'success',
   });
   const [event] = await db
     .insert(events)
-    .values({ ptId, type: 'seed', payload: {} })
+    .values({ accountId, type: 'seed', payload: {} })
     .returning({ id: events.id });
   await db.insert(eventOutbox).values({
-    ptId,
+    accountId,
     eventId: event.id,
     eventType: 'seed',
     payload: {},
   });
   await db.insert(auditLog).values({
-    ptId,
+    accountId,
     actor: 'svc',
     action: 'seed',
-    targetTable: 'patients',
+    targetTable: 'customers',
   });
-  await db.insert(erasureArchive).values({ ptId, scope: 'account' });
+  await db.insert(erasureArchive).values({ accountId, scope: 'account' });
   await db.insert(waMessageStatuses).values({
-    ptId,
+    accountId,
     externalId: `wamid-${Date.now()}-${Math.random()}`,
     lastStatus: 'sent',
   });
   await db.insert(costDaily).values({
-    ptId,
+    accountId,
     day: new Date().toISOString().slice(0, 10),
   });
   await db.insert(conversationDays).values({
-    ptId,
-    patientId: pat.id,
+    accountId,
+    customerId: pat.id,
     conversationId: conv.id,
     localDay: new Date().toISOString().slice(0, 10),
     monthKey: new Date().toISOString().slice(0, 7),
   });
   await db.insert(billingOrders).values({
-    ptId,
+    accountId,
     pokOrderId: `pok-${Date.now()}-${Math.random()}`,
     plan: 'solo',
     period: 'monthly',
@@ -349,8 +349,8 @@ async function seedFor(ptId: string): Promise<SeedDeps> {
   });
 
   return {
-    ptId,
-    patientId: pat.id,
+    accountId,
+    customerId: pat.id,
     conversationId: conv.id,
     appointmentId: appt.id,
     eventId: event.id,
@@ -361,10 +361,10 @@ beforeAll(async () => {
   sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 1 });
 
   const stamp = `${Date.now()}`;
-  ptIdA = await makeUser(`a-${stamp}`);
-  ptIdB = await makeUser(`b-${stamp}`);
-  depsA = await seedFor(ptIdA);
-  await seedFor(ptIdB);
+  accountIdA = await makeUser(`a-${stamp}`);
+  accountIdB = await makeUser(`b-${stamp}`);
+  depsA = await seedFor(accountIdA);
+  await seedFor(accountIdB);
 
   userClientA = createClient(
     process.env.SUPABASE_URL!,
@@ -379,8 +379,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const sb = createServiceClient();
-  if (ptIdA) await sb.auth.admin.deleteUser(ptIdA);
-  if (ptIdB) await sb.auth.admin.deleteUser(ptIdB);
+  if (accountIdA) await sb.auth.admin.deleteUser(accountIdA);
+  if (accountIdB) await sb.auth.admin.deleteUser(accountIdB);
   await sql.end({ timeout: 1 });
 });
 
@@ -395,8 +395,8 @@ async function tenantTablesFromDb(): Promise<string[]> {
 }
 
 describe('RLS isolation registry covers every tenant-scoped table', () => {
-  it('seedFactories covers every table in public (pts handled separately)', async () => {
-    const dbTables = (await tenantTablesFromDb()).filter((t) => t !== 'pts');
+  it('seedFactories covers every table in public (accounts handled separately)', async () => {
+    const dbTables = (await tenantTablesFromDb()).filter((t) => t !== 'accounts');
     const registered = Object.keys(seedFactories).sort();
     expect(registered).toEqual(dbTables.sort());
   });
@@ -411,7 +411,7 @@ describe('RLS isolation registry covers every tenant-scoped table', () => {
 const matrixTables = Object.keys(seedFactories);
 
 describe.each(matrixTables)('RLS isolation: %s', (table) => {
-  const tenantCol = TENANT_ID_COL[table] ?? 'pt_id';
+  const tenantCol = TENANT_ID_COL[table] ?? 'account_id';
   const patch = UPDATE_COL[table];
 
   // Positive canary: without it a deny-all policy (or a dropped policy) would
@@ -421,7 +421,7 @@ describe.each(matrixTables)('RLS isolation: %s', (table) => {
     const { data, error } = await userClientA
       .from(table)
       .select('*')
-      .eq(tenantCol, ptIdA);
+      .eq(tenantCol, accountIdA);
     expect(error).toBeNull();
     if (DENY_ALL.has(table)) {
       expect(data).toEqual([]);
@@ -434,7 +434,7 @@ describe.each(matrixTables)('RLS isolation: %s', (table) => {
     const { data, error } = await userClientA
       .from(table)
       .select('*')
-      .eq(tenantCol, ptIdB);
+      .eq(tenantCol, accountIdB);
     expect(error).toBeNull();
     expect(data).toEqual([]);
   });
@@ -450,7 +450,7 @@ describe.each(matrixTables)('RLS isolation: %s', (table) => {
 
     const other = await userClientA
       .from(table)
-      .insert(seedFactories[table]({ ...depsA, ptId: ptIdB }));
+      .insert(seedFactories[table]({ ...depsA, accountId: accountIdB }));
     expect(other.error).not.toBeNull();
   });
 
@@ -458,14 +458,14 @@ describe.each(matrixTables)('RLS isolation: %s', (table) => {
     const own = await userClientA
       .from(table)
       .update(patch)
-      .eq(tenantCol, ptIdA)
+      .eq(tenantCol, accountIdA)
       .select();
     expect(own.error).not.toBeNull();
 
     const other = await userClientA
       .from(table)
       .update(patch)
-      .eq(tenantCol, ptIdB)
+      .eq(tenantCol, accountIdB)
       .select();
     expect(other.error).not.toBeNull();
   });
@@ -474,48 +474,48 @@ describe.each(matrixTables)('RLS isolation: %s', (table) => {
     const own = await userClientA
       .from(table)
       .delete()
-      .eq(tenantCol, ptIdA)
+      .eq(tenantCol, accountIdA)
       .select();
     expect(own.error).not.toBeNull();
 
     const other = await userClientA
       .from(table)
       .delete()
-      .eq(tenantCol, ptIdB)
+      .eq(tenantCol, accountIdB)
       .select();
     expect(other.error).not.toBeNull();
   });
 });
 
-describe('RLS isolation: pts', () => {
-  it("SELECT as A returns A's own pts row", async () => {
+describe('RLS isolation: accounts', () => {
+  it("SELECT as A returns A's own accounts row", async () => {
     const { data, error } = await userClientA
-      .from('pts')
+      .from('accounts')
       .select('*')
-      .eq('id', ptIdA);
+      .eq('id', accountIdA);
     expect(error).toBeNull();
     expect(data?.length ?? 0).toBe(1);
   });
 
-  it("SELECT as A returns 0 rows for B's pts row", async () => {
+  it("SELECT as A returns 0 rows for B's accounts row", async () => {
     const { data, error } = await userClientA
-      .from('pts')
+      .from('accounts')
       .select('*')
-      .eq('id', ptIdB);
+      .eq('id', accountIdB);
     expect(error).toBeNull();
     expect(data).toEqual([]);
   });
 
   it("UPDATE filtered by B's id is rejected", async () => {
     const { error } = await userClientA
-      .from('pts')
-      .update({ practice_name: 'hijack' })
-      .eq('id', ptIdB)
+      .from('accounts')
+      .update({ name: 'hijack' })
+      .eq('id', accountIdB)
       .select();
     expect(error).not.toBeNull();
   });
 
-  // The entitlement fields live on the tenant's own row, so a writable pts row
+  // The entitlement fields live on the tenant's own row, so a writable accounts row
   // is a free upgrade to the paid plan (lib/billing/entitlements.ts trusts them)
   // and `retention_days` defeats the GDPR purge.
   it('UPDATE of own plan/retention fields is rejected', async () => {
@@ -526,17 +526,17 @@ describe('RLS isolation: pts', () => {
       { retention_days: 99_999 },
     ]) {
       const { error } = await userClientA
-        .from('pts')
+        .from('accounts')
         .update(patch)
-        .eq('id', ptIdA)
+        .eq('id', accountIdA)
         .select();
       expect(error).not.toBeNull();
     }
 
     const [row] = await db
-      .select({ plan: pts.plan, planLifetime: pts.planLifetime })
-      .from(pts)
-      .where(eq(pts.id, ptIdA));
+      .select({ plan: accounts.plan, planLifetime: accounts.planLifetime })
+      .from(accounts)
+      .where(eq(accounts.id, accountIdA));
     expect(row.plan).toBe('free');
     expect(row.planLifetime).toBe(false);
   });

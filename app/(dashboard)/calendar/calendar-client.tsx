@@ -50,14 +50,14 @@ function statusDot(appt: CalendarAppointment): string {
   )
     return 'bg-destructive';
   if (appt.status === 'confirmed') return 'bg-[var(--success-500)]';
-  // Reminder sent, patient hasn't replied → needs your attention (orange).
+  // Reminder sent, customer hasn't replied → needs your attention (orange).
   if (r && r.status === 'sent' && !r.responseType)
     return 'bg-[var(--attention-500)]';
   return 'bg-[var(--warning-500)]';
 }
 
 export function CalendarClient({
-  ptId,
+  accountId,
   timezone,
   view,
   anchorKey,
@@ -66,7 +66,7 @@ export function CalendarClient({
   appointments,
   activeServices,
 }: {
-  ptId: string;
+  accountId: string;
   timezone: string;
   view: 'day' | 'week';
   anchorKey: string;
@@ -156,7 +156,7 @@ export function CalendarClient({
 
   return (
     <div>
-      <RealtimeRefresher table="appointments" filter={`pt_id=eq.${ptId}`} />
+      <RealtimeRefresher table="appointments" filter={`account_id=eq.${accountId}`} />
 
       {/* Canvas CalHeader: seg left, true-centered title, "Sot" pill right. */}
       <div className="relative flex min-h-11 items-center justify-between">
@@ -246,7 +246,7 @@ export function CalendarClient({
               icon={CalendarDays}
               title={t.calendar.emptyDayTitle}
               description={t.calendar.emptyDayText}
-              className="pt-14"
+              className="account-14"
             />
           ) : (
             <>
@@ -265,7 +265,7 @@ export function CalendarClient({
                   />
                 ))}
               </ul>
-              <p className="text-ink-3 px-6 pt-6 text-center text-[12.5px] leading-normal">
+              <p className="text-ink-3 px-6 account-6 text-center text-[12.5px] leading-normal">
                 {t.calendar.restOfDayFree}
                 <br />
                 {t.calendar.mediumWillReply}
@@ -280,7 +280,7 @@ export function CalendarClient({
               icon={CalendarDays}
               title={t.calendar.weekEmpty}
               description={t.calendar.weekEmptyDesc}
-              className="pt-10"
+              className="account-10"
             />
           )}
 
@@ -379,7 +379,7 @@ function AppointmentCard({
         <span className="min-w-0 flex-1">
           <span className="flex items-start justify-between gap-2">
             <span className="min-w-0 flex-1 truncate text-[15.5px] font-semibold tracking-[-0.005em]">
-              {appt.patientName}
+              {appt.customerName}
             </span>
             <StatusBadge status={appt.status} />
           </span>
@@ -429,7 +429,7 @@ function AppointmentRow({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[14.5px] font-medium">
-            {appt.patientName}
+            {appt.customerName}
           </span>
           {appt.serviceType && (
             <span className="text-ink-3 block truncate text-xs">

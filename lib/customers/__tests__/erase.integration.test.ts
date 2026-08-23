@@ -9,8 +9,8 @@ import {
   erasureArchive,
   events,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderDeliveries,
   reminderJobs,
   whatsappContacts,
@@ -21,7 +21,7 @@ import {
   getReminderUsage,
 } from '@/lib/billing/usage';
 import { createServiceClient } from '@/lib/supabase/service';
-import { erasePatient } from '../erase';
+import { eraseCustomer } from '../erase';
 
 const tryPublish = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('@/lib/events/outbox', () => ({
@@ -30,9 +30,9 @@ vi.mock('@/lib/events/outbox', () => ({
 
 const WA_ID = '447700900555';
 
-let ptId = '';
-let otherPtId = '';
-let patientId = '';
+let accountId = '';
+let otherAccountId = '';
+let customerId = '';
 let conversationId = '';
 let confirmedApptId = '';
 let completedApptId = '';
@@ -49,47 +49,47 @@ async function makeUser(stamp: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  ptId = await makeUser(`a-${Date.now()}`);
-  otherPtId = await makeUser(`b-${Date.now()}`);
+  accountId = await makeUser(`a-${Date.now()}`);
+  otherAccountId = await makeUser(`b-${Date.now()}`);
 });
 
 afterAll(async () => {
   const sb = createServiceClient();
-  if (ptId) await db.delete(erasureArchive).where(eq(erasureArchive.ptId, ptId));
-  if (ptId) await sb.auth.admin.deleteUser(ptId);
-  if (otherPtId) await sb.auth.admin.deleteUser(otherPtId);
+  if (accountId) await db.delete(erasureArchive).where(eq(erasureArchive.accountId, accountId));
+  if (accountId) await sb.auth.admin.deleteUser(accountId);
+  if (otherAccountId) await sb.auth.admin.deleteUser(otherAccountId);
 });
 
 beforeEach(async () => {
   tryPublish.mockClear();
-  await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
-  // erasure_archive has no FK to pts, so it survives every other cleanup.
-  await db.delete(erasureArchive).where(eq(erasureArchive.ptId, ptId));
-  // conversation_days and reminder_deliveries outlive the patient by design
-  // (SET NULL), so they need their own cleanup — deleting patients no longer
+  await db.delete(auditLog).where(eq(auditLog.accountId, accountId));
+  // erasure_archive has no FK to accounts, so it survives every other cleanup.
+  await db.delete(erasureArchive).where(eq(erasureArchive.accountId, accountId));
+  // conversation_days and reminder_deliveries outlive the customer by design
+  // (SET NULL), so they need their own cleanup — deleting customers no longer
   // takes them with it.
-  await db.delete(conversationDays).where(eq(conversationDays.ptId, ptId));
-  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
-  await db.delete(whatsappContacts).where(eq(whatsappContacts.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
+  await db.delete(conversationDays).where(eq(conversationDays.accountId, accountId));
+  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
+  await db.delete(whatsappContacts).where(eq(whatsappContacts.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
 
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Erased One', phone: WA_ID, waId: WA_ID })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Erased One', phone: WA_ID, waId: WA_ID })
+    .returning({ id: customers.id });
+  customerId = customer.id;
 
   const [conv] = await db
     .insert(conversations)
-    .values({ ptId, patientId, channel: 'whatsapp', lastInboundAt: new Date() })
+    .values({ accountId, customerId, channel: 'whatsapp', lastInboundAt: new Date() })
     .returning({ id: conversations.id });
   conversationId = conv.id;
 
   await db.insert(messages).values({
-    ptId,
+    accountId,
     conversationId: conv.id,
-    role: 'patient',
+    role: 'customer',
     channel: 'whatsapp',
     content: 'hi there',
   });
@@ -97,8 +97,8 @@ beforeEach(async () => {
   const [confirmed] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: new Date(Date.now() + 86_400_000),
       endsAt: new Date(Date.now() + 90_000_000),
       serviceType: 'checkup',
@@ -110,8 +110,8 @@ beforeEach(async () => {
   const [completed] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt: new Date(Date.now() - 90_000_000),
       endsAt: new Date(Date.now() - 86_400_000),
       serviceType: 'checkup',
@@ -121,33 +121,33 @@ beforeEach(async () => {
   completedApptId = completed.id;
 
   await db.insert(reminderJobs).values({
-    ptId,
+    accountId,
     appointmentId: confirmedApptId,
     scheduledFor: new Date(Date.now() + 43_200_000),
   });
 
   await db
     .insert(whatsappContacts)
-    .values({ ptId, phone: WA_ID, waId: WA_ID });
+    .values({ accountId, phone: WA_ID, waId: WA_ID });
 });
 
-describe('erasePatient', () => {
-  it('cascade-deletes all patient data and leaves no orphans', async () => {
-    const result = await erasePatient({ patientId, ptId });
+describe('eraseCustomer', () => {
+  it('cascade-deletes all customer data and leaves no orphans', async () => {
+    const result = await eraseCustomer({ customerId, accountId });
     expect(result).toEqual({ erased: true });
 
     const remaining = await Promise.all([
-      db.select().from(patients).where(eq(patients.id, patientId)),
+      db.select().from(customers).where(eq(customers.id, customerId)),
       db
         .select()
         .from(conversations)
-        .where(eq(conversations.patientId, patientId)),
-      db.select().from(messages).where(eq(messages.ptId, ptId)),
+        .where(eq(conversations.customerId, customerId)),
+      db.select().from(messages).where(eq(messages.accountId, accountId)),
       db
         .select()
         .from(appointments)
-        .where(eq(appointments.patientId, patientId)),
-      db.select().from(reminderJobs).where(eq(reminderJobs.ptId, ptId)),
+        .where(eq(appointments.customerId, customerId)),
+      db.select().from(reminderJobs).where(eq(reminderJobs.accountId, accountId)),
       db
         .select()
         .from(whatsappContacts)
@@ -156,51 +156,51 @@ describe('erasePatient', () => {
     for (const rows of remaining) expect(rows).toHaveLength(0);
   });
 
-  it('deletes the synced contact of a manually added patient (wa_id NULL)', async () => {
+  it('deletes the synced contact of a manually added customer (wa_id NULL)', async () => {
     const [manual] = await db
-      .insert(patients)
-      .values({ ptId, name: 'Ana Hoxha', phone: '+355 69 123 4567' })
-      .returning({ id: patients.id });
+      .insert(customers)
+      .values({ accountId, name: 'Ana Hoxha', phone: '+355 69 123 4567' })
+      .returning({ id: customers.id });
     await db
       .insert(whatsappContacts)
-      .values({ ptId, phone: '355691234567', fullName: 'Ana Hoxha' });
+      .values({ accountId, phone: '355691234567', fullName: 'Ana Hoxha' });
 
-    const result = await erasePatient({ patientId: manual.id, ptId });
+    const result = await eraseCustomer({ customerId: manual.id, accountId });
     expect(result).toEqual({ erased: true });
 
-    // Only the other patient's contact (matched on wa_id) is left standing.
+    // Only the other customer's contact (matched on wa_id) is left standing.
     const remaining = await db
       .select({ phone: whatsappContacts.phone })
       .from(whatsappContacts)
-      .where(eq(whatsappContacts.ptId, ptId));
+      .where(eq(whatsappContacts.accountId, accountId));
     expect(remaining.map((r) => r.phone)).toEqual([WA_ID]);
   });
 
   it('keeps the metered conversation day counting after erasure', async () => {
-    const [pt] = await db
-      .select({ timezone: pts.timezone })
-      .from(pts)
-      .where(eq(pts.id, ptId))
+    const [account] = await db
+      .select({ timezone: accounts.timezone })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
       .limit(1);
     const now = new Date();
-    const { localDay, monthKey } = conversationDayKeys(now, pt.timezone);
+    const { localDay, monthKey } = conversationDayKeys(now, account.timezone);
     await db.insert(conversationDays).values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       conversationId,
       localDay,
       monthKey,
       firstMessageId: crypto.randomUUID(),
     });
 
-    const before = await getConversationUsage(ptId, now);
+    const before = await getConversationUsage(accountId, now);
     expect(before.used).toBe(1);
 
-    expect(await erasePatient({ patientId, ptId })).toEqual({ erased: true });
+    expect(await eraseCustomer({ customerId, accountId })).toEqual({ erased: true });
 
-    // Personal data is gone (patient row + its conversation)...
+    // Personal data is gone (customer row + its conversation)...
     expect(
-      await db.select().from(patients).where(eq(patients.id, patientId)),
+      await db.select().from(customers).where(eq(customers.id, customerId)),
     ).toHaveLength(0);
     expect(
       await db
@@ -213,9 +213,9 @@ describe('erasePatient', () => {
     const days = await db
       .select()
       .from(conversationDays)
-      .where(eq(conversationDays.ptId, ptId));
+      .where(eq(conversationDays.accountId, accountId));
     expect(days).toHaveLength(1);
-    expect(days[0].patientId).toBeNull();
+    expect(days[0].customerId).toBeNull();
     expect(days[0].conversationId).toBeNull();
     expect(days[0].localDay).toBe(localDay);
     expect(days[0].monthKey).toBe(monthKey);
@@ -225,7 +225,7 @@ describe('erasePatient', () => {
     expect(days[0].firstMessageId).toBeNull();
 
     // ...and still counts, so erasing clients can't win back free-plan quota.
-    const after = await getConversationUsage(ptId, now);
+    const after = await getConversationUsage(accountId, now);
     expect(after.used).toBe(before.used);
     expect(after.monthKey).toBe(monthKey);
   });
@@ -234,30 +234,30 @@ describe('erasePatient', () => {
     const wamid = `wamid.erase-${Date.now()}`;
     const deliveredAt = new Date();
     await db.insert(reminderDeliveries).values({
-      ptId,
+      accountId,
       appointmentId: confirmedApptId,
       externalId: wamid,
       deliveredAt,
     });
 
-    const before = await getReminderUsage(ptId, deliveredAt);
+    const before = await getReminderUsage(accountId, deliveredAt);
     expect(before.delivered).toBe(1);
     expect(before.used).toBe(1);
 
-    expect(await erasePatient({ patientId, ptId })).toEqual({ erased: true });
+    expect(await eraseCustomer({ customerId, accountId })).toEqual({ erased: true });
 
-    // The scheduling row is patient data and goes with the appointment...
+    // The scheduling row is customer data and goes with the appointment...
     expect(
-      await db.select().from(reminderJobs).where(eq(reminderJobs.ptId, ptId)),
+      await db.select().from(reminderJobs).where(eq(reminderJobs.accountId, accountId)),
     ).toHaveLength(0);
 
-    // ...but the billed delivery survives with nothing patient-linked left on
+    // ...but the billed delivery survives with nothing customer-linked left on
     // it: the appointment reference is nulled by the FK and the wamid (which
     // embeds the recipient's number) is rewritten.
     const deliveries = await db
       .select()
       .from(reminderDeliveries)
-      .where(eq(reminderDeliveries.ptId, ptId));
+      .where(eq(reminderDeliveries.accountId, accountId));
     expect(deliveries).toHaveLength(1);
     expect(deliveries[0].appointmentId).toBeNull();
     expect(deliveries[0].externalId).toBe(`erased:${deliveries[0].id}`);
@@ -265,21 +265,21 @@ describe('erasePatient', () => {
 
     // ...and still counts, so erasing clients can't win back reminder quota
     // that was already spent with Meta.
-    const after = await getReminderUsage(ptId, deliveredAt);
+    const after = await getReminderUsage(accountId, deliveredAt);
     expect(after.delivered).toBe(before.delivered);
     expect(after.used).toBe(before.used);
   });
 
-  it('archives a durable per-patient erasure proof outside audit_log', async () => {
-    await erasePatient({ patientId, ptId });
+  it('archives a durable per-customer erasure proof outside audit_log', async () => {
+    await eraseCustomer({ customerId, accountId });
 
     const rows = await db
       .select()
       .from(erasureArchive)
-      .where(eq(erasureArchive.ptId, ptId));
+      .where(eq(erasureArchive.accountId, accountId));
     expect(rows).toHaveLength(1);
-    expect(rows[0].scope).toBe('patient');
-    expect(rows[0].targetId).toBe(patientId);
+    expect(rows[0].scope).toBe('customer');
+    expect(rows[0].targetId).toBe(customerId);
     expect(rows[0].beforeStateHash).toMatch(/^[0-9a-f]{64}$/);
 
     const metadata = rows[0].metadata as Record<string, unknown>;
@@ -288,30 +288,30 @@ describe('erasePatient', () => {
     expect(serialized).not.toContain('Erased One');
     expect(serialized).not.toContain(WA_ID);
 
-    // The missing-patient no-op archives nothing.
-    await erasePatient({ patientId, ptId });
+    // The missing-customer no-op archives nothing.
+    await eraseCustomer({ customerId, accountId });
     const after = await db
       .select()
       .from(erasureArchive)
-      .where(eq(erasureArchive.ptId, ptId));
+      .where(eq(erasureArchive.accountId, accountId));
     expect(after).toHaveLength(1);
   });
 
   it('emits appointment.cancelled only for the active appointment', async () => {
-    await erasePatient({ patientId, ptId });
+    await eraseCustomer({ customerId, accountId });
 
     const cancelled = await db
       .select()
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'appointment.cancelled')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'appointment.cancelled')));
     expect(cancelled).toHaveLength(1);
 
     const payload = cancelled[0].payload as Record<string, unknown>;
     expect(payload.appointmentId).toBe(confirmedApptId);
-    expect(payload.cancelledBy).toBe('pt');
-    expect(payload.reason).toBe('patient_erased');
+    expect(payload.cancelledBy).toBe('account');
+    expect(payload.reason).toBe('customer_erased');
 
-    const allEvents = await db.select().from(events).where(eq(events.ptId, ptId));
+    const allEvents = await db.select().from(events).where(eq(events.accountId, accountId));
     const referencesCompleted = allEvents.some(
       (e) =>
         (e.payload as Record<string, unknown>).appointmentId ===
@@ -324,15 +324,15 @@ describe('erasePatient', () => {
   });
 
   it('writes exactly one erasure audit row with a hash and no PII', async () => {
-    await erasePatient({ patientId, ptId });
+    await eraseCustomer({ customerId, accountId });
 
     const rows = await db
       .select()
       .from(auditLog)
-      .where(and(eq(auditLog.ptId, ptId), eq(auditLog.action, 'erasure')));
+      .where(and(eq(auditLog.accountId, accountId), eq(auditLog.action, 'erasure')));
     expect(rows).toHaveLength(1);
-    expect(rows[0].targetTable).toBe('patients');
-    expect(rows[0].targetId).toBe(patientId);
+    expect(rows[0].targetTable).toBe('customers');
+    expect(rows[0].targetId).toBe(customerId);
 
     const metadata = rows[0].metadata as Record<string, unknown>;
     expect(metadata.beforeStateHash).toMatch(/^[0-9a-f]{64}$/);
@@ -343,29 +343,29 @@ describe('erasePatient', () => {
   });
 
   it('is idempotent: a second erase is a no-op', async () => {
-    await erasePatient({ patientId, ptId });
+    await eraseCustomer({ customerId, accountId });
     tryPublish.mockClear();
 
-    const second = await erasePatient({ patientId, ptId });
+    const second = await eraseCustomer({ customerId, accountId });
     expect(second).toEqual({ erased: false });
     expect(tryPublish).not.toHaveBeenCalled();
 
     const auditRows = await db
       .select()
       .from(auditLog)
-      .where(and(eq(auditLog.ptId, ptId), eq(auditLog.action, 'erasure')));
+      .where(and(eq(auditLog.accountId, accountId), eq(auditLog.action, 'erasure')));
     expect(auditRows).toHaveLength(1);
   });
 
   it('does not erase across tenants', async () => {
-    const result = await erasePatient({ patientId, ptId: otherPtId });
+    const result = await eraseCustomer({ customerId, accountId: otherAccountId });
     expect(result).toEqual({ erased: false });
     expect(tryPublish).not.toHaveBeenCalled();
 
     const stillThere = await db
       .select()
-      .from(patients)
-      .where(eq(patients.id, patientId));
+      .from(customers)
+      .where(eq(customers.id, customerId));
     expect(stillThere).toHaveLength(1);
   });
 });

@@ -4,14 +4,14 @@ export type AppointmentStatus = (typeof appointmentStatus.enumValues)[number];
 
 export type AppointmentRecord = {
   id: string;
-  ptId: string;
-  patientId: string;
+  accountId: string;
+  customerId: string;
   startsAt: Date;
   endsAt: Date;
   serviceType: string | null;
   status: AppointmentStatus;
   notes: string | null;
-  cancelledBy: 'patient' | 'pt' | 'ai' | null;
+  cancelledBy: 'customer' | 'account' | 'ai' | null;
   cancellationReason: string | null;
   createdAt: Date;
 };

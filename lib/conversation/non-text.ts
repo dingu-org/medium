@@ -2,8 +2,8 @@
  * Non-text inbound messages (2026-08-14). WhatsApp users send voice notes,
  * photos and documents constantly, and until now every one of them was dropped:
  * no `messages` row, so no unread badge, no chat-list preview, no realtime
- * refresh — the professional never learned the patient had written, and the
- * patient got silence.
+ * refresh — the professional never learned the customer had written, and the
+ * customer got silence.
  *
  * Two halves, deliberately split across the two runtimes that already exist:
  *
@@ -17,7 +17,7 @@
  *
  * The reply carries the same handoff offer the assistant makes for anything
  * out of scope (`handoff-offer.ts`), because "I cannot read this" is exactly
- * the case where a person should take over if the patient wants one.
+ * the case where a person should take over if the customer wants one.
  */
 import { and, eq } from 'drizzle-orm';
 import { conversationDayKeys } from '@/lib/billing/usage';
@@ -33,7 +33,7 @@ import {
 import type { InboundMessage, OutboundMessage } from './types';
 
 /**
- * The inbound `type` values that carry a patient-authored body we cannot read,
+ * The inbound `type` values that carry a customer-authored body we cannot read,
  * each with the Albanian placeholder stored in its place. This map is also the
  * webhook's allowlist of non-text types worth materialising a client and a
  * conversation for, so a type is added in exactly one place and cannot end up
@@ -65,9 +65,9 @@ export function nonTextPlaceholder(type: string): string | null {
 
 /**
  * What goes in `messages.content`: the placeholder, and the caption after it
- * when the patient wrote one. Captions live on the media object — never in
+ * when the customer wrote one. Captions live on the media object — never in
  * `msg.text` — so before this they were dropped along with the message, which
- * is the worst of both worlds: the patient DID write text and got silence.
+ * is the worst of both worlds: the customer DID write text and got silence.
  */
 export function nonTextContent(
   placeholder: string,
@@ -83,7 +83,7 @@ export const NON_TEXT_NOTICE_MODEL = 'deterministic-non-text-notice';
 /**
  * The one static reply. It says what the assistant can do (text), and offers
  * the handoff on the same terms as `handoffOfferMessage` — same acceptance
- * word, same vertical-neutral business label, so a patient meets one convention
+ * word, same vertical-neutral business label, so a customer meets one convention
  * and not two.
  */
 export function nonTextNoticeMessage(business: string): string {
@@ -95,22 +95,22 @@ export function nonTextNoticeMessage(business: string): string {
  * handoff offer armed if so.
  *
  * Throttled to one notice per conversation per local day, the same guard
- * `prepareCapHandoff` uses (`conversations.non_text_notice_at`): a patient who
+ * `prepareCapHandoff` uses (`conversations.non_text_notice_at`): a customer who
  * fires off five voice notes in a row is told once, not five times. Per *day*
  * rather than once per conversation for good: a conversation row lives for as
- * long as the patient does, so a once-ever notice would mean the voice note
+ * long as the customer does, so a once-ever notice would mean the voice note
  * they send three months from now is met with the very silence this exists to
  * remove. The per-inbound AI-reply unique index makes the persist itself
  * idempotent under Inngest retries.
  *
  * The reply and the offer anchor commit together, exactly as the model's own
- * offer does: an armed offer whose message never reached the patient would let
- * an ordinary "po" — how a patient takes a proposed slot — escalate a
+ * offer does: an armed offer whose message never reached the customer would let
+ * an ordinary "po" — how a customer takes a proposed slot — escalate a
  * conversation nobody offered anything to.
  */
 export async function prepareNonTextNotice(args: {
   inbound: InboundMessage;
-  practiceName: string | null;
+  name: string | null;
   timezone: string;
   instant: Date;
 }): Promise<
@@ -125,7 +125,7 @@ export async function prepareNonTextNotice(args: {
     .where(
       and(
         eq(conversations.id, args.inbound.conversationId),
-        eq(conversations.ptId, args.inbound.ptId),
+        eq(conversations.accountId, args.inbound.accountId),
       ),
     )
     .limit(1);
@@ -140,11 +140,11 @@ export async function prepareNonTextNotice(args: {
     }
   }
 
-  const svc = getServiceClient(args.inbound.ptId);
+  const svc = getServiceClient(args.inbound.accountId);
   const outbound = await svc.db.transaction(async (tx) => {
     const reply = await persistDeterministicReply({
       inbound: args.inbound,
-      content: nonTextNoticeMessage(businessLabel(args.practiceName)),
+      content: nonTextNoticeMessage(businessLabel(args.name)),
       model: NON_TEXT_NOTICE_MODEL,
       executor: tx,
     });
@@ -156,7 +156,7 @@ export async function prepareNonTextNotice(args: {
 
 /** Record that today's notice was sent so the same day won't send another. */
 export async function markNonTextNotice(args: {
-  ptId: string;
+  accountId: string;
   conversationId: string;
   instant: Date;
 }): Promise<void> {
@@ -166,7 +166,7 @@ export async function markNonTextNotice(args: {
     .where(
       and(
         eq(conversations.id, args.conversationId),
-        eq(conversations.ptId, args.ptId),
+        eq(conversations.accountId, args.accountId),
       ),
     );
 }

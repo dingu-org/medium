@@ -19,12 +19,12 @@ export type UsageMonitorResult = {
  * Distinct PTs with an active WhatsApp connection — the only PTs that can accrue
  * reminder or conversation usage (both arrive over WhatsApp).
  */
-async function activeConnectionPtIds(): Promise<string[]> {
+async function activeConnectionAccountIds(): Promise<string[]> {
   const rows = await db
-    .selectDistinct({ ptId: whatsappConnections.ptId })
+    .selectDistinct({ accountId: whatsappConnections.accountId })
     .from(whatsappConnections)
     .where(eq(whatsappConnections.status, 'active'));
-  return rows.map((row) => row.ptId);
+  return rows.map((row) => row.accountId);
 }
 
 /**
@@ -39,17 +39,17 @@ async function activeConnectionPtIds(): Promise<string[]> {
 export async function runBillingUsageMonitor(
   now: Date = new Date(),
 ): Promise<UsageMonitorResult> {
-  const ptIds = await activeConnectionPtIds();
+  const accountIds = await activeConnectionAccountIds();
   let reminderWarnings = 0;
   let conversationEvents = 0;
 
-  for (const ptId of ptIds) {
-    const usage = await getReminderUsage(ptId, now);
+  for (const accountId of accountIds) {
+    const usage = await getReminderUsage(accountId, now);
     if (usage.limit > 0) {
-      const upcoming = await countScheduledRemindersInMonth(ptId, now);
+      const upcoming = await countScheduledRemindersInMonth(accountId, now);
       if (upcoming > usage.remaining) {
         await emitReminderPredictiveWarningOnce({
-          ptId,
+          accountId,
           monthKey: usage.monthKey,
           used: usage.used,
           limit: usage.limit,
@@ -60,11 +60,11 @@ export async function runBillingUsageMonitor(
       }
     }
 
-    const conv = await emitConversationUsageEventIfCrossed(ptId, now);
+    const conv = await emitConversationUsageEventIfCrossed(accountId, now);
     if (conv !== 'none') conversationEvents++;
   }
 
-  return { ptsScanned: ptIds.length, reminderWarnings, conversationEvents };
+  return { ptsScanned: accountIds.length, reminderWarnings, conversationEvents };
 }
 
 export const billingUsageMonitor = inngest.createFunction(

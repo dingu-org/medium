@@ -1,22 +1,22 @@
 /**
  * Cap hard-stop handoff (Phase 16 C2, extended 2026-08-14). When a PT's monthly
- * conversation cap is reached, a new patient-day is answered once — with a
- * single warm, static message telling the patient a person will reply — instead
+ * conversation cap is reached, a new customer-day is answered once — with a
+ * single warm, static message telling the customer a person will reply — instead
  * of an AI turn. The PT's inbox and manual chat are never blocked; only the
  * automated AI reply is.
  *
  * Since 2026-08-14 the PT is also *told*. At the cap the assistant genuinely
- * cannot serve this patient, so unlike an out-of-scope question there is nothing
+ * cannot serve this customer, so unlike an out-of-scope question there is nothing
  * to offer and nothing to ask: the conversation is handed to the PT the way any
- * escalation is, and a `conversation.needs_reply` push says a patient is
- * waiting. Before that the patient got a holding message, the PT got nothing,
+ * escalation is, and a `conversation.needs_reply` push says a customer is
+ * waiting. Before that the customer got a holding message, the PT got nothing,
  * and the thread still looked AI-handled in the inbox.
  *
  * `deterministic-cap-handoff` joins the existing deterministic model markers
  * (`deterministic-reminder-response`, `deterministic-failure-handoff`); C4 will
  * centralize that allowlist for cost queries. This message carries no
  * plan/limit/AI language — that lives on the PT-facing surfaces (push, bell,
- * chat banner), not in the patient's chat.
+ * chat banner), not in the customer's chat.
  */
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
@@ -31,14 +31,14 @@ import { conversationDayKeys } from './usage';
 
 export const CAP_HANDOFF_MODEL = 'deterministic-cap-handoff';
 
-/** One static, patient-facing Albanian handoff. Reviewable in one place. */
+/** One static, customer-facing Albanian handoff. Reviewable in one place. */
 export const CAP_HANDOFF_MESSAGE_SQ =
   'Faleminderit për mesazhin! Do t’ju përgjigjemi personalisht sa më shpejt.';
 
 /**
  * Decide whether to send the handoff for this inbound. Only one handoff is sent
  * per conversation per local day (guarded by `conversations.limit_handoff_at`),
- * so a patient sending several messages after hitting the cap gets exactly one
+ * so a customer sending several messages after hitting the cap gets exactly one
  * reply that day. The per-inbound AI-reply unique index makes the persist
  * itself idempotent under Inngest retries.
  */
@@ -58,7 +58,7 @@ export async function prepareCapHandoff(args: {
     .where(
       and(
         eq(conversations.id, args.inbound.conversationId),
-        eq(conversations.ptId, args.inbound.ptId),
+        eq(conversations.accountId, args.inbound.accountId),
       ),
     )
     .limit(1);
@@ -83,7 +83,7 @@ export async function prepareCapHandoff(args: {
 
 /** Record that today's handoff was sent so the same day won't send another. */
 export async function markCapHandoff(args: {
-  ptId: string;
+  accountId: string;
   conversationId: string;
   instant: Date;
 }): Promise<void> {
@@ -93,13 +93,13 @@ export async function markCapHandoff(args: {
     .where(
       and(
         eq(conversations.id, args.conversationId),
-        eq(conversations.ptId, args.ptId),
+        eq(conversations.accountId, args.accountId),
       ),
     );
 }
 
 /**
- * Hand a capped conversation to the PT and tell them a patient is waiting.
+ * Hand a capped conversation to the PT and tell them a customer is waiting.
  *
  * The flag is the same one every human handoff sets (`ai_active = false`,
  * `escalation_state = 'requested'`) rather than a cap-specific state: the thread
@@ -109,7 +109,7 @@ export async function markCapHandoff(args: {
  * repeat a no-op.
  *
  * That flag is also what keeps the 2nd..Nth message of a capped day from
- * vanishing. The cap gate compensates its day-fact away when it turns a patient
+ * vanishing. The cap gate compensates its day-fact away when it turns a customer
  * away, so every later message that day hits the cap afresh and the once-a-day
  * handoff throttle returns `skip` — which used to mean silence for everyone.
  * With the conversation human-owned, those messages take the manual-handling
@@ -118,7 +118,7 @@ export async function markCapHandoff(args: {
  * collapses into one notification on the device.
  *
  * The push is deliberately `conversation.needs_reply` ("new message") and not
- * `conversation.escalated` ("X asked to talk to you"): at the cap the patient
+ * `conversation.escalated` ("X asked to talk to you"): at the cap the customer
  * asked for nothing. It does mean no resume offer is armed for this thread —
  * that is the honest outcome, since while the PT is at their cap the assistant
  * would only hit it again on the next message; the PT hands the thread back to
@@ -126,9 +126,9 @@ export async function markCapHandoff(args: {
  * escalation.
  */
 export async function handOffCappedConversation(args: {
-  ptId: string;
+  accountId: string;
   conversationId: string;
-  patientId: string;
+  customerId: string;
   traceId?: string;
 }): Promise<{ flagged: boolean; push: DispatchResult }> {
   const [updated] = await db
@@ -137,7 +137,7 @@ export async function handOffCappedConversation(args: {
     .where(
       and(
         eq(conversations.id, args.conversationId),
-        eq(conversations.ptId, args.ptId),
+        eq(conversations.accountId, args.accountId),
         eq(conversations.aiActive, true),
       ),
     )
@@ -146,9 +146,9 @@ export async function handOffCappedConversation(args: {
   const push = await dispatchPushForEvent({
     name: 'conversation.needs_reply',
     data: {
-      ptId: args.ptId,
+      accountId: args.accountId,
       conversationId: args.conversationId,
-      patientId: args.patientId,
+      customerId: args.customerId,
       traceId: args.traceId,
     },
   });

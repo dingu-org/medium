@@ -9,7 +9,7 @@ describe('confirmPhrase', () => {
   it('uses the first non-blank candidate', () => {
     expect(confirmPhrase('Fizio Tirana')).toBe('Fizio Tirana');
     expect(confirmPhrase('  Fizio Tirana  ')).toBe('Fizio Tirana');
-    expect(confirmPhrase('', 'pt@example.com')).toBe('pt@example.com');
+    expect(confirmPhrase('', 'account@example.com')).toBe('account@example.com');
   });
 
   it('falls back when every candidate is blank or missing', () => {

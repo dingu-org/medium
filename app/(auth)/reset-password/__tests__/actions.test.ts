@@ -43,14 +43,14 @@ function form(password: string, confirm = password) {
 beforeEach(() => {
   cookieJar.clear();
   getUserMock.mockReset();
-  getUserMock.mockResolvedValue({ data: { user: { id: 'pt-a' } } });
+  getUserMock.mockResolvedValue({ data: { user: { id: 'account-a' } } });
   updateUserMock.mockReset();
   updateUserMock.mockResolvedValue({ data: {}, error: null });
 });
 
 describe('resetPassword', () => {
   it('changes the password when the marker matches the signed-in user', async () => {
-    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('pt-a'));
+    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('account-a'));
 
     await expect(
       resetPassword(INITIAL, form('new-password-1')),
@@ -59,7 +59,7 @@ describe('resetPassword', () => {
   });
 
   it('burns the marker so the same session cannot reset again', async () => {
-    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('pt-a'));
+    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('account-a'));
 
     await expect(
       resetPassword(INITIAL, form('new-password-1')),
@@ -83,15 +83,15 @@ describe('resetPassword', () => {
   // PT B signs in inside the 10-minute window. A marker that only had to exist
   // would let the form change B's password.
   it('refuses a marker minted for a different user', async () => {
-    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('pt-a'));
-    getUserMock.mockResolvedValue({ data: { user: { id: 'pt-b' } } });
+    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('account-a'));
+    getUserMock.mockResolvedValue({ data: { user: { id: 'account-b' } } });
 
     const state = await resetPassword(INITIAL, form('new-password-1'));
 
     expect(updateUserMock).not.toHaveBeenCalled();
     expect(state.error).toBe(t.auth.errors.callbackFailed);
     // Still B's own session, so the marker is left for A's tab to consume.
-    expect(cookieJar.get(RECOVERY_COOKIE)).toBe(recoveryCookieValue('pt-a'));
+    expect(cookieJar.get(RECOVERY_COOKIE)).toBe(recoveryCookieValue('account-a'));
   });
 
   it('refuses a stale flag from before the marker carried a user id', async () => {
@@ -104,7 +104,7 @@ describe('resetPassword', () => {
   });
 
   it('refuses when there is no session at all', async () => {
-    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('pt-a'));
+    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('account-a'));
     getUserMock.mockResolvedValue({ data: { user: null } });
 
     const state = await resetPassword(INITIAL, form('new-password-1'));
@@ -121,7 +121,7 @@ describe('resetPassword', () => {
   });
 
   it('reports mismatched confirmations without changing anything', async () => {
-    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('pt-a'));
+    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('account-a'));
 
     const state = await resetPassword(
       INITIAL,
@@ -133,7 +133,7 @@ describe('resetPassword', () => {
   });
 
   it('keeps the marker when the update itself fails, so the PT can retry', async () => {
-    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('pt-a'));
+    cookieJar.set(RECOVERY_COOKIE, recoveryCookieValue('account-a'));
     updateUserMock.mockResolvedValue({
       data: {},
       error: { message: 'weak password' },
@@ -142,6 +142,6 @@ describe('resetPassword', () => {
     const state = await resetPassword(INITIAL, form('new-password-1'));
 
     expect(state.error).toBe(t.auth.errors.callbackFailed);
-    expect(cookieJar.get(RECOVERY_COOKIE)).toBe(recoveryCookieValue('pt-a'));
+    expect(cookieJar.get(RECOVERY_COOKIE)).toBe(recoveryCookieValue('account-a'));
   });
 });

@@ -27,8 +27,8 @@ import {
   conversations,
   events,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderJobs,
 } from '@/lib/db/schema';
 import { privacyName } from '@/lib/format/name';
@@ -42,15 +42,15 @@ export type TodayAppointment = AppointmentView & {
 export type TodayAttention =
   | {
       kind: 'escalation';
-      patientId: string;
-      patientName: string;
+      customerId: string;
+      customerName: string;
       conversationId: string;
       appointment: null;
     }
   | {
       kind: 'reminder';
-      patientId: string;
-      patientName: string;
+      customerId: string;
+      customerName: string;
       conversationId: string | null;
       appointment: TodayAppointment;
     };
@@ -63,7 +63,7 @@ export type WeekStrip = {
 };
 
 export type TodaySnapshot = {
-  ptId: string;
+  accountId: string;
   timezone: string;
   now: string;
   attention: TodayAttention[];
@@ -94,9 +94,9 @@ function appointmentView(
     serviceType: string | null;
     status: TodayAppointment['status'];
     notes: string | null;
-    patientName: string;
-    patientPhone: string;
-    patientWaId: string | null;
+    customerName: string;
+    customerPhone: string;
+    customerWaId: string | null;
     conversationId: string | null;
     reminderStatus: string | null;
     reminderResponse: string | null;
@@ -108,9 +108,9 @@ function appointmentView(
   const start = new TZDate(row.startsAt, timezone);
   return {
     id: row.id,
-    patientName: privacyName(row.patientName),
-    patientPhone: row.patientPhone,
-    patientWaId: row.patientWaId,
+    customerName: privacyName(row.customerName),
+    customerPhone: row.customerPhone,
+    customerWaId: row.customerWaId,
     conversationId: row.conversationId,
     startsAt: row.startsAt.toISOString(),
     endsAt: row.endsAt.toISOString(),
@@ -132,15 +132,15 @@ function appointmentView(
 }
 
 export async function getTodaySnapshot(
-  ptId: string,
+  accountId: string,
   now = new Date(),
 ): Promise<TodaySnapshot> {
-  const [pt] = await db
-    .select({ timezone: pts.timezone })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+  const [account] = await db
+    .select({ timezone: accounts.timezone })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  const timezone = pt?.timezone ?? 'Europe/Tirane';
+  const timezone = account?.timezone ?? 'Europe/Tirane';
   const zonedNow = new TZDate(now, timezone);
   const dayStart = new Date(startOfDay(zonedNow).getTime());
   const dayEnd = new Date(endOfDay(zonedNow).getTime());
@@ -165,27 +165,27 @@ export async function getTodaySnapshot(
         serviceType: appointments.serviceType,
         status: appointments.status,
         notes: appointments.notes,
-        patientName: patients.name,
-        patientPhone: patients.phone,
-        patientWaId: patients.waId,
+        customerName: customers.name,
+        customerPhone: customers.phone,
+        customerWaId: customers.waId,
         conversationId: conversations.id,
         reminderStatus: reminderJobs.status,
         reminderResponse: reminderJobs.responseType,
         reminderSkippedReason: reminderJobs.skippedReason,
       })
       .from(appointments)
-      .innerJoin(patients, eq(appointments.patientId, patients.id))
+      .innerJoin(customers, eq(appointments.customerId, customers.id))
       .leftJoin(
         conversations,
         and(
-          eq(conversations.patientId, appointments.patientId),
+          eq(conversations.customerId, appointments.customerId),
           eq(conversations.channel, 'whatsapp'),
         ),
       )
       .leftJoin(reminderJobs, eq(reminderJobs.appointmentId, appointments.id))
       .where(
         and(
-          eq(appointments.ptId, ptId),
+          eq(appointments.accountId, accountId),
           inArray(appointments.status, ['pending', 'confirmed']),
           gt(appointments.endsAt, now),
           lte(appointments.startsAt, dayEnd),
@@ -195,15 +195,15 @@ export async function getTodaySnapshot(
       .orderBy(asc(appointments.startsAt)),
     db
       .select({
-        patientId: patients.id,
-        patientName: patients.name,
+        customerId: customers.id,
+        customerName: customers.name,
         conversationId: conversations.id,
       })
       .from(conversations)
-      .innerJoin(patients, eq(conversations.patientId, patients.id))
+      .innerJoin(customers, eq(conversations.customerId, customers.id))
       .where(
         and(
-          eq(conversations.ptId, ptId),
+          eq(conversations.accountId, accountId),
           isNull(conversations.closedAt),
           ne(conversations.escalationState, 'idle'),
         ),
@@ -214,10 +214,10 @@ export async function getTodaySnapshot(
       ),
     db
       .select({
-        patientId: patients.id,
-        patientName: patients.name,
-        patientPhone: patients.phone,
-        patientWaId: patients.waId,
+        customerId: customers.id,
+        customerName: customers.name,
+        customerPhone: customers.phone,
+        customerWaId: customers.waId,
         conversationId: conversations.id,
         id: appointments.id,
         startsAt: appointments.startsAt,
@@ -231,17 +231,17 @@ export async function getTodaySnapshot(
       })
       .from(reminderJobs)
       .innerJoin(appointments, eq(reminderJobs.appointmentId, appointments.id))
-      .innerJoin(patients, eq(appointments.patientId, patients.id))
+      .innerJoin(customers, eq(appointments.customerId, customers.id))
       .leftJoin(
         conversations,
         and(
-          eq(conversations.patientId, patients.id),
+          eq(conversations.customerId, customers.id),
           eq(conversations.channel, 'whatsapp'),
         ),
       )
       .where(
         and(
-          eq(reminderJobs.ptId, ptId),
+          eq(reminderJobs.accountId, accountId),
           eq(reminderJobs.status, 'sent'),
           isNull(reminderJobs.responseType),
           inArray(appointments.status, ['pending', 'confirmed']),
@@ -257,8 +257,8 @@ export async function getTodaySnapshot(
       .from(messages)
       .where(
         and(
-          eq(messages.ptId, ptId),
-          eq(messages.role, 'patient'),
+          eq(messages.accountId, accountId),
+          eq(messages.role, 'customer'),
           gte(messages.createdAt, weekStart),
           lt(messages.createdAt, weekEnd),
         ),
@@ -268,7 +268,7 @@ export async function getTodaySnapshot(
       .from(appointments)
       .where(
         and(
-          eq(appointments.ptId, ptId),
+          eq(appointments.accountId, accountId),
           gte(appointments.createdAt, weekStart),
           lt(appointments.createdAt, weekEnd),
         ),
@@ -278,7 +278,7 @@ export async function getTodaySnapshot(
       .from(events)
       .where(
         and(
-          eq(events.ptId, ptId),
+          eq(events.accountId, accountId),
           eq(events.type, 'conversation.escalated'),
           gte(events.occurredAt, weekStart),
           lt(events.occurredAt, weekEnd),
@@ -289,33 +289,33 @@ export async function getTodaySnapshot(
   const todayAppointments = appointmentRows.map((row) =>
     appointmentView(row, timezone, zonedNow),
   );
-  const seenPatients = new Set<string>();
+  const seenCustomers = new Set<string>();
   const attention: TodayAttention[] = [];
   for (const row of escalationRows) {
-    if (seenPatients.has(row.patientId)) continue;
-    seenPatients.add(row.patientId);
+    if (seenCustomers.has(row.customerId)) continue;
+    seenCustomers.add(row.customerId);
     attention.push({
       kind: 'escalation',
-      patientId: row.patientId,
-      patientName: privacyName(row.patientName),
+      customerId: row.customerId,
+      customerName: privacyName(row.customerName),
       conversationId: row.conversationId,
       appointment: null,
     });
   }
   for (const row of reminderRows) {
-    if (seenPatients.has(row.patientId)) continue;
-    seenPatients.add(row.patientId);
+    if (seenCustomers.has(row.customerId)) continue;
+    seenCustomers.add(row.customerId);
     attention.push({
       kind: 'reminder',
-      patientId: row.patientId,
-      patientName: privacyName(row.patientName),
+      customerId: row.customerId,
+      customerName: privacyName(row.customerName),
       conversationId: row.conversationId,
       appointment: appointmentView(row, timezone, zonedNow),
     });
   }
 
   return {
-    ptId,
+    accountId,
     timezone,
     now: now.toISOString(),
     attention,

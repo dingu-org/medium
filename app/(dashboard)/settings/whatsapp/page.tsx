@@ -50,7 +50,7 @@ export default async function WhatsAppSettingsPage() {
         />
         <SectionLabel>{t.settings.whatsappRemindersLabel}</SectionLabel>
         <TemplatePreview status={snapshot.whatsappTemplateStatus} />
-        <p className="px-2 pt-2.5 pb-6 text-[12.5px] leading-[1.5] text-ink-3">
+        <p className="px-2 account-2.5 pb-6 text-[12.5px] leading-[1.5] text-ink-3">
           {t.settings.whatsappTemplateNote}
         </p>
         <DisconnectSection />
@@ -138,7 +138,7 @@ export default async function WhatsAppSettingsPage() {
   return (
     <div className="-mx-4 -mt-4">
       <NavBar title={t.settings.whatsappBusiness} backHref="/settings" />
-      <div className="px-5 pt-4 pb-7">{body}</div>
+      <div className="px-5 account-4 pb-7">{body}</div>
     </div>
   );
 }

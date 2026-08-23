@@ -13,8 +13,8 @@ import { SignOutMenuItem } from './sign-out-button';
 
 export function TopHeader({
   title,
-  ptId,
-  practiceName,
+  accountId,
+  name,
   email,
   unreadCount,
   notifications,
@@ -22,8 +22,8 @@ export function TopHeader({
   showAccountMenu = true,
 }: {
   title: string;
-  ptId: string;
-  practiceName: string | null;
+  accountId: string;
+  name: string | null;
   email: string;
   unreadCount: number;
   notifications: NotificationView[];
@@ -32,14 +32,14 @@ export function TopHeader({
 }) {
   return (
     <header className="bg-background sticky top-0 z-10">
-      <div className="mx-auto flex min-h-[44px] max-w-md items-center justify-between gap-2 px-4 pt-3.5 pb-3">
+      <div className="mx-auto flex min-h-[44px] max-w-md items-center justify-between gap-2 px-4 account-3.5 pb-3">
         <h1 className="font-heading min-w-0 flex-1 truncate text-[27px] leading-tight font-bold tracking-[-0.025em]">
           {title}
         </h1>
         <SyncIndicator />
         {action}
         <NotificationBell
-          ptId={ptId}
+          accountId={accountId}
           unreadCount={unreadCount}
           items={notifications}
         />
@@ -49,7 +49,7 @@ export function TopHeader({
               aria-label="Hap menunë e llogarisë"
               className="focus-visible:ring-ring rounded-full shadow-[var(--shadow-card)] outline-none focus-visible:ring-2"
             >
-              <InitialsAvatar name={practiceName} fallback={email} size={44} />
+              <InitialsAvatar name={name} fallback={email} size={44} />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 p-1.5">
               <DropdownMenuLabel className="text-muted-foreground truncate px-2.5 py-2 text-xs font-normal">

@@ -27,8 +27,8 @@ import {
   events,
   messageTemplates,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   reminderDeliveries,
   reminderJobs,
   whatsappConnections,
@@ -58,8 +58,8 @@ import {
 } from '../send-reminder';
 import { testNowUtc } from '@/tests/support/clock';
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let appointmentId = '';
 let connectionId = '';
@@ -73,27 +73,27 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(messageTemplates).where(eq(messageTemplates.ptId, ptId));
-  // Outlives its appointment by design (ON DELETE SET NULL), so the patient
+  await db.delete(messageTemplates).where(eq(messageTemplates.accountId, accountId));
+  // Outlives its appointment by design (ON DELETE SET NULL), so the customer
   // delete below leaves it behind — it needs its own cleanup.
-  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.ptId, ptId));
+  await db.delete(reminderDeliveries).where(eq(reminderDeliveries.accountId, accountId));
   await db
     .delete(whatsappConnections)
-    .where(eq(whatsappConnections.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
+    .where(eq(whatsappConnections.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
   await db
-    .update(pts)
-    .set({ timezone: 'Europe/Tirane', practiceName: 'Move Well' })
-    .where(eq(pts.id, ptId));
+    .update(accounts)
+    .set({ timezone: 'Europe/Tirane', name: 'Move Well' })
+    .where(eq(accounts.id, accountId));
 
   const [connection] = await db
     .insert(whatsappConnections)
     .values({
-      ptId,
+      accountId,
       phoneNumberId: `PNI_APPT_JOB_${Date.now()}_${++sequence}`,
       wabaId: 'WABA_APPT_JOB',
       accessTokenEncrypted: await encryptToken('APPT_JOB_TOKEN'),
@@ -103,22 +103,22 @@ beforeEach(async () => {
     .returning({ id: whatsappConnections.id });
   connectionId = connection.id;
 
-  const [patient] = await db
-    .insert(patients)
+  const [customer] = await db
+    .insert(customers)
     .values({
-      ptId,
-      name: 'Alex Patient',
+      accountId,
+      name: 'Alex Customer',
       phone: '447700900101',
       waId: '447700900101',
     })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+    .returning({ id: customers.id });
+  customerId = customer.id;
 
   const [conversation] = await db
     .insert(conversations)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       channel: 'whatsapp',
       lastInboundAt: new Date(),
     })
@@ -129,8 +129,8 @@ beforeEach(async () => {
   const [appointment] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt,
       endsAt: addHours(startsAt, 1),
       status: 'pending',
@@ -144,7 +144,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('appointment event confirmation', () => {
@@ -153,14 +153,14 @@ describe('appointment event confirmation', () => {
     const first = await prepareAppointmentConfirmation({
       sourceEventId,
       kind: 'appointment.booked',
-      ptId,
+      accountId,
       appointmentId,
       startsAt,
     });
     const second = await prepareAppointmentConfirmation({
       sourceEventId,
       kind: 'appointment.booked',
-      ptId,
+      accountId,
       appointmentId,
       startsAt,
     });
@@ -196,7 +196,7 @@ describe('appointment event confirmation', () => {
   });
 
   /**
-   * The turn that made the change has already sent the patient this exact text,
+   * The turn that made the change has already sent the customer this exact text,
    * so the job is the second sender and returns before preparing anything. The
    * suppression is final: with one producer per change there is nothing to
    * coordinate with, so no sleep and no re-check can reverse it.
@@ -208,11 +208,11 @@ describe('appointment event confirmation', () => {
       kind: 'appointment.booked',
       origin: 'conversation',
     });
-    if (plan.confirmPatient) {
+    if (plan.confirmCustomer) {
       const confirmation = await prepareAppointmentConfirmation({
         sourceEventId,
         kind: 'appointment.booked',
-        ptId,
+        accountId,
         appointmentId,
         startsAt,
       });
@@ -222,8 +222,8 @@ describe('appointment event confirmation', () => {
     }
 
     expect(plan).toEqual({
-      notifyPt: true,
-      confirmPatient: false,
+      notifyAccount: true,
+      confirmCustomer: false,
       skipped: 'conversation_replied',
     });
     expect(sendFn).not.toHaveBeenCalled();
@@ -239,14 +239,14 @@ describe('appointment event confirmation', () => {
     const sendFn = vi.fn(async () => ({ messageId: 'wamid.PT_ORIGIN' }));
     const plan = appointmentEventPlan({
       kind: 'appointment.booked',
-      origin: 'pt',
+      origin: 'account',
     });
-    expect(plan).toEqual({ notifyPt: true, confirmPatient: true });
+    expect(plan).toEqual({ notifyAccount: true, confirmCustomer: true });
 
     const confirmation = await prepareAppointmentConfirmation({
       sourceEventId,
       kind: 'appointment.booked',
-      ptId,
+      accountId,
       appointmentId,
       startsAt,
     });
@@ -261,30 +261,30 @@ describe('appointment event confirmation', () => {
   });
 
   it('surfaces a confirmation whose sends all failed instead of leaving it silent', async () => {
-    await db.delete(events).where(eq(events.ptId, ptId));
+    await db.delete(events).where(eq(events.accountId, accountId));
     const sourceEventId = randomUUID();
     const prepared = await prepareAppointmentConfirmation({
       sourceEventId,
       kind: 'appointment.cancelled',
-      ptId,
+      accountId,
       appointmentId,
       startsAt,
     });
     expect(prepared.kind).toBe('ready');
 
     // Every Graph attempt 5xx'd, so the row still carries a NULL externalId and
-    // nothing else would ever tell the PT the patient was not reached.
+    // nothing else would ever tell the PT the customer was not reached.
     await expect(
-      recordConfirmationFailure({ ptId, sourceEventId }),
+      recordConfirmationFailure({ accountId, sourceEventId }),
     ).resolves.toEqual({ recorded: true });
 
     const [failure] = await db
       .select()
       .from(events)
       .where(
-        and(eq(events.ptId, ptId), eq(events.type, 'conversation.failed')),
+        and(eq(events.accountId, accountId), eq(events.type, 'conversation.failed')),
       );
-    expect(failure.payload).toMatchObject({ ptId, conversationId });
+    expect(failure.payload).toMatchObject({ accountId, conversationId });
     const outbox = await db
       .select({ eventType: eventOutbox.eventType })
       .from(eventOutbox)
@@ -292,13 +292,13 @@ describe('appointment event confirmation', () => {
     expect(outbox).toEqual([{ eventType: 'conversation.failed' }]);
   });
 
-  it('stays quiet when the confirmation did reach the patient', async () => {
-    await db.delete(events).where(eq(events.ptId, ptId));
+  it('stays quiet when the confirmation did reach the customer', async () => {
+    await db.delete(events).where(eq(events.accountId, accountId));
     const sourceEventId = randomUUID();
     const prepared = await prepareAppointmentConfirmation({
       sourceEventId,
       kind: 'appointment.booked',
-      ptId,
+      accountId,
       appointmentId,
       startsAt,
     });
@@ -310,7 +310,7 @@ describe('appointment event confirmation', () => {
     });
 
     await expect(
-      recordConfirmationFailure({ ptId, sourceEventId }),
+      recordConfirmationFailure({ accountId, sourceEventId }),
     ).resolves.toEqual({
       recorded: false,
       reason: 'no_undelivered_confirmation',
@@ -319,7 +319,7 @@ describe('appointment event confirmation', () => {
       .select()
       .from(events)
       .where(
-        and(eq(events.ptId, ptId), eq(events.type, 'conversation.failed')),
+        and(eq(events.accountId, accountId), eq(events.type, 'conversation.failed')),
       );
     expect(failures).toHaveLength(0);
   });
@@ -345,14 +345,14 @@ describe('reminder scheduling and guards', () => {
   it('keeps one durable schedule per appointment across reschedules', async () => {
     const firstSchedule = subHours(startsAt, 24);
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: firstSchedule,
       runId: 'run-first',
     });
     const nextSchedule = addHours(firstSchedule, 2);
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: nextSchedule,
       runId: 'run-next',
@@ -371,7 +371,7 @@ describe('reminder scheduling and guards', () => {
   });
 
   /**
-   * Cycle 1: the reminder was sent, Meta confirmed it, the patient answered.
+   * Cycle 1: the reminder was sent, Meta confirmed it, the customer answered.
    * A confirmed delivery is two writes, as the statuses webhook makes them: the
    * job's latest-cycle stamp and the `reminder_deliveries` row the month is
    * counted from.
@@ -382,9 +382,9 @@ describe('reminder scheduling and guards', () => {
     const [reply] = await db
       .insert(messages)
       .values({
-        ptId,
+        accountId,
         conversationId,
-        role: 'patient',
+        role: 'customer',
         channel: 'whatsapp',
         content: 'KONFIRMO',
       })
@@ -401,7 +401,7 @@ describe('reminder scheduling and guards', () => {
       })
       .where(eq(reminderJobs.appointmentId, appointmentId));
     await db.insert(reminderDeliveries).values({
-      ptId,
+      accountId,
       appointmentId,
       externalId: `wamid.cycle1-${Date.now()}-${++sequence}`,
       deliveredAt,
@@ -410,7 +410,7 @@ describe('reminder scheduling and guards', () => {
 
   it('clears the previous cycle response but keeps its delivery when a reschedule re-arms the row', async () => {
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: subHours(startsAt, 24),
       runId: 'run-first-cycle',
@@ -419,7 +419,7 @@ describe('reminder scheduling and guards', () => {
     await seedDeliveredAndAnsweredCycle(deliveredAt);
 
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: addHours(subHours(startsAt, 24), 2),
       runId: 'run-second-cycle',
@@ -442,7 +442,7 @@ describe('reminder scheduling and guards', () => {
     });
     expect(rearmed.deliveredAt).toEqual(deliveredAt);
 
-    const usage = await getReminderUsage(ptId, deliveredAt);
+    const usage = await getReminderUsage(accountId, deliveredAt);
     expect(usage.delivered).toBe(1);
     expect(usage.used).toBe(1);
 
@@ -453,7 +453,7 @@ describe('reminder scheduling and guards', () => {
     const [secondMessage] = await db
       .insert(messages)
       .values({
-        ptId,
+        accountId,
         conversationId,
         role: 'ai',
         channel: 'whatsapp',
@@ -471,15 +471,15 @@ describe('reminder scheduling and guards', () => {
       })
       .where(eq(reminderJobs.appointmentId, appointmentId));
 
-    const secondCycle = await getReminderUsage(ptId, deliveredAt);
+    const secondCycle = await getReminderUsage(accountId, deliveredAt);
     expect(secondCycle.inFlight).toBe(1);
     expect(secondCycle.used).toBe(2);
   });
 
   it('records a run failure as a durable reminder.failed the bell can read', async () => {
-    await db.delete(events).where(eq(events.ptId, ptId));
+    await db.delete(events).where(eq(events.accountId, accountId));
     await recordReminderFailure({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: subHours(startsAt, 24),
       runId: 'run-exhausted',
@@ -489,9 +489,9 @@ describe('reminder scheduling and guards', () => {
     const [failure] = await db
       .select()
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'reminder.failed')));
     expect(failure.payload).toMatchObject({
-      ptId,
+      accountId,
       appointmentId,
       reason: 'Error: Graph 500',
     });
@@ -513,7 +513,7 @@ describe('reminder scheduling and guards', () => {
 
   it('keeps the delivery and the answer when a short-notice move parks the row', async () => {
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: subHours(startsAt, 24),
       runId: 'run-first-cycle',
@@ -524,7 +524,7 @@ describe('reminder scheduling and guards', () => {
     // No replacement reminder follows a short-notice skip, so nothing would ever
     // re-stamp a cleared delivery: the month's usage must not move.
     await recordShortNoticeSkip({
-      ptId,
+      accountId,
       appointmentId,
       startsAt: addMinutes(deliveredAt, 30),
       runId: 'run-short-notice',
@@ -544,14 +544,14 @@ describe('reminder scheduling and guards', () => {
     expect(parked.deliveredAt).toEqual(deliveredAt);
     expect(parked.respondedAt).toEqual(deliveredAt);
 
-    const usage = await getReminderUsage(ptId, deliveredAt);
+    const usage = await getReminderUsage(accountId, deliveredAt);
     expect(usage.delivered).toBe(1);
   });
 
   it('requeues for an unapproved template, becomes ready after approval, and rejects stale runs', async () => {
     const scheduledFor = subHours(startsAt, 24);
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor,
       runId: 'run-current',
@@ -559,7 +559,7 @@ describe('reminder scheduling and guards', () => {
     const [template] = await db
       .insert(messageTemplates)
       .values({
-        ptId,
+        accountId,
         name: REMINDER_TEMPLATE.name,
         language: REMINDER_TEMPLATE.language,
         status: 'pending',
@@ -569,7 +569,7 @@ describe('reminder scheduling and guards', () => {
 
     await expect(
       loadReminderAttempt({
-        ptId,
+        accountId,
         appointmentId,
         runId: 'run-current',
         scheduledFor,
@@ -580,14 +580,14 @@ describe('reminder scheduling and guards', () => {
     });
 
     await db.insert(messageTemplates).values({
-      ptId,
+      accountId,
       name: ENGLISH_REMINDER_TEMPLATE.name,
       language: ENGLISH_REMINDER_TEMPLATE.language,
       status: 'approved',
       body: ENGLISH_REMINDER_TEMPLATE.body,
     });
     const englishFallback = await loadReminderAttempt({
-      ptId,
+      accountId,
       appointmentId,
       runId: 'run-current',
       scheduledFor,
@@ -604,7 +604,7 @@ describe('reminder scheduling and guards', () => {
       .set({ status: 'approved' })
       .where(eq(messageTemplates.id, template.id));
     const ready = await loadReminderAttempt({
-      ptId,
+      accountId,
       appointmentId,
       runId: 'run-current',
       scheduledFor,
@@ -613,7 +613,7 @@ describe('reminder scheduling and guards', () => {
     if (ready.kind === 'ready') {
       expect(ready.context).toMatchObject({
         appointmentId,
-        patientId,
+        customerId,
         conversationId,
         connectionId,
       });
@@ -622,7 +622,7 @@ describe('reminder scheduling and guards', () => {
 
     await expect(
       loadReminderAttempt({
-        ptId,
+        accountId,
         appointmentId,
         runId: 'run-stale',
         scheduledFor,
@@ -633,7 +633,7 @@ describe('reminder scheduling and guards', () => {
   it('chooses approved templates in v2, fallback, legacy order', async () => {
     const scheduledFor = subHours(startsAt, 24);
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor,
       runId: 'run-template-priority',
@@ -641,14 +641,14 @@ describe('reminder scheduling and guards', () => {
 
     await db.insert(messageTemplates).values([
       {
-        ptId,
+        accountId,
         name: LEGACY_REMINDER_TEMPLATE.name,
         language: LEGACY_REMINDER_TEMPLATE.language,
         status: 'approved',
         body: LEGACY_REMINDER_TEMPLATE.body,
       },
       {
-        ptId,
+        accountId,
         name: FALLBACK_REMINDER_TEMPLATE.name,
         language: FALLBACK_REMINDER_TEMPLATE.language,
         status: 'approved',
@@ -656,7 +656,7 @@ describe('reminder scheduling and guards', () => {
       },
     ]);
     const fallbackReady = await loadReminderAttempt({
-      ptId,
+      accountId,
       appointmentId,
       runId: 'run-template-priority',
       scheduledFor,
@@ -667,14 +667,14 @@ describe('reminder scheduling and guards', () => {
     }
 
     await db.insert(messageTemplates).values({
-      ptId,
+      accountId,
       name: REMINDER_TEMPLATE.name,
       language: REMINDER_TEMPLATE.language,
       status: 'approved',
       body: REMINDER_TEMPLATE.body,
     });
     const primaryReady = await loadReminderAttempt({
-      ptId,
+      accountId,
       appointmentId,
       runId: 'run-template-priority',
       scheduledFor,
@@ -688,7 +688,7 @@ describe('reminder scheduling and guards', () => {
   it('reads a TIER_1K messaging limit as 1000, not 1', async () => {
     const scheduledFor = subHours(startsAt, 24);
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor,
       runId: 'run-tier-1k',
@@ -700,7 +700,7 @@ describe('reminder scheduling and guards', () => {
     const [template] = await db
       .insert(messageTemplates)
       .values({
-        ptId,
+        accountId,
         name: REMINDER_TEMPLATE.name,
         language: REMINDER_TEMPLATE.language,
         status: 'approved',
@@ -711,7 +711,7 @@ describe('reminder scheduling and guards', () => {
     // 1,000 × 0.95, but over the digit-scraped limit of 1.
     await db.insert(messages).values(
       [1, 2].map((index) => ({
-        ptId,
+        accountId,
         conversationId,
         externalId: `wamid.TIER.${Date.now()}.${sequence}.${index}`,
         role: 'ai' as const,
@@ -724,7 +724,7 @@ describe('reminder scheduling and guards', () => {
     );
 
     const state = await loadReminderAttempt({
-      ptId,
+      accountId,
       appointmentId,
       runId: 'run-tier-1k',
       scheduledFor,
@@ -732,39 +732,39 @@ describe('reminder scheduling and guards', () => {
     expect(state.kind).toBe('ready');
   });
 
-  it('skips reminders for opted-out patients and inactive connections', async () => {
+  it('skips reminders for opted-out customers and inactive connections', async () => {
     const scheduledFor = subHours(startsAt, 24);
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor,
       runId: 'run-skip-guards',
     });
 
     await db
-      .update(patients)
+      .update(customers)
       .set({ reminderOptedOutAt: new Date() })
-      .where(eq(patients.id, patientId));
+      .where(eq(customers.id, customerId));
     await expect(
       loadReminderAttempt({
-        ptId,
+        accountId,
         appointmentId,
         runId: 'run-skip-guards',
         scheduledFor,
       }),
-    ).resolves.toEqual({ kind: 'skipped', reason: 'patient_opted_out' });
+    ).resolves.toEqual({ kind: 'skipped', reason: 'customer_opted_out' });
 
     await db
-      .update(patients)
+      .update(customers)
       .set({ reminderOptedOutAt: null })
-      .where(eq(patients.id, patientId));
+      .where(eq(customers.id, customerId));
     await db
       .update(whatsappConnections)
       .set({ status: 'revoked' })
       .where(eq(whatsappConnections.id, connectionId));
     await expect(
       loadReminderAttempt({
-        ptId,
+        accountId,
         appointmentId,
         runId: 'run-skip-guards',
         scheduledFor,

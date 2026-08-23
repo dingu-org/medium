@@ -36,7 +36,7 @@ function target(response: Response) {
 beforeEach(() => {
   verifyOtpMock.mockReset();
   verifyOtpMock.mockResolvedValue({
-    data: { user: { id: 'pt-a' } },
+    data: { user: { id: 'account-a' } },
     error: null,
   });
   cookieSetMock.mockReset();
@@ -69,7 +69,7 @@ describe('GET /auth/confirm', () => {
     await confirm('?token_hash=hash-a&type=recovery&next=/reset-password');
     expect(cookieSetMock).toHaveBeenCalledWith(
       RECOVERY_COOKIE,
-      recoveryCookieValue('pt-a'),
+      recoveryCookieValue('account-a'),
       expect.objectContaining({ httpOnly: true, path: '/' }),
     );
 

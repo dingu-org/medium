@@ -47,7 +47,7 @@ export const coexistenceSyncStatus = pgEnum('coexistence_sync_status', [
   'failed',
   'history_declined',
 ]);
-export const messageRole = pgEnum('message_role', ['patient', 'ai', 'pt']);
+export const messageRole = pgEnum('message_role', ['customer', 'ai', 'account']);
 export const appointmentStatus = pgEnum('appointment_status', [
   'pending',
   'confirmed',
@@ -57,8 +57,8 @@ export const appointmentStatus = pgEnum('appointment_status', [
   'rescheduled',
 ]);
 export const cancellationActor = pgEnum('cancellation_actor', [
-  'patient',
-  'pt',
+  'customer',
+  'account',
   'ai',
 ]);
 export const templateStatus = pgEnum('template_status', [
@@ -89,10 +89,10 @@ export const billingOrderStatus = pgEnum('billing_order_status', [
   'expired',
 ]);
 
-export const pts = pgTable('pts', {
+export const accounts = pgTable('accounts', {
   id: uuid('id').primaryKey(),
   email: text('email').notNull(),
-  practiceName: text('practice_name'),
+  name: text('name'),
   // Personal + practice profile (Phase 15). Optional; feed the assistant's
   // answers (title/address) and the profile screen. Null = not set.
   fullName: text('full_name'),
@@ -102,7 +102,7 @@ export const pts = pgTable('pts', {
   aiName: text('ai_name'),
   aiGreeting: text('ai_greeting'),
   // Global assistant kill-switch (Phase 15). When true the dispatcher generates
-  // and sends NO AI reply to inbound patient messages; PT notifications +
+  // and sends NO AI reply to inbound customer messages; PT notifications +
   // appointment reminders still run.
   assistantPaused: boolean('assistant_paused').notNull().default(false),
   servicesConfiguredAt: tsTz('services_configured_at'),
@@ -126,16 +126,16 @@ export const pts = pgTable('pts', {
   createdAt: tsTz('created_at').notNull().default(now),
 });
 
-const ptIdRef = () =>
-  uuid('pt_id')
+const accountIdRef = () =>
+  uuid('account_id')
     .notNull()
-    .references(() => pts.id, { onDelete: 'cascade' });
+    .references(() => accounts.id, { onDelete: 'cascade' });
 
 export const whatsappConnections = pgTable(
   'whatsapp_connections',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     phoneNumberId: text('phone_number_id').notNull(),
     wabaId: text('waba_id').notNull(),
     accessTokenEncrypted: bytea('access_token_encrypted'),
@@ -171,7 +171,7 @@ export const whatsappContacts = pgTable(
   'whatsapp_contacts',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     phone: text('phone').notNull(),
     waId: text('wa_id'),
     fullName: text('full_name'),
@@ -182,18 +182,18 @@ export const whatsappContacts = pgTable(
     createdAt: tsTz('created_at').notNull().default(now),
   },
   (t) => [
-    uniqueIndex('whatsapp_contacts_pt_phone_uq').on(t.ptId, t.phone),
-    uniqueIndex('whatsapp_contacts_pt_wa_id_uq')
-      .on(t.ptId, t.waId)
+    uniqueIndex('whatsapp_contacts_account_phone_uq').on(t.accountId, t.phone),
+    uniqueIndex('whatsapp_contacts_account_wa_id_uq')
+      .on(t.accountId, t.waId)
       .where(sql`${t.waId} IS NOT NULL`),
   ],
 );
 
-export const patients = pgTable(
-  'patients',
+export const customers = pgTable(
+  'customers',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     name: text('name').notNull(),
     phone: text('phone').notNull(),
     waId: text('wa_id'),
@@ -201,14 +201,14 @@ export const patients = pgTable(
     reminderOptedOutAt: tsTz('reminder_opted_out_at'),
     createdAt: tsTz('created_at').notNull().default(now),
   },
-  (t) => [uniqueIndex('patients_pt_wa_id_uq').on(t.ptId, t.waId)],
+  (t) => [uniqueIndex('customers_account_wa_id_uq').on(t.accountId, t.waId)],
 );
 
 export const services = pgTable(
   'services',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     name: text('name').notNull(),
     durationMin: integer('duration_min').notNull(),
     // Optional price quote in whole Albanian Lekë (Phase 15). Null = no price
@@ -222,8 +222,8 @@ export const services = pgTable(
     check('services_name_not_blank', sql`length(btrim(${t.name})) > 0`),
     check('services_duration_range', sql`${t.durationMin} BETWEEN 5 AND 480`),
     check('services_price_positive', sql`${t.priceLek} > 0`),
-    uniqueIndex('services_pt_name_uq').on(t.ptId, sql`lower(btrim(${t.name}))`),
-    index('services_pt_active_idx').on(t.ptId, t.active, t.createdAt),
+    uniqueIndex('services_account_name_uq').on(t.accountId, sql`lower(btrim(${t.name}))`),
+    index('services_account_active_idx').on(t.accountId, t.active, t.createdAt),
   ],
 );
 
@@ -231,10 +231,10 @@ export const conversations = pgTable(
   'conversations',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
-    patientId: uuid('patient_id')
+    accountId: accountIdRef(),
+    customerId: uuid('customer_id')
       .notNull()
-      .references(() => patients.id, { onDelete: 'cascade' }),
+      .references(() => customers.id, { onDelete: 'cascade' }),
     channel: text('channel').notNull(),
     lastInboundAt: tsTz('last_inbound_at'),
     lastReadAt: tsTz('last_read_at'),
@@ -246,12 +246,12 @@ export const conversations = pgTable(
     // When the conversation-cap hard stop sent its one static handoff message
     // (Phase 16 C2). Null = never capped this cycle; reset on renewal.
     limitHandoffAt: tsTz('limit_handoff_at'),
-    // When the assistant last told this patient it can only read text messages
+    // When the assistant last told this customer it can only read text messages
     // (lib/conversation/non-text.ts). Same shape and same purpose as
     // `limit_handoff_at`: one such reply per conversation per local day, so a
     // burst of voice notes is answered once.
     nonTextNoticeAt: tsTz('non_text_notice_at'),
-    // The patient message the assistant answered with its "shall I pass this
+    // The customer message the assistant answered with its "shall I pass this
     // to the business?" offer. An anchor, not a flag: the offer is accepted
     // only by the message that immediately follows this one, and anchoring on
     // the message itself is what makes that true no matter which code path
@@ -264,18 +264,18 @@ export const conversations = pgTable(
     createdAt: tsTz('created_at').notNull().default(now),
   },
   (t) => [
-    uniqueIndex('conversations_patient_channel_uq').on(t.patientId, t.channel),
-    index('conversations_pt_last_inbound_idx').on(
-      t.ptId,
+    uniqueIndex('conversations_customer_channel_uq').on(t.customerId, t.channel),
+    index('conversations_account_last_inbound_idx').on(
+      t.accountId,
       t.lastInboundAt.desc(),
     ),
-    index('conversations_pt_closed_last_inbound_idx').on(
-      t.ptId,
+    index('conversations_account_closed_last_inbound_idx').on(
+      t.accountId,
       t.closedAt,
       t.lastInboundAt.desc(),
     ),
     index('conversations_ai_pause_idx')
-      .on(t.ptId, t.aiPausedUntil)
+      .on(t.accountId, t.aiPausedUntil)
       .where(sql`${t.aiPausedUntil} IS NOT NULL`),
   ],
 );
@@ -284,7 +284,7 @@ export const messages = pgTable(
   'messages',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     conversationId: uuid('conversation_id')
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
@@ -316,10 +316,10 @@ export const messages = pgTable(
     uniqueIndex('messages_source_event_id_uq')
       .on(t.sourceEventId)
       .where(sql`source_event_id IS NOT NULL`),
-    // pt_id was previously unindexed (FKs aren't auto-indexed). This composite
-    // serves the admin funnel's `min(created_at) GROUP BY pt_id` and general
+    // account_id was previously unindexed (FKs aren't auto-indexed). This composite
+    // serves the admin funnel's `min(created_at) GROUP BY account_id` and general
     // per-tenant message lookups.
-    index('messages_pt_created_at_idx').on(t.ptId, t.createdAt),
+    index('messages_account_created_at_idx').on(t.accountId, t.createdAt),
     // Serves the admin "today live cost" scan, which filters messages by a bare
     // created_at range across all tenants.
     index('messages_created_at_idx').on(t.createdAt),
@@ -338,10 +338,10 @@ export const appointments = pgTable(
   'appointments',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
-    patientId: uuid('patient_id')
+    accountId: accountIdRef(),
+    customerId: uuid('customer_id')
       .notNull()
-      .references(() => patients.id, { onDelete: 'cascade' }),
+      .references(() => customers.id, { onDelete: 'cascade' }),
     startsAt: tsTz('starts_at').notNull(),
     endsAt: tsTz('ends_at').notNull(),
     serviceType: text('service_type'),
@@ -353,15 +353,15 @@ export const appointments = pgTable(
   },
   (t) => [
     check('appointments_valid_range', sql`${t.endsAt} > ${t.startsAt}`),
-    index('appointments_pt_starts_at_idx').on(t.ptId, t.startsAt),
-    // Serves the admin funnel's `min(created_at) GROUP BY pt_id` (first-booking
+    index('appointments_account_starts_at_idx').on(t.accountId, t.startsAt),
+    // Serves the admin funnel's `min(created_at) GROUP BY account_id` (first-booking
     // window) — the existing starts_at index doesn't cover created_at.
-    index('appointments_pt_created_at_idx').on(t.ptId, t.createdAt),
+    index('appointments_account_created_at_idx').on(t.accountId, t.createdAt),
     index('appointments_starts_at_active_idx')
       .on(t.startsAt)
       .where(sql`status IN ('pending', 'confirmed')`),
     uniqueIndex('appointments_active_idempotency_uq')
-      .on(t.ptId, t.patientId, t.startsAt)
+      .on(t.accountId, t.customerId, t.startsAt)
       .where(sql`status IN ('pending', 'confirmed')`),
   ],
 );
@@ -370,7 +370,7 @@ export const availabilityRules = pgTable(
   'availability_rules',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     weekday: smallint('weekday').notNull(),
     startTime: time('start_time').notNull(),
     endTime: time('end_time').notNull(),
@@ -388,7 +388,7 @@ export const blockedPeriods = pgTable(
   'blocked_periods',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     startsAt: tsTz('starts_at').notNull(),
     endsAt: tsTz('ends_at').notNull(),
     label: text('label'),
@@ -400,7 +400,7 @@ export const blockedPeriods = pgTable(
 
 export const messageTemplates = pgTable('message_templates', {
   id: uuid('id').primaryKey().default(genUuid),
-  ptId: ptIdRef(),
+  accountId: accountIdRef(),
   name: text('name').notNull(),
   language: text('language').notNull(),
   status: templateStatus('status').notNull().default('pending'),
@@ -413,7 +413,7 @@ export const reminderJobs = pgTable(
   'reminder_jobs',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     appointmentId: uuid('appointment_id')
       .notNull()
       .references(() => appointments.id, { onDelete: 'cascade' }),
@@ -450,8 +450,8 @@ export const reminderJobs = pgTable(
       .where(sql`response_message_id IS NOT NULL`),
     // Serves the appointment badge's per-cycle delivery lookup; partial so it
     // only indexes confirmed deliveries.
-    index('reminder_jobs_pt_delivered_idx')
-      .on(t.ptId, t.deliveredAt)
+    index('reminder_jobs_account_delivered_idx')
+      .on(t.accountId, t.deliveredAt)
       .where(sql`delivered_at IS NOT NULL`),
   ],
 );
@@ -462,18 +462,18 @@ export const reminderJobs = pgTable(
 // because `reminder_jobs` is unique per appointment and its `delivered_at` is a
 // single scalar: a reschedule re-arms that row onto a second, separately-billed
 // template, and both cycles collapsed into one counted delivery.
-// Patient-free by construction, and `appointment_id` is ON DELETE SET NULL, so
+// Customer-free by construction, and `appointment_id` is ON DELETE SET NULL, so
 // GDPR erasure and retention purges strip the link without deleting the billed
 // fact — the contract `conversation_days` got in 0025, for the same reason:
-// erasing a chatty patient must never refund quota already spent with Meta.
-// `external_id` is the one patient-linked field (a wamid embeds the recipient's
-// number), so erasePatient rewrites it to `erased:<row id>`, which keeps the row
+// erasing a chatty customer must never refund quota already spent with Meta.
+// `external_id` is the one customer-linked field (a wamid embeds the recipient's
+// number), so eraseCustomer rewrites it to `erased:<row id>`, which keeps the row
 // unique without keeping the identifier.
 export const reminderDeliveries = pgTable(
   'reminder_deliveries',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     appointmentId: uuid('appointment_id').references(() => appointments.id, {
       onDelete: 'set null',
     }),
@@ -485,7 +485,7 @@ export const reminderDeliveries = pgTable(
     // Idempotency for a redelivered `delivered` webhook: one billed template,
     // one counted row, however many times Meta reports it.
     uniqueIndex('reminder_deliveries_external_id_uq').on(t.externalId),
-    index('reminder_deliveries_pt_delivered_idx').on(t.ptId, t.deliveredAt),
+    index('reminder_deliveries_account_delivered_idx').on(t.accountId, t.deliveredAt),
   ],
 );
 
@@ -493,7 +493,7 @@ export const pushSubscriptions = pgTable(
   'push_subscriptions',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     endpoint: text('endpoint').notNull(),
     keys: jsonb('keys').notNull(),
     userAgent: text('user_agent'),
@@ -508,7 +508,7 @@ export const pwaMutations = pgTable(
   'pwa_mutations',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     clientMutationId: text('client_mutation_id').notNull(),
     type: text('type').notNull(),
     status: text('status').notNull().default('processing'),
@@ -518,8 +518,8 @@ export const pwaMutations = pgTable(
     updatedAt: tsTz('updated_at').notNull().default(now),
   },
   (t) => [
-    uniqueIndex('pwa_mutations_pt_client_id_uq').on(t.ptId, t.clientMutationId),
-    index('pwa_mutations_pt_status_idx').on(t.ptId, t.status, t.createdAt),
+    uniqueIndex('pwa_mutations_account_client_id_uq').on(t.accountId, t.clientMutationId),
+    index('pwa_mutations_account_status_idx').on(t.accountId, t.status, t.createdAt),
   ],
 );
 
@@ -527,15 +527,15 @@ export const events = pgTable(
   'events',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     type: text('type').notNull(),
     payload: jsonb('payload').notNull(),
     occurredAt: tsTz('occurred_at').notNull().default(now),
   },
   (t) => [
-    index('events_pt_occurred_at_idx').on(t.ptId, t.occurredAt.desc()),
+    index('events_account_occurred_at_idx').on(t.accountId, t.occurredAt.desc()),
     // Serves the admin push-delivery aggregate, which filters by type +
-    // occurred_at with no pt_id (so the pt-scoped index above can't be used).
+    // occurred_at with no account_id (so the account-scoped index above can't be used).
     index('events_type_occurred_at_idx').on(t.type, t.occurredAt),
   ],
 );
@@ -544,7 +544,7 @@ export const eventOutbox = pgTable(
   'event_outbox',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     eventId: uuid('event_id')
       .notNull()
       .references(() => events.id, { onDelete: 'cascade' }),
@@ -567,12 +567,12 @@ export const eventOutbox = pgTable(
 
 // Per-PT per-day cost rollup (Phase 11). Populated by the `daily-cost-rollup`
 // Inngest cron from persisted `messages` cost fields + an estimated Meta
-// conversation cost. Idempotent upsert on (pt_id, day).
+// conversation cost. Idempotent upsert on (account_id, day).
 export const costDaily = pgTable(
   'cost_daily',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     day: date('day', { mode: 'string' }).notNull(),
     aiCostMicrousd: bigint('ai_cost_microusd', { mode: 'number' })
       .notNull()
@@ -594,12 +594,12 @@ export const costDaily = pgTable(
     metaCostSource: text('meta_cost_source').notNull().default('estimated'),
     computedAt: tsTz('computed_at').notNull().default(now),
   },
-  (t) => [uniqueIndex('cost_daily_pt_day_uq').on(t.ptId, t.day)],
+  (t) => [uniqueIndex('cost_daily_account_day_uq').on(t.accountId, t.day)],
 );
 
 // Meta (WhatsApp) delivery-status truth per outbound message (Phase 16 C3).
-// Content-free and patient-free, so it survives message-retention purge and
-// patient erasure; FK'd only to `pts`. Written exclusively by the `statuses`
+// Content-free and customer-free, so it survives message-retention purge and
+// customer erasure; FK'd only to `accounts`. Written exclusively by the `statuses`
 // webhook via the RLS-bypassing owner connection — deny-all RLS for
 // authenticated (operator data, not PT-facing; mirrors `erasure_archive`).
 // `delivered_at` is the authoritative signal for the reminder plan quota;
@@ -608,7 +608,7 @@ export const waMessageStatuses = pgTable(
   'wa_message_statuses',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     // Meta wamid; joins `messages.external_id` while that row lives.
     externalId: text('external_id').notNull(),
     // Highest status reached: sent | delivered | read | failed. Monotonic —
@@ -629,29 +629,29 @@ export const waMessageStatuses = pgTable(
   },
   (t) => [
     uniqueIndex('wa_message_statuses_external_id_uq').on(t.externalId),
-    index('wa_message_statuses_pt_delivered_idx').on(t.ptId, t.deliveredAt),
-    index('wa_message_statuses_pt_created_idx').on(t.ptId, t.createdAt),
+    index('wa_message_statuses_account_delivered_idx').on(t.accountId, t.deliveredAt),
+    index('wa_message_statuses_account_created_idx').on(t.accountId, t.createdAt),
   ],
 );
 
-// Conversation metering fact table (Phase 16): one row per active patient-day
-// in the PT's timezone. "Conversation" for billing = a patient-day, inserted
-// idempotently on the first patient message of that local day (C2 writes it).
+// Conversation metering fact table (Phase 16): one row per active customer-day
+// in the PT's timezone. "Conversation" for billing = a customer-day, inserted
+// idempotently on the first customer message of that local day (C2 writes it).
 // `month_key` (e.g. '2026-07', PT timezone) serves the monthly usage count;
 // `first_message_id` is a bare uuid breadcrumb (no FK — the message may be
 // retention-erased while the billing fact must survive).
-// Same reason `patient_id` / `conversation_id` are nullable ON DELETE SET NULL
-// (0025): GDPR per-patient erasure and retention purges strip the personal-data
+// Same reason `customer_id` / `conversation_id` are nullable ON DELETE SET NULL
+// (0025): GDPR per-customer erasure and retention purges strip the personal-data
 // link but must NOT delete the metered day, or the month's count (the only store
 // of Free-plan usage) would drop retroactively. countConversationDays filters on
-// pt_id + month_key alone and joins nothing, so anonymised rows keep counting;
-// the unique index below still dedupes live patient-days (every insert supplies a
-// real patient_id) and simply stops constraining erased ones.
+// account_id + month_key alone and joins nothing, so anonymised rows keep counting;
+// the unique index below still dedupes live customer-days (every insert supplies a
+// real customer_id) and simply stops constraining erased ones.
 // ACCEPTED CONSEQUENCE of that last point: NULLs are distinct, so if a PT erases
-// a patient and the same person messages again on the SAME local day, the
-// webhook creates a new patient row and inserts a SECOND fact for one real
-// patient-day. There is no fix that keeps the erasure promise — deduping across
-// the erasure would need a patient-derived key on the surviving row, and a hash
+// a customer and the same person messages again on the SAME local day, the
+// webhook creates a new customer row and inserts a SECOND fact for one real
+// customer-day. There is no fix that keeps the erasure promise — deduping across
+// the erasure would need a customer-derived key on the surviving row, and a hash
 // of the number is re-derivable by this controller, so it would be
 // pseudonymisation, not erasure. The error is bounded (one extra day per
 // erasure, and only for a same-day re-contact) and always runs against the PT,
@@ -660,8 +660,8 @@ export const conversationDays = pgTable(
   'conversation_days',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
-    patientId: uuid('patient_id').references(() => patients.id, {
+    accountId: accountIdRef(),
+    customerId: uuid('customer_id').references(() => customers.id, {
       onDelete: 'set null',
     }),
     conversationId: uuid('conversation_id').references(() => conversations.id, {
@@ -673,12 +673,12 @@ export const conversationDays = pgTable(
     createdAt: tsTz('created_at').notNull().default(now),
   },
   (t) => [
-    uniqueIndex('conversation_days_pt_patient_day_uq').on(
-      t.ptId,
-      t.patientId,
+    uniqueIndex('conversation_days_account_customer_day_uq').on(
+      t.accountId,
+      t.customerId,
       t.localDay,
     ),
-    index('conversation_days_pt_month_idx').on(t.ptId, t.monthKey),
+    index('conversation_days_account_month_idx').on(t.accountId, t.monthKey),
   ],
 );
 
@@ -692,7 +692,7 @@ export const billingOrders = pgTable(
   'billing_orders',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: ptIdRef(),
+    accountId: accountIdRef(),
     pokOrderId: text('pok_order_id').notNull(),
     plan: plan('plan').notNull(),
     period: billingPeriod('period').notNull(),
@@ -707,7 +707,7 @@ export const billingOrders = pgTable(
   },
   (t) => [
     uniqueIndex('billing_orders_pok_order_id_uq').on(t.pokOrderId),
-    index('billing_orders_pt_created_idx').on(t.ptId, t.createdAt),
+    index('billing_orders_account_created_idx').on(t.accountId, t.createdAt),
     // Partial index for the reconcile cron's scan of still-open orders.
     index('billing_orders_pending_idx')
       .on(t.createdAt)
@@ -717,7 +717,7 @@ export const billingOrders = pgTable(
 
 export const auditLog = pgTable('audit_log', {
   id: uuid('id').primaryKey().default(genUuid),
-  ptId: ptIdRef(),
+  accountId: accountIdRef(),
   actor: text('actor').notNull(),
   action: text('action').notNull(),
   targetTable: text('target_table').notNull(),
@@ -727,13 +727,13 @@ export const auditLog = pgTable('audit_log', {
 });
 
 // Long-term compliance record of an erasure event itself — survives the PT
-// deletion it describes, so pt_id is a bare uuid with no FK cascade. Written
+// deletion it describes, so account_id is a bare uuid with no FK cascade. Written
 // only by the service role (RLS is deny-all for authenticated).
 export const erasureArchive = pgTable(
   'erasure_archive',
   {
     id: uuid('id').primaryKey().default(genUuid),
-    ptId: uuid('pt_id').notNull(),
+    accountId: uuid('account_id').notNull(),
     scope: text('scope').notNull(),
     targetId: uuid('target_id'),
     beforeStateHash: text('before_state_hash'),
@@ -743,7 +743,7 @@ export const erasureArchive = pgTable(
   (t) => [
     check(
       'erasure_archive_scope_check',
-      sql`${t.scope} in ('patient','account')`,
+      sql`${t.scope} in ('customer','account')`,
     ),
   ],
 );

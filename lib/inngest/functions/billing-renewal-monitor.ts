@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { events, pts, services } from '@/lib/db/schema';
+import { events, accounts, services } from '@/lib/db/schema';
 import { EXPIRY_GRACE_DAYS, PLANS, RENEWAL_REMINDER_DAYS_BEFORE } from '@/lib/billing/plans';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
@@ -60,15 +60,15 @@ function toDate(value: Date | string | null): Date | null {
 /**
  * Pure decision core — what SHOULD fire for a PT at `now`, ignoring dedupe and
  * DB state. Dedupe (renewal/grace already emitted) and the conditional
- * downgrade write are applied by processRenewalForPt. Lifetime / expiry-less
+ * downgrade write are applied by processRenewalForAccount. Lifetime / expiry-less
  * rows produce no actions (defensive: the scan already excludes them).
  */
 export function planRenewalActions(
-  pt: { planExpiresAt: Date | string | null; planLifetime?: boolean },
+  account: { planExpiresAt: Date | string | null; planLifetime?: boolean },
   now: Date,
 ): RenewalDecision[] {
-  if (pt.planLifetime) return [];
-  const expiresAt = toDate(pt.planExpiresAt);
+  if (account.planLifetime) return [];
+  const expiresAt = toDate(account.planExpiresAt);
   if (!expiresAt) return [];
 
   const nowMs = now.getTime();
@@ -103,29 +103,29 @@ export function planRenewalActions(
 export async function loadRenewalCandidates(): Promise<RenewalCandidate[]> {
   return db
     .select({
-      id: pts.id,
-      planExpiresAt: pts.planExpiresAt,
-      // TODO(pok-subscriptions): also skip pts backed by a pok_subscription_id.
+      id: accounts.id,
+      planExpiresAt: accounts.planExpiresAt,
+      // TODO(pok-subscriptions): also skip accounts backed by a pok_subscription_id.
     })
-    .from(pts)
+    .from(accounts)
     .where(
       and(
-        eq(pts.plan, 'solo'),
-        eq(pts.planLifetime, false),
-        isNotNull(pts.planExpiresAt),
+        eq(accounts.plan, 'solo'),
+        eq(accounts.planLifetime, false),
+        isNotNull(accounts.planExpiresAt),
       ),
     );
 }
 
 /** Emit a billing lifecycle event once, deduped on the given payload keys. */
 async function emitLifecycleEventOnce(
-  ptId: string,
+  accountId: string,
   match: { type: 'billing.renewal_due' | 'billing.grace_started'; expiresAtIso: string; offset?: number },
   build: () => Parameters<typeof appendBackgroundEvent>[1],
 ): Promise<boolean> {
   const eventId = await db.transaction(async (tx) => {
     const conditions = [
-      eq(events.ptId, ptId),
+      eq(events.accountId, accountId),
       eq(events.type, match.type),
       sql`${events.payload}->>'expiresAt' = ${match.expiresAtIso}`,
     ];
@@ -154,22 +154,22 @@ async function emitLifecycleEventOnce(
  * services beyond Free's active cap flip to inactive (oldest active stays; the
  * PT can swap later), and retention is clamped lazily by purge-expired-messages.
  */
-async function runDowngrade(ptId: string, now: Date): Promise<boolean> {
+async function runDowngrade(accountId: string, now: Date): Promise<boolean> {
   const maxActive = PLANS.free.maxActiveServices ?? 1;
   const result = await db.transaction(async (tx) => {
     const downgraded = await tx
-      .update(pts)
+      .update(accounts)
       .set({ plan: 'free', planDowngradedAt: now })
       .where(
         and(
-          eq(pts.id, ptId),
-          eq(pts.plan, 'solo'),
-          eq(pts.planLifetime, false),
-          isNotNull(pts.planExpiresAt),
-          sql`${pts.planExpiresAt} + interval '3 days' <= ${now.toISOString()}::timestamptz`,
+          eq(accounts.id, accountId),
+          eq(accounts.plan, 'solo'),
+          eq(accounts.planLifetime, false),
+          isNotNull(accounts.planExpiresAt),
+          sql`${accounts.planExpiresAt} + interval '3 days' <= ${now.toISOString()}::timestamptz`,
         ),
       )
-      .returning({ id: pts.id });
+      .returning({ id: accounts.id });
     if (downgraded.length === 0) return null;
 
     // Deactivate every active service except the oldest `maxActive` — no picker
@@ -179,11 +179,11 @@ async function runDowngrade(ptId: string, now: Date): Promise<boolean> {
       .set({ active: false })
       .where(
         and(
-          eq(services.ptId, ptId),
+          eq(services.accountId, accountId),
           eq(services.active, true),
           sql`${services.id} NOT IN (
             SELECT id FROM services
-            WHERE pt_id = ${ptId} AND active = true
+            WHERE account_id = ${accountId} AND active = true
             ORDER BY created_at ASC
             LIMIT ${maxActive}
           )`,
@@ -192,7 +192,7 @@ async function runDowngrade(ptId: string, now: Date): Promise<boolean> {
 
     return appendBackgroundEvent(tx, {
       type: 'billing.downgraded',
-      data: { ptId, from: 'solo', to: 'free', traceId: newTraceId() },
+      data: { accountId, from: 'solo', to: 'free', traceId: newTraceId() },
     });
   });
 
@@ -202,11 +202,11 @@ async function runDowngrade(ptId: string, now: Date): Promise<boolean> {
 }
 
 /** Evaluate + apply the lifecycle for a single PT (deduped emits + downgrade). */
-export async function processRenewalForPt(
-  pt: RenewalCandidate,
+export async function processRenewalForAccount(
+  account: RenewalCandidate,
   now: Date,
 ): Promise<RenewalOutcome> {
-  const expiresAt = toDate(pt.planExpiresAt);
+  const expiresAt = toDate(account.planExpiresAt);
   const outcome: RenewalOutcome = {
     remindersDue: 0,
     graceStarted: false,
@@ -215,15 +215,15 @@ export async function processRenewalForPt(
   if (!expiresAt) return outcome;
   const expiresAtIso = expiresAt.toISOString();
 
-  for (const decision of planRenewalActions(pt, now)) {
+  for (const decision of planRenewalActions(account, now)) {
     if (decision.type === 'renewal_due') {
       const fired = await emitLifecycleEventOnce(
-        pt.id,
+        account.id,
         { type: 'billing.renewal_due', expiresAtIso, offset: decision.offset },
         () => ({
           type: 'billing.renewal_due',
           data: {
-            ptId: pt.id,
+            accountId: account.id,
             expiresAt: expiresAtIso,
             daysLeft: decision.offset,
             offset: decision.offset,
@@ -234,16 +234,16 @@ export async function processRenewalForPt(
       if (fired) outcome.remindersDue += 1;
     } else if (decision.type === 'grace_started') {
       const fired = await emitLifecycleEventOnce(
-        pt.id,
+        account.id,
         { type: 'billing.grace_started', expiresAtIso },
         () => ({
           type: 'billing.grace_started',
-          data: { ptId: pt.id, expiresAt: expiresAtIso, traceId: newTraceId() },
+          data: { accountId: account.id, expiresAt: expiresAtIso, traceId: newTraceId() },
         }),
       );
       if (fired) outcome.graceStarted = true;
     } else {
-      outcome.downgraded = await runDowngrade(pt.id, now);
+      outcome.downgraded = await runDowngrade(account.id, now);
     }
   }
 
@@ -262,7 +262,7 @@ export async function runBillingRenewalMonitor(
     downgrades: 0,
   };
   for (const candidate of candidates) {
-    const outcome = await processRenewalForPt(candidate, now);
+    const outcome = await processRenewalForAccount(candidate, now);
     result.remindersDue += outcome.remindersDue;
     if (outcome.graceStarted) result.gracesStarted += 1;
     if (outcome.downgraded) result.downgrades += 1;
@@ -286,7 +286,7 @@ export const billingRenewalMonitor = inngest.createFunction(
     };
     for (const candidate of candidates) {
       const outcome = await step.run(`renewal-${candidate.id}`, () =>
-        processRenewalForPt(candidate, now),
+        processRenewalForAccount(candidate, now),
       );
       result.remindersDue += outcome.remindersDue;
       if (outcome.graceStarted) result.gracesStarted += 1;

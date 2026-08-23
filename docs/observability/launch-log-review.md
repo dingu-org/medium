@@ -2,11 +2,11 @@
 
 Structured JSON logs (Vercel + Supabase logs, no dedicated log platform for
 MVP — see `docs/tech-stack-and-architecture.md` §2). Every line has the shape
-`{ timestamp, level, trace_id?, pt_id?, conversation_id?, event_name, message, ...attrs }`
+`{ timestamp, level, trace_id?, account_id?, conversation_id?, event_name, message, ...attrs }`
 (`lib/log.ts`). PII (`phone`, `name`, `body`, `content`, `notes`, `email`,
 tokens/keys/auth) is redacted at the logger before it's ever written — do not
 add ad-hoc `console.log`s that bypass `lib/log.ts` for anything that touches
-patient data.
+customer data.
 
 Run this checklist daily during the first two weeks after a real PT connects,
 then weekly.
@@ -21,7 +21,7 @@ Filter: `level=error`.
   `errorMessage`. A `redirect()`/`notFound()` control-flow throw is passed
   through un-logged — only real failures show up here.
 - `conversation.turn_failed` — an AI turn or reminder turn failed inside
-  `lib/conversation/engine.ts`. Carries `pt_id`, `conversation_id`,
+  `lib/conversation/engine.ts`. Carries `account_id`, `conversation_id`,
   `message_id`, `model`, `error_code`.
   > Naming note: this checklist's acceptance vocabulary originally called for
   > `ai.turn_failed`. The engine's actual failure event is
@@ -49,7 +49,7 @@ Every inbound WhatsApp webhook call gets a `trace_id` (from the
 `x-request-id` header if Meta ever sends one, otherwise a fresh UUID) at the
 top of `app/api/webhooks/whatsapp/route.ts POST`. Filter
 `event_name=webhook.message_accepted` to see accepted inbound messages
-(`pt_id`, `conversation_id`, `message_id`, no message body). Compare the
+(`account_id`, `conversation_id`, `message_id`, no message body). Compare the
 webhook-accepted timestamp against the corresponding
 `inbound.processing`/`inbound.reply_sent` lines from
 `lib/inngest/functions/handle-inbound-message.ts` (same `trace_id`) to see
@@ -93,7 +93,7 @@ usually means a connection was revoked without the PT noticing — check
   (`app/(dashboard)/admin/page.tsx`) as a 7-day rollup + delivery rate.
 - `push.dispatch_no_live_subscriptions` (warn) — every subscription for a PT
   was stale (404/410) at dispatch time. Repeated occurrences for the same
-  `pt_id` mean their browser(s) are no longer subscribed — the in-app push
+  `account_id` mean their browser(s) are no longer subscribed — the in-app push
   prompt should reappear for them naturally, but it's worth a manual check
   during early launch.
 - `push.send_failed` (warn, `lib/notifications/push.ts`) — an individual
@@ -101,11 +101,11 @@ usually means a connection was revoked without the PT noticing — check
   kept (it might be transient). Repeated failures for one `subscription_id`
   are worth investigating.
 
-## 5. Filtering logs by `pt_id` / `trace_id`
+## 5. Filtering logs by `account_id` / `trace_id`
 
 In Vercel's log viewer (or `vercel logs`), search is a plain text/JSON
 substring match — since every line is single-line JSON, searching
-`"pt_id":"<uuid>"` or `"trace_id":"<uuid>"` isolates exactly one PT or one
+`"account_id":"<uuid>"` or `"trace_id":"<uuid>"` isolates exactly one PT or one
 request's full lifecycle (webhook → Inngest → outbound send, or Server
 Action → error). Supabase's Postgres logs cover DB-level errors (constraint
 violations, connection issues) separately — cross-reference by timestamp when

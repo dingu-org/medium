@@ -37,7 +37,7 @@ export function BottomNav({
   }
 
   return (
-    <nav className="fixed right-0 bottom-0 left-0 z-10 px-3.5 pt-2 pb-[max(16px,env(safe-area-inset-bottom))]">
+    <nav className="fixed right-0 bottom-0 left-0 z-10 px-3.5 account-2 pb-[max(16px,env(safe-area-inset-bottom))]">
       <ul className="mx-auto flex max-w-md items-center justify-between rounded-full bg-dock p-1.5 shadow-[var(--shadow-dock)]">
         {items.map(({ href, label, icon: Icon, badge }) => {
           const displayPathname = pendingHref ?? pathname;

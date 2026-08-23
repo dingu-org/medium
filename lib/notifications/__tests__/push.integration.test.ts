@@ -41,7 +41,7 @@ const payload = {
   tag: 'appointment-1-booked',
 };
 
-let ptId = '';
+let accountId = '';
 
 beforeAll(async () => {
   const { data, error } = await createServiceClient().auth.admin.createUser({
@@ -50,18 +50,18 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
-  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.ptId, ptId));
+  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.accountId, accountId));
   // Sentinels must be distinctive: the log legitimately includes the
   // subscription's UUID, so a short marker like 'a1' collides with any random
   // UUID containing those hex chars (a ~11%-flaky false positive). 'AUTHMARK'
   // uses non-hex letters, so it can never appear in a UUID.
   await db.insert(pushSubscriptions).values([
-    { ptId, endpoint: LIVE, keys: { p256dh: 'p1', auth: 'AUTHMARK1' } },
-    { ptId, endpoint: DEAD, keys: { p256dh: 'p2', auth: 'AUTHMARK2' } },
+    { accountId, endpoint: LIVE, keys: { p256dh: 'p1', auth: 'AUTHMARK1' } },
+    { accountId, endpoint: DEAD, keys: { p256dh: 'p2', auth: 'AUTHMARK2' } },
   ]);
   sendNotification.mockReset();
 });
@@ -71,13 +71,13 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('sendPush', () => {
   it('fans the serialized payload out to every subscription', async () => {
     sendNotification.mockResolvedValue({ statusCode: 201 });
-    const result = await sendPush(ptId, payload);
+    const result = await sendPush(accountId, payload);
 
     expect(result).toEqual({ sent: 2, removed: 0 });
     expect(sendNotification).toHaveBeenCalledTimes(2);
@@ -90,13 +90,13 @@ describe('sendPush', () => {
       return { statusCode: 201 };
     });
 
-    const result = await sendPush(ptId, payload);
+    const result = await sendPush(accountId, payload);
     expect(result).toEqual({ sent: 1, removed: 1 });
 
     const remaining = await db
       .select({ endpoint: pushSubscriptions.endpoint })
       .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.ptId, ptId));
+      .where(eq(pushSubscriptions.accountId, accountId));
     expect(remaining).toEqual([{ endpoint: LIVE }]);
   });
 
@@ -107,13 +107,13 @@ describe('sendPush', () => {
       return { statusCode: 201 };
     });
 
-    const result = await sendPush(ptId, payload);
+    const result = await sendPush(accountId, payload);
     expect(result).toEqual({ sent: 1, removed: 0 });
 
     const rows = await db
       .select()
       .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.ptId, ptId));
+      .where(eq(pushSubscriptions.accountId, accountId));
     expect(rows).toHaveLength(2);
     expect(warn).toHaveBeenCalled();
   });
@@ -126,7 +126,7 @@ describe('sendPush', () => {
     ];
     sendNotification.mockRejectedValue(new WebPushError('boom', 500));
 
-    await sendPush(ptId, payload);
+    await sendPush(accountId, payload);
 
     const logged = spies
       .flatMap((spy) => spy.mock.calls)

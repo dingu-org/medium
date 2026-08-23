@@ -9,18 +9,18 @@ import {
   eventOutbox,
   events,
   messages,
-  patients,
+  customers,
   reminderJobs,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
   AUDIT_LOG_RETENTION_DAYS,
   purgeExpiredAuditLog,
-  purgePtExpiredMessages,
+  purgeAccountExpiredMessages,
 } from '../purge-expired-messages';
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let appointmentId = '';
 
@@ -31,28 +31,28 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 beforeEach(async () => {
-  await db.delete(auditLog).where(eq(auditLog.ptId, ptId));
-  await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
+  await db.delete(auditLog).where(eq(auditLog.accountId, accountId));
+  await db.delete(eventOutbox).where(eq(eventOutbox.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
 
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Purge Patient', phone: '447700900103' })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Purge Customer', phone: '447700900103' })
+    .returning({ id: customers.id });
+  customerId = customer.id;
 
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId, channel: 'whatsapp' })
+    .values({ accountId, customerId, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   conversationId = conversation.id;
 
@@ -60,8 +60,8 @@ beforeEach(async () => {
   const [appointment] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt,
       endsAt: addHours(startsAt, 1),
       status: 'confirmed',
@@ -70,30 +70,30 @@ beforeEach(async () => {
   appointmentId = appointment.id;
 });
 
-describe('purgePtExpiredMessages', () => {
+describe('purgeAccountExpiredMessages', () => {
   it('deletes expired messages, keeps recent and reminder-protected ones', async () => {
     const now = new Date();
     const [expired, recent, protectedMsg] = await db
       .insert(messages)
       .values([
         {
-          ptId,
+          accountId,
           conversationId,
-          role: 'patient',
+          role: 'customer',
           channel: 'whatsapp',
           content: 'expired',
           createdAt: subDays(now, 31),
         },
         {
-          ptId,
+          accountId,
           conversationId,
-          role: 'patient',
+          role: 'customer',
           channel: 'whatsapp',
           content: 'recent',
           createdAt: subDays(now, 29),
         },
         {
-          ptId,
+          accountId,
           conversationId,
           role: 'ai',
           channel: 'whatsapp',
@@ -105,14 +105,14 @@ describe('purgePtExpiredMessages', () => {
 
     // Protect the third message via a reminder tied to an active appointment.
     await db.insert(reminderJobs).values({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: subDays(now, 31),
       status: 'sent',
       messageId: protectedMsg.id,
     });
 
-    const result = await purgePtExpiredMessages({ ptId, retentionDays: 30, now });
+    const result = await purgeAccountExpiredMessages({ accountId, retentionDays: 30, now });
     expect(result.deletedCount).toBe(1);
 
     const remaining = await db
@@ -125,34 +125,34 @@ describe('purgePtExpiredMessages', () => {
   });
 });
 
-describe('purgePtExpiredMessages — events retention', () => {
+describe('purgeAccountExpiredMessages — events retention', () => {
   it('drops expired events but keeps unpublished and billing ones', async () => {
     const now = new Date();
     const [expiredEvent, recentEvent, owedEvent, billingEvent] = await db
       .insert(events)
       .values([
         {
-          ptId,
+          accountId,
           type: 'appointment.booked',
-          payload: { ptId, patientId },
+          payload: { accountId, customerId },
           occurredAt: subDays(now, 31),
         },
         {
-          ptId,
+          accountId,
           type: 'appointment.booked',
-          payload: { ptId, patientId },
+          payload: { accountId, customerId },
           occurredAt: subDays(now, 29),
         },
         {
-          ptId,
+          accountId,
           type: 'appointment.cancelled',
-          payload: { ptId, patientId },
+          payload: { accountId, customerId },
           occurredAt: subDays(now, 31),
         },
         {
-          ptId,
+          accountId,
           type: 'billing.limit_warning',
-          payload: { ptId, kind: 'reminders', monthKey: '2026-07' },
+          payload: { accountId, kind: 'reminders', monthKey: '2026-07' },
           occurredAt: subDays(now, 31),
         },
       ])
@@ -160,13 +160,13 @@ describe('purgePtExpiredMessages — events retention', () => {
 
     // Still owed to a consumer — and event_outbox cascades from events.
     await db.insert(eventOutbox).values({
-      ptId,
+      accountId,
       eventId: owedEvent.id,
       eventType: 'appointment.cancelled',
-      payload: { ptId, patientId },
+      payload: { accountId, customerId },
     });
 
-    const result = await purgePtExpiredMessages({ ptId, retentionDays: 30, now });
+    const result = await purgeAccountExpiredMessages({ accountId, retentionDays: 30, now });
     expect(result.deletedEventCount).toBe(1);
 
     const survivors = await db
@@ -193,17 +193,17 @@ describe('purgeExpiredAuditLog', () => {
       .insert(auditLog)
       .values([
         {
-          ptId,
+          accountId,
           actor: 'system',
           action: 'stale',
-          targetTable: 'patients',
+          targetTable: 'customers',
           occurredAt: subDays(now, AUDIT_LOG_RETENTION_DAYS + 1),
         },
         {
-          ptId,
+          accountId,
           actor: 'system',
           action: 'fresh',
-          targetTable: 'patients',
+          targetTable: 'customers',
           occurredAt: subDays(now, AUDIT_LOG_RETENTION_DAYS - 1),
         },
       ])

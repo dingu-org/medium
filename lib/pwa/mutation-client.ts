@@ -31,8 +31,8 @@ export async function queueMessageSend(input: {
 export type AppointmentMutationInput =
   | {
       action: 'manual_book';
-      patientId?: string;
-      newPatient?: { name: string; phone: string };
+      customerId?: string;
+      newCustomer?: { name: string; phone: string };
       date: string;
       time: string;
       serviceId?: string;

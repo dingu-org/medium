@@ -47,7 +47,7 @@ describe('withAdvisoryLock (integration)', () => {
 
   it('gives up on a contended key instead of blocking forever', async () => {
     // The reentrant hold pins a nested key to the OUTER transaction, so
-    // `appointments:<ptId>` stays locked for a whole AI turn. Pre-fix a waiter had
+    // `appointments:<accountId>` stays locked for a whole AI turn. Pre-fix a waiter had
     // no lock_timeout and parked on it indefinitely, holding a pooled connection
     // with no error to explain it.
     const key = k('timeout');

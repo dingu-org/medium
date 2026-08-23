@@ -14,10 +14,10 @@ import {
 const TAG = `pexport-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const at = (iso: string) => new Date(iso);
 
-type Pt = { id: string; email: string };
-const created: Pt[] = [];
+type Account = { id: string; email: string };
+const created: Account[] = [];
 
-async function makeUser(tag: string): Promise<Pt> {
+async function makeUser(tag: string): Promise<Account> {
   const email = `${TAG}-${tag}@example.com`;
   const { data, error } = await createServiceClient().auth.admin.createUser({
     email,
@@ -25,13 +25,13 @@ async function makeUser(tag: string): Promise<Pt> {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  const pt = { id: data.user.id, email };
-  created.push(pt);
-  return pt;
+  const account = { id: data.user.id, email };
+  created.push(account);
+  return account;
 }
 
 async function seedOrder(args: {
-  ptId: string;
+  accountId: string;
   key: string;
   status: 'created' | 'paid' | 'failed' | 'expired';
   plan?: 'free' | 'solo';
@@ -44,7 +44,7 @@ async function seedOrder(args: {
   newExpiresAt?: Date | null;
 }): Promise<void> {
   await db.insert(billingOrders).values({
-    ptId: args.ptId,
+    accountId: args.accountId,
     pokOrderId: `${TAG}-${args.key}`,
     plan: args.plan ?? 'solo',
     period: args.period ?? 'monthly',
@@ -61,20 +61,20 @@ async function seedOrder(args: {
 const mine = (rows: PaymentExportRow[]): PaymentExportRow[] =>
   rows.filter((r) => r.pokOrderId.startsWith(`${TAG}-`));
 
-let ptA: Pt;
-let ptB: Pt;
-let ptC: Pt;
-let ptD: Pt;
+let accountA: Account;
+let accountB: Account;
+let accountC: Account;
+let accountD: Account;
 
 beforeAll(async () => {
-  ptA = await makeUser('a');
-  ptB = await makeUser('b');
-  ptC = await makeUser('c');
-  ptD = await makeUser('d');
+  accountA = await makeUser('a');
+  accountB = await makeUser('b');
+  accountC = await makeUser('c');
+  accountD = await makeUser('d');
 
   // Two April paid orders (a before b by paid_at) — the fiscal rows.
   await seedOrder({
-    ptId: ptA.id,
+    accountId: accountA.id,
     key: 'a',
     status: 'paid',
     amountMinor: 250000,
@@ -83,7 +83,7 @@ beforeAll(async () => {
     newExpiresAt: at('2026-05-10T10:00:00.000Z'),
   });
   await seedOrder({
-    ptId: ptB.id,
+    accountId: accountB.id,
     key: 'b',
     status: 'paid',
     period: 'yearly',
@@ -94,7 +94,7 @@ beforeAll(async () => {
   });
   // April created-but-unpaid order — excluded from the paid view, present in ?all.
   await seedOrder({
-    ptId: ptC.id,
+    accountId: accountC.id,
     key: 'c',
     status: 'created',
     amountMinor: 250000,
@@ -103,7 +103,7 @@ beforeAll(async () => {
   });
   // A May paid order — must not leak into the April query.
   await seedOrder({
-    ptId: ptD.id,
+    accountId: accountD.id,
     key: 'd',
     status: 'paid',
     amountMinor: 250000,
@@ -115,7 +115,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const sb = createServiceClient();
-  for (const pt of created) await sb.auth.admin.deleteUser(pt.id);
+  for (const account of created) await sb.auth.admin.deleteUser(account.id);
 });
 
 describe('loadPaymentsForMonth', () => {
@@ -123,15 +123,15 @@ describe('loadPaymentsForMonth', () => {
     const rows = mine(await loadPaymentsForMonth('2026-04'));
     expect(rows.map((r) => r.pokOrderId)).toEqual([`${TAG}-a`, `${TAG}-b`]);
     expect(rows[0]).toMatchObject({
-      ptEmail: ptA.email,
-      ptId: ptA.id,
+      accountEmail: accountA.email,
+      accountId: accountA.id,
       amountMinor: 250000,
       currency: 'ALL',
       status: 'paid',
       paidAt: '2026-04-10T10:00:00.000Z',
     });
     expect(rows[1]).toMatchObject({
-      ptEmail: ptB.email,
+      accountEmail: accountB.email,
       period: 'yearly',
       amountMinor: 25000,
     });
@@ -160,12 +160,12 @@ describe('loadPaymentsForMonth', () => {
     const csv = buildPaymentsCsv(rows);
     const lines = csv.split('\r\n');
     expect(lines[0]).toBe(
-      'paid_at,created_at,pt_email,pt_id,plan,period,amount_minor_units,currency,status,pok_order_id,previous_expires_at,new_expires_at',
+      'paid_at,created_at,pt_email,account_id,plan,period,amount_minor_units,currency,status,pok_order_id,previous_expires_at,new_expires_at',
     );
     expect(lines).toHaveLength(3); // header + 2 paid rows
-    expect(lines[1]).toContain(ptA.email);
+    expect(lines[1]).toContain(accountA.email);
     expect(lines[1]).toContain('250000');
     expect(lines[1]).toContain(`${TAG}-a`);
-    expect(lines[2]).toContain(ptB.email);
+    expect(lines[2]).toContain(accountB.email);
   });
 });

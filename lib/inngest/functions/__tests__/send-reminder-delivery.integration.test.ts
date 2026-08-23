@@ -24,7 +24,7 @@ import {
   eventOutbox,
   events,
   messages,
-  patients,
+  customers,
   reminderJobs,
 } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -34,8 +34,8 @@ import {
   upsertReminderSchedule,
 } from '../send-reminder';
 
-let ptId = '';
-let patientId = '';
+let accountId = '';
+let customerId = '';
 let conversationId = '';
 let appointmentId = '';
 let startsAt: Date;
@@ -44,7 +44,7 @@ async function seedReminderMessage(externalId: string | null): Promise<string> {
   const [message] = await db
     .insert(messages)
     .values({
-      ptId,
+      accountId,
       conversationId,
       externalId,
       role: 'ai',
@@ -75,32 +75,32 @@ beforeAll(async () => {
     email_confirm: true,
   });
   if (error || !data.user) throw new Error(error?.message);
-  ptId = data.user.id;
+  accountId = data.user.id;
 });
 
 beforeEach(async () => {
   mockSendTemplate.mockReset();
-  await db.delete(eventOutbox).where(eq(eventOutbox.ptId, ptId));
-  await db.delete(events).where(eq(events.ptId, ptId));
-  await db.delete(patients).where(eq(patients.ptId, ptId));
+  await db.delete(eventOutbox).where(eq(eventOutbox.accountId, accountId));
+  await db.delete(events).where(eq(events.accountId, accountId));
+  await db.delete(customers).where(eq(customers.accountId, accountId));
 
   const stamp = `${Date.now()}`;
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Alex', phone: `4477009${stamp.slice(-5)}` })
-    .returning({ id: patients.id });
-  patientId = patient.id;
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Alex', phone: `4477009${stamp.slice(-5)}` })
+    .returning({ id: customers.id });
+  customerId = customer.id;
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId, channel: 'whatsapp' })
+    .values({ accountId, customerId, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   conversationId = conversation.id;
   startsAt = addHours(new Date(), 48);
   const [appointment] = await db
     .insert(appointments)
     .values({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt,
       endsAt: addHours(startsAt, 1),
       status: 'pending',
@@ -110,7 +110,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  if (ptId) await createServiceClient().auth.admin.deleteUser(ptId);
+  if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
 
 describe('sendReminderTemplateOnce', () => {
@@ -150,14 +150,14 @@ describe('sendReminderTemplateOnce', () => {
 describe('recordReminderFailure run ownership', () => {
   it('does not fail (or announce) a cycle a newer run already re-armed', async () => {
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: subHours(startsAt, 24),
       runId: 'run-live',
     });
 
     await recordReminderFailure({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: subHours(startsAt, 24),
       runId: 'run-stale',
@@ -173,20 +173,20 @@ describe('recordReminderFailure run ownership', () => {
     const failures = await db
       .select({ id: events.id })
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'reminder.failed')));
     expect(failures).toHaveLength(0);
   });
 
   it('records the failure of the run that owns the row', async () => {
     await upsertReminderSchedule({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: subHours(startsAt, 24),
       runId: 'run-live',
     });
 
     await recordReminderFailure({
-      ptId,
+      accountId,
       appointmentId,
       scheduledFor: subHours(startsAt, 24),
       runId: 'run-live',
@@ -201,7 +201,7 @@ describe('recordReminderFailure run ownership', () => {
     const failures = await db
       .select({ payload: events.payload })
       .from(events)
-      .where(and(eq(events.ptId, ptId), eq(events.type, 'reminder.failed')));
+      .where(and(eq(events.accountId, accountId), eq(events.type, 'reminder.failed')));
     expect(failures).toHaveLength(1);
     expect(failures[0].payload).toMatchObject({ appointmentId });
   });

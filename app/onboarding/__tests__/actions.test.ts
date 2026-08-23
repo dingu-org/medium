@@ -82,7 +82,7 @@ describe('onboarding actions', () => {
 
   it('continueSetup replaces another account’s marker', async () => {
     store.set(ONBOARDING_SKIP_COOKIE, {
-      value: onboardingCookieValue('dismissed', 'other-pt'),
+      value: onboardingCookieValue('dismissed', 'other-account'),
     });
     await expect(continueSetup(formData('/settings/services'))).rejects.toThrow(
       'REDIRECT:',

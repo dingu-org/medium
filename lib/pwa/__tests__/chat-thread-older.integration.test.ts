@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
-import { conversations, messages, patients } from '@/lib/db/schema';
+import { conversations, messages, customers } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import type { ChatMessageSnapshot } from '../read-models';
 import { getChatThreadSnapshot, getOlderChatMessages } from '../read-models';
 
-let ptId = '';
-let otherPtId = '';
+let accountId = '';
+let otherAccountId = '';
 let conversationId = '';
 
 // >50 so the thread snapshot fills a page and there is older history to walk;
@@ -37,7 +37,7 @@ beforeAll(async () => {
   });
   if (owner.error || !owner.data.user)
     throw owner.error ?? new Error('Missing owner user');
-  ptId = owner.data.user.id;
+  accountId = owner.data.user.id;
 
   const other = await sb.auth.admin.createUser({
     email: `chat-older-b-${Date.now()}@example.com`,
@@ -46,15 +46,15 @@ beforeAll(async () => {
   });
   if (other.error || !other.data.user)
     throw other.error ?? new Error('Missing other user');
-  otherPtId = other.data.user.id;
+  otherAccountId = other.data.user.id;
 
-  const [patient] = await db
-    .insert(patients)
-    .values({ ptId, name: 'Older Client', phone: '+355690000300' })
-    .returning({ id: patients.id });
+  const [customer] = await db
+    .insert(customers)
+    .values({ accountId, name: 'Older Client', phone: '+355690000300' })
+    .returning({ id: customers.id });
   const [conversation] = await db
     .insert(conversations)
-    .values({ ptId, patientId: patient.id, channel: 'whatsapp' })
+    .values({ accountId, customerId: customer.id, channel: 'whatsapp' })
     .returning({ id: conversations.id });
   conversationId = conversation.id;
 
@@ -63,9 +63,9 @@ beforeAll(async () => {
   // its (created_at, id) id-tiebreaker branch.
   await db.insert(messages).values(
     Array.from({ length: TOTAL }, (_, i) => ({
-      ptId,
+      accountId,
       conversationId,
-      role: 'pt' as const,
+      role: 'account' as const,
       channel: 'whatsapp',
       content: `msg ${i}`,
     })),
@@ -74,15 +74,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const sb = createServiceClient();
-  if (ptId) await sb.auth.admin.deleteUser(ptId);
-  if (otherPtId) await sb.auth.admin.deleteUser(otherPtId);
+  if (accountId) await sb.auth.admin.deleteUser(accountId);
+  if (otherAccountId) await sb.auth.admin.deleteUser(otherAccountId);
 });
 
 async function page1Cursor(): Promise<{
   page: ChatMessageSnapshot[];
   cursor: { createdAt: string; id: string };
 }> {
-  const snap = await getChatThreadSnapshot(ptId, conversationId);
+  const snap = await getChatThreadSnapshot(accountId, conversationId);
   const page = snap?.initialMessages ?? [];
   // The thread snapshot is the newest page, returned ascending, so its first
   // element is the oldest loaded message — exactly the keyset cursor.
@@ -94,7 +94,7 @@ describe('getOlderChatMessages · keyset pagination', () => {
     const { page, cursor } = await page1Cursor();
     expect(page).toHaveLength(PAGE);
 
-    const older = await getOlderChatMessages(ptId, conversationId, cursor);
+    const older = await getOlderChatMessages(accountId, conversationId, cursor);
 
     expect(older.messages).toHaveLength(PAGE);
     expect(older.hasMore).toBe(true);
@@ -124,7 +124,7 @@ describe('getOlderChatMessages · keyset pagination', () => {
 
     while (guard < 10) {
       guard += 1;
-      const older = await getOlderChatMessages(ptId, conversationId, cursor);
+      const older = await getOlderChatMessages(accountId, conversationId, cursor);
       for (const m of older.messages) {
         // Nothing is returned twice across the whole walk.
         expect(seen.has(m.id)).toBe(false);
@@ -141,10 +141,10 @@ describe('getOlderChatMessages · keyset pagination', () => {
     expect(seen.size).toBe(TOTAL);
   });
 
-  it('enforces pt tenancy — another pt pages nothing', async () => {
+  it('enforces account tenancy — another account pages nothing', async () => {
     const { cursor } = await page1Cursor();
 
-    const older = await getOlderChatMessages(otherPtId, conversationId, cursor);
+    const older = await getOlderChatMessages(otherAccountId, conversationId, cursor);
 
     expect(older.messages).toHaveLength(0);
     expect(older.hasMore).toBe(false);

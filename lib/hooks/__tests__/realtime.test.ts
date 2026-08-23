@@ -71,7 +71,7 @@ describe('compareMessages', () => {
 
 describe('nextRealtimeTopic', () => {
   it('never repeats a topic for the same table and filter', () => {
-    const filter = 'pt_id=eq.11111111-1111-4111-8111-111111111111';
+    const filter = 'account_id=eq.11111111-1111-4111-8111-111111111111';
     const first = nextRealtimeTopic('conversations', filter);
     const second = nextRealtimeTopic('conversations', filter);
 

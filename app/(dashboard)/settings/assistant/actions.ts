@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { pts } from '@/lib/db/schema';
+import { accounts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { sanitizePromptField } from '@/lib/ai/prompt';
 import { getPlan } from '@/lib/billing/plans';
@@ -14,7 +14,7 @@ import { t } from '@/lib/i18n';
 import { createServerClient } from '@/lib/supabase/server';
 import type { SettingsState } from '../constants';
 
-async function requirePtId(): Promise<string> {
+async function requireAccountId(): Promise<string> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -25,11 +25,11 @@ async function requirePtId(): Promise<string> {
 
 async function setAssistantPausedImpl(paused: boolean): Promise<void> {
   const value = z.boolean().parse(paused);
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   await db
-    .update(pts)
+    .update(accounts)
     .set({ assistantPaused: value })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
   revalidatePath('/settings');
   revalidatePath('/settings/assistant');
 }
@@ -58,7 +58,7 @@ async function updateAssistantIdentityImpl(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
 
   const parsed = identitySchema.safeParse({
     aiName: formData.get('aiName') ?? undefined,
@@ -76,7 +76,7 @@ async function updateAssistantIdentityImpl(
   // on Free with an upgrade prompt (the UI also locks those rows).
   const writesIdentity = formData.has('aiName') || formData.has('aiGreeting');
   if (writesIdentity) {
-    const plan = await loadEffectivePlan(ptId);
+    const plan = await loadEffectivePlan(accountId);
     if (!getPlan(plan).customAssistantIdentity) {
       return { error: t.billing.gateIdentity, success: false, fieldErrors: null };
     }
@@ -85,14 +85,14 @@ async function updateAssistantIdentityImpl(
   // Partial-update: per-row sheets submit ONE field; absent fields stay
   // untouched, present-but-blank fields clear to null.
   await db
-    .update(pts)
+    .update(accounts)
     .set({
       ...(formData.has('aiName') ? { aiName: parsed.data.aiName ?? null } : {}),
       ...(formData.has('aiGreeting')
         ? { aiGreeting: parsed.data.aiGreeting ?? null }
         : {}),
     })
-    .where(eq(pts.id, ptId));
+    .where(eq(accounts.id, accountId));
 
   revalidatePath('/settings');
   revalidatePath('/settings/assistant');

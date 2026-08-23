@@ -12,8 +12,8 @@ import {
   events,
   messageTemplates,
   messages,
-  patients,
-  pts,
+  customers,
+  accounts,
   pushSubscriptions,
   pwaMutations,
   reminderJobs,
@@ -23,24 +23,24 @@ import {
   whatsappContacts,
 } from '@/lib/db/schema';
 import {
-  contactMatchesPatient,
-  patientWhatsappContactsFilter,
-} from '@/lib/patients/whatsapp-contacts';
+  contactMatchesCustomer,
+  customerWhatsappContactsFilter,
+} from '@/lib/customers/whatsapp-contacts';
 
-export type PatientExport = {
-  patient: Record<string, unknown>;
+export type CustomerExport = {
+  customer: Record<string, unknown>;
   conversations: Record<string, unknown>[];
   messages: Record<string, unknown>[];
   appointments: Record<string, unknown>[];
   reminder_jobs: Record<string, unknown>[];
   conversation_days: Record<string, unknown>[];
   whatsapp_contacts: Record<string, unknown>[];
-  audit_log_entries_for_patient: Record<string, unknown>[];
+  audit_log_entries_for_customer: Record<string, unknown>[];
 };
 
-export type PtExport = {
-  pt: Record<string, unknown>;
-  patients: Record<string, unknown>[];
+export type AccountExport = {
+  account: Record<string, unknown>;
+  customers: Record<string, unknown>[];
   conversations: Record<string, unknown>[];
   messages: Record<string, unknown>[];
   appointments: Record<string, unknown>[];
@@ -70,26 +70,26 @@ function serializeRow(row: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-export async function buildPatientExport(input: {
-  ptId: string;
-  patientId: string;
-}): Promise<PatientExport | null> {
-  const { ptId, patientId } = input;
+export async function buildCustomerExport(input: {
+  accountId: string;
+  customerId: string;
+}): Promise<CustomerExport | null> {
+  const { accountId, customerId } = input;
 
-  const [patient] = await db
+  const [customer] = await db
     .select()
-    .from(patients)
-    .where(and(eq(patients.id, patientId), eq(patients.ptId, ptId)))
+    .from(customers)
+    .where(and(eq(customers.id, customerId), eq(customers.accountId, accountId)))
     .limit(1);
-  if (!patient) return null;
+  if (!customer) return null;
 
   const convRows = await db
     .select()
     .from(conversations)
     .where(
       and(
-        eq(conversations.ptId, ptId),
-        eq(conversations.patientId, patientId),
+        eq(conversations.accountId, accountId),
+        eq(conversations.customerId, customerId),
       ),
     );
 
@@ -105,7 +105,7 @@ export async function buildPatientExport(input: {
     .select()
     .from(appointments)
     .where(
-      and(eq(appointments.ptId, ptId), eq(appointments.patientId, patientId)),
+      and(eq(appointments.accountId, accountId), eq(appointments.customerId, customerId)),
     );
 
   const reminderRows = appointmentRows.length
@@ -125,16 +125,16 @@ export async function buildPatientExport(input: {
     .from(conversationDays)
     .where(
       and(
-        eq(conversationDays.ptId, ptId),
-        eq(conversationDays.patientId, patientId),
+        eq(conversationDays.accountId, accountId),
+        eq(conversationDays.customerId, customerId),
       ),
     );
 
-  // The erasure path deletes these rows as part of the same patient's right to
-  // erasure (lib/patients/erase.ts), so access has to disclose them — same
+  // The erasure path deletes these rows as part of the same customer's right to
+  // erasure (lib/customers/erase.ts), so access has to disclose them — same
   // matcher on both sides keeps the subject boundary symmetric.
   //
-  // Except when the number is shared: nothing stops two patients of one PT from
+  // Except when the number is shared: nothing stops two customers of one PT from
   // having the same phone (family, carer), and they then resolve to ONE contact
   // row that names whoever WhatsApp says owns the number. That row is not this
   // subject's data alone, so it is withheld rather than disclosed to either of
@@ -142,30 +142,30 @@ export async function buildPatientExport(input: {
   const contactCandidates = await db
     .select()
     .from(whatsappContacts)
-    .where(patientWhatsappContactsFilter(patient));
-  const otherPatients = contactCandidates.length
+    .where(customerWhatsappContactsFilter(customer));
+  const otherCustomers = contactCandidates.length
     ? await db
-        .select({ phone: patients.phone, waId: patients.waId })
-        .from(patients)
-        .where(and(eq(patients.ptId, ptId), ne(patients.id, patientId)))
+        .select({ phone: customers.phone, waId: customers.waId })
+        .from(customers)
+        .where(and(eq(customers.accountId, accountId), ne(customers.id, customerId)))
     : [];
   const contactRows = contactCandidates.filter(
     (contact) =>
-      !otherPatients.some((other) => contactMatchesPatient(contact, other)),
+      !otherCustomers.some((other) => contactMatchesCustomer(contact, other)),
   );
 
-  // Access to a patient's data is audited against whichever row the operation
-  // touched, so targetId is not always the patient id: AI conversation reads and
+  // Access to a customer's data is audited against whichever row the operation
+  // touched, so targetId is not always the customer id: AI conversation reads and
   // failure handoffs log the inbound message id, and AI appointment tools log the
   // appointment id (see lib/conversation/engine.ts and lib/ai/dispatcher.ts).
-  // Matching only targetId = patientId would silently drop nearly every real
-  // access event, so match (targetTable, targetId) across all of the patient's
+  // Matching only targetId = customerId would silently drop nearly every real
+  // access event, so match (targetTable, targetId) across all of the customer's
   // conversation, message, and appointment ids as well.
   const messageIds = messageRows.map((m) => m.id);
   const appointmentIds = appointmentRows.map((a) => a.id);
 
   const targetMatchers = [
-    and(eq(auditLog.targetTable, 'patients'), eq(auditLog.targetId, patientId)),
+    and(eq(auditLog.targetTable, 'customers'), eq(auditLog.targetId, customerId)),
   ];
   if (convIds.length) {
     targetMatchers.push(
@@ -195,94 +195,94 @@ export async function buildPatientExport(input: {
   const auditRows = await db
     .select()
     .from(auditLog)
-    .where(and(eq(auditLog.ptId, ptId), or(...targetMatchers)))
+    .where(and(eq(auditLog.accountId, accountId), or(...targetMatchers)))
     .orderBy(auditLog.occurredAt);
 
   return {
-    patient: serializeRow(patient),
+    customer: serializeRow(customer),
     conversations: convRows.map(serializeRow),
     messages: messageRows.map(serializeRow),
     appointments: appointmentRows.map(serializeRow),
     reminder_jobs: reminderRows.map(serializeRow),
     conversation_days: conversationDayRows.map(serializeRow),
     whatsapp_contacts: contactRows.map(serializeRow),
-    audit_log_entries_for_patient: auditRows.map(serializeRow),
+    audit_log_entries_for_customer: auditRows.map(serializeRow),
   };
 }
 
-export async function buildPtExport(ptId: string): Promise<PtExport> {
-  const [pt] = await db.select().from(pts).where(eq(pts.id, ptId)).limit(1);
-  const patientRows = await db
+export async function buildAccountExport(accountId: string): Promise<AccountExport> {
+  const [account] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
+  const customerRows = await db
     .select()
-    .from(patients)
-    .where(eq(patients.ptId, ptId));
+    .from(customers)
+    .where(eq(customers.accountId, accountId));
   const convRows = await db
     .select()
     .from(conversations)
-    .where(eq(conversations.ptId, ptId));
+    .where(eq(conversations.accountId, accountId));
   const messageRows = await db
     .select()
     .from(messages)
-    .where(eq(messages.ptId, ptId));
+    .where(eq(messages.accountId, accountId));
   const appointmentRows = await db
     .select()
     .from(appointments)
-    .where(eq(appointments.ptId, ptId));
+    .where(eq(appointments.accountId, accountId));
   const serviceRows = await db
     .select()
     .from(services)
-    .where(eq(services.ptId, ptId));
+    .where(eq(services.accountId, accountId));
   const availabilityRows = await db
     .select()
     .from(availabilityRules)
-    .where(eq(availabilityRules.ptId, ptId));
+    .where(eq(availabilityRules.accountId, accountId));
   const blockedRows = await db
     .select()
     .from(blockedPeriods)
-    .where(eq(blockedPeriods.ptId, ptId));
+    .where(eq(blockedPeriods.accountId, accountId));
   const templateRows = await db
     .select()
     .from(messageTemplates)
-    .where(eq(messageTemplates.ptId, ptId));
-  // Tenant-scoped tables a single patient's DSAR already discloses (plus the
+    .where(eq(messageTemplates.accountId, accountId));
+  // Tenant-scoped tables a single customer's DSAR already discloses (plus the
   // operational ones): without them the PT's own subject access would return
-  // LESS about their practice than one of their patients can ask for.
+  // LESS about their practice than one of their customers can ask for.
   const contactRows = await db
     .select()
     .from(whatsappContacts)
-    .where(eq(whatsappContacts.ptId, ptId));
+    .where(eq(whatsappContacts.accountId, accountId));
   const reminderRows = await db
     .select()
     .from(reminderJobs)
-    .where(eq(reminderJobs.ptId, ptId));
+    .where(eq(reminderJobs.accountId, accountId));
   const conversationDayRows = await db
     .select()
     .from(conversationDays)
-    .where(eq(conversationDays.ptId, ptId));
+    .where(eq(conversationDays.accountId, accountId));
   const statusRows = await db
     .select()
     .from(waMessageStatuses)
-    .where(eq(waMessageStatuses.ptId, ptId));
+    .where(eq(waMessageStatuses.accountId, accountId));
   const costRows = await db
     .select()
     .from(costDaily)
-    .where(eq(costDaily.ptId, ptId));
+    .where(eq(costDaily.accountId, accountId));
   const mutationRows = await db
     .select()
     .from(pwaMutations)
-    .where(eq(pwaMutations.ptId, ptId));
+    .where(eq(pwaMutations.accountId, accountId));
   const eventRows = await db
     .select()
     .from(events)
-    .where(eq(events.ptId, ptId));
+    .where(eq(events.accountId, accountId));
   const orderRows = await db
     .select()
     .from(billingOrders)
-    .where(eq(billingOrders.ptId, ptId));
+    .where(eq(billingOrders.accountId, accountId));
   const auditRows = await db
     .select()
     .from(auditLog)
-    .where(eq(auditLog.ptId, ptId))
+    .where(eq(auditLog.accountId, accountId))
     .orderBy(auditLog.occurredAt);
   // endpoint + keys are the push credentials for the PT's own browser — the
   // subject already knows their devices, and the values must never leave the
@@ -290,19 +290,19 @@ export async function buildPtExport(ptId: string): Promise<PtExport> {
   const pushRows = await db
     .select({
       id: pushSubscriptions.id,
-      ptId: pushSubscriptions.ptId,
+      accountId: pushSubscriptions.accountId,
       userAgent: pushSubscriptions.userAgent,
       createdAt: pushSubscriptions.createdAt,
     })
     .from(pushSubscriptions)
-    .where(eq(pushSubscriptions.ptId, ptId));
+    .where(eq(pushSubscriptions.accountId, accountId));
 
   // Explicitly omit access_token_encrypted — the bytea must never enter this
   // module; the redacted marker is attached below instead.
   const [connection] = await db
     .select({
       id: whatsappConnections.id,
-      ptId: whatsappConnections.ptId,
+      accountId: whatsappConnections.accountId,
       phoneNumberId: whatsappConnections.phoneNumberId,
       wabaId: whatsappConnections.wabaId,
       mode: whatsappConnections.mode,
@@ -324,13 +324,13 @@ export async function buildPtExport(ptId: string): Promise<PtExport> {
       createdAt: whatsappConnections.createdAt,
     })
     .from(whatsappConnections)
-    .where(eq(whatsappConnections.ptId, ptId))
+    .where(eq(whatsappConnections.accountId, accountId))
     .orderBy(desc(whatsappConnections.createdAt))
     .limit(1);
 
   return {
-    pt: pt ? serializeRow(pt) : {},
-    patients: patientRows.map(serializeRow),
+    account: account ? serializeRow(account) : {},
+    customers: customerRows.map(serializeRow),
     conversations: convRows.map(serializeRow),
     messages: messageRows.map(serializeRow),
     appointments: appointmentRows.map(serializeRow),

@@ -16,7 +16,7 @@ describe('privacyName', () => {
   });
 
   it('falls back for empty input', () => {
-    expect(privacyName('')).toBe('Patient');
-    expect(privacyName('   ')).toBe('Patient');
+    expect(privacyName('')).toBe('Customer');
+    expect(privacyName('   ')).toBe('Customer');
   });
 });

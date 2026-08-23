@@ -8,7 +8,7 @@ import { db } from '@/lib/db';
  * query.
  *
  * Most of the suite is safe by construction: each file owns a PT and every
- * query it makes is scoped to that `ptId`. The exceptions are the operator-level
+ * query it makes is scoped to that `accountId`. The exceptions are the operator-level
  * code paths — the admin funnel, the outbox publisher, the token-expiry claim —
  * which deliberately scan the whole table on the RLS-bypassing owner connection
  * because that is what a cron or an admin dashboard does. A test asserting on
@@ -24,7 +24,7 @@ import { db } from '@/lib/db';
  *   asserts the change it caused rather than the absolute total.
  */
 
-type TenantTable = PgTable & { ptId: PgColumn };
+type TenantTable = PgTable & { accountId: PgColumn };
 
 /**
  * Take every row of `table` that belongs to some OTHER tenant out of a global
@@ -41,10 +41,10 @@ type TenantTable = PgTable & { ptId: PgColumn };
  */
 export async function excludeForeignRows<T extends TenantTable>(
   table: T,
-  ptId: string,
+  accountId: string,
   patch: PgUpdateSetSource<T>,
 ): Promise<void> {
-  await db.update(table).set(patch).where(ne(table.ptId, ptId));
+  await db.update(table).set(patch).where(ne(table.accountId, accountId));
 }
 
 /**

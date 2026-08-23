@@ -14,13 +14,13 @@ import {
 } from '@/lib/appointments';
 import { getFreeSlotsInternal } from '@/lib/appointments/availability';
 import { db } from '@/lib/db';
-import { appointments, patients, pts } from '@/lib/db/schema';
+import { appointments, customers, accounts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 import { resolveBookingService } from '@/lib/services/queries';
-import { createManualPatient } from '@/lib/clients/mutations';
+import { createManualCustomer } from '@/lib/clients/mutations';
 
-async function requirePtId(): Promise<string> {
+async function requireAccountId(): Promise<string> {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -52,14 +52,14 @@ async function cancelAppointmentActionImpl(
   appointmentId: string,
   reason?: string,
 ): Promise<ActionResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   try {
     await cancelAppointment({
-      ptId,
+      accountId,
       appointmentId,
-      cancelledBy: 'pt',
+      cancelledBy: 'account',
       reason: reason?.trim() || undefined,
-      origin: 'pt',
+      origin: 'account',
     });
     revalidatePath('/calendar');
     return { ok: true };
@@ -79,7 +79,7 @@ async function transitionAppointmentActionImpl(
   appointmentId: string,
   nextStatus: 'confirmed' | 'completed' | 'no_show',
 ): Promise<ActionResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const parsed = transitionSchema.safeParse(nextStatus);
   if (!parsed.success)
     return {
@@ -89,10 +89,10 @@ async function transitionAppointmentActionImpl(
     };
   try {
     await transitionAppointment({
-      ptId,
+      accountId,
       appointmentId,
       nextStatus: parsed.data,
-      origin: 'pt',
+      origin: 'account',
     });
     revalidatePath('/calendar');
     return { ok: true };
@@ -110,7 +110,7 @@ async function rescheduleAppointmentActionImpl(
   appointmentId: string,
   newStartsAt: string,
 ): Promise<ActionResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const date = new Date(newStartsAt);
   if (Number.isNaN(date.getTime())) {
     return {
@@ -121,10 +121,10 @@ async function rescheduleAppointmentActionImpl(
   }
   try {
     await rescheduleAppointment({
-      ptId,
+      accountId,
       appointmentId,
       newStartsAt: date,
-      origin: 'pt',
+      origin: 'account',
     });
     revalidatePath('/calendar');
     return { ok: true };
@@ -142,12 +142,12 @@ async function updateAppointmentNotesImpl(
   appointmentId: string,
   notes: string,
 ): Promise<ActionResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   await db
     .update(appointments)
     .set({ notes: notes.trim() || null })
     .where(
-      and(eq(appointments.id, appointmentId), eq(appointments.ptId, ptId)),
+      and(eq(appointments.id, appointmentId), eq(appointments.accountId, accountId)),
     );
   revalidatePath('/calendar');
   return { ok: true };
@@ -177,13 +177,13 @@ async function getUpcomingSlotsImpl(options?: {
   days: SlotsByDay[];
   timezone: string;
 }> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const parsed = upcomingSlotsSchema.safeParse(options ?? {});
   const start = new Date();
   const end = new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000);
 
   const { slots, timezone } = await getFreeSlotsInternal({
-    ptId,
+    accountId,
     start,
     end,
     durationMinutes: parsed.success ? parsed.data.durationMinutes : undefined,
@@ -228,36 +228,36 @@ export const getUpcomingSlots = instrumentedAction(
   getUpcomingSlotsImpl,
 );
 
-export type PatientOption = { id: string; name: string; phone: string };
+export type CustomerOption = { id: string; name: string; phone: string };
 
-/** Patient picker search for manual booking (by name or phone). */
-async function searchPatientsImpl(query: string): Promise<PatientOption[]> {
-  const ptId = await requirePtId();
+/** Customer picker search for manual booking (by name or phone). */
+async function searchCustomersImpl(query: string): Promise<CustomerOption[]> {
+  const accountId = await requireAccountId();
   const q = query.trim();
   const where = q
     ? and(
-        eq(patients.ptId, ptId),
-        or(ilike(patients.name, `%${q}%`), ilike(patients.phone, `%${q}%`)),
+        eq(customers.accountId, accountId),
+        or(ilike(customers.name, `%${q}%`), ilike(customers.phone, `%${q}%`)),
       )
-    : eq(patients.ptId, ptId);
+    : eq(customers.accountId, accountId);
 
   return db
-    .select({ id: patients.id, name: patients.name, phone: patients.phone })
-    .from(patients)
+    .select({ id: customers.id, name: customers.name, phone: customers.phone })
+    .from(customers)
     .where(where)
-    .orderBy(desc(patients.createdAt))
+    .orderBy(desc(customers.createdAt))
     .limit(20);
 }
 
-export const searchPatients = instrumentedAction(
-  'calendar.searchPatients',
-  searchPatientsImpl,
+export const searchCustomers = instrumentedAction(
+  'calendar.searchCustomers',
+  searchCustomersImpl,
 );
 
 const manualBookingSchema = z
   .object({
-    patientId: z.uuid().optional(),
-    newPatient: z
+    customerId: z.uuid().optional(),
+    newCustomer: z
       .object({
         name: z.string().trim().min(1).max(120),
         phone: z.string().trim().min(3).max(40),
@@ -271,7 +271,7 @@ const manualBookingSchema = z
     serviceType: z.string().trim().max(80).optional(),
     notes: z.string().trim().max(500).optional(),
   })
-  .refine((v) => v.patientId || v.newPatient, {
+  .refine((v) => v.customerId || v.newCustomer, {
     message: 'Zgjidh ose shto një klient.',
   });
 
@@ -280,15 +280,15 @@ const manualBookingSchema = z
  * are bypassed); double-booking is still blocked by the overlap constraint.
  */
 async function bookManualAppointmentImpl(input: {
-  patientId?: string;
-  newPatient?: { name: string; phone: string };
+  customerId?: string;
+  newCustomer?: { name: string; phone: string };
   date: string;
   time: string;
   serviceId?: string;
   serviceType?: string;
   notes?: string;
 }): Promise<ActionResult> {
-  const ptId = await requirePtId();
+  const accountId = await requireAccountId();
   const parsed = manualBookingSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -299,12 +299,12 @@ async function bookManualAppointmentImpl(input: {
     };
   }
 
-  const [pt] = await db
-    .select({ timezone: pts.timezone })
-    .from(pts)
-    .where(eq(pts.id, ptId))
+  const [account] = await db
+    .select({ timezone: accounts.timezone })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
     .limit(1);
-  const timezone = pt?.timezone ?? 'Europe/Berlin';
+  const timezone = account?.timezone ?? 'Europe/Berlin';
 
   const [year, month, day] = parsed.data.date.split('-').map(Number);
   const [h, m] = parsed.data.time.split(':').map(Number);
@@ -312,11 +312,11 @@ async function bookManualAppointmentImpl(input: {
     new TZDate(year, month - 1, day, h, m, 0, 0, timezone).getTime(),
   );
 
-  let patientId = parsed.data.patientId;
-  if (!patientId && parsed.data.newPatient) {
-    const created = await createManualPatient({
-      ptId,
-      ...parsed.data.newPatient,
+  let customerId = parsed.data.customerId;
+  if (!customerId && parsed.data.newCustomer) {
+    const created = await createManualCustomer({
+      accountId,
+      ...parsed.data.newCustomer,
     });
     if ('failure' in created) {
       return {
@@ -328,16 +328,16 @@ async function bookManualAppointmentImpl(input: {
             : 'Numri i telefonit nuk është i vlefshëm.',
       };
     }
-    patientId = created.id;
+    customerId = created.id;
   }
-  if (!patientId)
+  if (!customerId)
     return {
       ok: false,
       code: 'PATIENT_REQUIRED',
       error: 'Zgjidh ose shto një klient.',
     };
 
-  const service = await resolveBookingService(ptId, {
+  const service = await resolveBookingService(accountId, {
     serviceId: parsed.data.serviceId,
     legacyServiceType: parsed.data.serviceType,
   });
@@ -347,14 +347,14 @@ async function bookManualAppointmentImpl(input: {
 
   try {
     await bookAppointment({
-      ptId,
-      patientId,
+      accountId,
+      customerId,
       startsAt,
       serviceType: service.name,
       durationMinutes: service.durationMinutes,
       notes: parsed.data.notes,
       allowOutsideAvailability: true,
-      origin: 'pt',
+      origin: 'account',
     });
     revalidatePath('/calendar');
     return { ok: true };

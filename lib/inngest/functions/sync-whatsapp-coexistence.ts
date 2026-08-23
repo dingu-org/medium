@@ -10,7 +10,7 @@ function cleanError(error: unknown): string {
 }
 
 export async function syncWhatsappCoexistenceCore(args: {
-  ptId: string;
+  accountId: string;
   connectionId: string;
 }): Promise<
   | {
@@ -33,7 +33,7 @@ export async function syncWhatsappCoexistenceCore(args: {
     .where(
       and(
         eq(whatsappConnections.id, args.connectionId),
-        eq(whatsappConnections.ptId, args.ptId),
+        eq(whatsappConnections.accountId, args.accountId),
       ),
     )
     .limit(1);
@@ -101,7 +101,7 @@ export const syncWhatsappCoexistence = inngest.createFunction(
     if (event.data.mode !== 'coexistence') return { skipped: 'not_coexistence' };
     return step.run('request-smb-app-data-sync', () =>
       syncWhatsappCoexistenceCore({
-        ptId: event.data.ptId,
+        accountId: event.data.accountId,
         connectionId: event.data.connectionId,
       }),
     );

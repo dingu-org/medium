@@ -48,7 +48,7 @@ async function savePushSubscriptionImpl(
   await db
     .insert(pushSubscriptions)
     .values({
-      ptId: user.id,
+      accountId: user.id,
       endpoint: parsed.data.endpoint,
       keys: parsed.data.keys,
       userAgent: userAgent ?? null,
@@ -56,7 +56,7 @@ async function savePushSubscriptionImpl(
     .onConflictDoUpdate({
       target: pushSubscriptions.endpoint,
       set: {
-        ptId: user.id,
+        accountId: user.id,
         keys: parsed.data.keys,
         userAgent: userAgent ?? null,
       },
@@ -69,7 +69,7 @@ async function savePushSubscriptionImpl(
     await db.transaction((tx) =>
       appendBackgroundEvent(tx, {
         type: 'push.subscribed',
-        data: { ptId: user.id },
+        data: { accountId: user.id },
       }),
     );
   } catch {
@@ -101,7 +101,7 @@ async function isEndpointOwnedImpl(endpoint: string): Promise<boolean> {
     .from(pushSubscriptions)
     .where(
       and(
-        eq(pushSubscriptions.ptId, user.id),
+        eq(pushSubscriptions.accountId, user.id),
         eq(pushSubscriptions.endpoint, endpoint),
       ),
     )
@@ -126,7 +126,7 @@ async function removePushSubscriptionImpl(endpoint: string): Promise<void> {
     .delete(pushSubscriptions)
     .where(
       and(
-        eq(pushSubscriptions.ptId, user.id),
+        eq(pushSubscriptions.accountId, user.id),
         eq(pushSubscriptions.endpoint, endpoint),
       ),
     );
