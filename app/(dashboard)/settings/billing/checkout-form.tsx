@@ -73,11 +73,11 @@ export function CheckoutForm({
           })}
         </div>
       ) : (
-        <div className="rounded-lg border border-border bg-card p-3">
+        <div className="rounded-lg border border-border bg-card p-4">
           <span className="text-[13.5px] font-semibold text-foreground">
             {OPTION[periods[0]].label}
           </span>
-          <span className="text-ink-2 mt-0.5 block text-[13px] tabular-nums">
+          <span className="text-ink-2 mt-1 block text-[13px] tabular-nums">
             {OPTION[periods[0]].price}
           </span>
         </div>
@@ -112,7 +112,7 @@ function PeriodOption({
       aria-checked={selected}
       onClick={onSelect}
       className={cn(
-        'relative rounded-lg border p-3 text-left transition-colors',
+        'relative rounded-lg border p-4 text-left transition-colors',
         selected
           ? 'border-[var(--brand-500)] bg-[var(--brand-50)]'
           : 'border-border bg-card',
@@ -121,11 +121,11 @@ function PeriodOption({
       <span className="text-[13.5px] font-semibold text-foreground">
         {label}
       </span>
-      <span className="text-ink-2 mt-0.5 block text-[13px] tabular-nums">
+      <span className="text-ink-2 mt-1 block text-[13px] tabular-nums">
         {price}
       </span>
       {badge && (
-        <span className="mt-1.5 inline-block rounded-full bg-[var(--brand-500)] px-2 py-0.5 text-[10.5px] font-semibold text-white">
+        <span className="mt-2 inline-block rounded-full bg-[var(--brand-500)] px-2 py-0.5 text-[10.5px] font-semibold text-white">
           {badge}
         </span>
       )}

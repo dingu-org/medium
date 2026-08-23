@@ -54,7 +54,7 @@ export default function HelpIndexPage() {
               <p className="font-heading text-base font-medium">
                 {guide.title}
               </p>
-              <p className="text-muted-foreground mt-1 text-sm leading-6">
+              <p className="text-muted-foreground mt-2 text-sm leading-6">
                 {guide.description}
               </p>
             </Link>

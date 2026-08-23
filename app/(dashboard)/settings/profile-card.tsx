@@ -17,7 +17,7 @@ export function ProfileCard({
   return (
     <Link
       href={href}
-      className="flex items-center gap-[14px] rounded-lg bg-card px-[18px] py-4 shadow-[var(--shadow-card)]"
+      className="flex items-center gap-3 rounded-lg bg-card p-4 shadow-[var(--shadow-card)]"
     >
       <InitialsAvatar name={name} fallback={email} size={54} />
       <span className="min-w-0 flex-1">
@@ -25,7 +25,7 @@ export function ProfileCard({
           {name}
         </span>
         {subtitle && (
-          <span className="mt-[3px] block truncate text-[13px] text-ink-3">
+          <span className="mt-1 block truncate text-[13px] text-ink-3">
             {subtitle}
           </span>
         )}

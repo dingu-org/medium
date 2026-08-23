@@ -57,9 +57,9 @@ export function ProfileForm({
         backHref="/settings"
         right={<SaveAction form={FORM_ID} disabled={pending || !online} />}
       />
-      <div className="px-5 account-2 pb-7">
+      <div className="space-y-6 px-4 pt-2 pb-4">
         <OfflineNote />
-        <div className="mb-[26px] flex justify-center account-1">
+        <div className="flex justify-center pt-1">
           <InitialsAvatar name={avatarName} fallback={email} size={76} />
         </div>
         <form

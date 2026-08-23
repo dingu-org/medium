@@ -22,7 +22,7 @@ export function HandledBy({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-[5px] text-xs font-semibold',
+        'inline-flex shrink-0 items-center gap-1 text-xs font-semibold',
         who === 'ai' && 'text-primary',
         who === 'you' && 'text-[var(--success-500)]',
         who === 'closed' && 'text-ink-3',

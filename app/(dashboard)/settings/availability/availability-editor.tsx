@@ -174,18 +174,18 @@ export function AvailabilityEditor({
         backHref="/settings"
         right={<SaveAction onClick={onSave} disabled={saving || offline} />}
       />
-      <div className="space-y-6 px-5 account-2 pb-6">
+      <div className="space-y-6 px-4 pt-2 pb-4">
         <OfflineNote />
         <div className={cn('space-y-6', offline && 'pointer-events-none opacity-55')}>
           {/* Weekly hours */}
-          <section className="space-y-2">
+          <section>
             <div className="flex items-baseline justify-between">
               <SectionLabel>{t.availability.weeklyScheduleLabel}</SectionLabel>
               <button
                 type="button"
                 onClick={copyMonday}
                 disabled={offline}
-                className="px-2 pb-[9px] text-[12.5px] font-bold text-primary disabled:opacity-40"
+                className="relative px-2 pb-2 text-[12.5px] font-bold text-primary after:absolute after:inset-x-0 after:-top-5 after:bottom-0 disabled:opacity-40"
               >
                 {t.availability.copyMonday}
               </button>
@@ -206,7 +206,7 @@ export function AvailabilityEditor({
           </section>
 
           {/* Blocked periods */}
-          <section className="space-y-2">
+          <section>
             <SectionLabel>{t.availability.blockedPeriods}</SectionLabel>
             {blocks.length > 0 && (
               <GroupedList>
@@ -276,7 +276,7 @@ function TimeChipInput({
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-[10px] border border-input bg-card px-[11px] py-[7px] font-mono text-[12.5px] tabular-nums text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/15 disabled:opacity-40 [&::-webkit-calendar-picker-indicator]:hidden"
+      className="h-11 rounded-[10px] border border-input bg-card px-3 font-mono text-[12.5px] tabular-nums text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/15 disabled:opacity-40 [&::-webkit-calendar-picker-indicator]:hidden"
     />
   );
 }
@@ -298,7 +298,7 @@ function DayRow({
 }) {
   const label = t.availability.days[weekday];
   return (
-    <div className="flex items-center gap-3 px-[18px] py-[11px]">
+    <div className="flex items-center gap-3 px-4 py-3">
       <Switch
         checked={day.enabled}
         disabled={!online}
@@ -314,7 +314,7 @@ function DayRow({
         {label}
       </span>
       {day.enabled ? (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <TimeChipInput
             value={day.start}
             disabled={!online}
@@ -350,13 +350,13 @@ function BlockRow({
   const title = block.label ?? block.when; // design: label is the bold title …
   const subtitle = block.label ? block.when : null; // … when there is one; else show the date/time
   return (
-    <div className="flex items-center gap-3 px-[18px] py-[13px]">
+    <div className="flex items-center gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
         <p className="truncate text-[14.5px] font-semibold text-foreground">
           {title}
         </p>
         {subtitle && (
-          <p className="mt-0.5 text-[12.5px] tabular-nums text-ink-3">
+          <p className="mt-1 text-[12.5px] tabular-nums text-ink-3">
             {subtitle}
           </p>
         )}
@@ -366,7 +366,7 @@ function BlockRow({
         aria-label={t.availability.deleteBlockedAriaLabel}
         disabled={!online || deleting}
         onClick={() => onDelete(block.id)}
-        className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-muted text-ink-2 disabled:opacity-40"
+        className="relative inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-muted text-ink-2 after:absolute after:-inset-2 disabled:opacity-40"
       >
         <X className="h-[15px] w-[15px]" aria-hidden="true" />
       </button>
@@ -398,7 +398,7 @@ function BlockSheet({
         </SheetHeader>
         <form
           key={String(open)}
-          className="space-y-4 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+          className="space-y-4 px-4 pb-4"
           onSubmit={(e) => {
             e.preventDefault();
             if (!online) return;
@@ -431,7 +431,7 @@ function BlockSheet({
             });
           }}
         >
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-2">
             <label
               htmlFor="block-date"
               className="text-[13px] font-semibold text-[#303744]"
@@ -440,7 +440,7 @@ function BlockSheet({
             </label>
             <Input id="block-date" name="date" type="date" required disabled={!online} />
           </div>
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-2">
             <span className="text-[13px] font-semibold text-[#303744]">
               {t.availability.timeRangeLabel}
             </span>
@@ -464,7 +464,7 @@ function BlockSheet({
               />
             </div>
           </div>
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-2">
             <label
               htmlFor="block-label"
               className="text-[13px] font-semibold text-[#303744]"
@@ -515,14 +515,14 @@ function TimezoneSheet({
         <SheetHeader>
           <SheetTitle>{t.availability.timezone}</SheetTitle>
         </SheetHeader>
-        <div className="px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="px-4 pb-4">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t.availability.timezoneSearch}
             autoFocus
           />
-          <ul className="mt-3 max-h-[50vh] divide-y divide-sep overflow-y-auto rounded-lg border border-border">
+          <ul className="mt-3 max-h-[50dvh] divide-y divide-sep overflow-y-auto rounded-lg border border-border">
             {filtered.map((tz) => {
               const active = tz === current;
               return (

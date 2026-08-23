@@ -50,7 +50,7 @@ export default async function WhatsAppSettingsPage() {
         />
         <SectionLabel>{t.settings.whatsappRemindersLabel}</SectionLabel>
         <TemplatePreview status={snapshot.whatsappTemplateStatus} />
-        <p className="px-2 account-2.5 pb-6 text-[12.5px] leading-[1.5] text-ink-3">
+        <p className="px-4 pt-2 pb-6 text-[12.5px] leading-[1.5] text-ink-3">
           {t.settings.whatsappTemplateNote}
         </p>
         <DisconnectSection />
@@ -67,7 +67,7 @@ export default async function WhatsAppSettingsPage() {
           variant="reconnect"
           note={t.settings.whatsappReconnectNote}
         >
-          <div className="rounded-lg bg-card px-[18px] py-5 text-center shadow-[var(--shadow-card)]">
+          <div className="rounded-lg bg-card p-5 text-center shadow-[var(--shadow-card)]">
             <div className="mb-3 flex justify-center">
               <span className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--danger-50)]">
                 <Phone className="h-6 w-6 text-destructive" />
@@ -87,7 +87,7 @@ export default async function WhatsAppSettingsPage() {
           </div>
         </ConnectWhatsApp>
         {envMissing && (
-          <p className="text-ink-3 mt-3.5 text-xs">
+          <p className="text-ink-3 mt-4 text-xs">
             {t.settings.whatsappEnvNote}
           </p>
         )}
@@ -105,7 +105,7 @@ export default async function WhatsAppSettingsPage() {
           variant="connect"
           note={t.settings.whatsappConnectNote}
         >
-          <div className="flex flex-col gap-3.5 rounded-lg bg-card p-[18px] shadow-[var(--shadow-card)]">
+          <div className="flex flex-col gap-4 rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
             {t.settings.whatsappConnectBullets.map((b, i) => {
               const Icon = BULLET_ICONS[i];
               return (
@@ -117,7 +117,7 @@ export default async function WhatsAppSettingsPage() {
                     <p className="text-sm font-semibold text-foreground">
                       {b.title}
                     </p>
-                    <p className="text-ink-2 mt-[3px] text-[12.5px] leading-[1.45]">
+                    <p className="text-ink-2 mt-1 text-[12.5px] leading-[1.45]">
                       {b.sub}
                     </p>
                   </div>
@@ -127,7 +127,7 @@ export default async function WhatsAppSettingsPage() {
           </div>
         </ConnectWhatsApp>
         {envMissing && (
-          <p className="text-ink-3 mt-3.5 text-xs">
+          <p className="text-ink-3 mt-4 text-xs">
             {t.settings.whatsappEnvNote}
           </p>
         )}
@@ -136,9 +136,9 @@ export default async function WhatsAppSettingsPage() {
   }
 
   return (
-    <div className="-mx-4 -mt-4">
+    <div>
       <NavBar title={t.settings.whatsappBusiness} backHref="/settings" />
-      <div className="px-5 account-4 pb-7">{body}</div>
+      <div className="px-4 pt-2 pb-4">{body}</div>
     </div>
   );
 }

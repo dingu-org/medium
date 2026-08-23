@@ -75,7 +75,7 @@ export function DashboardChrome({
   }
 
   return (
-    <div className="bg-background min-h-screen">
+    <div className="bg-background min-h-dvh">
       {topLevel && (
         <TopHeader
           title={title}
@@ -89,9 +89,12 @@ export function DashboardChrome({
         />
       )}
       {searchParams.get('from') === 'onboarding' && (
-        <div className="bg-[var(--brand-50)] px-4 py-2 text-center text-sm text-[var(--brand-600)]">
+        <div className="bg-[var(--brand-50)] px-4 py-3 text-center text-sm text-[var(--brand-600)]">
           Ruaj ndryshimet, pastaj{' '}
-          <Link href="/onboarding" className="font-semibold underline">
+          <Link
+            href="/onboarding"
+            className="inline-flex min-h-11 items-center px-2 font-semibold underline"
+          >
             kthehu te konfigurimi
           </Link>
           .
@@ -99,8 +102,10 @@ export function DashboardChrome({
       )}
       <main
         className={cn(
-          'mx-auto max-w-md px-4',
-          topLevel ? 'account-2 pb-28' : 'account-4 pb-6',
+          'mx-auto max-w-md',
+          topLevel
+            ? 'px-4 pt-2 pb-[calc(6rem+max(16px,env(safe-area-inset-bottom)))]'
+            : 'pt-[env(safe-area-inset-top)]',
         )}
       >
         {children}

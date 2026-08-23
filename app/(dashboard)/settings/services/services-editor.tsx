@@ -44,7 +44,7 @@ export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
   }
 
   return (
-    <div className="space-y-4 account-1">
+    <div className="space-y-4 px-4 pt-2 pb-4">
       <OfflineNote />
 
       {services.length === 0 ? (
@@ -66,7 +66,7 @@ export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
               <div
                 key={service.id}
                 className={cn(
-                  'flex min-h-[60px] items-center gap-[13px] px-[18px] py-[14px]',
+                  'flex min-h-[60px] items-center gap-3 px-4 py-3',
                   !service.active && 'opacity-55',
                 )}
               >
@@ -75,13 +75,13 @@ export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
                   onClick={() => setEditing(service)}
                   disabled={!online}
                   aria-label={`${t.settings.serviceEdit}: ${service.name}`}
-                  className="flex min-w-0 flex-1 items-center gap-[13px] text-left"
+                  className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-semibold tracking-[-0.005em] text-foreground">
                       {service.name}
                     </span>
-                    <span className="mt-[3px] block text-[12.5px] text-ink-3 tabular-nums">
+                    <span className="mt-1 block text-[12.5px] text-ink-3 tabular-nums">
                       {t.settings.serviceMeta(
                         service.durationMinutes,
                         service.priceLek != null
@@ -109,7 +109,7 @@ export function ServicesEditor({ services }: { services: ServiceRecord[] }) {
             {t.settings.serviceAdd}
           </AddDashed>
 
-          <p className="px-2 account-1 text-[12.5px] leading-[1.5] text-ink-3">
+          <p className="px-4 pt-1 text-[12.5px] leading-[1.5] text-ink-3">
             {t.settings.serviceListFooter}
           </p>
         </>
@@ -218,7 +218,7 @@ function ServiceForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-4 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+      className="space-y-4 px-4 pb-4"
     >
       <OfflineNote />
 
@@ -229,7 +229,7 @@ function ServiceForm({
         disabled={!online}
       />
 
-      <div className="flex flex-col gap-[7px]">
+      <div className="flex flex-col gap-2">
         <label className="text-[13px] font-semibold tracking-[-0.005em] text-[#303744]">
           {t.settings.serviceDuration}
         </label>
@@ -268,7 +268,7 @@ function ServiceForm({
         disabled={!online}
       />
 
-      <div className="flex flex-col gap-2 account-2">
+      <div className="flex flex-col gap-2 pt-2">
         <Button type="submit" className="w-full" disabled={pending || !online}>
           {pending ? t.actions.saving : t.settings.serviceSave}
         </Button>

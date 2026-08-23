@@ -37,8 +37,8 @@ export function BottomNav({
   }
 
   return (
-    <nav className="fixed right-0 bottom-0 left-0 z-10 px-3.5 account-2 pb-[max(16px,env(safe-area-inset-bottom))]">
-      <ul className="mx-auto flex max-w-md items-center justify-between rounded-full bg-dock p-1.5 shadow-[var(--shadow-dock)]">
+    <nav className="fixed right-0 bottom-0 left-0 z-10 px-4 pt-2 pb-[max(16px,env(safe-area-inset-bottom))]">
+      <ul className="mx-auto flex max-w-md items-center justify-between rounded-full bg-dock p-2 shadow-[var(--shadow-dock)]">
         {items.map(({ href, label, icon: Icon, badge }) => {
           const displayPathname = pendingHref ?? pathname;
           const current = pathname === href || pathname.startsWith(`${href}/`);
@@ -58,7 +58,7 @@ export function BottomNav({
                   if (!active) setPendingHref(href);
                 }}
                 className={cn(
-                  'relative flex h-[52px] w-[52px] items-center justify-center rounded-full transition-colors',
+                  'relative flex h-12 w-12 items-center justify-center rounded-full transition-colors',
                   active
                     ? 'bg-primary text-white'
                     : 'text-white/[0.66] hover:text-white',
@@ -72,7 +72,7 @@ export function BottomNav({
                 />
                 {showDot && (
                   <span
-                    className="absolute top-[11px] right-[11px] h-[7px] w-[7px] rounded-full border-2 border-dock bg-primary"
+                    className="absolute top-2 right-2 h-[7px] w-[7px] rounded-full border-2 border-dock bg-primary"
                     aria-hidden="true"
                   />
                 )}

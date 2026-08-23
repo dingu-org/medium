@@ -18,7 +18,7 @@ export function UsageMeter({
     meter.limit > 0 ? Math.min(100, Math.round((meter.used / meter.limit) * 100)) : 0;
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <div className="flex items-baseline justify-between">
         <span className="text-[13.5px] font-semibold text-foreground">
           {label}

@@ -50,7 +50,7 @@ export function ChatNotice({
     <div
       role={tone === 'danger' ? 'alert' : 'status'}
       className={cn(
-        'flex shrink-0 items-start gap-2.5 border-b px-4 py-2.5',
+        'flex shrink-0 items-start gap-2 border-b px-4 py-3',
         m.row,
         className,
       )}
@@ -67,7 +67,7 @@ export function ChatNotice({
       {action && (
         <div
           className={cn(
-            'shrink-0 text-[12.5px] font-semibold whitespace-nowrap',
+            '-my-3 -mr-2 flex min-h-11 shrink-0 items-center text-[12.5px] font-semibold whitespace-nowrap [&>*]:inline-flex [&>*]:min-h-11 [&>*]:items-center [&>*]:px-2',
             m.action,
           )}
         >

@@ -53,7 +53,7 @@ export function ClientsDirectory({
       {/* Always-visible directory search (canvas SearchBar). */}
       <div className="relative">
         <Search
-          className="text-ink-3 absolute top-1/2 left-[13px] h-[18px] w-[18px] -translate-y-1/2"
+          className="text-ink-3 absolute top-1/2 left-4 h-[18px] w-[18px] -translate-y-1/2"
           aria-hidden
         />
         <input
@@ -61,13 +61,13 @@ export function ClientsDirectory({
           onChange={(event) => search(event.target.value)}
           placeholder="Kërko klient"
           aria-label="Kërko klientët"
-          className="placeholder:text-ink-3 h-[42px] w-full rounded-[14px] bg-[#ecece7] pr-10 pl-10 text-[15px] outline-none focus-visible:ring-3 focus-visible:ring-ring/20"
+          className="placeholder:text-ink-3 h-11 w-full rounded-[14px] bg-[#ecece7] pr-11 pl-11 text-[15px] outline-none focus-visible:ring-3 focus-visible:ring-ring/20"
         />
         {query && (
           <button
             type="button"
             onClick={() => search('')}
-            className="text-ink-3 absolute top-1/2 right-[13px] -translate-y-1/2"
+            className="text-ink-3 absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 items-center justify-center"
             aria-label="Pastro kërkimin"
           >
             <X className="h-[17px] w-[17px]" aria-hidden />
@@ -84,7 +84,7 @@ export function ClientsDirectory({
               ? 'Provo një emër ose numër tjetër.'
               : 'Sapo një pacient të shkruajë në WhatsApp, shtohet këtu vetë. Ose shto një me dorë.'
           }
-          className="account-14"
+          className="pt-14"
           action={
             !query && (
               <Button asChild variant="tinted" className="h-11">
@@ -108,7 +108,7 @@ export function ClientsDirectory({
               <Link
                 key={client.id}
                 href={`/clients/${client.id}`}
-                className="hover:bg-muted/50 flex items-center gap-[13px] px-4 py-3"
+                className="hover:bg-muted/50 flex items-center gap-3 px-4 py-3"
               >
                 <InitialsAvatar name={client.name} size={44} />
                 <span className="min-w-0 flex-1">

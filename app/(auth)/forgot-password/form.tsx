@@ -19,7 +19,7 @@ export function ForgotPasswordForm() {
         <p className="text-sm">{t.auth.forgot.sent}</p>
         <Link
           href="/sign-in"
-          className="block text-center text-sm font-medium text-foreground hover:underline"
+          className="-my-3 flex min-h-11 items-center justify-center text-sm font-medium text-foreground hover:underline"
         >
           {t.auth.forgot.backToSignIn}
         </Link>
@@ -42,7 +42,7 @@ export function ForgotPasswordForm() {
       </Button>
       <Link
         href="/sign-in"
-        className="block text-center text-sm text-muted-foreground hover:text-foreground"
+        className="-my-3 flex min-h-11 items-center justify-center text-sm text-muted-foreground hover:text-foreground"
       >
         {t.auth.forgot.backToSignIn}
       </Link>

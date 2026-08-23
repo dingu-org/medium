@@ -69,18 +69,18 @@ export default async function BillingSettingsPage({
   const slot = resolveCheckoutSlot(snapshot);
 
   return (
-    <div className="-mx-4 -mt-4">
+    <div>
       <NavBar title={t.billing.navTitle} backHref="/settings" />
-      <div className="space-y-6 px-5 account-2 pb-8">
+      <div className="space-y-6 px-4 pt-2 pb-4">
         {checkoutResult && <CheckoutResultBanner result={checkoutResult} />}
         <PlanCard snapshot={snapshot} />
 
         {/* Usage meters — capacity, never punitive. */}
-        <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-card)]">
+        <section className="rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
           <h2 className="text-[11.5px] font-bold tracking-[0.07em] uppercase text-ink-3">
             {t.billing.usageTitle}
           </h2>
-          <div className="mt-4 space-y-4">
+          <div className="mt-3 space-y-4">
             <UsageMeter
               label={t.billing.meterConversations}
               meter={snapshot.conversations}
@@ -94,11 +94,11 @@ export default async function BillingSettingsPage({
 
         {/* Yearly-Solo reassurance — no form, they already hold the best plan. */}
         {slot.kind === 'reassure' && (
-          <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-card)]">
+          <section className="rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
             <h2 className="font-heading text-lg font-semibold text-foreground">
               {t.billing.reassureTitle}
             </h2>
-            <p className="text-ink-2 mt-1 text-[13.5px]">
+            <p className="text-ink-2 mt-2 text-[13.5px]">
               {t.billing.reassureBody}
             </p>
           </section>
@@ -109,11 +109,11 @@ export default async function BillingSettingsPage({
           (slot.kind === 'upgrade' ||
             slot.kind === 'switch' ||
             slot.kind === 'renew') && (
-            <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-card)]">
+            <section className="rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
               <h2 className="font-heading text-lg font-semibold text-foreground">
                 {CHECKOUT_COPY[slot.kind].title}
               </h2>
-              <p className="text-ink-2 mt-1 text-[13.5px]">
+              <p className="text-ink-2 mt-2 text-[13.5px]">
                 {CHECKOUT_COPY[slot.kind].sub}
               </p>
               <div className="mt-4">
@@ -132,11 +132,11 @@ export default async function BillingSettingsPage({
             {t.billing.receiptsTitle}
           </h2>
           {snapshot.receipts.length === 0 ? (
-            <p className="text-ink-3 mt-3 text-[13.5px]">
+            <p className="text-ink-3 mt-2 text-[13.5px]">
               {t.billing.receiptsEmpty}
             </p>
           ) : (
-            <ul className="mt-3 overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)]">
+            <ul className="mt-2 overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)]">
               {snapshot.receipts.map((receipt) => {
                 const date = formatDate(
                   new TZDate(new Date(receipt.createdAt), snapshot.timezone),
@@ -150,7 +150,7 @@ export default async function BillingSettingsPage({
                       <p className="text-[14px] font-medium text-foreground tabular-nums">
                         {formatLek(receipt.amountAll)} ALL
                       </p>
-                      <p className="text-ink-3 mt-0.5 text-[12.5px]">
+                      <p className="text-ink-3 mt-1 text-[12.5px]">
                         {date} · {PERIOD_LABEL[receipt.period]}
                       </p>
                     </div>
@@ -197,7 +197,7 @@ function ReceiptStatus({ status }: { status: BillingReceipt['status'] }) {
   return (
     <span
       className={cn(
-        'shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-semibold',
+        'shrink-0 rounded-full px-2 py-0.5 text-[12px] font-semibold',
         paid
           ? 'bg-[var(--success-50)] text-[var(--success-700)]'
           : 'bg-muted text-ink-3',

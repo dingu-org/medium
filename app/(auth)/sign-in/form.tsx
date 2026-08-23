@@ -28,22 +28,22 @@ export function SignInForm({
   return (
     <div className="space-y-6">
       {confirmHint && (
-        <div className="border-border bg-muted/40 text-muted-foreground rounded-md border p-3 text-sm">
+        <div className="border-border bg-muted/40 text-muted-foreground rounded-md border p-4 text-sm">
           {t.auth.signIn.confirmHint}
         </div>
       )}
       {resetHint && (
-        <div className="rounded-md border border-[var(--success-200)] bg-[var(--success-50)] p-3 text-sm text-[var(--success-700)]">
+        <div className="rounded-md border border-[var(--success-200)] bg-[var(--success-50)] p-4 text-sm text-[var(--success-700)]">
           {t.auth.reset.complete}
         </div>
       )}
       {callbackError && (
-        <div className="border-destructive/30 text-destructive rounded-md border bg-[var(--danger-50)] p-3 text-sm">
+        <div className="border-destructive/30 text-destructive rounded-md border bg-[var(--danger-50)] p-4 text-sm">
           <p>{callbackError}</p>
           {canRequestNewLink && (
             <Link
               href="/forgot-password"
-              className="mt-1 inline-block font-medium underline"
+              className="mt-1 -mb-3 inline-flex min-h-11 items-center font-medium underline"
             >
               {t.auth.signIn.linkFailedAction}
             </Link>
@@ -72,7 +72,7 @@ export function SignInForm({
             <Label htmlFor="password">{t.auth.signIn.password}</Label>
             <Link
               href="/forgot-password"
-              className="text-muted-foreground hover:text-foreground text-xs"
+              className="text-muted-foreground hover:text-foreground -my-3 inline-flex min-h-11 items-center text-xs"
             >
               {t.auth.signIn.forgot}
             </Link>
@@ -106,7 +106,7 @@ export function SignInForm({
         {t.auth.signIn.footerQuestion}{' '}
         <Link
           href="/sign-up"
-          className="text-foreground font-medium hover:underline"
+          className="text-foreground -my-3 inline-flex min-h-11 items-center font-medium hover:underline"
         >
           {t.auth.signIn.footerAction}
         </Link>

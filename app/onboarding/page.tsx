@@ -25,9 +25,9 @@ function PlanStep() {
   const free = PLANS.free;
   const solo = PLANS.solo;
   return (
-    <section className="border-border bg-card mt-8 rounded-lg border p-5 text-left">
+    <section className="border-border bg-card mt-8 rounded-lg border p-4 text-left">
       <h2 className="text-lg font-semibold">{t.billing.onboardingTitle}</h2>
-      <p className="text-muted-foreground mt-1 text-sm leading-6">
+      <p className="text-muted-foreground mt-2 text-sm leading-6">
         {t.billing.onboardingSub}
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -145,11 +145,11 @@ export default async function OnboardingPage() {
   const current = steps[currentIndex];
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-sm flex-col">
+    <div className="mx-auto flex min-h-[calc(100dvh-4rem)] flex-col">
       <header className="pb-8 text-center">
         <Link
           href="/"
-          className="font-heading text-primary text-xl font-semibold"
+          className="font-heading text-primary inline-flex min-h-11 items-center text-xl font-semibold"
         >
           Medium
         </Link>
@@ -245,7 +245,7 @@ export default async function OnboardingPage() {
               </div>
             )}
 
-            <div className="mt-auto space-y-3 account-10">
+            <div className="mt-auto space-y-3 pt-10">
               {current.key === 'services' ? (
                 <>
                   <form action={confirmServices}>
@@ -292,7 +292,7 @@ export default async function OnboardingPage() {
               <p className="text-center">
                 <Link
                   href="/help"
-                  className="text-muted-foreground hover:text-foreground text-xs"
+                  className="text-muted-foreground hover:text-foreground -my-3 inline-flex min-h-11 items-center text-xs"
                 >
                   {t.onboarding.helpLink}
                 </Link>

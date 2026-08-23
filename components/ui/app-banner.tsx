@@ -32,7 +32,7 @@ export function AppBanner({
       role={tone === 'danger' ? 'alert' : 'status'}
       aria-live="polite"
       className={cn(
-        'flex items-start gap-2.5 rounded-[18px] px-[15px] py-[13px] text-sm leading-snug',
+        'flex items-start gap-3 rounded-[18px] px-4 py-3 text-sm leading-snug',
         toneClasses[tone],
         className,
       )}
@@ -40,7 +40,7 @@ export function AppBanner({
       {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />}
       <div className="min-w-0 flex-1">
         {title && <p className="font-semibold">{title}</p>}
-        {children && <div className={cn(title && 'mt-0.5')}>{children}</div>}
+        {children && <div className={cn(title && 'mt-1')}>{children}</div>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>

@@ -41,7 +41,7 @@ export function RoundButton({
       {children}
       {dot && (
         <span
-          className="absolute top-[9px] right-[10px] h-[7px] w-[7px] rounded-full border-2 border-card bg-primary"
+          className="absolute top-2 right-2 h-[7px] w-[7px] rounded-full border-2 border-card bg-primary"
           aria-hidden="true"
         />
       )}

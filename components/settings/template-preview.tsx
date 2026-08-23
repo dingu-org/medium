@@ -39,7 +39,7 @@ const STATUS_META: Record<
 
 function KwTag({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-md border border-black/5 bg-card px-1.5 py-0.5 font-mono text-[11px] font-semibold text-ink-2">
+    <span className="rounded-md border border-black/5 bg-card px-2 py-0.5 font-mono text-[11px] font-semibold text-ink-2">
       {children}
     </span>
   );
@@ -53,7 +53,7 @@ export function TemplatePreview({ status }: { status: TplStatus }) {
   const meta = STATUS_META[status ?? 'preparing'];
   const Icon = meta.icon;
   return (
-    <div className="rounded-lg bg-card p-[18px] shadow-[var(--shadow-card)]">
+    <div className="rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
       <div className="mb-3 flex items-center gap-2">
         <WhatsAppMark size={15} />
         <span className="text-[11.5px] font-bold uppercase tracking-[0.07em] text-ink-3">
@@ -61,7 +61,7 @@ export function TemplatePreview({ status }: { status: TplStatus }) {
         </span>
         <span
           className={cn(
-            'ml-auto inline-flex items-center gap-1.5 text-xs font-semibold',
+            'ml-auto inline-flex items-center gap-1 text-xs font-semibold',
             meta.text,
           )}
         >
@@ -69,7 +69,7 @@ export function TemplatePreview({ status }: { status: TplStatus }) {
           {meta.label}
         </span>
       </div>
-      <div className="rounded-[4px_16px_16px_16px] bg-muted px-3.5 py-[11px] text-[13.5px] leading-[1.55] text-foreground">
+      <div className="rounded-[4px_16px_16px_16px] bg-muted px-4 py-3 text-[13.5px] leading-[1.55] text-foreground">
         {t.settings.whatsappTemplatePreviewLead}
         <KwTag>{t.ops.confirm}</KwTag>
         {t.settings.whatsappTemplatePreviewMid}

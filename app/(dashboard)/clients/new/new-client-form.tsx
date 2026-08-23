@@ -36,7 +36,7 @@ export function NewClientForm() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-[18px]">
+    <form onSubmit={submit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="new-client-name">Emri</Label>
         <Input
@@ -92,7 +92,7 @@ export function NewClientForm() {
       <Button
         type="submit"
         size="lg"
-        className="h-[50px] w-full"
+        className="w-full"
         disabled={!online || pending}
       >
         {pending ? 'Po shtohet…' : 'Shto klientin'}

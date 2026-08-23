@@ -3,7 +3,7 @@ import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 // Alternating incoming/outgoing bubble placeholders for the thread route's
-// Suspense fallback, mirroring ChatThread's -mx-4 -mt-4 header offset.
+// Suspense fallback, mirroring ChatThread's full-bleed header column.
 const bubbles: { side: 'left' | 'right'; width: string }[] = [
   { side: 'left', width: 'w-40' },
   { side: 'right', width: 'w-52' },
@@ -15,7 +15,7 @@ const bubbles: { side: 'left' | 'right'; width: string }[] = [
 export default function ConversationLoading() {
   return (
     <div
-      className="-mx-4 -mt-4 flex flex-col"
+      className="flex flex-col"
       aria-busy="true"
       aria-live="polite"
     >
@@ -24,7 +24,7 @@ export default function ConversationLoading() {
         <Skeleton className="h-9 w-9 rounded-full" />
         <Skeleton className="h-4 w-36" />
       </div>
-      <div className="border-line flex items-center gap-2.5 border-b px-4 py-[9px]">
+      <div className="border-line flex min-h-11 items-center gap-2 border-b px-4 py-2">
         <Skeleton className="h-3.5 w-40" />
         <Skeleton className="ml-auto h-5 w-14 rounded-full" />
       </div>

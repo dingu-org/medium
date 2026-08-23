@@ -32,7 +32,7 @@ export function TopHeader({
 }) {
   return (
     <header className="bg-background sticky top-0 z-10">
-      <div className="mx-auto flex min-h-[44px] max-w-md items-center justify-between gap-2 px-4 account-3.5 pb-3">
+      <div className="mx-auto flex min-h-[44px] max-w-md items-center justify-between gap-2 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3">
         <h1 className="font-heading min-w-0 flex-1 truncate text-[27px] leading-tight font-bold tracking-[-0.025em]">
           {title}
         </h1>
@@ -51,8 +51,8 @@ export function TopHeader({
             >
               <InitialsAvatar name={name} fallback={email} size={44} />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 p-1.5">
-              <DropdownMenuLabel className="text-muted-foreground truncate px-2.5 py-2 text-xs font-normal">
+            <DropdownMenuContent align="end" className="w-56 p-1">
+              <DropdownMenuLabel className="text-muted-foreground truncate py-2 text-xs font-normal">
                 {email}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
