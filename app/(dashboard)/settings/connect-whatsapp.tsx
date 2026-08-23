@@ -233,8 +233,8 @@ export function ConnectWhatsApp({
 
   if (pending) {
     return (
-      <div className="flex flex-col items-center account-[90px] text-center">
-        <div className="mb-[22px] inline-flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[var(--brand-50)]">
+      <div className="flex flex-col items-center pt-24 text-center">
+        <div className="mb-5 inline-flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[var(--brand-50)]">
           <Loader2
             className="h-[30px] w-[30px] animate-spin text-primary"
             strokeWidth={3}
@@ -243,13 +243,13 @@ export function ConnectWhatsApp({
         <p className="font-heading text-[22px] font-bold tracking-[-0.025em] text-foreground">
           {t.settings.whatsappPendingTitle}
         </p>
-        <p className="mt-[9px] max-w-[280px] text-sm leading-[1.55] text-ink-2">
+        <p className="mt-2 max-w-[280px] text-sm leading-[1.55] text-ink-2">
           {t.settings.whatsappPendingBody}
         </p>
         <button
           type="button"
           onClick={handleCancel}
-          className="mt-[26px] text-sm font-semibold text-ink-2"
+          className="mt-4 inline-flex min-h-11 items-center px-4 text-sm font-semibold text-ink-2"
         >
           {t.actions.cancel}
         </button>
@@ -268,11 +268,11 @@ export function ConnectWhatsApp({
         >
           <p>{status.body}</p>
           {status.reasons && (
-            <div className="mt-2.5">
+            <div className="mt-3">
               <p className="text-ink-3 mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase">
                 {t.settings.whatsappCommonReasons}
               </p>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {status.reasons.map((reason) => (
                   <li key={reason} className="flex gap-2 text-[13px]">
                     <span className="text-destructive" aria-hidden>
@@ -290,7 +290,7 @@ export function ConnectWhatsApp({
         type="button"
         onClick={handleClick}
         disabled={pending || !appId || !configId || !online}
-        className="flex h-[52px] w-full items-center justify-center gap-2.5 rounded-full bg-[#25D366] text-[15.5px] font-bold tracking-[-0.01em] text-white shadow-[0_10px_24px_-12px_rgba(37,211,102,0.5)] transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] text-[15.5px] font-bold tracking-[-0.01em] text-white shadow-[0_10px_24px_-12px_rgba(37,211,102,0.5)] transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
       >
         <WhatsAppMark size={20} fill="#ffffff" />
         {variant === 'reconnect'
@@ -298,7 +298,7 @@ export function ConnectWhatsApp({
           : t.settings.whatsappConnectBusiness}
       </button>
       {note && (
-        <div className="flex items-center justify-center gap-1.5 text-xs text-ink-3">
+        <div className="flex items-center justify-center gap-2 text-xs text-ink-3">
           <Clock className="h-[13px] w-[13px]" aria-hidden />
           {note}
         </div>

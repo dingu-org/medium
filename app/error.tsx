@@ -31,7 +31,7 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-6">
+    <div className="flex min-h-[60dvh] items-center justify-center px-4">
       <ErrorState
         action={
           <Button onClick={reset} className="mt-1">

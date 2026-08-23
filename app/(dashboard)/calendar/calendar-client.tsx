@@ -155,7 +155,7 @@ export function CalendarClient({
   const dayList = byDay.get(anchorKey) ?? [];
 
   return (
-    <div>
+    <div className="pb-16">
       <RealtimeRefresher table="appointments" filter={`account_id=eq.${accountId}`} />
 
       {/* Canvas CalHeader: seg left, true-centered title, "Sot" pill right. */}
@@ -175,7 +175,7 @@ export function CalendarClient({
             {headerTitle}
           </p>
           {headerSub && (
-            <p className="text-ink-3 mt-0.5 text-xs whitespace-nowrap">
+            <p className="text-ink-3 mt-1 text-xs whitespace-nowrap">
               {headerSub}
             </p>
           )}
@@ -183,7 +183,7 @@ export function CalendarClient({
         <button
           type="button"
           onClick={() => navigate(todayKey, view)}
-          className="text-primary h-9 shrink-0 rounded-full bg-card px-[15px] text-[13px] font-bold shadow-[var(--shadow-card)] transition-colors hover:bg-[#f7f7f4]"
+          className="text-primary relative h-9 shrink-0 rounded-full bg-card px-5 text-[13px] font-bold shadow-[var(--shadow-card)] transition-colors hover:bg-[#f7f7f4] before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
         >
           {t.calendar.todayBtn}
         </button>
@@ -194,7 +194,7 @@ export function CalendarClient({
           type="button"
           aria-label={t.calendar.prevWeek}
           onClick={() => shiftDays(-7)}
-          className="-ml-2 flex h-11 w-8 shrink-0 items-center justify-center"
+          className="relative -ml-2 flex h-11 w-8 shrink-0 items-center justify-center before:absolute before:inset-y-0 before:-left-3 before:right-0 before:content-['']"
         >
           <ChevronLeft className="text-ink-3/70 h-[18px] w-[18px]" aria-hidden />
         </button>
@@ -207,7 +207,7 @@ export function CalendarClient({
                 key={day.key}
                 type="button"
                 onClick={() => navigate(day.key, 'day')}
-                className="flex flex-col items-center gap-1.5"
+                className="flex flex-col items-center gap-1"
               >
                 <span
                   className={cn(
@@ -233,7 +233,7 @@ export function CalendarClient({
           type="button"
           aria-label={t.calendar.nextWeek}
           onClick={() => shiftDays(7)}
-          className="-mr-2 flex h-11 w-8 shrink-0 items-center justify-center"
+          className="relative -mr-2 flex h-11 w-8 shrink-0 items-center justify-center before:absolute before:inset-y-0 before:left-0 before:-right-3 before:content-['']"
         >
           <ChevronRight className="text-ink-3/70 h-[18px] w-[18px]" aria-hidden />
         </button>
@@ -246,16 +246,16 @@ export function CalendarClient({
               icon={CalendarDays}
               title={t.calendar.emptyDayTitle}
               description={t.calendar.emptyDayText}
-              className="account-14"
+              className="pt-14"
             />
           ) : (
             <>
-              <p className="flex items-baseline gap-2 px-0.5 pb-3">
+              <p className="flex items-baseline gap-2 px-0.5 pb-2">
                 <span className="font-heading text-lg font-semibold tracking-[-0.02em]">
                   {t.calendar.apptCount(dayList.length)}
                 </span>
               </p>
-              <ul className="space-y-[11px]">
+              <ul className="space-y-3">
                 {dayList.map((appt) => (
                   <AppointmentCard
                     key={appt.id}
@@ -265,7 +265,7 @@ export function CalendarClient({
                   />
                 ))}
               </ul>
-              <p className="text-ink-3 px-6 account-6 text-center text-[12.5px] leading-normal">
+              <p className="text-ink-3 px-6 pt-6 text-center text-[12.5px] leading-normal">
                 {t.calendar.restOfDayFree}
                 <br />
                 {t.calendar.mediumWillReply}
@@ -274,13 +274,13 @@ export function CalendarClient({
           )}
         </div>
       ) : (
-        <div className="space-y-[18px]">
+        <div className="space-y-6">
           {appointments.length === 0 && (
             <EmptyState
               icon={CalendarDays}
               title={t.calendar.weekEmpty}
               description={t.calendar.weekEmptyDesc}
-              className="account-10"
+              className="pt-14"
             />
           )}
 
@@ -355,7 +355,7 @@ function AppointmentCard({
         type="button"
         onClick={() => onOpen(appt)}
         className={cn(
-          'hover:bg-muted/40 flex w-full gap-3.5 rounded-lg bg-card px-4 py-[15px] text-left shadow-[var(--shadow-card)] transition-colors',
+          'hover:bg-muted/40 flex w-full gap-3 rounded-lg bg-card p-4 text-left shadow-[var(--shadow-card)] transition-colors',
           faded && 'opacity-60',
         )}
       >
@@ -368,7 +368,7 @@ function AppointmentCard({
           >
             {appt.startLabel}
           </span>
-          <span className="text-ink-3 mt-[3px] block font-mono text-[11px] whitespace-nowrap">
+          <span className="text-ink-3 mt-1 block font-mono text-[11px] whitespace-nowrap">
             {durationMin} min
           </span>
         </span>
@@ -384,7 +384,7 @@ function AppointmentCard({
             <StatusBadge status={appt.status} />
           </span>
           {appt.serviceType && (
-            <span className="text-ink-2 mt-[3px] block text-[13.5px]">
+            <span className="text-ink-2 mt-1 block text-[13.5px]">
               {appt.serviceType}
             </span>
           )}
@@ -418,7 +418,7 @@ function AppointmentRow({
       <button
         type="button"
         onClick={() => onOpen(appt)}
-        className="hover:bg-muted/40 flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors"
+        className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
       >
         <span
           className={cn('h-2.5 w-2.5 shrink-0 rounded-full', statusDot(appt))}

@@ -53,10 +53,10 @@ export function ChatComposer({
 
   return (
     <div className="border-line bg-card fixed inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto max-w-md px-4 account-3 pb-3.5">
+      <div className="mx-auto max-w-md px-4 py-3">
         {state === 'windowClosed' ? (
           <>
-            <div className="border-line mb-2.5 flex items-start gap-2.5 rounded-[18px] border bg-[#f4f4f1] px-3 py-[11px]">
+            <div className="border-line mb-3 flex items-start gap-2 rounded-[18px] border bg-[#f4f4f1] px-3 py-3">
               <Clock className="text-ink-3 mt-px h-4 w-4 shrink-0" aria-hidden />
               <p className="text-ink-2 min-w-0 flex-1 text-[12.5px] leading-snug">
                 {t.chat.windowClosedText}
@@ -80,7 +80,7 @@ export function ChatComposer({
           </>
         ) : state === 'revoked' ? (
           <>
-            <div className="mb-2.5 flex items-start gap-2.5 rounded-[18px] border border-[#f0d0cf] bg-[var(--danger-50)] px-3 py-[11px]">
+            <div className="mb-3 flex items-start gap-2 rounded-[18px] border border-[#f0d0cf] bg-[var(--danger-50)] px-3 py-3">
               <Phone
                 className="text-destructive mt-px h-4 w-4 shrink-0"
                 aria-hidden
@@ -98,7 +98,7 @@ export function ChatComposer({
             </Link>
           </>
         ) : (
-          <div className="flex items-end gap-2.5">
+          <div className="flex items-end gap-2">
             <textarea
               ref={textareaRef}
               value={draft}
@@ -120,7 +120,7 @@ export function ChatComposer({
               rows={1}
               placeholder={t.chat.messagePlaceholder}
               aria-label={t.chat.messagePlaceholder}
-              className="border-line placeholder:text-ink-3 focus-visible:border-ring focus-visible:ring-ring/20 max-h-32 min-h-11 flex-1 resize-none rounded-[22px] border bg-card px-4 py-[11px] text-[14.5px] leading-snug outline-none focus-visible:ring-3"
+              className="border-line placeholder:text-ink-3 focus-visible:border-ring focus-visible:ring-ring/20 max-h-32 min-h-11 flex-1 resize-none rounded-[22px] border bg-card px-4 py-3 text-[14.5px] leading-snug outline-none focus-visible:ring-3"
             />
             <button
               type="button"

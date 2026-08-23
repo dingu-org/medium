@@ -22,7 +22,7 @@ export function LoadingState({
       <span className="sr-only">{t.states.loading}</span>
       <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
         {Array.from({ length: rows }, (_, i) => `skeleton-${i}`).map((key) => (
-          <div key={key} className="flex items-center gap-3 px-4 py-[13px]">
+          <div key={key} className="flex items-center gap-3 px-4 py-3">
             <Skeleton className="h-11 w-11 rounded-full" />
             <div className="flex-1 space-y-2">
               <Skeleton className="h-3 w-1/2" />
@@ -66,7 +66,7 @@ export function EmptyState({
         {title}
       </p>
       {description && (
-        <p className="mt-1.5 max-w-[260px] text-[13.5px] leading-relaxed text-ink-2">
+        <p className="mt-2 max-w-[260px] text-[13.5px] leading-relaxed text-ink-2">
           {description}
         </p>
       )}

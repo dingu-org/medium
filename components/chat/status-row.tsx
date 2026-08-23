@@ -46,7 +46,7 @@ export function ChatStatusRow({
   return (
     <div
       className={cn(
-        'border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-[9px]',
+        'border-line flex min-h-11 shrink-0 items-center gap-2 border-b px-4 py-2',
         m.tint,
         className,
       )}

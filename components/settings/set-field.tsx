@@ -40,17 +40,22 @@ export function SetField({
     ? (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
         onChange(event.target.value)
     : undefined;
+  // `self-stretch` is load-bearing: the shell is min-h-12 but a bare <input> is
+  // only ~22px tall, so without it the top/bottom ~13px of the field looks
+  // pressable and is not. Stretching the control to fill the shell — and
+  // wrapping the whole block in the <label> below — makes every pixel of the
+  // field, including its padding, prefix and suffix, focus the control.
   const fieldClassName =
-    'min-w-0 flex-1 bg-transparent text-[15px] text-foreground outline-none placeholder:text-[#a4abb7]';
+    'min-w-0 flex-1 self-stretch bg-transparent text-[15px] text-foreground outline-none placeholder:text-[#a4abb7]';
 
   return (
-    <div className={cn('flex flex-col gap-[7px]', disabled && 'opacity-55')}>
-      <label className="text-[13px] font-semibold tracking-[-0.005em] text-[#303744]">
+    <label className={cn('flex flex-col gap-2', disabled && 'opacity-55')}>
+      <span className="text-[13px] font-semibold tracking-[-0.005em] text-[#303744]">
         {label}
-      </label>
+      </span>
       <div
         className={cn(
-          'flex items-center gap-[9px] rounded-2xl border border-input px-4 focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary/15',
+          'flex items-center gap-2 rounded-2xl border border-input px-4 focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary/15',
           multiline ? 'py-3' : 'min-h-12',
           readOnly || disabled ? 'bg-muted' : 'bg-card',
         )}
@@ -91,6 +96,6 @@ export function SetField({
       </div>
       {help && <p className="text-xs leading-[1.45] text-ink-3">{help}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
-    </div>
+    </label>
   );
 }

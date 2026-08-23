@@ -18,9 +18,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
-import { cn } from '@/lib/utils';
 import type { ServiceRecord } from '@/lib/services/queries';
 import { type CustomerOption, searchCustomers } from './actions';
 
@@ -53,7 +53,7 @@ export function CalendarFab({
       <SheetTrigger asChild>
         <Button
           size="icon-lg"
-          className="fixed right-[18px] bottom-28 z-20 h-[58px] w-[58px] rounded-full shadow-[0_14px_30px_-10px_rgb(59_91_254_/_55%)]"
+          className="fixed right-4 bottom-[calc(6rem+max(16px,env(safe-area-inset-bottom)))] z-20 h-[58px] w-[58px] rounded-full shadow-[0_14px_30px_-10px_rgb(59_91_254_/_55%)]"
           aria-label={t.calendar.addLabel}
         >
           <Plus className="h-6 w-6" aria-hidden="true" />
@@ -73,9 +73,9 @@ export function CalendarFab({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="px-4 pb-6">
+        <div className="px-4 pb-4">
           {mode === 'menu' && (
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               <MenuItem
                 icon={CalendarPlus}
                 title={t.calendar.addApptTitle}
@@ -294,32 +294,16 @@ function AppointmentForm({
 
   return (
     <div className="space-y-3">
-      <div className="border-border inline-flex rounded-md border p-0.5">
-        <button
-          type="button"
-          onClick={() => setTab('existing')}
-          className={cn(
-            'rounded px-3 py-1 text-sm',
-            tab === 'existing'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground',
-          )}
-        >
-          {t.calendar.existingCustomer}
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('new')}
-          className={cn(
-            'rounded px-3 py-1 text-sm',
-            tab === 'new'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground',
-          )}
-        >
-          {t.calendar.newCustomer}
-        </button>
-      </div>
+      <SegmentedControl
+        ariaLabel={t.calendar.newAppointment}
+        value={tab}
+        onValueChange={setTab}
+        options={[
+          { value: 'existing', label: t.calendar.existingCustomer },
+          { value: 'new', label: t.calendar.newCustomer },
+        ]}
+        className="flex w-full"
+      />
 
       {tab === 'existing' ? (
         <div className="space-y-2">
@@ -340,7 +324,7 @@ function AppointmentForm({
               <span className="font-medium">{selected.name}</span>{' '}
               <button
                 type="button"
-                className="text-muted-foreground text-xs underline"
+                className="-my-2 inline-flex min-h-11 items-center px-1 text-muted-foreground text-xs underline"
                 onClick={() => setSelected(null)}
               >
                 {t.calendar.changeLink}
@@ -359,7 +343,7 @@ function AppointmentForm({
                     <button
                       type="button"
                       onClick={() => setSelected(p)}
-                      className="border-border hover:bg-muted/50 w-full rounded-md border px-3 py-2 text-left text-sm"
+                      className="border-border hover:bg-muted/50 flex min-h-11 w-full items-center rounded-md border px-4 py-2 text-left text-sm"
                     >
                       <span className="font-medium">{p.name}</span>{' '}
                       <span className="text-muted-foreground">{p.phone}</span>
@@ -375,7 +359,7 @@ function AppointmentForm({
           )}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="fab-new-name">{t.appointment.customerName}</Label>
             <Input
@@ -422,7 +406,7 @@ function AppointmentForm({
           id="fab-appt-service"
           value={serviceId}
           onChange={(e) => setServiceId(e.target.value)}
-          className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+          className="border-input bg-background h-12 w-full rounded-md border px-4 text-sm"
           required
         >
           <option value="" disabled>
@@ -462,14 +446,14 @@ function MenuItem({
     <button
       type="button"
       onClick={onClick}
-      className="border-line hover:bg-muted/50 flex w-full items-center gap-[13px] rounded-[12px] border bg-card px-4 py-3.5 text-left transition-colors"
+      className="border-line hover:bg-muted/50 flex w-full items-center gap-3 rounded-[12px] border bg-card px-4 py-3 text-left transition-colors"
     >
       <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[10px] bg-[var(--brand-50)]">
         <Icon className="text-primary h-[19px] w-[19px]" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[15px] font-semibold">{title}</span>
-        <span className="text-ink-3 mt-0.5 block text-[12.5px]">{sub}</span>
+        <span className="text-ink-3 mt-1 block text-[12.5px]">{sub}</span>
       </span>
       <ChevronRight className="text-ink-3/70 h-[18px] w-[18px] shrink-0" aria-hidden="true" />
     </button>

@@ -26,8 +26,8 @@ export function AssistantCard({
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-lg bg-card px-[18px] shadow-[var(--shadow-card)]',
-        big ? 'py-[18px]' : 'py-[15px]',
+        'flex items-center gap-3 rounded-lg bg-card px-4 shadow-[var(--shadow-card)]',
+        big ? 'py-5' : 'py-4',
       )}
     >
       <span
@@ -49,7 +49,7 @@ export function AssistantCard({
             ? t.settings.assistantCardPausedTitle
             : t.settings.assistantCardActiveTitle}
         </span>
-        <span className="mt-0.5 block text-[12.5px] leading-snug text-ink-3">
+        <span className="mt-1 block text-[12.5px] leading-snug text-ink-3">
           {optimistic
             ? t.settings.assistantCardPausedSub
             : t.settings.assistantCardActiveSub}

@@ -67,7 +67,7 @@ export default async function AvailabilityPage() {
   });
 
   return (
-    <div className="-mx-4 -mt-4">
+    <div>
       <AvailabilityEditor
         initialRules={initialRules}
         blocks={blockViews}

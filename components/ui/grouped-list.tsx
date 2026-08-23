@@ -18,15 +18,15 @@ export function GroupedList({
   return (
     <div className={cn('space-y-2', className)}>
       {title && (
-        <p className="px-2 text-[11.5px] font-bold tracking-[0.07em] uppercase text-ink-3">
+        <p className="px-4 text-[11.5px] font-bold tracking-[0.07em] uppercase text-ink-3">
           {title}
         </p>
       )}
-      <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+      <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:inset-x-4 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-sep">
         {children}
       </div>
       {footer && (
-        <p className="px-2 account-2 text-[12.5px] leading-relaxed text-ink-3">
+        <p className="px-4 pt-2 text-[12.5px] leading-relaxed text-ink-3">
           {footer}
         </p>
       )}
@@ -107,7 +107,7 @@ export function GroupedListRow({
     </>
   );
   const rowClassName = cn(
-    'flex min-h-[46px] w-full items-center gap-3 px-[18px] py-3 text-left',
+    'flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left',
     interactive && 'transition-colors hover:bg-muted/60',
     className,
   );

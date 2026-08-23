@@ -23,14 +23,14 @@ export function DurChips({
 }) {
   const chip = (active: boolean, extra?: string) =>
     cn(
-      'rounded-[14px] border py-[11px] text-[13px] tabular-nums transition-colors disabled:opacity-40',
+      'min-h-11 rounded-[14px] border py-2 text-[13px] tabular-nums transition-colors disabled:opacity-40',
       active
         ? 'border-primary bg-primary font-bold text-primary-foreground'
         : 'border-input bg-card font-medium text-ink-2',
       extra,
     );
   return (
-    <div className="flex gap-[7px]">
+    <div className="flex gap-2">
       {PRESETS.map((m) => {
         const active = !custom && minutes === m;
         return (

@@ -9,7 +9,7 @@ export function SyncIndicator() {
   const online = useOnlineStatus();
   return (
     <span
-      className="flex items-center gap-1.5 text-xs text-muted-foreground"
+      className="flex items-center gap-2 text-xs text-muted-foreground"
       role="status"
       aria-live="polite"
     >

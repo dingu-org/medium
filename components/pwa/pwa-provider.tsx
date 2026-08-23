@@ -318,7 +318,7 @@ export function PwaProvider() {
 function FailedMutationsBanner({ items }: { items: PendingMutation[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="border-destructive/20 bg-destructive/5 space-y-2 border-b px-4 py-2 text-xs">
+    <div className="border-destructive/20 bg-destructive/5 space-y-2 border-b px-4 py-3 text-xs">
       {items.slice(0, 3).map((item) => (
         <div key={item.id} className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
@@ -373,7 +373,7 @@ function StatusBanner({
   return (
     <AppBanner
       tone={tone === 'error' ? 'danger' : 'neutral'}
-      className="border-x-0 border-t-0 px-4 py-2 text-center text-xs"
+      className="px-4 py-3 text-center text-xs"
     >
       {text}
     </AppBanner>
@@ -386,7 +386,7 @@ function UpdateBanner({ worker }: { worker: ServiceWorker | null }) {
     <AppBanner
       tone="info"
       icon={RefreshCcw}
-      className="border-x-0 border-t-0 px-4 py-2 text-xs"
+      className="px-4 py-3 text-xs"
       action={
         <Button
           type="button"
@@ -417,7 +417,7 @@ function InstallBanner({
     <AppBanner
       tone="info"
       icon={isIos ? Share : Download}
-      className="border-x-0 border-t-0 px-4 py-2 text-xs"
+      className="px-4 py-3 text-xs"
       action={
         <div className="flex items-center gap-2">
           {!isIos && (
@@ -439,7 +439,7 @@ function InstallBanner({
           )}
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground"
+            className="-mr-3 flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground"
             aria-label={t.pwa.dismissInstall}
             onClick={onDismiss}
           >
@@ -465,7 +465,7 @@ function PushPromptBanner({ onDismiss }: { onDismiss: () => void }) {
     <AppBanner
       tone="info"
       icon={Bell}
-      className="border-x-0 border-t-0 px-4 py-2 text-xs"
+      className="px-4 py-3 text-xs"
       action={
         <div className="flex items-center gap-2">
           <Button
@@ -491,7 +491,7 @@ function PushPromptBanner({ onDismiss }: { onDismiss: () => void }) {
           </Button>
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground"
+            className="-mr-3 flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground"
             aria-label={t.pwa.dismissPush}
             onClick={onDismiss}
           >

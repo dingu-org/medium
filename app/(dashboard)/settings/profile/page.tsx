@@ -16,7 +16,7 @@ export default async function ProfileSettingsPage() {
   const snapshot = await getSettingsSnapshot(user.id);
 
   return (
-    <div className="-mx-4 -mt-4">
+    <div>
       <ProfileForm
         fullName={snapshot.fullName}
         title={snapshot.title}

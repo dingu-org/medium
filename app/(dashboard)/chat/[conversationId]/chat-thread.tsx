@@ -444,7 +444,7 @@ export function ChatThread({
         : ('default' as const);
 
   return (
-    <div className="-mx-4 -mt-4 flex flex-col">
+    <div className="flex flex-col">
       <div className="bg-background sticky top-0 z-10">
         <NavBar
           backHref="/chat"
@@ -553,14 +553,14 @@ export function ChatThread({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 space-y-[11px] px-4 py-4">
+      <div className="flex-1 space-y-3 px-4 py-4">
         {hasOlder && (
           <div className="flex justify-center pb-1">
             <button
               type="button"
               onClick={loadOlder}
               disabled={loadingOlder}
-              className="text-ink-2 bg-[#ecece7] rounded-full px-4 py-1.5 text-[12.5px] font-medium transition-opacity disabled:opacity-50"
+              className="text-ink-2 bg-[#ecece7] relative rounded-full px-4 py-2 text-[12.5px] font-medium transition-opacity disabled:opacity-50 before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']"
             >
               {loadingOlder ? t.chat.loadingOlder : t.chat.loadOlder}
             </button>
@@ -599,7 +599,7 @@ export function ChatThread({
               {isOptimisticMessage(m) && m.failed === true && (
                 <button
                   type="button"
-                  className="text-primary mt-1 ml-auto block font-mono text-[11px] font-semibold"
+                  className="text-primary relative mt-1 ml-auto block py-2 font-mono text-[11px] font-semibold before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']"
                   onClick={() => retryFailed(m)}
                 >
                   · {t.chat.retry}
@@ -612,7 +612,7 @@ export function ChatThread({
         {windowClosed && !closed && connectionStatus === 'active' && (
           <ChatSysLine>{t.chat.sysWindowClosed}</ChatSysLine>
         )}
-        <div ref={bottomRef} className="h-24" />
+        <div ref={bottomRef} className="h-[calc(10rem+env(safe-area-inset-bottom))]" />
       </div>
 
       {/* Composer — pinned above the bottom safe area */}

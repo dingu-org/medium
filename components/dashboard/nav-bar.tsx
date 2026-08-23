@@ -28,7 +28,7 @@ export function NavBar({
   return (
     <header
       className={cn(
-        'relative flex h-[60px] shrink-0 items-center px-4',
+        'relative flex h-16 shrink-0 items-center px-4',
         className,
       )}
     >

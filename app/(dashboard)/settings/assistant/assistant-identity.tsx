@@ -101,7 +101,7 @@ export function AssistantIdentity({
       </GroupedList>
 
       {locked && (
-        <div className="border-border bg-card mt-3 rounded-lg border p-4">
+        <div className="border-border bg-card rounded-lg border p-4">
           <p className="text-ink-2 text-[13px] leading-5">
             {t.billing.gateIdentity}
           </p>
@@ -164,7 +164,7 @@ function AssistantIdentitySheet({
         {cfg && (
           <form
             key={activeField}
-            className="space-y-4 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+            className="space-y-4 px-4 pb-4"
             onSubmit={(event) => {
               event.preventDefault();
               if (!online) {

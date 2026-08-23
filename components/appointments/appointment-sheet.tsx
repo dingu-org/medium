@@ -184,7 +184,7 @@ export function AppointmentSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto">
         <SheetHeader>
-          <SheetTitle className="font-heading flex items-center justify-between gap-2.5 pr-9 text-[19px] font-semibold tracking-[-0.02em]">
+          <SheetTitle className="font-heading flex items-center justify-between gap-2 pr-7 text-[19px] font-semibold tracking-[-0.02em]">
             {appointment.customerName}
             <StatusBadge status={appointment.status} />
           </SheetTitle>
@@ -193,18 +193,18 @@ export function AppointmentSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-3.5 px-5 pb-6">
+        <div className="space-y-4 px-4 pb-6">
           {mode === 'detail' && (
             <>
               {/* Canvas InfoCard: Manrope date, tabular time, chips row. */}
-              <div className="border-line rounded-[12px] border bg-card p-3.5">
+              <div className="border-line rounded-[12px] border bg-card p-4">
                 <p className="font-heading text-[17px] font-semibold tracking-[-0.015em]">
                   {formatWeekdayDate(start)}
                 </p>
-                <p className="text-ink-2 mt-0.5 text-sm tabular-nums">
+                <p className="text-ink-2 mt-1 text-sm tabular-nums">
                   {formatTime(start)}–{formatTime(end)}
                 </p>
-                <div className="mt-[11px] flex flex-wrap items-center gap-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {appointment.serviceType && (
                     <span className="text-ink-2 text-[13px]">
                       {appointment.serviceType}
@@ -230,7 +230,7 @@ export function AppointmentSheet({
               <div className="flex gap-2">
                 <a
                   href={`tel:${appointment.customerPhone}`}
-                  className="border-line hover:bg-muted/50 flex h-[42px] flex-1 items-center justify-center gap-[7px] rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
+                  className="border-line hover:bg-muted/50 flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
                 >
                   <Phone className="text-primary h-4 w-4" aria-hidden="true" />
                   {t.appointment.call}
@@ -240,7 +240,7 @@ export function AppointmentSheet({
                     href={`https://wa.me/${appointment.customerWaId.replace(/\D/g, '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="border-line hover:bg-muted/50 flex h-[42px] flex-1 items-center justify-center gap-[7px] rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
+                    className="border-line hover:bg-muted/50 flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
                   >
                     <WhatsAppMark size={16} />
                     {t.appointment.whatsapp}
@@ -249,7 +249,7 @@ export function AppointmentSheet({
                 {appointment.conversationId && (
                   <Link
                     href={`/chat/${appointment.conversationId}`}
-                    className="border-line hover:bg-muted/50 flex h-[42px] flex-1 items-center justify-center gap-[7px] rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
+                    className="border-line hover:bg-muted/50 flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
                   >
                     <MessageSquare className="text-primary h-4 w-4" aria-hidden="true" />
                     {t.appointment.openChat}
@@ -257,10 +257,10 @@ export function AppointmentSheet({
                 )}
               </div>
 
-              <div className="account-1">
+              <div className="pt-1">
                 <label
                   htmlFor="appt-notes"
-                  className="mb-[7px] block text-[13px] font-semibold text-[var(--neutral-700)]"
+                  className="mb-2 block text-[13px] font-semibold text-[var(--neutral-700)]"
                 >
                   {t.appointment.privateNote}
                 </label>
@@ -278,7 +278,7 @@ export function AppointmentSheet({
                     size="sm"
                     onClick={saveNotes}
                     disabled={pending}
-                    className="mt-2.5 rounded-[10px]"
+                    className="mt-3 rounded-[10px]"
                   >
                     {t.appointment.saveNote}
                   </Button>
@@ -286,7 +286,7 @@ export function AppointmentSheet({
               </div>
 
               {isActive && (
-                <div className="border-sep flex flex-col gap-2.5 border-t account-[18px]">
+                <div className="border-sep flex flex-col gap-3 border-t pt-4">
                   {ended && (
                     <Button
                       onClick={() =>

@@ -51,7 +51,7 @@ export function SignUpForm() {
 
       <p className="text-center text-sm text-muted-foreground">
         {t.auth.signUp.footerQuestion}{' '}
-        <Link href="/sign-in" className="font-medium text-foreground hover:underline">
+        <Link href="/sign-in" className="-my-3 inline-flex min-h-11 items-center font-medium text-foreground hover:underline">
           {t.auth.signUp.footerAction}
         </Link>
       </p>

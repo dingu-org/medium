@@ -11,7 +11,7 @@ export function SignOutMenuItem() {
   const [pending, startTransition] = useTransition();
 
   return (
-    <DropdownMenuItem asChild className="px-2.5 py-2">
+    <DropdownMenuItem asChild>
       <button
         type="button"
         className="w-full cursor-pointer text-left"

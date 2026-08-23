@@ -13,7 +13,7 @@ export function LegalSection({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       <h2 className="font-heading text-xl font-medium tracking-normal">
         {title}
       </h2>
@@ -41,7 +41,7 @@ export function LanguageSwitch({
       <Link
         href={href}
         lang={lang}
-        className="text-muted-foreground hover:text-foreground underline underline-offset-4"
+        className="text-muted-foreground hover:text-foreground -my-3 inline-flex min-h-11 items-center underline underline-offset-4"
       >
         {label}
       </Link>

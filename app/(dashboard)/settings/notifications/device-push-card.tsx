@@ -70,7 +70,7 @@ export function DevicePushCard() {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-[13px] rounded-lg bg-card px-[18px] py-[15px] shadow-[var(--shadow-card)]">
+      <div className="flex items-center gap-3 rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
         <span
           className="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[var(--brand-50)]"
           aria-hidden="true"
@@ -81,7 +81,7 @@ export function DevicePushCard() {
           <span className="block text-[15px] font-semibold text-foreground">
             {t.settings.pushCardTitle}
           </span>
-          <span className="mt-0.5 block truncate text-[12.5px] text-ink-3">
+          <span className="mt-1 block truncate text-[12.5px] text-ink-3">
             {device}
           </span>
         </span>

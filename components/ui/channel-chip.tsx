@@ -46,14 +46,14 @@ export function ChannelChip({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-[7px] rounded-full py-[5px] pr-[11px] pl-2 text-xs font-medium',
+        'inline-flex shrink-0 items-center gap-2 rounded-full py-1 pr-3 pl-2 text-xs font-medium',
         m.chip,
         className,
       )}
     >
       <WhatsAppMark size={15} />
       <span className="h-3 w-px bg-black/10" aria-hidden="true" />
-      <span className="inline-flex items-center gap-[5px]">
+      <span className="inline-flex items-center gap-1">
         <span
           className={cn('h-1.5 w-1.5 rounded-full', m.dot)}
           aria-hidden="true"

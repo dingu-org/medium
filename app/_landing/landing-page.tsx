@@ -68,7 +68,7 @@ const features = [
 
 export function LandingPage() {
   return (
-    <div className="bg-background text-foreground min-h-screen">
+    <div className="bg-background text-foreground min-h-dvh">
       <SiteHeader />
       <main>
         <Hero />
@@ -86,8 +86,8 @@ export function LandingPage() {
 function SiteHeader() {
   return (
     <header className="border-line/70 bg-background/95 sticky top-0 z-40 border-b backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
-        <Link href="/" className="flex items-center gap-2.5" aria-label="Medium">
+      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 md:px-5">
+        <Link href="/" className="flex min-h-11 items-center gap-3" aria-label="Medium">
           <LogoMark size={32} />
           <span className="font-heading text-lg font-semibold tracking-tight">
             Medium
@@ -113,7 +113,7 @@ function Hero() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(58%_48%_at_72%_4%,var(--brand-50),rgba(255,255,255,0)_70%)]"
         aria-hidden
       />
-      <div className="relative mx-auto grid max-w-5xl items-center gap-12 px-6 lg:grid-cols-[1.05fr_0.95fr]">
+      <div className="relative mx-auto grid max-w-5xl items-center gap-12 px-4 md:px-5 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="max-w-xl">
           <span className="text-[12px] font-bold tracking-[0.08em] text-[var(--brand-500)] uppercase">
             Asistent takimesh për WhatsApp
@@ -160,7 +160,7 @@ function PhoneMock() {
       aria-hidden
     >
       <div className="bg-background relative flex h-[560px] flex-col overflow-hidden rounded-[28px]">
-        <div className="border-line bg-card flex items-center gap-3 border-b px-4 py-3 account-7">
+        <div className="border-line bg-card flex items-center gap-3 border-b px-4 py-3 pt-7">
           <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-500)]">
             <span className="font-heading text-sm font-semibold text-white">
               M
@@ -215,8 +215,8 @@ function ChatBubble({
     <div
       className={
         out
-          ? 'ml-auto max-w-[80%] rounded-2xl rounded-br-md bg-[var(--brand-500)] px-3 py-1.5 text-[13px] leading-snug text-white'
-          : 'border-line bg-card mr-auto max-w-[80%] rounded-2xl rounded-bl-md border px-3 py-1.5 text-[13px] leading-snug'
+          ? 'ml-auto max-w-[80%] rounded-2xl rounded-br-md bg-[var(--brand-500)] px-3 py-2 text-[13px] leading-snug text-white'
+          : 'border-line bg-card mr-auto max-w-[80%] rounded-2xl rounded-bl-md border px-3 py-2 text-[13px] leading-snug'
       }
     >
       {children}
@@ -227,7 +227,7 @@ function ChatBubble({
 function HowItWorks() {
   return (
     <section id="how" className="py-16 sm:py-24">
-      <div className="mx-auto max-w-5xl px-6">
+      <div className="mx-auto max-w-5xl px-4 md:px-5">
         <div className="max-w-xl">
           <span className="text-[12px] font-bold tracking-[0.08em] text-[var(--brand-500)] uppercase">
             Si funksionon
@@ -235,7 +235,7 @@ function HowItWorks() {
           <h2 className="font-heading mt-3 text-3xl font-semibold tracking-tight">
             Tre hapa. Pa zakone të reja për të mësuar.
           </h2>
-          <p className="text-ink-2 mt-3 text-base">
+          <p className="text-ink-2 mt-2 text-base">
             Medium qëndron aty ku janë tashmë pacientët tuaj — dhe e bën
             planifikimin në heshtje për ju.
           </p>
@@ -252,7 +252,7 @@ function HowItWorks() {
               <h3 className="font-heading text-lg font-semibold">
                 {step.title}
               </h3>
-              <p className="text-ink-2 mt-1.5 text-sm">{step.body}</p>
+              <p className="text-ink-2 mt-2 text-sm">{step.body}</p>
             </div>
           ))}
         </div>
@@ -264,7 +264,7 @@ function HowItWorks() {
 function Features() {
   return (
     <section className="border-line bg-card border-t border-b">
-      <div className="mx-auto max-w-5xl px-6 py-16 sm:py-24">
+      <div className="mx-auto max-w-5xl px-4 md:px-5 py-16 sm:py-24">
         <div className="max-w-xl">
           <span className="text-[12px] font-bold tracking-[0.08em] text-[var(--brand-500)] uppercase">
             Çfarë bën
@@ -273,11 +273,11 @@ function Features() {
             Një koleg i qetë për recepsionin.
           </h2>
         </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2">
+        <div className="mt-10 grid gap-4 sm:grid-cols-2">
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="border-line bg-background rounded-2xl border p-6 shadow-[var(--shadow-card)]"
+              className="border-line bg-background rounded-2xl border p-5 shadow-[var(--shadow-card)]"
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--brand-50)] text-[var(--brand-500)]">
                 <feature.icon className="h-5 w-5" aria-hidden />
@@ -285,16 +285,16 @@ function Features() {
               <h3 className="font-heading text-lg font-semibold">
                 {feature.title}
               </h3>
-              <p className="text-ink-2 mt-1.5 text-sm">
+              <p className="text-ink-2 mt-2 text-sm">
                 {feature.body ?? (
                   <>
                     Pacientët marrin një kujtesë një ditë para dhe konfirmojnë
                     me{' '}
-                    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-[0.85em] text-[var(--brand-600)]">
+                    <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em] text-[var(--brand-600)]">
                       KONFIRMO
                     </code>{' '}
                     ose anulojnë me{' '}
-                    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-[0.85em] text-[var(--brand-600)]">
+                    <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em] text-[var(--brand-600)]">
                       ANULO
                     </code>
                     .
@@ -314,7 +314,7 @@ function Pricing() {
   const solo = PLANS.solo;
   return (
     <section id="pricing" className="py-16 sm:py-24">
-      <div className="mx-auto max-w-5xl px-6">
+      <div className="mx-auto max-w-5xl px-4 md:px-5">
         <div className="max-w-xl">
           <span className="text-[12px] font-bold tracking-[0.08em] text-[var(--brand-500)] uppercase">
             {t.billing.landingEyebrow}
@@ -322,16 +322,16 @@ function Pricing() {
           <h2 className="font-heading mt-3 text-3xl font-semibold tracking-tight">
             {t.billing.landingTitle}
           </h2>
-          <p className="text-ink-2 mt-3 text-base">{t.billing.landingSub}</p>
+          <p className="text-ink-2 mt-2 text-base">{t.billing.landingSub}</p>
         </div>
 
-        <div className="mt-10 grid items-start gap-5 sm:grid-cols-3">
+        <div className="mt-10 grid items-start gap-4 sm:grid-cols-3">
           {/* Falas */}
-          <div className="border-line bg-card rounded-2xl border p-6 shadow-[var(--shadow-card)]">
+          <div className="border-line bg-card rounded-2xl border p-5 shadow-[var(--shadow-card)]">
             <h3 className="font-heading text-lg font-semibold">
               {t.billing.planFree}
             </h3>
-            <p className="text-ink-3 mt-1 text-sm">{t.billing.landingStartFree}</p>
+            <p className="text-ink-3 mt-2 text-sm">{t.billing.landingStartFree}</p>
             <ul className="text-ink-2 mt-5 space-y-2 text-sm">
               <PriceFeature>
                 {t.billing.featConversations(free.conversationsPerMonth)}
@@ -347,12 +347,12 @@ function Pricing() {
           </div>
 
           {/* Solo — favored */}
-          <div className="rounded-2xl border-2 border-[var(--brand-500)] bg-[var(--brand-50)] p-6 shadow-[var(--shadow-card)]">
+          <div className="rounded-2xl border-2 border-[var(--brand-500)] bg-[var(--brand-50)] p-5 shadow-[var(--shadow-card)]">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-lg font-semibold">
                 {t.billing.planSolo}
               </h3>
-              <span className="rounded-full bg-[var(--brand-500)] px-2.5 py-0.5 text-[11px] font-semibold text-white">
+              <span className="rounded-full bg-[var(--brand-500)] px-2 py-0.5 text-[11px] font-semibold text-white">
                 {t.billing.landingSoloTag}
               </span>
             </div>
@@ -361,7 +361,7 @@ function Pricing() {
                 <p className="font-heading text-2xl font-semibold tabular-nums">
                   {t.billing.priceMonthly(formatLek(solo.price.monthly))}
                 </p>
-                <p className="text-ink-3 mt-0.5 text-[13px] tabular-nums">
+                <p className="text-ink-3 mt-1 text-[13px] tabular-nums">
                   {t.billing.priceYearly(formatLek(solo.price.yearly))} ·{' '}
                   <span className="font-medium text-[var(--brand-600)]">
                     {t.billing.twoMonthsFree}
@@ -386,16 +386,16 @@ function Pricing() {
           </div>
 
           {/* Dual / Multi — coming soon (muted) */}
-          <div className="border-line rounded-2xl border border-dashed p-6 opacity-70">
+          <div className="border-line rounded-2xl border border-dashed p-5 opacity-70">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-ink-2 text-lg font-semibold">
                 Dual / Multi
               </h3>
-              <span className="border-line text-ink-3 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold">
+              <span className="border-line text-ink-3 rounded-full border px-2 py-0.5 text-[11px] font-semibold">
                 {t.billing.comingSoon}
               </span>
             </div>
-            <p className="text-ink-3 mt-3 text-sm leading-6">
+            <p className="text-ink-3 mt-2 text-sm leading-6">
               Për praktika me disa terapistë. Së shpejti.
             </p>
           </div>
@@ -424,7 +424,7 @@ function PriceFeature({ children }: { children: React.ReactNode }) {
 function WhoItsFor() {
   return (
     <section className="py-16 text-center sm:py-24">
-      <div className="mx-auto max-w-3xl px-6">
+      <div className="mx-auto max-w-3xl px-4 md:px-5">
         <span className="text-[12px] font-bold tracking-[0.08em] text-[var(--brand-500)] uppercase">
           Për kë është
         </span>
@@ -432,7 +432,7 @@ function WhoItsFor() {
           Ndërtuar për fizioterapeutët. Po zgjerohet te çdo profesionist i
           pavarur.
         </h2>
-        <p className="text-ink-2 mt-5 text-lg leading-relaxed">
+        <p className="text-ink-2 mt-2 text-lg leading-relaxed">
           Medium nisi me fizioterapinë, ku çdo takim i humbur ka rëndësi. Më
           pas vjen për këdo që jeton me kalendarin e vet — dentistë, trajnerë,
           konsulentë.
@@ -445,7 +445,7 @@ function WhoItsFor() {
 function CtaBand() {
   return (
     <section className="bg-[var(--brand-600)] py-16 text-white sm:py-24">
-      <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-6 text-center">
+      <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-4 md:px-5 text-center">
         <LogoMark size={40} />
         <h2 className="font-heading max-w-xl text-3xl font-semibold tracking-tight text-white">
           Lëre Medium të mbajë bisedat. Ti mbaj pacientët.
@@ -464,8 +464,8 @@ function CtaBand() {
 function SiteFooter() {
   return (
     <footer className="border-line bg-card border-t">
-      <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 px-6 py-10 sm:flex-row sm:justify-between">
-        <div className="flex items-center gap-2.5">
+      <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 px-4 md:px-5 py-10 sm:flex-row sm:justify-between">
+        <div className="flex items-center gap-3">
           <LogoMark size={24} />
           <div>
             <p className="text-ink-2 text-sm">
@@ -474,7 +474,7 @@ function SiteFooter() {
             <p className="text-ink-3 text-xs">© 2026 Medium</p>
           </div>
         </div>
-        <div className="text-ink-2 flex gap-4 text-sm">
+        <div className="text-ink-2 flex gap-4 text-sm [&>a]:inline-flex [&>a]:min-h-11 [&>a]:items-center">
           <Link href="/privacy" className="hover:text-foreground">
             Politika e privatësisë
           </Link>

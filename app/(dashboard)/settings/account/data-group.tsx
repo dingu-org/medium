@@ -126,7 +126,7 @@ export function DataGroup({
           <SheetHeader>
             <SheetTitle>{t.settings.retentionRow}</SheetTitle>
           </SheetHeader>
-          <div className="flex flex-col pb-2">
+          <div className="flex flex-col pb-4">
             {RETENTION_OPTIONS.map((opt) => {
               const locked = opt > retentionMaxDays;
               return (
@@ -159,7 +159,7 @@ export function DataGroup({
             {RETENTION_OPTIONS.some((opt) => opt > retentionMaxDays) && (
               <Link
                 href="/settings/billing"
-                className="mx-4 mt-2 rounded-lg bg-[var(--brand-50)] px-3 py-2.5 text-center text-[13px] font-medium text-[var(--brand-600)]"
+                className="mx-4 mt-2 flex min-h-11 items-center justify-center rounded-lg bg-[var(--brand-50)] px-4 text-center text-[13px] font-medium text-[var(--brand-600)]"
                 onClick={() => setSheetOpen(false)}
               >
                 {t.billing.gateRetention}

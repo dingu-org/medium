@@ -22,9 +22,9 @@ export default async function AccountSettingsPage() {
   const email = user.email ?? '';
 
   return (
-    <div className="-mx-4 -mt-4">
+    <div>
       <NavBar title={t.settings.accountAndData} backHref="/settings" />
-      <div className="space-y-6 px-5 account-2 pb-7">
+      <div className="space-y-6 px-4 pt-2 pb-4">
         <OfflineNote />
 
         <GroupedList title={t.settings.accountSection}>

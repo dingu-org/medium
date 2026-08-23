@@ -14,7 +14,7 @@ export function SectionLabel({
   return (
     <p
       className={cn(
-        'px-2 pb-2 text-[11.5px] font-bold tracking-[0.07em] uppercase',
+        'px-4 pb-2 text-[11.5px] font-bold tracking-[0.07em] uppercase',
         danger ? 'text-[var(--danger-600)]' : 'text-ink-3',
         className,
       )}

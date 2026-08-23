@@ -64,7 +64,7 @@ export function ChatBubble({
     <div className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
       <div className="max-w-[84%]">
         {ai && !grouped && (
-          <div className="text-primary mb-1 inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium tracking-[0.04em] uppercase">
+          <div className="text-primary mb-1 inline-flex items-center gap-1 font-mono text-[10.5px] font-medium tracking-[0.04em] uppercase">
             <span
               className="h-1.5 w-1.5 rounded-full bg-sage"
               aria-hidden="true"
@@ -91,7 +91,7 @@ export function ChatBubble({
         {!grouped && (
           <div
             className={cn(
-              'text-ink-3 mt-1 flex items-center gap-1.5 px-1 font-mono text-[11px]',
+              'text-ink-3 mt-1 flex items-center gap-2 px-1 font-mono text-[11px]',
               mine ? 'justify-end text-right' : 'justify-start',
               failed && 'text-destructive',
             )}

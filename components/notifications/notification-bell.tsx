@@ -105,14 +105,14 @@ export function NotificationBell({
               type="button"
               onClick={markRead}
               disabled={pending || unreadCount === 0}
-              className="text-primary text-[13px] font-semibold disabled:opacity-40"
+              className="text-primary -my-2 -mr-2 flex min-h-11 items-center px-2 text-[13px] font-semibold disabled:opacity-40"
             >
               {t.notifications.markAllRead}
             </button>
           </div>
         )}
 
-        <ScrollArea className="flex-1 px-4 pb-6">
+        <ScrollArea className="flex-1 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
           {items.length === 0 ? (
             <EmptyState
               icon={Bell}
@@ -121,7 +121,7 @@ export function NotificationBell({
               className="mt-6"
             />
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-6">
               {/* The first `unreadCount` items are past the read watermark. */}
               <FeedGroup
                 title={t.notifications.groupNew}
@@ -167,7 +167,7 @@ function FeedGroup({
               type="button"
               onClick={() => onOpen(item.href)}
               className={cn(
-                'hover:bg-muted/50 flex w-full items-center gap-3 px-4 py-[13px] text-left transition-colors',
+                'hover:bg-muted/50 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors',
                 unread && 'bg-[#fbfcfe]',
               )}
             >
@@ -188,7 +188,7 @@ function FeedGroup({
                 >
                   {item.title}
                 </span>
-                <span className="text-ink-3 mt-0.5 block font-mono text-xs">
+                <span className="text-ink-3 mt-1 block font-mono text-xs">
                   {formatRelativeShort(new Date(item.occurredAt))}
                 </span>
               </span>

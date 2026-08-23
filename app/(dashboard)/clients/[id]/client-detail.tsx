@@ -98,7 +98,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
   }
 
   return (
-    <div className="-mx-4 -mt-4">
+    <div>
       <RealtimeRefresher table="customers" filter={`account_id=eq.${client.accountId}`} />
       <RealtimeRefresher
         table="appointments"
@@ -110,7 +110,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
       />
       <NavBar backHref="/clients" title={client.name} />
 
-      <div className="px-5 account-4 pb-7">
+      <div className="px-4 pt-2 pb-4">
         {/* Canvas ClientHeader: big avatar, Manrope name, mono phone. */}
         <section className="flex flex-col items-center pb-1 text-center">
           <InitialsAvatar name={client.name} size={72} />
@@ -120,14 +120,14 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
           <p className="text-ink-2 mt-1 font-mono text-sm tabular-nums">
             {client.phone}
           </p>
-          <div className="mt-[11px]">
+          <div className="mt-3">
             {client.manual ? (
               <ManualBadge />
             ) : (
               <ChannelChip state="connected" />
             )}
           </div>
-          <p className="text-ink-3 mt-2.5 text-[12.5px]">
+          <p className="text-ink-3 mt-2 text-[12.5px]">
             {client.manual
               ? `Shtuar me dorë · ${memberSince}`
               : `Klient që nga ${memberSince}`}
@@ -135,7 +135,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
         </section>
 
         {/* Quick actions (canvas QuickActs). */}
-        <div className="mt-[18px] flex gap-2">
+        <div className="mt-4 flex gap-2">
           <QuickAct href={`tel:${client.phone}`} label="Telefono">
             <Phone className="h-5 w-5" aria-hidden />
           </QuickAct>
@@ -179,7 +179,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
         )}
 
         {/* Private note (canvas NoteBlock). */}
-        <section className="mt-5">
+        <section className="mt-6">
           <label
             htmlFor="client-notes"
             className="mb-2 block text-[13px] font-semibold text-[var(--neutral-700)]"
@@ -221,13 +221,13 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
           empty="Ende pa histori takimesh."
           timezone={client.timezone}
           onOpen={setSelected}
-          className="mt-5"
+          className="mt-6"
         />
 
         {/* Danger zone (canvas parity with settings/account/account-danger.tsx): export + erase. */}
         <section className="mt-6">
           <SectionLabel>{t.clients.dangerZone}</SectionLabel>
-          <div className="border-line bg-card space-y-2 rounded-[12px] border p-3 shadow-[var(--shadow-card)]">
+          <div className="border-line bg-card space-y-2 rounded-[12px] border p-4 shadow-[var(--shadow-card)]">
             <Button
               variant="outline"
               className="w-full"
@@ -298,7 +298,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
 /** Manually-added customer badge (canvas ManualBadge). */
 function ManualBadge() {
   return (
-    <span className="text-ink-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--neutral-100)] py-[5px] pr-[11px] pl-[9px] text-xs font-medium">
+    <span className="text-ink-2 inline-flex items-center gap-1 rounded-full bg-[var(--neutral-100)] px-3 py-1 text-xs font-medium">
       <User className="h-3.5 w-3.5" aria-hidden />
       Shtuar me dorë
     </span>
@@ -335,7 +335,7 @@ function QuickAct({
     </>
   );
   const classes = cn(
-    'border-line flex flex-1 flex-col items-center gap-1.5 rounded-[12px] border bg-card px-1.5 py-3',
+    'border-line flex flex-1 flex-col items-center gap-1 rounded-[12px] border bg-card px-2 py-3',
     !href && 'opacity-60',
   );
   if (!href) {
@@ -407,7 +407,7 @@ function AppointmentList({
                   >
                     {formatDateLong(zoned)} · {formatTime(zoned)}
                   </span>
-                  <span className="text-ink-3 mt-px block truncate text-[12.5px]">
+                  <span className="text-ink-3 mt-1 block truncate text-[12.5px]">
                     {appointment.serviceType ?? 'Takim'}
                   </span>
                 </span>

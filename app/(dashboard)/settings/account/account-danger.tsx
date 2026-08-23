@@ -76,8 +76,8 @@ export function AccountDanger({ name }: { name: string }) {
           showCloseButton={false}
           className="max-w-[340px] gap-0 rounded-[26px] p-0"
         >
-          <div className="px-[22px] account-[22px] pb-4 text-center">
-            <span className="mb-3.5 inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--danger-50)]">
+          <div className="px-5 pt-5 pb-4 text-center">
+            <span className="mb-3 inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--danger-50)]">
               <X
                 className="h-6 w-6 text-destructive"
                 strokeWidth={2.2}
@@ -92,7 +92,7 @@ export function AccountDanger({ name }: { name: string }) {
             </DialogDescription>
           </div>
 
-          <div className="space-y-[7px] px-[22px]">
+          <div className="space-y-2 px-5">
             <p className="text-[12.5px] text-ink-2">
               {t.settings.deleteTypePromptPre}
               <strong className="font-bold text-foreground">{phrase}</strong>
@@ -107,7 +107,7 @@ export function AccountDanger({ name }: { name: string }) {
             />
           </div>
 
-          <div className="flex flex-col gap-2 p-[18px]">
+          <div className="flex flex-col gap-2 p-5">
             <Button
               variant="destructive"
               className="h-12 rounded-full"

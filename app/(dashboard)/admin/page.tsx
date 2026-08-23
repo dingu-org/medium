@@ -37,7 +37,7 @@ export default async function AdminPage() {
   const exportMonths = recentMonthKeys(new Date(), 6);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="mx-auto max-w-5xl space-y-6 px-4 pt-2 pb-4">
       <h1 className="text-xl font-bold">Admin metrics</h1>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -91,7 +91,7 @@ export default async function AdminPage() {
         rows={metrics.cost.today}
       />
 
-      <h2 className="account-2 text-lg font-bold">Monetization</h2>
+      <h2 className="pt-2 text-lg font-bold">Monetization</h2>
 
       <div className="grid gap-6 md:grid-cols-2">
         <PlanDistributionCard billing={billing} />
@@ -305,7 +305,7 @@ function PaymentsCard({
               key={month}
               href={`/admin/payments-export?month=${month}`}
               download
-              className="underline"
+              className="inline-flex min-h-11 items-center underline"
             >
               {month}
             </a>

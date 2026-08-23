@@ -46,7 +46,7 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        'inline-flex h-5 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2 text-[11px] font-medium leading-none',
+        'inline-flex h-5 max-w-full shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-medium leading-none',
         mono && 'font-mono text-[10.5px]',
         toneClasses[tone],
         className,

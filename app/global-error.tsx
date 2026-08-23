@@ -32,7 +32,7 @@ export default function GlobalError({
       <body
         style={{
           margin: 0,
-          minHeight: '100vh',
+          minHeight: '100dvh',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -42,7 +42,7 @@ export default function GlobalError({
           color: '#1a1a18',
         }}
       >
-        <div style={{ textAlign: 'center', padding: '24px', maxWidth: 360 }}>
+        <div style={{ textAlign: 'center', padding: '16px', maxWidth: 360 }}>
           <p style={{ fontSize: 18, fontWeight: 700, margin: '0 0 8px' }}>
             Diçka shkoi keq
           </p>
@@ -55,7 +55,8 @@ export default function GlobalError({
             style={{
               border: 'none',
               borderRadius: 10,
-              padding: '11px 20px',
+              minHeight: 48,
+              padding: '12px 20px',
               fontSize: 14,
               fontWeight: 600,
               background: '#1a1a18',

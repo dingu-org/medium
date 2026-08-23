@@ -134,7 +134,7 @@ export function ChatList({
           <Input
             value={query}
             onChange={(event) => search(event.target.value)}
-            className="h-11 rounded-full pr-10 pl-11"
+            className="h-11 rounded-full pr-11 pl-11"
             placeholder={t.chat.searchPlaceholder}
             aria-label={t.chat.searchLabel}
             autoFocus
@@ -143,7 +143,7 @@ export function ChatList({
             <button
               type="button"
               onClick={() => search('')}
-              className="text-ink-3 absolute top-1/2 right-4 -translate-y-1/2"
+              className="text-ink-3 absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 items-center justify-center"
               aria-label={t.chat.searchClear}
             >
               <X className="h-4 w-4" aria-hidden />
@@ -163,7 +163,7 @@ export function ChatList({
                 : t.chat.emptyTitle
           }
           description={query ? t.chat.searchEmptyText : t.chat.emptyText}
-          className="account-16"
+          className="pt-14"
         />
       ) : (
         <>
@@ -248,7 +248,7 @@ function ConversationGroup({
             <Link
               key={row.id}
               href={`/chat/${row.id}`}
-              className="hover:bg-muted/50 flex items-center gap-[13px] px-4 py-[13px]"
+              className="hover:bg-muted/50 flex items-center gap-3 px-4 py-3"
             >
               <InitialsAvatar
                 name={privacyName(row.customer_name)}
@@ -264,7 +264,7 @@ function ConversationGroup({
                 }
               />
               <span className="min-w-0 flex-1">
-                <span className="mb-[3px] flex items-baseline justify-between gap-2">
+                <span className="mb-1 flex items-baseline justify-between gap-2">
                   <span className="truncate text-[15px] font-semibold tracking-[-0.005em]">
                     {privacyName(row.customer_name)}
                   </span>
