@@ -4,19 +4,20 @@ A conversation belongs either to the assistant or to a person, and `conversation
 
 ## The paths out of the assistant
 
-Each path sets the same two columns, which is deliberate: the chat list, the chat banner, and the Today attention list all read `ai_active` and `escalation_state`, and a path-specific third value would buy nothing they could act on differently.
+Telling the owner and stopping the assistant are **independent**. Most paths do both, and those set the same two columns deliberately: the chat list, the chat banner, and the Today attention list all read `ai_active` and `escalation_state`, and a path-specific third value would buy nothing they could act on differently. Two paths tell the owner without stopping the assistant, because their trigger is transient — permanent state that only a human can undo must never be written for a reason that undoes itself.
 
 | Path                   | Trigger                                                                  | Sets                                                                        | Customer sees                                   | Owner sees                                                           |
 | ---------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------- |
 | Escalation             | `escalate_to_human` tool call                                            | `ai_active = false`, `escalation_state = 'requested'`                       | The model's own words                           | `conversation.escalated` push and bell entry                         |
 | Accepted handoff offer | An affirmative reply to the offer                                        | Escalation, then the anchor cleared                                         | One fixed sentence                              | The escalation push and bell entry                                   |
-| Cap handoff            | The monthly conversation cap is reached                                  | `ai_active = false`, `escalation_state = 'requested'`                       | One static holding sentence, once per local day | `conversation.needs_reply` push                                      |
 | Failure handoff        | A turn changed state then produced no text, or every retry was exhausted | Escalation                                                                  | One of two fixed sentences                      | The escalation push, plus `conversation.failed` for an exhausted run |
+| Cap notice             | The monthly conversation cap is reached                                  | Nothing — the assistant keeps the thread                                    | One static holding sentence, once per local day | `conversation.needs_reply` push                                      |
+| Non-text notice        | A voice note, photo, or document arrives                                 | Nothing — the assistant keeps the thread                                    | One fixed notice, once per local day            | `conversation.needs_reply` push                                      |
 | Takeover               | The owner switches handling to themselves, or answers by hand            | `ai_active = false`, pause cleared                                          | Nothing                                         | `conversation.taken_over`, then a resume offer after an idle hour    |
 | Close                  | The owner closes the thread                                              | `ai_active = false`, `closed_at` set, `escalation_state = 'idle'`           | Nothing                                         | The thread moves to the **Closed** tab                               |
 | Echo pause             | The owner replies from the WhatsApp Business app                         | `ai_active = false`, `ai_paused_until` two hours out, `ai_pause_reason` set | Nothing                                         | Nothing; the owner is already replying                               |
 
-Only the echo pause is excluded from `manualHandling` in the inbound job. Every other row means the customer's next message gets a nudge instead of an answer.
+Only the echo pause is excluded from `manualHandling` in the inbound job. Every row that sets `ai_active = false` means the customer's next message gets a nudge instead of an answer; the two notice rows leave the assistant answering as usual.
 
 ## Escalation
 
@@ -52,17 +53,21 @@ The placeholder is never routed into the model. It is text the product wrote, an
 
 The notice is throttled to one per conversation per local day through `conversations.non_text_notice_at`, so a burst of voice notes is answered once. Per day rather than once for good: a conversation row lives as long as the customer does, and a once-ever notice would meet the voice note they send months later with the silence this exists to remove.
 
+The owner is told on **every** non-text inbound, by a `conversation.needs_reply` push dispatched before any branch below it can decide the customer hears nothing — the throttled path and the globally-paused path most of all, since those two used to end the run in silence for everyone. It stops there: non-text never sets `ai_active = false`, because the assistant can still read the next message the customer types.
+
 The branch sits after the human-owned check, so a thread a person is already handling gets the nudge rather than an assistant talking over them, and before the cap gate, because no model round happened and nothing should be metered. Placeholder types are also the webhook's allowlist: a type absent from the map is ignored outright rather than turning an unknown number into a permanent entry in the client directory.
 
-## Cap handoff
+## Cap notice
 
-At the monthly conversation cap the assistant genuinely cannot serve this customer, so unlike an out-of-scope question there is nothing to offer and nothing to ask. `handOffCappedConversation` in `lib/billing/cap-handoff.ts` hands the thread over exactly as any escalation does, and dispatches a `conversation.needs_reply` push before the customer's holding message goes out, so whatever happens to the send, the owner knows someone is waiting.
+At the monthly conversation cap the assistant genuinely cannot serve this customer, so unlike an out-of-scope question there is nothing to offer and nothing to ask. `notifyCappedConversation` in `lib/billing/cap-handoff.ts` dispatches a `conversation.needs_reply` push before the customer's holding message goes out, so whatever happens to the send, the owner knows someone is waiting.
+
+It notifies and nothing else — the cap writes no conversation state at all. It used to also set `ai_active = false, escalation_state = 'requested'`, hand-rolling the transition `escalateConversationToHuman` owns. That was permanent state only the owner toggling the thread back could undo, written for a reason that undoes itself: the cap clears at month rollover, or the moment the account upgrades. Resuming therefore needs no code and no human. Once the cap clears, the next inbound finds `ai_active` still true and takes an ordinary AI turn.
 
 The customer receives one static sentence per local day, guarded by `conversations.limit_handoff_at`. It carries no plan, limit, or AI language; that belongs on the owner-facing surfaces.
 
-Handing the thread over is also what keeps the second and later messages of a capped day visible. The cap gate compensates its day-fact away when it turns a customer away, so every later message that day hits the cap afresh and the once-a-day throttle returns a skip — which would otherwise mean silence for everyone. With the conversation human-owned, those messages take the manual-handling path instead and push the same nudge, collapsed into one notification by the per-conversation device tag.
+The second and later messages of a capped day still reach the owner, by a different route than the thread being human-owned. The cap gate compensates its day-fact away when it turns a customer away, so every later message that day hits the cap afresh and lands on this same push — which runs ahead of the once-a-day throttle that keeps the *customer* from being told twice. The per-conversation device tag collapses the burst into one notification.
 
-The push is `conversation.needs_reply` and not `conversation.escalated`, because at the cap the customer asked for nothing. That does mean no resume offer is armed: while the account is at its cap the assistant would only hit it again on the next message, so the owner hands the thread back from the chat screen instead. Metering and cap arithmetic are covered in [billing and plans](./billing-and-plans.md).
+The push is `conversation.needs_reply` and not `conversation.escalated`, because at the cap the customer asked for nothing. Push yes, bell no: the value of a “reply now” nudge decays in hours, and the durable records are the unread badge and the monthly `billing.limit_reached` event, which already reach the owner. No resume offer is armed either, and none is needed — nothing was taken away to hand back. Metering and cap arithmetic are covered in [billing and plans](./billing-and-plans.md).
 
 ## Failure handoff
 
