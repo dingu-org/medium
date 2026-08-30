@@ -10,7 +10,13 @@ export default defineConfig({
   // pipeline must compile JSX itself or .tsx imports fail to parse.
   oxc: { jsx: { runtime: 'automatic' } },
   test: {
-    env,
+    // Reminders are off by default in every real environment
+    // (lib/reminders/flag.ts). The suites that document the feature must keep
+    // exercising it, so the whole run turns it back on here; both projects
+    // inherit this the same way they inherit DATABASE_URL from `.env`. A test
+    // that asserts the disabled path opts out with
+    // `vi.stubEnv('REMINDERS_ENABLED', 'false')`.
+    env: { ...env, REMINDERS_ENABLED: 'true' },
     globalSetup: ['./tests/setup/global.ts'],
     fileParallelism: false,
     sequence: { hooks: 'list' },
