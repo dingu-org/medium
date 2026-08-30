@@ -37,7 +37,18 @@ import { confirmMatches, confirmPhrase } from '@/lib/settings/confirm-phrase';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { cn } from '@/lib/utils';
 
-export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
+export function ClientDetail({
+  client,
+  remindersEnabled,
+}: {
+  client: ClientDetailSnapshot;
+  /**
+   * Reminders are parked — see lib/reminders/flag.ts. Read on the server by
+   * this screen's page and handed down, because the flag is server-only (no
+   * `NEXT_PUBLIC_` twin). False hides every reminder surface on this screen.
+   */
+  remindersEnabled: boolean;
+}) {
   const router = useRouter();
   const [notes, setNotes] = useState(client.notes ?? '');
   const [selected, setSelected] = useState<AppointmentView | null>(null);
@@ -99,7 +110,10 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
 
   return (
     <div>
-      <RealtimeRefresher table="customers" filter={`account_id=eq.${client.accountId}`} />
+      <RealtimeRefresher
+        table="customers"
+        filter={`account_id=eq.${client.accountId}`}
+      />
       <RealtimeRefresher
         table="appointments"
         filter={`account_id=eq.${client.accountId}`}
@@ -167,7 +181,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
           </p>
         )}
 
-        {client.reminderOptedOutAt && (
+        {remindersEnabled && client.reminderOptedOutAt && (
           <AppBanner
             tone="warning"
             icon={Bell}
@@ -288,6 +302,7 @@ export function ClientDetail({ client }: { client: ClientDetailSnapshot }) {
       <AppointmentSheet
         appointment={selected}
         timezone={client.timezone}
+        remindersEnabled={remindersEnabled}
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
       />

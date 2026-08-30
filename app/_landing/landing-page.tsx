@@ -12,9 +12,11 @@ import {
 import Link from 'next/link';
 import { PLANS } from '@/lib/billing/plans';
 import { formatLek, t } from '@/lib/i18n';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import { Button } from '@/components/ui/button';
 import { LogoMark } from '@/components/ui/logo-mark';
 import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
+import { cn } from '@/lib/utils';
 
 // Demo number used for the "try it on WhatsApp" CTAs — same number referenced
 // in the ops runbook (workstream A), copied literally rather than shared.
@@ -43,26 +45,35 @@ const steps = [
   },
 ] as const;
 
+// `reminders: true` marks the one card that promises the parked feature (see
+// lib/reminders/flag.ts). This is the public marketing site, so the card is
+// filtered out rather than left advertising something the product will not do —
+// it is a stronger claim than the pricing bullet, since it names the KONFIRMO /
+// ANULO reply words a customer would try and get no answer to.
 const features = [
   {
     icon: CalendarClock,
     title: 'Rezervim automatik',
     body: 'Medium cakton takime 24 orë në ditë, edhe kur klinika është mbyllur.',
+    reminders: false,
   },
   {
     icon: Users,
     title: 'Merr drejtimin',
     body: 'Hyr në çdo bisedë dhe përgjigju vetë me një prekje.',
+    reminders: false,
   },
   {
     icon: Clock3,
     title: 'Orët e tua, të respektuara',
     body: 'Cakto disponueshmërinë dhe shërbimet; Medium nuk rezervon kurrë jashtë tyre.',
+    reminders: false,
   },
   {
     icon: Bell,
     title: 'Kujtesa automatike',
     body: null,
+    reminders: true,
   },
 ] as const;
 
@@ -87,7 +98,11 @@ function SiteHeader() {
   return (
     <header className="border-line/70 bg-background/95 sticky top-0 z-40 border-b backdrop-blur">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 md:px-5">
-        <Link href="/" className="flex min-h-11 items-center gap-3" aria-label="Medium">
+        <Link
+          href="/"
+          className="flex min-h-11 items-center gap-3"
+          aria-label="Medium"
+        >
           <LogoMark size={32} />
           <span className="font-heading text-lg font-semibold tracking-tight">
             Medium
@@ -137,10 +152,7 @@ function Hero() {
             </Button>
           </div>
           <p className="text-ink-3 mt-5 flex items-center gap-2 text-sm">
-            <Check
-              className="h-4 w-4 text-[var(--success-500)]"
-              aria-hidden
-            />
+            <Check className="h-4 w-4 text-[var(--success-500)]" aria-hidden />
             Pa aplikacion për të instaluar. Funksionon brenda WhatsApp-it që
             përdorni tashmë.
           </p>
@@ -262,9 +274,13 @@ function HowItWorks() {
 }
 
 function Features() {
+  const showReminders = remindersEnabled();
+  const shown = features.filter(
+    (feature) => showReminders || !feature.reminders,
+  );
   return (
     <section className="border-line bg-card border-t border-b">
-      <div className="mx-auto max-w-5xl px-4 md:px-5 py-16 sm:py-24">
+      <div className="mx-auto max-w-5xl px-4 py-16 sm:py-24 md:px-5">
         <div className="max-w-xl">
           <span className="text-[12px] font-bold tracking-[0.08em] text-[var(--brand-500)] uppercase">
             Çfarë bën
@@ -274,10 +290,18 @@ function Features() {
           </h2>
         </div>
         <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          {features.map((feature) => (
+          {shown.map((feature, i) => (
             <div
               key={feature.title}
-              className="border-line bg-background rounded-2xl border p-5 shadow-[var(--shadow-card)]"
+              className={cn(
+                'border-line bg-background rounded-2xl border p-5 shadow-[var(--shadow-card)]',
+                // Dropping the reminder card leaves an odd count, and a lone
+                // half-width card beside an empty cell reads as a broken grid
+                // on the public site. Let a trailing odd card span the row.
+                shown.length % 2 === 1 &&
+                  i === shown.length - 1 &&
+                  'sm:col-span-2',
+              )}
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--brand-50)] text-[var(--brand-500)]">
                 <feature.icon className="h-5 w-5" aria-hidden />
@@ -312,6 +336,10 @@ function Features() {
 function Pricing() {
   const free = PLANS.free;
   const solo = PLANS.solo;
+  // Reminders are parked (lib/reminders/flag.ts). `remindersPerMonth` stays in
+  // PLANS as dormant config, but a public price card must not sell an allowance
+  // for a feature that will not run.
+  const showReminders = remindersEnabled();
   return (
     <section id="pricing" className="py-16 sm:py-24">
       <div className="mx-auto max-w-5xl px-4 md:px-5">
@@ -331,14 +359,18 @@ function Pricing() {
             <h3 className="font-heading text-lg font-semibold">
               {t.billing.planFree}
             </h3>
-            <p className="text-ink-3 mt-2 text-sm">{t.billing.landingStartFree}</p>
+            <p className="text-ink-3 mt-2 text-sm">
+              {t.billing.landingStartFree}
+            </p>
             <ul className="text-ink-2 mt-5 space-y-2 text-sm">
               <PriceFeature>
                 {t.billing.featConversations(free.conversationsPerMonth)}
               </PriceFeature>
-              <PriceFeature>
-                {t.billing.featReminders(free.remindersPerMonth)}
-              </PriceFeature>
+              {showReminders && (
+                <PriceFeature>
+                  {t.billing.featReminders(free.remindersPerMonth)}
+                </PriceFeature>
+              )}
               <PriceFeature>{t.billing.featOneService}</PriceFeature>
             </ul>
             <Button asChild variant="outline" className="mt-6 w-full">
@@ -373,9 +405,11 @@ function Pricing() {
               <PriceFeature>
                 {t.billing.featConversations(solo.conversationsPerMonth)}
               </PriceFeature>
-              <PriceFeature>
-                {t.billing.featReminders(solo.remindersPerMonth)}
-              </PriceFeature>
+              {showReminders && (
+                <PriceFeature>
+                  {t.billing.featReminders(solo.remindersPerMonth)}
+                </PriceFeature>
+              )}
               <PriceFeature>{t.billing.featUnlimitedServices}</PriceFeature>
               <PriceFeature>{t.billing.featCustomAssistant}</PriceFeature>
               <PriceFeature>{t.billing.featLongRetention}</PriceFeature>
@@ -433,8 +467,8 @@ function WhoItsFor() {
           pavarur.
         </h2>
         <p className="text-ink-2 mt-2 text-lg leading-relaxed">
-          Medium nisi me fizioterapinë, ku çdo takim i humbur ka rëndësi. Më
-          pas vjen për këdo që jeton me kalendarin e vet — dentistë, trajnerë,
+          Medium nisi me fizioterapinë, ku çdo takim i humbur ka rëndësi. Më pas
+          vjen për këdo që jeton me kalendarin e vet — dentistë, trajnerë,
           konsulentë.
         </p>
       </div>
@@ -445,7 +479,7 @@ function WhoItsFor() {
 function CtaBand() {
   return (
     <section className="bg-[var(--brand-600)] py-16 text-white sm:py-24">
-      <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-4 md:px-5 text-center">
+      <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-4 text-center md:px-5">
         <LogoMark size={40} variant="dark" />
         <h2 className="font-heading max-w-xl text-3xl font-semibold tracking-tight text-white">
           Lëre Medium të mbajë bisedat. Ti mbaj pacientët.
@@ -464,7 +498,7 @@ function CtaBand() {
 function SiteFooter() {
   return (
     <footer className="border-line bg-card border-t">
-      <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 px-4 md:px-5 py-10 sm:flex-row sm:justify-between">
+      <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 px-4 py-10 sm:flex-row sm:justify-between md:px-5">
         <div className="flex items-center gap-3">
           <LogoMark size={24} />
           <div>

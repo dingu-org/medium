@@ -15,6 +15,7 @@ import {
 import { db } from '@/lib/db';
 import { billingOrders } from '@/lib/db/schema';
 import { formatDate, formatLek, t } from '@/lib/i18n';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import { createServerClient } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils';
 import { CheckoutForm } from './checkout-form';
@@ -76,8 +77,8 @@ export default async function BillingSettingsPage({
         <PlanCard snapshot={snapshot} />
 
         {/* Usage meters — capacity, never punitive. */}
-        <section className="rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
-          <h2 className="text-[11.5px] font-bold tracking-[0.07em] uppercase text-ink-3">
+        <section className="bg-card rounded-lg p-4 shadow-[var(--shadow-card)]">
+          <h2 className="text-ink-3 text-[11.5px] font-bold tracking-[0.07em] uppercase">
             {t.billing.usageTitle}
           </h2>
           <div className="mt-3 space-y-4">
@@ -85,17 +86,23 @@ export default async function BillingSettingsPage({
               label={t.billing.meterConversations}
               meter={snapshot.conversations}
             />
-            <UsageMeter
-              label={t.billing.meterReminders}
-              meter={snapshot.reminders}
-            />
+            {/* Reminders are parked (lib/reminders/flag.ts). The plan still
+                carries a `remindersPerMonth` allowance as dormant config, but
+                a meter that can only ever read 0/10 is not capacity — it is an
+                unexplained dead gauge, so hide it with the feature. */}
+            {remindersEnabled() && (
+              <UsageMeter
+                label={t.billing.meterReminders}
+                meter={snapshot.reminders}
+              />
+            )}
           </div>
         </section>
 
         {/* Yearly-Solo reassurance — no form, they already hold the best plan. */}
         {slot.kind === 'reassure' && (
-          <section className="rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
-            <h2 className="font-heading text-lg font-semibold text-foreground">
+          <section className="bg-card rounded-lg p-4 shadow-[var(--shadow-card)]">
+            <h2 className="font-heading text-foreground text-lg font-semibold">
               {t.billing.reassureTitle}
             </h2>
             <p className="text-ink-2 mt-2 text-[13.5px]">
@@ -109,8 +116,8 @@ export default async function BillingSettingsPage({
           (slot.kind === 'upgrade' ||
             slot.kind === 'switch' ||
             slot.kind === 'renew') && (
-            <section className="rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
-              <h2 className="font-heading text-lg font-semibold text-foreground">
+            <section className="bg-card rounded-lg p-4 shadow-[var(--shadow-card)]">
+              <h2 className="font-heading text-foreground text-lg font-semibold">
                 {CHECKOUT_COPY[slot.kind].title}
               </h2>
               <p className="text-ink-2 mt-2 text-[13.5px]">
@@ -128,7 +135,7 @@ export default async function BillingSettingsPage({
 
         {/* Receipts. */}
         <section>
-          <h2 className="text-[11.5px] font-bold tracking-[0.07em] uppercase text-ink-3">
+          <h2 className="text-ink-3 text-[11.5px] font-bold tracking-[0.07em] uppercase">
             {t.billing.receiptsTitle}
           </h2>
           {snapshot.receipts.length === 0 ? (
@@ -136,7 +143,7 @@ export default async function BillingSettingsPage({
               {t.billing.receiptsEmpty}
             </p>
           ) : (
-            <ul className="mt-2 overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)]">
+            <ul className="bg-card mt-2 overflow-hidden rounded-lg shadow-[var(--shadow-card)]">
               {snapshot.receipts.map((receipt) => {
                 const date = formatDate(
                   new TZDate(new Date(receipt.createdAt), snapshot.timezone),
@@ -144,10 +151,10 @@ export default async function BillingSettingsPage({
                 return (
                   <li
                     key={receipt.id}
-                    className="flex items-center justify-between border-b border-border px-4 py-3 last:border-b-0"
+                    className="border-border flex items-center justify-between border-b px-4 py-3 last:border-b-0"
                   >
                     <div className="min-w-0">
-                      <p className="text-[14px] font-medium text-foreground tabular-nums">
+                      <p className="text-foreground text-[14px] font-medium tabular-nums">
                         {formatLek(receipt.amountAll)} ALL
                       </p>
                       <p className="text-ink-3 mt-1 text-[12.5px]">

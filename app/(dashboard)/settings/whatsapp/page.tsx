@@ -10,6 +10,7 @@ import { SectionLabel } from '@/components/ui/section-label';
 import { GRAPH_VERSION } from '@/lib/channels/whatsapp/constants';
 import { t } from '@/lib/i18n';
 import { getSettingsSnapshot } from '@/lib/pwa/read-models';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import { createServerClient } from '@/lib/supabase/server';
 import { ConnectWhatsApp } from '../connect-whatsapp';
 import { DisconnectSection } from './disconnect-section';
@@ -48,11 +49,20 @@ export default async function WhatsAppSettingsPage() {
           displayPhoneNumber={snapshot.whatsappDisplayPhoneNumber}
           phoneNumberId={snapshot.whatsappPhoneNumberId}
         />
-        <SectionLabel>{t.settings.whatsappRemindersLabel}</SectionLabel>
-        <TemplatePreview status={snapshot.whatsappTemplateStatus} />
-        <p className="px-4 pt-2 pb-6 text-[12.5px] leading-[1.5] text-ink-3">
-          {t.settings.whatsappTemplateNote}
-        </p>
+        {/* Reminders are parked (lib/reminders/flag.ts). Template approval
+            deliberately keeps running in the background — it takes days, is
+            per-WABA and costs nothing unused — but the PT has no reminder to
+            preview, so the whole card goes with the feature and approval
+            proceeds silently. */}
+        {remindersEnabled() && (
+          <>
+            <SectionLabel>{t.settings.whatsappRemindersLabel}</SectionLabel>
+            <TemplatePreview status={snapshot.whatsappTemplateStatus} />
+            <p className="text-ink-3 px-4 pt-2 pb-6 text-[12.5px] leading-[1.5]">
+              {t.settings.whatsappTemplateNote}
+            </p>
+          </>
+        )}
         <DisconnectSection />
       </>
     );
@@ -67,16 +77,16 @@ export default async function WhatsAppSettingsPage() {
           variant="reconnect"
           note={t.settings.whatsappReconnectNote}
         >
-          <div className="rounded-lg bg-card p-5 text-center shadow-[var(--shadow-card)]">
+          <div className="bg-card rounded-lg p-5 text-center shadow-[var(--shadow-card)]">
             <div className="mb-3 flex justify-center">
               <span className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--danger-50)]">
-                <Phone className="h-6 w-6 text-destructive" />
+                <Phone className="text-destructive h-6 w-6" />
               </span>
             </div>
-            <p className="font-heading text-[20px] font-bold tracking-[-0.02em] text-foreground">
+            <p className="font-heading text-foreground text-[20px] font-bold tracking-[-0.02em]">
               {t.settings.whatsappRevokedTitle}
             </p>
-            <p className="mt-2 px-2 text-[13.5px] leading-[1.55] text-ink-2">
+            <p className="text-ink-2 mt-2 px-2 text-[13.5px] leading-[1.55]">
               {t.settings.whatsappRevokedBody(
                 snapshot.whatsappDisplayPhoneNumber ?? undefined,
               )}
@@ -105,16 +115,16 @@ export default async function WhatsAppSettingsPage() {
           variant="connect"
           note={t.settings.whatsappConnectNote}
         >
-          <div className="flex flex-col gap-4 rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
+          <div className="bg-card flex flex-col gap-4 rounded-lg p-4 shadow-[var(--shadow-card)]">
             {t.settings.whatsappConnectBullets.map((b, i) => {
               const Icon = BULLET_ICONS[i];
               return (
                 <div key={b.title} className="flex items-start gap-3">
                   <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[var(--brand-50)]">
-                    <Icon className="h-4 w-4 text-primary" />
+                    <Icon className="text-primary h-4 w-4" />
                   </span>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">
+                    <p className="text-foreground text-sm font-semibold">
                       {b.title}
                     </p>
                     <p className="text-ink-2 mt-1 text-[12.5px] leading-[1.45]">

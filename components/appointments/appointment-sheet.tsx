@@ -39,11 +39,22 @@ export function AppointmentSheet({
   timezone,
   open,
   onOpenChange,
+  remindersEnabled = false,
 }: {
   appointment: AppointmentView | null;
   timezone: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Reminders are parked — see lib/reminders/flag.ts. The flag is server-only
+   * (no `NEXT_PUBLIC_` twin), so every screen that opens this sheet reads it on
+   * the server and hands it down. It defaults to the parked state so a caller
+   * that cannot reach the flag fails closed, the same way the flag itself does;
+   * the read models (`lib/today/queries.ts`, `lib/clients/queries.ts`) already
+   * strip `appointment.reminder` while it is off, so the default only ever
+   * doubles up on a gate that has already been applied to the data.
+   */
+  remindersEnabled?: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('detail');
@@ -130,7 +141,9 @@ export function AppointmentSheet({
         toast.error(res.error);
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : t.appointment.changeQueueError,
+          error instanceof Error
+            ? error.message
+            : t.appointment.changeQueueError,
         );
       }
     });
@@ -159,7 +172,9 @@ export function AppointmentSheet({
         }
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : t.appointment.notesQueueError,
+          error instanceof Error
+            ? error.message
+            : t.appointment.notesQueueError,
         );
       }
     });
@@ -197,7 +212,7 @@ export function AppointmentSheet({
           {mode === 'detail' && (
             <>
               {/* Canvas InfoCard: Manrope date, tabular time, chips row. */}
-              <div className="border-line rounded-[12px] border bg-card p-4">
+              <div className="border-line bg-card rounded-[12px] border p-4">
                 <p className="font-heading text-[17px] font-semibold tracking-[-0.015em]">
                   {formatWeekdayDate(start)}
                 </p>
@@ -210,7 +225,9 @@ export function AppointmentSheet({
                       {appointment.serviceType}
                     </span>
                   )}
-                  <ReminderBadge reminder={appointment.reminder} />
+                  {remindersEnabled && (
+                    <ReminderBadge reminder={appointment.reminder} />
+                  )}
                   {pendingLabel && (
                     <StatusPill
                       tone={
@@ -230,7 +247,7 @@ export function AppointmentSheet({
               <div className="flex gap-2">
                 <a
                   href={`tel:${appointment.customerPhone}`}
-                  className="border-line hover:bg-muted/50 flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
+                  className="border-line hover:bg-muted/50 bg-card flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border text-[13.5px] font-semibold transition-colors"
                 >
                   <Phone className="text-primary h-4 w-4" aria-hidden="true" />
                   {t.appointment.call}
@@ -240,7 +257,7 @@ export function AppointmentSheet({
                     href={`https://wa.me/${appointment.customerWaId.replace(/\D/g, '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="border-line hover:bg-muted/50 flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
+                    className="border-line hover:bg-muted/50 bg-card flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border text-[13.5px] font-semibold transition-colors"
                   >
                     <WhatsAppMark size={16} />
                     {t.appointment.whatsapp}
@@ -249,9 +266,12 @@ export function AppointmentSheet({
                 {appointment.conversationId && (
                   <Link
                     href={`/chat/${appointment.conversationId}`}
-                    className="border-line hover:bg-muted/50 flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border bg-card text-[13.5px] font-semibold transition-colors"
+                    className="border-line hover:bg-muted/50 bg-card flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border text-[13.5px] font-semibold transition-colors"
                   >
-                    <MessageSquare className="text-primary h-4 w-4" aria-hidden="true" />
+                    <MessageSquare
+                      className="text-primary h-4 w-4"
+                      aria-hidden="true"
+                    />
                     {t.appointment.openChat}
                   </Link>
                 )}
@@ -396,7 +416,9 @@ export function AppointmentSheet({
           {mode === 'reschedule' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">{t.appointment.pickNewTime}</p>
+                <p className="text-sm font-medium">
+                  {t.appointment.pickNewTime}
+                </p>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -406,11 +428,11 @@ export function AppointmentSheet({
                 </Button>
               </div>
               {slots === null ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   {t.appointment.loadingSlots}
                 </p>
               ) : slots.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   {online
                     ? t.appointment.noSlotsOnline
                     : t.appointment.noSlotsOffline}
@@ -461,7 +483,9 @@ function appointmentIdFromMutation(mutation: PendingMutation): string | null {
   return typeof body?.appointmentId === 'string' ? body.appointmentId : null;
 }
 
-function getPendingAppointmentLabel(mutations: PendingMutation[]): string | null {
+function getPendingAppointmentLabel(
+  mutations: PendingMutation[],
+): string | null {
   if (mutations.length === 0) return null;
   if (mutations.some((m) => m.status === 'failed'))
     return t.appointment.syncFailed;
