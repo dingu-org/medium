@@ -15,9 +15,9 @@
  *   placeholder is never routed into the model: it is our own text, and a model
  *   asked to reply to `[mesazh zanor]` would invent what the voice note said.
  *
- * The reply carries the same handoff offer the assistant makes for anything
- * out of scope (`handoff-offer.ts`), because "I cannot read this" is exactly
- * the case where a person should take over if the customer wants one.
+ * The reply is one of the three fixed customer sentences in `customer-copy.ts`.
+ * It does not offer to pass the message on — it says the message already went to
+ * the professional, which is what the `notify-non-text` push makes true.
  *
  * Telling the *professional* is the inbound job's own step (`notify-non-text`
  * in `handle-inbound-message.ts`), not this module's: it fires on every
@@ -28,13 +28,8 @@ import { and, eq } from 'drizzle-orm';
 import { conversationDayKeys } from '@/lib/billing/usage';
 import { db } from '@/lib/db';
 import { conversations } from '@/lib/db/schema';
-import { getServiceClient } from '@/lib/tenancy';
+import { businessLabel, nonTextNoticeMessage } from './customer-copy';
 import { persistDeterministicReply } from './deterministic-reply';
-import {
-  armHandoffOffer,
-  businessLabel,
-  HANDOFF_ACCEPTANCE_WORD,
-} from './handoff-offer';
 import type { InboundMessage, OutboundMessage } from './types';
 
 /**
@@ -86,18 +81,7 @@ export function nonTextContent(
 export const NON_TEXT_NOTICE_MODEL = 'deterministic-non-text-notice';
 
 /**
- * The one static reply. It says what the assistant can do (text), and offers
- * the handoff on the same terms as `handoffOfferMessage` — same acceptance
- * word, same vertical-neutral business label, so a customer meets one convention
- * and not two.
- */
-export function nonTextNoticeMessage(business: string): string {
-  return `Mund të lexoj vetëm mesazhe me tekst. Nëse doni ndihmë me një takim, më shkruani me tekst. Nëse dëshironi t'ia kaloj këtë mesazh ${business}, përgjigjuni me ${HANDOFF_ACCEPTANCE_WORD}.`;
-}
-
-/**
- * Decide whether this non-text inbound gets the notice, and persist it with its
- * handoff offer armed if so.
+ * Decide whether this non-text inbound gets the notice, and persist it if so.
  *
  * Throttled to one notice per conversation per local day, the same guard
  * `prepareCapHandoff` uses (`conversations.non_text_notice_at`): a customer who
@@ -107,11 +91,6 @@ export function nonTextNoticeMessage(business: string): string {
  * they send three months from now is met with the very silence this exists to
  * remove. The per-inbound AI-reply unique index makes the persist itself
  * idempotent under Inngest retries.
- *
- * The reply and the offer anchor commit together, exactly as the model's own
- * offer does: an armed offer whose message never reached the customer would let
- * an ordinary "po" — how a customer takes a proposed slot — escalate a
- * conversation nobody offered anything to.
  */
 export async function prepareNonTextNotice(args: {
   inbound: InboundMessage;
@@ -145,16 +124,10 @@ export async function prepareNonTextNotice(args: {
     }
   }
 
-  const svc = getServiceClient(args.inbound.accountId);
-  const outbound = await svc.db.transaction(async (tx) => {
-    const reply = await persistDeterministicReply({
-      inbound: args.inbound,
-      content: nonTextNoticeMessage(businessLabel(args.name)),
-      model: NON_TEXT_NOTICE_MODEL,
-      executor: tx,
-    });
-    await armHandoffOffer(tx, args.inbound);
-    return reply;
+  const outbound = await persistDeterministicReply({
+    inbound: args.inbound,
+    content: nonTextNoticeMessage(businessLabel(args.name)),
+    model: NON_TEXT_NOTICE_MODEL,
   });
   return { action: 'send', outbound };
 }

@@ -131,7 +131,7 @@ Five of those tokens are **ambiguous particles** — `po`, `jo`, `ok`, `okay`, `
 
 ### How a message is read
 
-The parse runs in four stages, and `isAffirmative` — the product's only definition of "yes", shared with the assistant's handoff offer — is simply this parse returning `confirm`.
+The parse runs in four stages. It used to have a second consumer: `isAffirmative`, the shared definition of "yes" the assistant's handoff offer accepted on. That is deleted (2026-08-30) — the assistant reads its own answers now — so `parseReplyIntent` is this handler's alone, and nothing else should adopt it.
 
 1. **Tokenise.** Decompose to NFD, drop combining marks, keep only letters and digits, lowercase. Albanian keyboards routinely drop `ë` and `ç`, and phone keyboards rewrite `'` into `’`, so `s'ndal` and `s’ndal` tokenise identically.
 2. **Strip politeness.** A leading `ju`/`të`/`te` plus `lutem`/`lutemi` is removed when more tokens follow, so "Ju lutem aktivizoni kujtesat" resolves exactly like "Aktivizoni kujtesat".

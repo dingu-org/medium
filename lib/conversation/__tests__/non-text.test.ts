@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_BUSINESS_LABEL_SQ,
-  HANDOFF_ACCEPTANCE_WORD,
-  isHandoffAcceptance,
-} from '../handoff-offer';
+  nonTextNoticeMessage,
+} from '../customer-copy';
 import {
   NON_TEXT_PLACEHOLDER_SQ,
   nonTextContent,
-  nonTextNoticeMessage,
   nonTextPlaceholder,
 } from '../non-text';
 
@@ -61,11 +59,10 @@ describe('nonTextContent', () => {
 });
 
 describe('nonTextNoticeMessage', () => {
-  it('says what the assistant can read and offers the handoff', () => {
+  it('says what the assistant can read and that the message went to a person', () => {
     const notice = nonTextNoticeMessage('Studio Bella');
     expect(notice).toContain('vetëm mesazhe me tekst');
     expect(notice).toContain('Studio Bella');
-    expect(notice).toContain(HANDOFF_ACCEPTANCE_WORD);
   });
 
   it('falls back to the vertical-neutral business label', () => {
@@ -74,15 +71,12 @@ describe('nonTextNoticeMessage', () => {
     );
   });
 
-  // The word the notice asks for has to be the word the resolver accepts. Two
-  // modules own the two halves, so this is the seam that keeps them honest.
-  it('asks for a word that actually accepts the offer', () => {
-    const asked = nonTextNoticeMessage('Studio Bella')
-      .split(/\s+/)
-      .map((word) => word.replace(/[.,!?]$/, ''))
-      .find((word) => word === HANDOFF_ACCEPTANCE_WORD);
-    expect(asked).toBeDefined();
-    expect(isHandoffAcceptance(asked!)).toBe(true);
+  // The notice used to end by offering to pass the message on if the customer
+  // replied with a keyword, which took two messages and a keyword match to do
+  // what the professional-facing push already does on the first one. It now
+  // states the handoff as done, so nothing here asks the customer for a word.
+  it('asks the customer for no keyword', () => {
+    expect(nonTextNoticeMessage('Studio Bella')).not.toMatch(/\bPO\b/);
   });
 
   // Medium books appointments for barbers and nail salons as much as for

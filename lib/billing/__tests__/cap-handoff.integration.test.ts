@@ -24,6 +24,7 @@ import {
   notifyCappedConversation,
   prepareCapHandoff,
 } from '@/lib/billing/cap-handoff';
+import { escalationMessage } from '@/lib/conversation/customer-copy';
 import { createServiceClient } from '@/lib/supabase/service';
 import { DAY, HOUR, testNow } from '@/tests/support/clock';
 
@@ -114,18 +115,24 @@ describe('cap handoff', () => {
     const inbound1 = await seedInbound('Message one');
     const first = await prepareCapHandoff({
       inbound: inbound1,
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: day1a,
     });
     expect(first.action).toBe('send');
     if (first.action !== 'send') throw new Error('expected send');
     expect(first.outbound.replyToMessageId).toBe(inbound1.id);
+    // The shared escalation sentence, named with the business: a customer
+    // turned away by the cap is told exactly what a customer whose question was
+    // escalated is told, and cannot tell the two apart.
+    expect(first.outbound.content).toBe(escalationMessage('Studio Bella'));
 
     await markCapHandoff({ accountId, conversationId, instant: day1a });
 
     const inbound2 = await seedInbound('Message two same day');
     const second = await prepareCapHandoff({
       inbound: inbound2,
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: day1b,
     });
@@ -142,6 +149,7 @@ describe('cap handoff', () => {
     const inbound1 = await seedInbound('Day one');
     await prepareCapHandoff({
       inbound: inbound1,
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: DAY_ONE,
     });
@@ -154,6 +162,7 @@ describe('cap handoff', () => {
     const inbound2 = await seedInbound('Day two');
     const next = await prepareCapHandoff({
       inbound: inbound2,
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: new Date(DAY_ONE.getTime() + DAY),
     });
@@ -165,11 +174,13 @@ describe('cap handoff', () => {
     const inbound = await seedInbound('Retry me');
     const a = await prepareCapHandoff({
       inbound,
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: DAY_ONE,
     });
     const b = await prepareCapHandoff({
       inbound,
+      name: 'Studio Bella',
       timezone: 'UTC',
       instant: DAY_ONE,
     });

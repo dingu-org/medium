@@ -251,15 +251,14 @@ export const conversations = pgTable(
     // `limit_handoff_at`: one such reply per conversation per local day, so a
     // burst of voice notes is answered once.
     nonTextNoticeAt: tsTz('non_text_notice_at'),
-    // The customer message the assistant answered with its "shall I pass this
-    // to the business?" offer. An anchor, not a flag: the offer is accepted
-    // only by the message that immediately follows this one, and anchoring on
-    // the message itself is what makes that true no matter which code path
-    // handled the messages in between (a globally paused assistant, a capped
-    // conversation, a PT takeover) — none of them has to remember to clear it.
-    // Deliberately not a foreign key, like `messages.source_event_id` and
-    // `messages.template_id`: retention purges messages, and a dangling anchor
-    // is self-correcting (it simply stops matching, which is a lapse).
+    // DEAD as of 2026-08-30, dropped by its own migration in C3. This anchored
+    // the "shall I pass this to the business?" offer to the customer message it
+    // answered, so only the immediately-next reply could accept it by keyword.
+    // Keyword acceptance is gone — the model reads the answer out of the
+    // conversation history — and no code writes or reads this column any more.
+    // It stays declared for exactly one deploy: dropping a column while running
+    // code still selects it is the one ordering that breaks, so C1+C2 ship
+    // first and the migration follows.
     handoffOfferMessageId: uuid('handoff_offer_message_id'),
     createdAt: tsTz('created_at').notNull().default(now),
   },

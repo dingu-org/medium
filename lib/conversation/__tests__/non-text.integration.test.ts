@@ -4,12 +4,14 @@ import { db } from '@/lib/db';
 import { conversations, messages, customers, accounts } from '@/lib/db/schema';
 import type { InboundMessage } from '@/lib/conversation/types';
 import {
-  markNonTextNotice,
+  DEFAULT_BUSINESS_LABEL_SQ,
   nonTextNoticeMessage,
+} from '@/lib/conversation/customer-copy';
+import {
+  markNonTextNotice,
   NON_TEXT_NOTICE_MODEL,
   prepareNonTextNotice,
 } from '@/lib/conversation/non-text';
-import { DEFAULT_BUSINESS_LABEL_SQ } from '@/lib/conversation/handoff-offer';
 import { createServiceClient } from '@/lib/supabase/service';
 import { DAY, HOUR, testNow } from '@/tests/support/clock';
 
@@ -59,14 +61,6 @@ async function countNotices(): Promise<number> {
   return rows.length;
 }
 
-async function readOfferAnchor(): Promise<string | null> {
-  const [row] = await db
-    .select({ anchor: conversations.handoffOfferMessageId })
-    .from(conversations)
-    .where(eq(conversations.id, conversationId));
-  return row.anchor;
-}
-
 beforeAll(async () => {
   const { data, error } = await createServiceClient().auth.admin.createUser({
     email: `non-text-${Date.now()}@example.com`,
@@ -103,7 +97,7 @@ afterAll(async () => {
 });
 
 describe('non-text notice', () => {
-  it('answers once and arms the handoff offer against the media message', async () => {
+  it('answers once, with the fixed notice', async () => {
     const inbound = await seedInbound('[mesazh zanor]');
     const result = await prepareNonTextNotice({
       inbound,
@@ -116,9 +110,6 @@ describe('non-text notice', () => {
     if (result.action !== 'send') throw new Error('expected send');
     expect(result.outbound.replyToMessageId).toBe(inbound.id);
     expect(result.outbound.content).toBe(nonTextNoticeMessage('Studio Bella'));
-    // The offer is answered only by the message immediately after the one it
-    // answered, which is what the anchor makes true.
-    expect(await readOfferAnchor()).toBe(inbound.id);
   });
 
   // A customer who fires off five voice notes in a row is told once, not five
@@ -146,9 +137,6 @@ describe('non-text notice', () => {
       reason: 'already_notified_today',
     });
     expect(await countNotices()).toBe(1);
-    // No fresh offer either: the anchor still belongs to the message that was
-    // actually answered.
-    expect(await readOfferAnchor()).toBe(first.id);
   });
 
   // Per day rather than once per conversation for good: a conversation row lives
@@ -174,7 +162,6 @@ describe('non-text notice', () => {
 
     expect(next.action).toBe('send');
     expect(await countNotices()).toBe(2);
-    expect(await readOfferAnchor()).toBe(later.id);
   });
 
   it('is idempotent for a repeat of the same inbound (retry)', async () => {

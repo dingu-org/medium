@@ -90,13 +90,14 @@ Each tool is a typed Zod schema exposed through AI SDK tool definitions.
 - [x] Exports idempotent `handoffFailedTurn({ inboundMessage })` for Phase 5 retry exhaustion.
 - [x] Returns the final assistant text content.
 
-### Handoff offer (replaced the deterministic safety guard, 2026-08-14)
+### Handoff offer (replaced the deterministic safety guard, 2026-08-14; acceptance handed to the model 2026-08-30)
 
 - [x] The model alone decides a request is out of scope and calls `offer_human_handoff`; nothing inspects the inbound message before inference.
 - [x] One static, vertical-agnostic offer for every case, interpolating the business name; no emergency guidance.
-- [x] The offer is anchored to the message it answered (`conversations.handoff_offer_message_id`, migration `0029`) and commits with it in one transaction.
-- [x] Only the immediately next patient message can accept, matched whole-message and case/diacritic-insensitively; anything else lapses and is handled normally.
-- [x] Acceptance escalates through the existing `escalate_to_human` path and confirms in one fixed sentence.
+- [x] The offer asks a plain question and names no keyword. **Superseded:** it used to end in "përgjigjuni me PO", anchored to the message it answered (`conversations.handoff_offer_message_id`, migration `0029`), accepted only by the immediately-next message and only on a keyword match. That parser could not be made correct — six ordinary ways of declining parsed as a yes — so the whole mechanism was deleted.
+- [x] The model reads the acceptance out of the conversation history and calls `escalate_to_human`; nothing records that an offer is outstanding. Bounded by `HISTORY_LIMIT` (20 messages); an offer answered later is simply re-offered.
+- [x] A successful escalation is a stop condition, and the engine — not the model — sends one fixed sentence, shared with the failed turn and the billing cap.
+- [ ] **C3, a separate later deploy:** drop `conversations.handoff_offer_message_id`. The column is dead but still declared; dropping it while running code selects it is the one ordering that breaks.
 
 ### Model routing policy — `lib/ai/models.ts` + `lib/ai/client.ts`
 

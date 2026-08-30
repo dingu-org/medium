@@ -1,7 +1,7 @@
 /**
  * Cap hard-stop handoff (Phase 16 C2, extended 2026-08-14). When a PT's monthly
- * conversation cap is reached, a new customer-day is answered once — with a
- * single warm, static message telling the customer a person will reply — instead
+ * conversation cap is reached, a new customer-day is answered once — with the
+ * shared escalation sentence telling the customer a person will reply — instead
  * of an AI turn. The PT's inbox and manual chat are never blocked; only the
  * automated AI reply is.
  *
@@ -14,10 +14,21 @@
  * centralize that allowlist for cost queries. This message carries no
  * plan/limit/AI language — that lives on the PT-facing surfaces (push, bell,
  * chat banner), not in the customer's chat.
+ *
+ * Since 2026-08-30 the words themselves are the shared `escalationMessage`, the
+ * same sentence a model escalation, an accepted offer and a crashed turn send.
+ * The customer must never be able to tell which of the four happened: "we are
+ * out of conversations this month" is true, useless to them, and damaging to
+ * the business. What is useful is identical in all four cases — a person has
+ * this now — so it is one sentence in one place.
  */
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { conversations } from '@/lib/db/schema';
+import {
+  businessLabel,
+  escalationMessage,
+} from '@/lib/conversation/customer-copy';
 import { persistDeterministicReply } from '@/lib/conversation/deterministic-reply';
 import type { InboundMessage, OutboundMessage } from '@/lib/conversation/types';
 import {
@@ -28,19 +39,21 @@ import { conversationDayKeys } from './usage';
 
 export const CAP_HANDOFF_MODEL = 'deterministic-cap-handoff';
 
-/** One static, customer-facing Albanian handoff. Reviewable in one place. */
-export const CAP_HANDOFF_MESSAGE_SQ =
-  'Faleminderit për mesazhin! Do t’ju përgjigjemi personalisht sa më shpejt.';
-
 /**
  * Decide whether to send the handoff for this inbound. Only one handoff is sent
  * per conversation per local day (guarded by `conversations.limit_handoff_at`),
  * so a customer sending several messages after hitting the cap gets exactly one
  * reply that day. The per-inbound AI-reply unique index makes the persist
  * itself idempotent under Inngest retries.
+ *
+ * `name` is the account's own name, threaded in from the inbound job context
+ * that already carries it, so this sentence reads exactly like the escalation a
+ * customer would get from any other path — including the fallback to the
+ * vertical-neutral label when the business never filled a name in.
  */
 export async function prepareCapHandoff(args: {
   inbound: InboundMessage;
+  name: string | null;
   timezone: string;
   instant: Date;
 }): Promise<
@@ -72,7 +85,7 @@ export async function prepareCapHandoff(args: {
 
   const outbound = await persistDeterministicReply({
     inbound: args.inbound,
-    content: CAP_HANDOFF_MESSAGE_SQ,
+    content: escalationMessage(businessLabel(args.name)),
     model: CAP_HANDOFF_MODEL,
   });
   return { action: 'send', outbound };
