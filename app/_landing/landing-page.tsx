@@ -446,7 +446,7 @@ function CtaBand() {
   return (
     <section className="bg-[var(--brand-600)] py-16 text-white sm:py-24">
       <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-4 md:px-5 text-center">
-        <LogoMark size={40} />
+        <LogoMark size={40} variant="dark" />
         <h2 className="font-heading max-w-xl text-3xl font-semibold tracking-tight text-white">
           Lëre Medium të mbajë bisedat. Ti mbaj pacientët.
         </h2>

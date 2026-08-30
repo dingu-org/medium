@@ -4,7 +4,7 @@ import sharp from 'sharp';
 
 const root = process.cwd();
 const iconsDir = path.join(root, 'public', 'icons');
-const source = path.join(iconsDir, 'source.svg');
+const source = path.join(iconsDir, 'source.png');
 const regularSizes = [192, 256, 384, 512];
 const maskableSizes = [192, 512];
 
@@ -38,6 +38,7 @@ for (const size of maskableSizes) {
 }
 
 await sharp(source)
+  .flatten({ background: '#fafafa' })
   .resize(180, 180, { fit: 'contain' })
   .png()
   .toFile(path.join(root, 'public', 'apple-touch-icon.png'));

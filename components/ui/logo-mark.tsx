@@ -1,19 +1,28 @@
-/** Medium logo mark (canvas LogoMark): royal-blue tile + sage dot. */
-export function LogoMark({ size = 46 }: { size?: number }) {
+/** Medium logo mark: circular "m." — ink (or light, on dark backgrounds) circle, blue dot. */
+export function LogoMark({
+  size = 46,
+  variant = 'light',
+}: {
+  size?: number;
+  variant?: 'light' | 'dark';
+}) {
+  const circleFill = variant === 'dark' ? '#EDEDED' : '#171717';
+  const textFill = variant === 'dark' ? '#0A0A0A' : '#FFFFFF';
+
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
-      fill="none"
-      aria-hidden="true"
-    >
-      <rect width="40" height="40" rx="11" fill="#3B5BFE" />
-      <path
-        d="M11 27V13h2.4l4.1 7.6 4.1-7.6h2.4v14h-2.2v-9.5l-3.6 6.6h-1.4l-3.6-6.6V27H11Z"
-        fill="#fff"
-      />
-      <circle cx="29.5" cy="13.5" r="1.8" fill="#7CC4A8" />
+    <svg width={size} height={size} viewBox="0 0 220 220" aria-hidden="true">
+      <circle cx="110" cy="110" r="100" fill={circleFill} />
+      <text
+        x="110"
+        y="144"
+        textAnchor="middle"
+        fontFamily="var(--font-manrope), Helvetica, Arial, sans-serif"
+        fontWeight={700}
+        fontSize="96"
+        fill={textFill}
+      >
+        m<tspan fill="#2E6BFF">.</tspan>
+      </text>
     </svg>
   );
 }
