@@ -21,6 +21,7 @@ import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { logger, serializeError } from '@/lib/log';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import { withAuditLog } from '@/lib/tenancy';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
@@ -197,6 +198,21 @@ export const setConversationClosed = instrumentedAction(
 async function sendUpcomingReminderTemplateImpl(
   conversationId: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  // The real gate. `chat-thread.tsx` hides the button on the same flag, but a
+  // server action is callable by anyone holding its id, so the refusal has to
+  // live here — and ahead of the auth and DB work, because there is nothing to
+  // authorize: this is the last hand-operated way to send a WhatsApp template
+  // and reminders are parked (see lib/reminders/flag.ts).
+  //
+  // Consequence, accepted deliberately by the owner: outside the 24h service
+  // window WhatsApp permits nothing but an approved template, so with this
+  // refused a professional cannot reach a customer who has been silent longer
+  // than that. The composer keeps the explanation card and simply offers no
+  // action. Re-engagement becomes its own feature alongside the reminder
+  // redesign; do not route around this gate.
+  if (!remindersEnabled()) {
+    return { ok: false, error: 'Kujtesat janë të çaktivizuara.' };
+  }
   const accountId = await requireAccountId();
   const [context] = await db
     .select({

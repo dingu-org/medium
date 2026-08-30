@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -704,6 +705,63 @@ describe('sendUpcomingReminderTemplate', () => {
       inFlight: 1,
       used: 10,
       limit: 10,
+    });
+  });
+
+  /**
+   * Reminders are parked behind `REMINDERS_ENABLED` (lib/reminders/flag.ts).
+   * The composer hides the button on the same flag, but that is cosmetic: a
+   * server action is callable by anyone holding its id, so this is where the
+   * feature is actually off.
+   */
+  describe('with reminders disabled', () => {
+    beforeEach(() => {
+      // vitest.config.ts turns the flag ON for the whole run, so the parked
+      // reminder suites keep documenting the feature; this describe opts out.
+      vi.stubEnv('REMINDERS_ENABLED', 'false');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('refuses the manual send without calling Graph or writing a reminder_jobs row', async () => {
+      // Guard the guard: the surrounding beforeEach seeds an active connection,
+      // an approved template, an upcoming appointment and a customer who never
+      // opted out, so this send WOULD succeed. The refusal can only be the flag.
+      expect(process.env.REMINDERS_ENABLED).toBe('false');
+
+      await expect(
+        sendUpcomingReminderTemplate(conversationId),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'Kujtesat janë të çaktivizuara.',
+      });
+
+      // Nothing billed, nothing metered, nothing correlatable to a reply.
+      expect(sendTemplateMock).not.toHaveBeenCalled();
+      const jobs = await db
+        .select({ id: reminderJobs.id })
+        .from(reminderJobs)
+        .where(eq(reminderJobs.appointmentId, appointmentId));
+      expect(jobs).toHaveLength(0);
+      const stored = await db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, conversationId),
+            eq(messages.templateId, templateId),
+          ),
+        );
+      expect(stored).toHaveLength(0);
+      // The successful path pauses the AI; a refusal must leave the
+      // conversation exactly as it found it.
+      const [conv] = await db
+        .select({ aiActive: conversations.aiActive })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      expect(conv.aiActive).toBe(true);
     });
   });
 });
