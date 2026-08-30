@@ -5,6 +5,11 @@ import { PLANS } from '@/lib/billing/plans';
 import { t } from '@/lib/i18n';
 import { LandingPage } from '@/app/_landing/landing-page';
 import HelpPlansPage from '@/app/(legal)/help/plans/page';
+import { NotificationPrefs } from '@/app/(dashboard)/settings/notifications/notification-prefs';
+import {
+  NOTIFICATION_PREF_KEYS,
+  type NotificationPrefs as NotificationPrefsShape,
+} from '@/app/(dashboard)/settings/constants';
 
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) => (
@@ -81,5 +86,32 @@ describe('help → plans with reminders off', () => {
     expect(html).toContain(`${PLANS.free.remindersPerMonth} kujtesa`);
     expect(html).toContain(`${PLANS.solo.remindersPerMonth} kujtesa`);
     expect(html).toContain('Të dyja');
+  });
+});
+
+describe('settings → notifications with reminders off', () => {
+  const prefs = Object.fromEntries(
+    NOTIFICATION_PREF_KEYS.map((key) => [key, true]),
+  ) as NotificationPrefsShape;
+
+  it('offers no toggle for a notification that can never arrive', () => {
+    const html = renderToStaticMarkup(
+      <NotificationPrefs prefs={prefs} remindersEnabled={false} />,
+    );
+
+    expect(html).not.toContain(t.settings.notifReminderFailure);
+    // Only that row goes: the group it lived in still carries its siblings, so
+    // this is a removed row rather than a collapsed section.
+    expect(html).toContain(t.settings.notifConnection);
+    expect(html).toContain(t.settings.notifBilling);
+    expect(html).toContain(t.settings.notifNewBookings);
+  });
+
+  it('restores the row when the flag is on', () => {
+    const html = renderToStaticMarkup(
+      <NotificationPrefs prefs={prefs} remindersEnabled={true} />,
+    );
+
+    expect(html).toContain(t.settings.notifReminderFailure);
   });
 });
