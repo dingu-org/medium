@@ -5,22 +5,29 @@ import { t } from '@/lib/i18n';
 import type { TodayAppointment, TodaySnapshot } from '@/lib/today/queries';
 import { CancelAppointmentDialog, TodayClient } from '../today-client';
 
-const { queueMock } = vi.hoisted(() => ({
+const { queueMock, sheetRenders } = vi.hoisted(() => ({
   queueMock: vi.fn(async () => ({
     status: 'sent' as const,
     response: null,
     clientMutationId: 'cm-1',
   })),
+  sheetRenders: [] as { remindersEnabled?: boolean }[],
 }));
 
 vi.mock('@/lib/pwa/mutation-client', () => ({
   queueAppointmentMutation: queueMock,
 }));
+// Renders the subscribed table so a test can see which channels are opened.
 vi.mock('@/components/realtime-refresher', () => ({
-  RealtimeRefresher: () => null,
+  RealtimeRefresher: ({ table }: { table: string }) => (
+    <span data-realtime-table={table} />
+  ),
 }));
 vi.mock('@/components/appointments/appointment-sheet', () => ({
-  AppointmentSheet: () => null,
+  AppointmentSheet: (props: { remindersEnabled?: boolean }) => {
+    sheetRenders.push(props);
+    return null;
+  },
 }));
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) => (
@@ -72,6 +79,7 @@ describe('TodayClient attention card', () => {
             appointment,
           },
         ])}
+        remindersEnabled={false}
       />,
     );
 
@@ -94,6 +102,7 @@ describe('TodayClient attention card', () => {
             appointment: null,
           },
         ])}
+        remindersEnabled={false}
       />,
     );
 
@@ -171,3 +180,33 @@ function clickOf(
   expect(typeof onClick).toBe('function');
   return onClick as () => void;
 }
+
+describe('TodayClient reminder gating', () => {
+  it('opens no reminder_jobs channel while reminders are parked', () => {
+    const markup = renderToStaticMarkup(
+      <TodayClient snapshot={snapshotWith([])} remindersEnabled={false} />,
+    );
+
+    // The appointments channel is unconditional; reminder_jobs is not written
+    // to at all while the feature is off, so holding a socket on it is waste.
+    expect(markup).toContain('data-realtime-table="appointments"');
+    expect(markup).not.toContain('reminder_jobs');
+  });
+
+  it('opens the reminder_jobs channel again once reminders are on', () => {
+    const markup = renderToStaticMarkup(
+      <TodayClient snapshot={snapshotWith([])} remindersEnabled />,
+    );
+
+    expect(markup).toContain('data-realtime-table="reminder_jobs"');
+  });
+
+  it('hands the flag down to the appointment sheet', () => {
+    sheetRenders.length = 0;
+    renderToStaticMarkup(
+      <TodayClient snapshot={snapshotWith([])} remindersEnabled />,
+    );
+
+    expect(sheetRenders.at(-1)?.remindersEnabled).toBe(true);
+  });
+});

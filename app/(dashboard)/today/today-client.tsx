@@ -30,7 +30,18 @@ import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
 import type { TodayAppointment, TodaySnapshot } from '@/lib/today/queries';
 import { formatWeekdayDate, t } from '@/lib/i18n';
 
-export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
+export function TodayClient({
+  snapshot,
+  remindersEnabled,
+}: {
+  snapshot: TodaySnapshot;
+  /**
+   * Read on the server (lib/reminders/flag.ts) and handed down, the same way
+   * the calendar screen threads it — the flag is server-only, with no
+   * `NEXT_PUBLIC_` twin.
+   */
+  remindersEnabled: boolean;
+}) {
   const [selected, setSelected] = useState<TodayAppointment | null>(null);
   // Cancelling is irreversible and WhatsApps the customer, so the card's "Anulo"
   // only opens this confirmation — same gate (and reason field) as the sheet.
@@ -73,10 +84,15 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
         filter={`account_id=eq.${snapshot.accountId}`}
       />
       {/* conversations is subscribed app-wide in the dashboard layout. */}
-      <RealtimeRefresher
-        table="reminder_jobs"
-        filter={`account_id=eq.${snapshot.accountId}`}
-      />
+      {/* Reminders are parked (lib/reminders/flag.ts): nothing writes
+          `reminder_jobs` while the feature is off, so this would be a live
+          websocket held open for a table that can never change. */}
+      {remindersEnabled && (
+        <RealtimeRefresher
+          table="reminder_jobs"
+          filter={`account_id=eq.${snapshot.accountId}`}
+        />
+      )}
 
       {/* Canvas TopBar sub line — sits right under the chrome title. */}
       <p className="text-ink-3 -mt-1 mb-6 text-[13.5px] tracking-[-0.005em]">
@@ -228,6 +244,7 @@ export function TodayClient({ snapshot }: { snapshot: TodaySnapshot }) {
         timezone={snapshot.timezone}
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
+        remindersEnabled={remindersEnabled}
       />
 
       <CancelAppointmentDialog

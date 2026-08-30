@@ -61,8 +61,11 @@ export const chat = {
   messagePlaceholder: 'Shkruaj një mesazh…',
 
   windowClosedTitle: 'Dritarja 24-orëshe u mbyll',
+  // The whole windowClosed composer state (components/chat/composer.tsx) — the
+  // template button next to it is gated off with reminders, so nothing at all
+  // can be sent until the customer writes. Say that, and no more.
   windowClosedText:
-    'Dritarja 24-orëshe u mbyll. Pacienti duhet të shkruajë sërish para një përgjigjeje të lirë.',
+    "Dritarja 24-orëshe u mbyll. Klienti duhet të shkruajë sërish para se t'i përgjigjesh.",
   sendTemplateReminder: 'Dërgo kujtesë me shabllon',
   revokedTitle: 'WhatsApp u shkëput',
   revokedText: 'WhatsApp u shkëput. Rilidh për të dërguar mesazhe.',

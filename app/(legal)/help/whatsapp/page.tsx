@@ -40,10 +40,8 @@ export default function HelpWhatsAppPage() {
 
       <PolicySection title="Pas lidhjes">
         <p>
-          Pacientët mund të të shkruajnë menjëherë dhe asistenti u përgjigjet.
-          Vetëm mesazhi i kujtesës së takimeve ka nevojë për një miratim nga
-          Meta, i cili zakonisht zgjat 24–48 orë — derisa të miratohet,
-          kujtesat automatike mund të mos dërgohen ende.
+          Nuk ka asgjë tjetër për të pritur. Pacientët mund të të shkruajnë
+          menjëherë dhe asistenti u përgjigjet.
         </p>
       </PolicySection>
 

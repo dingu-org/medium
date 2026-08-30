@@ -51,24 +51,13 @@ export default function HelpAiBookingsPage() {
         </p>
       </PolicySection>
 
-      <PolicySection title="Dritarja 24-orëshe dhe kujtesat">
+      <PolicySection title="Dritarja 24-orëshe">
         <p>
           WhatsApp-i lejon përgjigje të lira vetëm brenda 24 orëve nga mesazhi
-          i fundit i pacientit — pas kësaj, asistenti mund të dërgojë vetëm
-          mesazhe të paracaktuara, si kujtesa e takimit. Kur pacienti merr
-          kujtesën, mund të përgjigjet me{' '}
-          <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]">
-            KONFIRMO
-          </code>{' '}
-          për ta konfirmuar,{' '}
-          <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]">
-            ANULO
-          </code>{' '}
-          për ta anuluar, ose{' '}
-          <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]">
-            RICAKTO
-          </code>{' '}
-          për të kërkuar një ndryshim.
+          i fundit i pacientit. Brenda kësaj dritareje asistenti përgjigjet
+          normalisht. Pasi ajo mbyllet, biseda nuk mund të rihapet nga Medium —
+          pacienti duhet të shkruajë sërish, dhe dritarja hapet përsëri për 24
+          orë.
         </p>
       </PolicySection>
     </article>
