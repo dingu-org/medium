@@ -37,6 +37,7 @@ import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { createLogger } from '@/lib/log';
 import { dispatchPushForEvent } from '@/lib/notifications/push-dispatch';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import {
   handleReminderResponse,
   pendingReminderSentAt,
@@ -477,7 +478,23 @@ export const handleInboundMessage = inngest.createFunction(
     // either; the inbound routes through the engine, which skips it as
     // `assistant_paused` (the single logging/skip choke point).
     const nonText = event.data.nonText === true;
-    const deterministicReminders = !(context.assistantPaused || nonText);
+    //
+    // `remindersEnabled()` is the kill switch (lib/reminders/flag.ts). With
+    // reminders off this is false, so `claim` short-circuits to 'reminder'
+    // without running the `resolve-turn-precedence` step,
+    // `handleReminderResponse` is never called, `reminder` stays
+    // `{ kind: 'none' }`, and the message falls through to the ordinary AI turn
+    // below — the assistant reads "PO" as the customer's words, not as a
+    // reminder confirmation.
+    //
+    // This single flag also closes the reminder *fallback* path, so
+    // `runReminderFallbackTurn` and the engine's `runReminderTurn` deliberately
+    // carry no gate of their own: the fallback runs only when
+    // `reminder.kind === 'fallback'`, and `handleReminderResponse` — unreachable
+    // above — is the only thing that produces that kind. A second check there
+    // would be dead code that implies some other caller exists.
+    const deterministicReminders =
+      !(context.assistantPaused || nonText) && remindersEnabled();
     // Ahead of the reminder step, never inside it: the handler returns an
     // outbound and ends the run, so once it has claimed the message the engine
     // — and with it the acceptance of an outstanding handoff offer — is already

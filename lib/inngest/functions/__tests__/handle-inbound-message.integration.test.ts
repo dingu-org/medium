@@ -46,6 +46,7 @@ import {
 import type { InboundMessage } from '@/lib/conversation/types';
 import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { getNotificationData } from '@/lib/notifications/query';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import {
   handleReminderResponse,
   type ReminderHandlingResult,
@@ -65,6 +66,7 @@ import {
   runReminderFallbackTurn,
   sendInboundReply,
   type InboundClaim,
+  type InboundJobContext,
 } from '../handle-inbound-message';
 import { DAY, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
 
@@ -1329,6 +1331,185 @@ describe('handleInboundMessage cores', () => {
       }
 
       expect(claims).toEqual(['reminder', 'reminder', 'reminder']);
+    });
+  });
+
+  /**
+   * The reminders kill switch (`lib/reminders/flag.ts`) at the boundary it was
+   * built for: with reminders off, nothing may read the customer's words before
+   * the assistant does. A bare "Ok" answering a reminder that really did go out
+   * is the sharpest case, because it is exactly the message `parseReplyIntent`
+   * confirms an appointment on.
+   *
+   * Both tests run the same fixture through the same mirrored gate and differ
+   * only in the flag, so the disabled case cannot pass by the fixture having
+   * quietly stopped being reminder-eligible.
+   */
+  describe('the reminders kill switch', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    /** A sent, unanswered reminder plus an inbound "Ok" that answers it. */
+    async function seedAnsweredReminder() {
+      const startsAt = addHours(new Date(), 30);
+      const [appointment] = await db
+        .insert(appointments)
+        .values({
+          accountId,
+          customerId,
+          startsAt,
+          endsAt: addHours(startsAt, 1),
+          status: 'pending',
+          serviceType: 'Treatment',
+        })
+        .returning({ id: appointments.id });
+      const [reminderMessage] = await db
+        .insert(messages)
+        .values({
+          accountId,
+          conversationId,
+          externalId: `wamid.REMINDER.${Date.now()}.${sequence}`,
+          role: 'ai',
+          channel: 'whatsapp',
+          content: 'Reminder',
+          model: 'deterministic-reminder',
+          provider: 'internal',
+        })
+        .returning({ id: messages.id });
+      await db.insert(reminderJobs).values({
+        accountId,
+        appointmentId: appointment.id,
+        scheduledFor: subHours(startsAt, 24),
+        inngestRunId: `run-flag-${sequence}`,
+        status: 'sent',
+        sentAt: new Date(),
+        messageId: reminderMessage.id,
+      });
+      await db
+        .update(messages)
+        .set({ content: 'Ok' })
+        .where(eq(messages.id, inboundMessageId));
+
+      return { appointmentId: appointment.id };
+    }
+
+    /**
+     * The Inngest body's gate, verbatim — including the real
+     * `remindersEnabled()` call, so this tracks the shipped condition rather
+     * than a restatement of its intent. `resolveInboundClaim` is called through
+     * a spy so the disabled case can show that the `resolve-turn-precedence`
+     * step is skipped outright, not merely that its verdict was ignored.
+     */
+    async function runBody(context: InboundJobContext) {
+      const inbound: InboundMessage = {
+        ...context.inbound,
+        occurredAt: new Date(context.inbound.occurredAt),
+      };
+      const nonText = false;
+      const deterministicReminders =
+        !(context.assistantPaused || nonText) && remindersEnabled();
+
+      const resolveClaim = vi.fn(resolveInboundClaim);
+      const claim: InboundClaim = deterministicReminders
+        ? await resolveClaim(inbound)
+        : 'reminder';
+      const reminder: ReminderHandlingResult =
+        deterministicReminders && claim === 'reminder'
+          ? await handleReminderResponse({ inbound })
+          : { kind: 'none' };
+
+      return { deterministicReminders, resolveClaim, claim, reminder };
+    }
+
+    async function loadContext() {
+      return (await loadInboundJobContext({
+        messageId: inboundMessageId,
+        accountId,
+        conversationId,
+      }))!;
+    }
+
+    async function bookingState(appointmentId: string) {
+      const [appointment] = await db
+        .select({ status: appointments.status })
+        .from(appointments)
+        .where(eq(appointments.id, appointmentId));
+      const [job] = await db
+        .select({ responseType: reminderJobs.responseType })
+        .from(reminderJobs)
+        .where(eq(reminderJobs.appointmentId, appointmentId));
+      const replies = await db
+        .select({ model: messages.model })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.role, 'ai'),
+            eq(messages.replyToMessageId, inboundMessageId),
+          ),
+        );
+      return {
+        status: appointment.status,
+        responseType: job.responseType,
+        replies,
+      };
+    }
+
+    it('hands a reminder reply to the AI turn while reminders are off', async () => {
+      vi.stubEnv('REMINDERS_ENABLED', 'false');
+      const { appointmentId } = await seedAnsweredReminder();
+      const context = await loadContext();
+
+      const { deterministicReminders, resolveClaim, claim, reminder } =
+        await runBody(context);
+
+      expect(deterministicReminders).toBe(false);
+      // Short-circuited, not overruled: the precedence step never runs, so
+      // nothing inspected the customer's words ahead of the assistant.
+      expect(resolveClaim).not.toHaveBeenCalled();
+      expect(claim).toBe('reminder');
+      expect(reminder.kind).toBe('none');
+
+      // ...and the message falls through to the ordinary AI turn.
+      const runTurnFn = vi.fn(async () => ({
+        id: inboundMessageId,
+        conversationId,
+        replyToMessageId: inboundMessageId,
+        content: 'Si mund t’ju ndihmoj?',
+        channel: 'whatsapp',
+      }));
+      await expect(runInboundTurn(context, runTurnFn)).resolves.toMatchObject({
+        kind: 'outbound',
+      });
+      expect(runTurnFn).toHaveBeenCalledTimes(1);
+
+      const state = await bookingState(appointmentId);
+      expect(state.status).toBe('pending');
+      expect(state.responseType).toBeNull();
+      // The stubbed turn writes nothing, so any reply row here would be the
+      // deterministic confirmation this switch exists to stop.
+      expect(state.replies).toHaveLength(0);
+    });
+
+    it('still confirms deterministically while reminders are on', async () => {
+      vi.stubEnv('REMINDERS_ENABLED', 'true');
+      const { appointmentId } = await seedAnsweredReminder();
+      const context = await loadContext();
+
+      const { deterministicReminders, resolveClaim, claim, reminder } =
+        await runBody(context);
+
+      expect(deterministicReminders).toBe(true);
+      expect(resolveClaim).toHaveBeenCalledTimes(1);
+      expect(claim).toBe('reminder');
+      expect(reminder.kind).toBe('outbound');
+
+      const state = await bookingState(appointmentId);
+      expect(state.status).toBe('confirmed');
+      expect(state.responseType).toBe('confirm');
+      expect(state.replies).toEqual([
+        { model: 'deterministic-reminder-response' },
+      ]);
     });
   });
 });
