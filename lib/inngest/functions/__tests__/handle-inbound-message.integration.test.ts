@@ -46,7 +46,6 @@ import {
 import type { InboundMessage } from '@/lib/conversation/types';
 import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { getNotificationData } from '@/lib/notifications/query';
-import { remindersEnabled } from '@/lib/reminders/flag';
 import {
   handleReminderResponse,
   type ReminderHandlingResult,
@@ -58,6 +57,7 @@ import {
   sendAppointmentConfirmation,
 } from '../appointment-events';
 import {
+  handleInboundMessageHandler,
   loadInboundJobContext,
   persistInboundReplyDelivery,
   recordConversationFailure,
@@ -66,7 +66,6 @@ import {
   runReminderFallbackTurn,
   sendInboundReply,
   type InboundClaim,
-  type InboundJobContext,
 } from '../handle-inbound-message';
 import { DAY, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
 
@@ -1341,9 +1340,9 @@ describe('handleInboundMessage cores', () => {
    * is the sharpest case, because it is exactly the message `parseReplyIntent`
    * confirms an appointment on.
    *
-   * Both tests run the same fixture through the same mirrored gate and differ
-   * only in the flag, so the disabled case cannot pass by the fixture having
-   * quietly stopped being reminder-eligible.
+   * Both tests run the same fixture through the same shipped handler and
+   * differ only in the flag, so the disabled case cannot pass by the fixture
+   * having quietly stopped being reminder-eligible.
    */
   describe('the reminders kill switch', () => {
     afterEach(() => {
@@ -1394,40 +1393,58 @@ describe('handleInboundMessage cores', () => {
       return { appointmentId: appointment.id };
     }
 
+    /** Thrown by the step shim to end a run at its first terminal step. */
+    class StepStop extends Error {}
+
     /**
-     * The Inngest body's gate, verbatim — including the real
-     * `remindersEnabled()` call, so this tracks the shipped condition rather
-     * than a restatement of its intent. `resolveInboundClaim` is called through
-     * a spy so the disabled case can show that the `resolve-turn-precedence`
-     * step is skipped outright, not merely that its verdict was ignored.
+     * The steps past which a run leaves this process: it sends to WhatsApp, or
+     * hands the message to the model. The shim stops at whichever comes first,
+     * so no test here can make a network call however the gate behaves.
      */
-    async function runBody(context: InboundJobContext) {
-      const inbound: InboundMessage = {
-        ...context.inbound,
-        occurredAt: new Date(context.inbound.occurredAt),
+    const TERMINAL_STEPS = new Set([
+      'run-ai-turn',
+      'run-reminder-ai-turn',
+      'send-reminder-response',
+      'send-non-text-notice',
+      'send-cap-handoff',
+      'send-outbound',
+    ]);
+
+    /**
+     * Drives the shipped handler — `handleInboundMessageHandler`, the very
+     * function handed to `inngest.createFunction` — rather than a restatement
+     * of its gate, which could drift from the line it claims to track. Every
+     * step runs for real; the names it recorded are the assertion, because the
+     * gate's whole effect is which steps the run contains:
+     * `resolve-turn-precedence` and `handle-reminder-response` are there or
+     * they are not, and the terminal step names which path the run committed
+     * to.
+     */
+    async function runHandler(): Promise<string[]> {
+      const ran: string[] = [];
+      const step = {
+        run: async (name: string, fn: () => unknown) => {
+          ran.push(name);
+          if (TERMINAL_STEPS.has(name)) throw new StepStop(name);
+          return await fn();
+        },
       };
-      const nonText = false;
-      const deterministicReminders =
-        !(context.assistantPaused || nonText) && remindersEnabled();
 
-      const resolveClaim = vi.fn(resolveInboundClaim);
-      const claim: InboundClaim = deterministicReminders
-        ? await resolveClaim(inbound)
-        : 'reminder';
-      const reminder: ReminderHandlingResult =
-        deterministicReminders && claim === 'reminder'
-          ? await handleReminderResponse({ inbound })
-          : { kind: 'none' };
+      try {
+        await handleInboundMessageHandler({
+          event: {
+            name: 'message.received',
+            data: { messageId: inboundMessageId, accountId, conversationId },
+          },
+          step,
+          runId: '01JRUNKILLSWITCH',
+        } as unknown as Parameters<typeof handleInboundMessageHandler>[0]);
+        throw new Error(`handler returned without a terminal step: ${ran}`);
+      } catch (error) {
+        if (!(error instanceof StepStop)) throw error;
+      }
 
-      return { deterministicReminders, resolveClaim, claim, reminder };
-    }
-
-    async function loadContext() {
-      return (await loadInboundJobContext({
-        messageId: inboundMessageId,
-        accountId,
-        conversationId,
-      }))!;
+      return ran;
     }
 
     async function bookingState(appointmentId: string) {
@@ -1458,35 +1475,22 @@ describe('handleInboundMessage cores', () => {
     it('hands a reminder reply to the AI turn while reminders are off', async () => {
       vi.stubEnv('REMINDERS_ENABLED', 'false');
       const { appointmentId } = await seedAnsweredReminder();
-      const context = await loadContext();
 
-      const { deterministicReminders, resolveClaim, claim, reminder } =
-        await runBody(context);
+      const ran = await runHandler();
 
-      expect(deterministicReminders).toBe(false);
-      // Short-circuited, not overruled: the precedence step never runs, so
-      // nothing inspected the customer's words ahead of the assistant.
-      expect(resolveClaim).not.toHaveBeenCalled();
-      expect(claim).toBe('reminder');
-      expect(reminder.kind).toBe('none');
-
-      // ...and the message falls through to the ordinary AI turn.
-      const runTurnFn = vi.fn(async () => ({
-        id: inboundMessageId,
-        conversationId,
-        replyToMessageId: inboundMessageId,
-        content: 'Si mund t’ju ndihmoj?',
-        channel: 'whatsapp',
-      }));
-      await expect(runInboundTurn(context, runTurnFn)).resolves.toMatchObject({
-        kind: 'outbound',
-      });
-      expect(runTurnFn).toHaveBeenCalledTimes(1);
+      // Short-circuited, not overruled: neither reminder step is in the run at
+      // all, so nothing inspected the customer's words ahead of the assistant,
+      // and the message reached the ordinary AI turn.
+      expect(ran).toEqual([
+        'load-context',
+        'check-conversation-cap',
+        'run-ai-turn',
+      ]);
 
       const state = await bookingState(appointmentId);
       expect(state.status).toBe('pending');
       expect(state.responseType).toBeNull();
-      // The stubbed turn writes nothing, so any reply row here would be the
+      // The run stopped before any send, so a reply row here could only be the
       // deterministic confirmation this switch exists to stop.
       expect(state.replies).toHaveLength(0);
     });
@@ -1494,15 +1498,17 @@ describe('handleInboundMessage cores', () => {
     it('still confirms deterministically while reminders are on', async () => {
       vi.stubEnv('REMINDERS_ENABLED', 'true');
       const { appointmentId } = await seedAnsweredReminder();
-      const context = await loadContext();
 
-      const { deterministicReminders, resolveClaim, claim, reminder } =
-        await runBody(context);
+      const ran = await runHandler();
 
-      expect(deterministicReminders).toBe(true);
-      expect(resolveClaim).toHaveBeenCalledTimes(1);
-      expect(claim).toBe('reminder');
-      expect(reminder.kind).toBe('outbound');
+      // The same fixture, the same handler, one env var apart: the reminder
+      // steps are back, and they claim the message before the AI turn.
+      expect(ran).toEqual([
+        'load-context',
+        'resolve-turn-precedence',
+        'handle-reminder-response',
+        'send-reminder-response',
+      ]);
 
       const state = await bookingState(appointmentId);
       expect(state.status).toBe('confirmed');

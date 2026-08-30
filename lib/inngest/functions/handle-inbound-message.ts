@@ -1,6 +1,10 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { APICallError } from 'ai';
-import { NonRetriableError, type GetStepTools } from 'inngest';
+import {
+  NonRetriableError,
+  type GetFunctionInput,
+  type GetStepTools,
+} from 'inngest';
 import { db } from '@/lib/db';
 import {
   conversations,
@@ -422,6 +426,317 @@ async function recoverFailedInbound(args: {
   return { recovered: true };
 }
 
+/**
+ * The handler is a named export so the reminder kill switch on `claim` /
+ * `deterministicReminders` below can be exercised by running the shipped line
+ * rather than a copy of it: `handleInboundMessage` is an `InngestFunction`
+ * whose handler is private, and there is no test engine in this repo.
+ * `createFunction` receives this same function, so what the tests call is what
+ * Inngest runs. (Same shape as `sendReminderHandler` in ./send-reminder.ts.)
+ */
+export async function handleInboundMessageHandler({
+  event,
+  step,
+  runId,
+}: GetFunctionInput<typeof inngest, 'message.received'>) {
+  // Continue the webhook's trace through Inngest to the outbound send; fall
+  // back to the run id when the event carries no trace (criterion 6). These
+  // entry/exit lines all share trace_id.
+  const trace_id = event.data.traceId ?? runId;
+  const log = createLogger({
+    trace_id,
+    account_id: event.data.accountId,
+    conversation_id: event.data.conversationId,
+  });
+  log.info('inbound.processing', 'Processing inbound message', {
+    message_id: event.data.messageId,
+  });
+
+  const context = await step.run('load-context', () =>
+    loadInboundJobContext(event.data),
+  );
+  if (!context) return { skipped: 'conversation_not_found' };
+  if (!context.connectionId || !context.recipient) {
+    return { skipped: 'delivery_context_missing' };
+  }
+
+  // A body the assistant cannot read: the stored content is our own
+  // placeholder, so there is nothing here that could be a reminder answer
+  // (those are typed words) and nothing worth a keyword lookup.
+  //
+  // Globally paused ⇒ no automated reminder mutation or confirmation reply
+  // either; the inbound routes through the engine, which skips it as
+  // `assistant_paused` (the single logging/skip choke point).
+  const nonText = event.data.nonText === true;
+  //
+  // `remindersEnabled()` is the kill switch (lib/reminders/flag.ts). With
+  // reminders off this is false, so `claim` short-circuits to 'reminder'
+  // without running the `resolve-turn-precedence` step,
+  // `handleReminderResponse` is never called, `reminder` stays
+  // `{ kind: 'none' }`, and the message falls through to the ordinary AI turn
+  // below — the assistant reads "PO" as the customer's words, not as a
+  // reminder confirmation.
+  //
+  // This single flag also closes the reminder *fallback* path, so
+  // `runReminderFallbackTurn` and the engine's `runReminderTurn` deliberately
+  // carry no gate of their own: the fallback runs only when
+  // `reminder.kind === 'fallback'`, and `handleReminderResponse` — unreachable
+  // above — is the only thing that produces that kind. A second check there
+  // would be dead code that implies some other caller exists.
+  const deterministicReminders =
+    !(context.assistantPaused || nonText) && remindersEnabled();
+  // Ahead of the reminder step, never inside it: the handler returns an
+  // outbound and ends the run, so once it has claimed the message the engine
+  // — and with it the acceptance of an outstanding handoff offer — is already
+  // unreachable.
+  const claim: InboundClaim = deterministicReminders
+    ? await step.run('resolve-turn-precedence', () =>
+        resolveInboundClaim(hydrateInbound(context.inbound)),
+      )
+    : 'reminder';
+  const reminder: ReminderHandlingResult =
+    deterministicReminders && claim === 'reminder'
+      ? await step.run('handle-reminder-response', () =>
+          handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
+        )
+      : { kind: 'none' };
+  if (reminder.kind === 'outbound') {
+    const delivery = await step.run('send-reminder-response', () =>
+      sendInboundReply({
+        outbound: reminder.outbound,
+        connectionId: context.connectionId!,
+        recipient: context.recipient!,
+      }),
+    );
+    await step.run('persist-reminder-response-delivery', () =>
+      persistInboundReplyDelivery({
+        outboundId: reminder.outbound.id,
+        messageId: delivery.messageId,
+      }),
+    );
+
+    log.info('inbound.reply_sent', 'Outbound AI reply sent', {
+      message_id: event.data.messageId,
+      wa_message_id: delivery.messageId,
+    });
+    return {
+      outboundMessageId: reminder.outbound.id,
+      externalId: delivery.messageId,
+      replay: delivery.alreadyDelivered,
+      reminder: true,
+    };
+  }
+
+  // Takeover on a non-fallback inbound is the PT handling it manually — never
+  // metered. (A reminder AI fallback runs even during takeover, so it is
+  // excluded here and does get metered below.)
+  if (reminder.kind !== 'fallback' && !context.aiActive) {
+    // The assistant won't answer, so the customer's message needs a manual
+    // reply — push a nudge (push-only, no bell entry). Echo-paused
+    // conversations are excluded via `manualHandling`; the per-conversation
+    // device tag collapses a burst of messages into one notification. The
+    // function's messageId idempotency + step memoization keep it single-send
+    // across retries.
+    if (context.manualHandling) {
+      await step.run('notify-manual-reply', () =>
+        dispatchPushForEvent({
+          name: 'conversation.needs_reply',
+          data: {
+            accountId: context.inbound.accountId,
+            conversationId: context.inbound.conversationId,
+            customerId: context.inbound.customerId,
+            traceId: event.data.traceId,
+          },
+        }),
+      );
+    }
+    return { skipped: 'conversation_inactive' };
+  }
+
+  // The assistant cannot read this body, and it never becomes an AI turn:
+  // handing our own `[mesazh zanor]` placeholder to the model would have it
+  // invent what the voice note said. One fixed notice per conversation per
+  // day instead, carrying the same handoff offer as any out-of-scope
+  // question. Placed after the takeover check above (a PT already handling
+  // the thread gets the nudge, not an assistant talking over them) and before
+  // the cap gate (no model round happened, so nothing is metered).
+  if (nonText) {
+    // The engine is the single skip choke point for text; this branch never
+    // reaches it, so it owns the same line for a globally paused assistant.
+    if (context.assistantPaused) {
+      log.info(
+        'inbound.non_text',
+        'Non-text message stored; assistant globally paused',
+        { message_id: event.data.messageId },
+      );
+      return { skipped: 'assistant_paused' };
+    }
+
+    const notice = await step.run('prepare-non-text-notice', () =>
+      prepareNonTextNotice({
+        inbound: hydrateInbound(context.inbound),
+        name: context.name,
+        timezone: context.timezone,
+        instant: new Date(context.inbound.occurredAt),
+      }),
+    );
+    if (notice.action === 'skip') {
+      log.info(
+        'inbound.non_text',
+        'Non-text message stored; notice already sent today',
+        { message_id: event.data.messageId },
+      );
+      return { nonText: true, noticeSent: false };
+    }
+
+    const delivery = await step.run('send-non-text-notice', () =>
+      sendInboundReply({
+        outbound: notice.outbound,
+        connectionId: context.connectionId!,
+        recipient: context.recipient!,
+      }),
+    );
+    await step.run('persist-non-text-notice-delivery', () =>
+      persistInboundReplyDelivery({
+        outboundId: notice.outbound.id,
+        messageId: delivery.messageId,
+      }),
+    );
+    await step.run('mark-non-text-notice', () =>
+      markNonTextNotice({
+        accountId: context.inbound.accountId,
+        conversationId: context.inbound.conversationId,
+        instant: new Date(context.inbound.occurredAt),
+      }),
+    );
+
+    log.info('inbound.non_text', 'Non-text message stored; notice sent', {
+      message_id: event.data.messageId,
+      wa_message_id: delivery.messageId,
+    });
+    return {
+      nonText: true,
+      noticeSent: true,
+      outboundMessageId: notice.outbound.id,
+      externalId: delivery.messageId,
+    };
+  }
+
+  // Meter the conversation-day and enforce the monthly cap. Paused
+  // conversations skip the gate (not counted) — the engine self-skips as
+  // `assistant_paused` before any model call. The metering instant is the
+  // customer message's own timestamp (not wall-clock) so Inngest retries land
+  // on the same billing day and month.
+  if (!context.assistantPaused) {
+    const gate = await step.run('check-conversation-cap', () =>
+      checkAndRecordConversation({
+        accountId: context.inbound.accountId,
+        customerId: context.inbound.customerId,
+        conversationId: context.inbound.conversationId,
+        plan: context.plan,
+        timezone: context.timezone,
+        inboundMessageId: context.inbound.id,
+        instant: new Date(context.inbound.occurredAt),
+        traceId: event.data.traceId,
+      }),
+    );
+
+    if (gate.status === 'at_cap') {
+      // The assistant is out of conversations for the month, so this customer
+      // needs a person — no offer to make, nothing to ask. Hand the thread
+      // over and push before the customer's holding message: whatever happens
+      // to the send, the PT knows someone is waiting. This is also what keeps
+      // the 2nd..Nth message of a capped day visible — they take the
+      // manual-handling path above instead of hitting the throttled handoff.
+      await step.run('hand-off-capped-conversation', () =>
+        handOffCappedConversation({
+          accountId: context.inbound.accountId,
+          conversationId: context.inbound.conversationId,
+          customerId: context.inbound.customerId,
+          traceId: event.data.traceId,
+        }),
+      );
+
+      const prep = await step.run('prepare-cap-handoff', () =>
+        prepareCapHandoff({
+          inbound: hydrateInbound(context.inbound),
+          timezone: context.timezone,
+          instant: new Date(context.inbound.occurredAt),
+        }),
+      );
+      if (prep.action === 'skip') {
+        log.info('inbound.capped', 'Conversation cap reached; handoff already sent today', {
+          message_id: event.data.messageId,
+        });
+        return { capped: true, handoffSent: false };
+      }
+
+      const delivery = await step.run('send-cap-handoff', () =>
+        sendInboundReply({
+          outbound: prep.outbound,
+          connectionId: context.connectionId!,
+          recipient: context.recipient!,
+        }),
+      );
+      await step.run('persist-cap-handoff-delivery', () =>
+        persistInboundReplyDelivery({
+          outboundId: prep.outbound.id,
+          messageId: delivery.messageId,
+        }),
+      );
+      await step.run('mark-cap-handoff', () =>
+        markCapHandoff({
+          accountId: context.inbound.accountId,
+          conversationId: context.inbound.conversationId,
+          instant: new Date(context.inbound.occurredAt),
+        }),
+      );
+
+      log.info('inbound.capped', 'Conversation cap reached; static handoff sent', {
+        message_id: event.data.messageId,
+        wa_message_id: delivery.messageId,
+      });
+      return { capped: true, handoffSent: true };
+    }
+  }
+
+  let turn:
+    | { kind: 'outbound'; outbound: OutboundMessage }
+    | { kind: 'skipped'; reason: string };
+  if (reminder.kind === 'fallback') {
+    turn = await step.run('run-reminder-ai-turn', () =>
+      runReminderFallbackTurn(context, reminder.reminder),
+    );
+  } else {
+    turn = await step.run('run-ai-turn', () => runInboundTurn(context));
+  }
+  if (turn.kind === 'skipped') return { skipped: turn.reason };
+
+  const delivery = await step.run('send-outbound', () =>
+    sendInboundReply({
+      outbound: turn.outbound,
+      connectionId: context.connectionId!,
+      recipient: context.recipient!,
+    }),
+  );
+  await step.run('persist-delivery', () =>
+    persistInboundReplyDelivery({
+      outboundId: turn.outbound.id,
+      messageId: delivery.messageId,
+    }),
+  );
+
+  log.info('inbound.reply_sent', 'Outbound AI reply sent', {
+    message_id: event.data.messageId,
+    wa_message_id: delivery.messageId,
+  });
+  return {
+    outboundMessageId: turn.outbound.id,
+    externalId: delivery.messageId,
+    replay: delivery.alreadyDelivered,
+  };
+}
+
 export const handleInboundMessage = inngest.createFunction(
   {
     id: 'handle-inbound-message',
@@ -448,302 +763,5 @@ export const handleInboundMessage = inngest.createFunction(
     },
   },
   { event: 'message.received' },
-  async ({ event, step, runId }) => {
-    // Continue the webhook's trace through Inngest to the outbound send; fall
-    // back to the run id when the event carries no trace (criterion 6). These
-    // entry/exit lines all share trace_id.
-    const trace_id = event.data.traceId ?? runId;
-    const log = createLogger({
-      trace_id,
-      account_id: event.data.accountId,
-      conversation_id: event.data.conversationId,
-    });
-    log.info('inbound.processing', 'Processing inbound message', {
-      message_id: event.data.messageId,
-    });
-
-    const context = await step.run('load-context', () =>
-      loadInboundJobContext(event.data),
-    );
-    if (!context) return { skipped: 'conversation_not_found' };
-    if (!context.connectionId || !context.recipient) {
-      return { skipped: 'delivery_context_missing' };
-    }
-
-    // A body the assistant cannot read: the stored content is our own
-    // placeholder, so there is nothing here that could be a reminder answer
-    // (those are typed words) and nothing worth a keyword lookup.
-    //
-    // Globally paused ⇒ no automated reminder mutation or confirmation reply
-    // either; the inbound routes through the engine, which skips it as
-    // `assistant_paused` (the single logging/skip choke point).
-    const nonText = event.data.nonText === true;
-    //
-    // `remindersEnabled()` is the kill switch (lib/reminders/flag.ts). With
-    // reminders off this is false, so `claim` short-circuits to 'reminder'
-    // without running the `resolve-turn-precedence` step,
-    // `handleReminderResponse` is never called, `reminder` stays
-    // `{ kind: 'none' }`, and the message falls through to the ordinary AI turn
-    // below — the assistant reads "PO" as the customer's words, not as a
-    // reminder confirmation.
-    //
-    // This single flag also closes the reminder *fallback* path, so
-    // `runReminderFallbackTurn` and the engine's `runReminderTurn` deliberately
-    // carry no gate of their own: the fallback runs only when
-    // `reminder.kind === 'fallback'`, and `handleReminderResponse` — unreachable
-    // above — is the only thing that produces that kind. A second check there
-    // would be dead code that implies some other caller exists.
-    const deterministicReminders =
-      !(context.assistantPaused || nonText) && remindersEnabled();
-    // Ahead of the reminder step, never inside it: the handler returns an
-    // outbound and ends the run, so once it has claimed the message the engine
-    // — and with it the acceptance of an outstanding handoff offer — is already
-    // unreachable.
-    const claim: InboundClaim = deterministicReminders
-      ? await step.run('resolve-turn-precedence', () =>
-          resolveInboundClaim(hydrateInbound(context.inbound)),
-        )
-      : 'reminder';
-    const reminder: ReminderHandlingResult =
-      deterministicReminders && claim === 'reminder'
-        ? await step.run('handle-reminder-response', () =>
-            handleReminderResponse({ inbound: hydrateInbound(context.inbound) }),
-          )
-        : { kind: 'none' };
-    if (reminder.kind === 'outbound') {
-      const delivery = await step.run('send-reminder-response', () =>
-        sendInboundReply({
-          outbound: reminder.outbound,
-          connectionId: context.connectionId!,
-          recipient: context.recipient!,
-        }),
-      );
-      await step.run('persist-reminder-response-delivery', () =>
-        persistInboundReplyDelivery({
-          outboundId: reminder.outbound.id,
-          messageId: delivery.messageId,
-        }),
-      );
-
-      log.info('inbound.reply_sent', 'Outbound AI reply sent', {
-        message_id: event.data.messageId,
-        wa_message_id: delivery.messageId,
-      });
-      return {
-        outboundMessageId: reminder.outbound.id,
-        externalId: delivery.messageId,
-        replay: delivery.alreadyDelivered,
-        reminder: true,
-      };
-    }
-
-    // Takeover on a non-fallback inbound is the PT handling it manually — never
-    // metered. (A reminder AI fallback runs even during takeover, so it is
-    // excluded here and does get metered below.)
-    if (reminder.kind !== 'fallback' && !context.aiActive) {
-      // The assistant won't answer, so the customer's message needs a manual
-      // reply — push a nudge (push-only, no bell entry). Echo-paused
-      // conversations are excluded via `manualHandling`; the per-conversation
-      // device tag collapses a burst of messages into one notification. The
-      // function's messageId idempotency + step memoization keep it single-send
-      // across retries.
-      if (context.manualHandling) {
-        await step.run('notify-manual-reply', () =>
-          dispatchPushForEvent({
-            name: 'conversation.needs_reply',
-            data: {
-              accountId: context.inbound.accountId,
-              conversationId: context.inbound.conversationId,
-              customerId: context.inbound.customerId,
-              traceId: event.data.traceId,
-            },
-          }),
-        );
-      }
-      return { skipped: 'conversation_inactive' };
-    }
-
-    // The assistant cannot read this body, and it never becomes an AI turn:
-    // handing our own `[mesazh zanor]` placeholder to the model would have it
-    // invent what the voice note said. One fixed notice per conversation per
-    // day instead, carrying the same handoff offer as any out-of-scope
-    // question. Placed after the takeover check above (a PT already handling
-    // the thread gets the nudge, not an assistant talking over them) and before
-    // the cap gate (no model round happened, so nothing is metered).
-    if (nonText) {
-      // The engine is the single skip choke point for text; this branch never
-      // reaches it, so it owns the same line for a globally paused assistant.
-      if (context.assistantPaused) {
-        log.info(
-          'inbound.non_text',
-          'Non-text message stored; assistant globally paused',
-          { message_id: event.data.messageId },
-        );
-        return { skipped: 'assistant_paused' };
-      }
-
-      const notice = await step.run('prepare-non-text-notice', () =>
-        prepareNonTextNotice({
-          inbound: hydrateInbound(context.inbound),
-          name: context.name,
-          timezone: context.timezone,
-          instant: new Date(context.inbound.occurredAt),
-        }),
-      );
-      if (notice.action === 'skip') {
-        log.info(
-          'inbound.non_text',
-          'Non-text message stored; notice already sent today',
-          { message_id: event.data.messageId },
-        );
-        return { nonText: true, noticeSent: false };
-      }
-
-      const delivery = await step.run('send-non-text-notice', () =>
-        sendInboundReply({
-          outbound: notice.outbound,
-          connectionId: context.connectionId!,
-          recipient: context.recipient!,
-        }),
-      );
-      await step.run('persist-non-text-notice-delivery', () =>
-        persistInboundReplyDelivery({
-          outboundId: notice.outbound.id,
-          messageId: delivery.messageId,
-        }),
-      );
-      await step.run('mark-non-text-notice', () =>
-        markNonTextNotice({
-          accountId: context.inbound.accountId,
-          conversationId: context.inbound.conversationId,
-          instant: new Date(context.inbound.occurredAt),
-        }),
-      );
-
-      log.info('inbound.non_text', 'Non-text message stored; notice sent', {
-        message_id: event.data.messageId,
-        wa_message_id: delivery.messageId,
-      });
-      return {
-        nonText: true,
-        noticeSent: true,
-        outboundMessageId: notice.outbound.id,
-        externalId: delivery.messageId,
-      };
-    }
-
-    // Meter the conversation-day and enforce the monthly cap. Paused
-    // conversations skip the gate (not counted) — the engine self-skips as
-    // `assistant_paused` before any model call. The metering instant is the
-    // customer message's own timestamp (not wall-clock) so Inngest retries land
-    // on the same billing day and month.
-    if (!context.assistantPaused) {
-      const gate = await step.run('check-conversation-cap', () =>
-        checkAndRecordConversation({
-          accountId: context.inbound.accountId,
-          customerId: context.inbound.customerId,
-          conversationId: context.inbound.conversationId,
-          plan: context.plan,
-          timezone: context.timezone,
-          inboundMessageId: context.inbound.id,
-          instant: new Date(context.inbound.occurredAt),
-          traceId: event.data.traceId,
-        }),
-      );
-
-      if (gate.status === 'at_cap') {
-        // The assistant is out of conversations for the month, so this customer
-        // needs a person — no offer to make, nothing to ask. Hand the thread
-        // over and push before the customer's holding message: whatever happens
-        // to the send, the PT knows someone is waiting. This is also what keeps
-        // the 2nd..Nth message of a capped day visible — they take the
-        // manual-handling path above instead of hitting the throttled handoff.
-        await step.run('hand-off-capped-conversation', () =>
-          handOffCappedConversation({
-            accountId: context.inbound.accountId,
-            conversationId: context.inbound.conversationId,
-            customerId: context.inbound.customerId,
-            traceId: event.data.traceId,
-          }),
-        );
-
-        const prep = await step.run('prepare-cap-handoff', () =>
-          prepareCapHandoff({
-            inbound: hydrateInbound(context.inbound),
-            timezone: context.timezone,
-            instant: new Date(context.inbound.occurredAt),
-          }),
-        );
-        if (prep.action === 'skip') {
-          log.info('inbound.capped', 'Conversation cap reached; handoff already sent today', {
-            message_id: event.data.messageId,
-          });
-          return { capped: true, handoffSent: false };
-        }
-
-        const delivery = await step.run('send-cap-handoff', () =>
-          sendInboundReply({
-            outbound: prep.outbound,
-            connectionId: context.connectionId!,
-            recipient: context.recipient!,
-          }),
-        );
-        await step.run('persist-cap-handoff-delivery', () =>
-          persistInboundReplyDelivery({
-            outboundId: prep.outbound.id,
-            messageId: delivery.messageId,
-          }),
-        );
-        await step.run('mark-cap-handoff', () =>
-          markCapHandoff({
-            accountId: context.inbound.accountId,
-            conversationId: context.inbound.conversationId,
-            instant: new Date(context.inbound.occurredAt),
-          }),
-        );
-
-        log.info('inbound.capped', 'Conversation cap reached; static handoff sent', {
-          message_id: event.data.messageId,
-          wa_message_id: delivery.messageId,
-        });
-        return { capped: true, handoffSent: true };
-      }
-    }
-
-    let turn:
-      | { kind: 'outbound'; outbound: OutboundMessage }
-      | { kind: 'skipped'; reason: string };
-    if (reminder.kind === 'fallback') {
-      turn = await step.run('run-reminder-ai-turn', () =>
-        runReminderFallbackTurn(context, reminder.reminder),
-      );
-    } else {
-      turn = await step.run('run-ai-turn', () => runInboundTurn(context));
-    }
-    if (turn.kind === 'skipped') return { skipped: turn.reason };
-
-    const delivery = await step.run('send-outbound', () =>
-      sendInboundReply({
-        outbound: turn.outbound,
-        connectionId: context.connectionId!,
-        recipient: context.recipient!,
-      }),
-    );
-    await step.run('persist-delivery', () =>
-      persistInboundReplyDelivery({
-        outboundId: turn.outbound.id,
-        messageId: delivery.messageId,
-      }),
-    );
-
-    log.info('inbound.reply_sent', 'Outbound AI reply sent', {
-      message_id: event.data.messageId,
-      wa_message_id: delivery.messageId,
-    });
-    return {
-      outboundMessageId: turn.outbound.id,
-      externalId: delivery.messageId,
-      replay: delivery.alreadyDelivered,
-    };
-  },
+  handleInboundMessageHandler,
 );
