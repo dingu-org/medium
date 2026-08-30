@@ -18,13 +18,14 @@ vi.mock('@/lib/events/outbox', () => ({
 
 import { APICallError } from 'ai';
 import { MockLanguageModelV3 } from 'ai/test';
-import { addHours, subHours } from 'date-fns';
+import { addHours, subHours, subMonths } from 'date-fns';
 import { and, eq } from 'drizzle-orm';
 import { NonRetriableError } from 'inngest';
 import { db } from '@/lib/db';
 import {
   appointments,
   availabilityRules,
+  conversationDays,
   conversations,
   eventOutbox,
   events,
@@ -35,15 +36,12 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
-import { handOffCappedConversation } from '@/lib/billing/cap-handoff';
+import { CAP_HANDOFF_MODEL } from '@/lib/billing/cap-handoff';
+import { getPlan } from '@/lib/billing/plans';
+import { conversationDayKeys } from '@/lib/billing/usage';
 import { runTurnCore } from '@/lib/conversation/engine';
 import { ConversationEngineError } from '@/lib/conversation/errors';
-import {
-  businessLabel,
-  handoffOfferMessage,
-  HANDOFF_ACCEPTED_MODEL,
-} from '@/lib/conversation/handoff-offer';
-import type { InboundMessage } from '@/lib/conversation/types';
+import { NON_TEXT_NOTICE_MODEL } from '@/lib/conversation/non-text';
 import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { getNotificationData } from '@/lib/notifications/query';
 import {
@@ -57,16 +55,15 @@ import {
   sendAppointmentConfirmation,
 } from '../appointment-events';
 import {
+  handleInboundMessageHandler,
   loadInboundJobContext,
   persistInboundReplyDelivery,
   recordConversationFailure,
-  resolveInboundClaim,
   runInboundTurn,
   runReminderFallbackTurn,
   sendInboundReply,
-  type InboundClaim,
 } from '../handle-inbound-message';
-import { DAY, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
+import { DAY, testNow, testNowUtc, zonedTime } from '@/tests/support/clock';
 
 // The booking turn below books against a Monday-only availability rule, so the
 // fixture needs a real Monday — derived, and a week out so the booking is in the
@@ -155,6 +152,63 @@ afterEach(() => {
 afterAll(async () => {
   if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
+
+/** Thrown by the step shim to end a run at its first terminal step. */
+class StepStop extends Error {}
+
+/**
+ * The steps past which a run leaves this process: it sends to WhatsApp, or
+ * hands the message to the model. The shim stops at whichever comes first, so
+ * no test driving the whole handler can make a network call however a gate
+ * behaves.
+ */
+const TERMINAL_STEPS = new Set([
+  'run-ai-turn',
+  'run-reminder-ai-turn',
+  'send-reminder-response',
+  'send-non-text-notice',
+  'send-cap-handoff',
+  'send-outbound',
+]);
+
+/**
+ * Drives the shipped handler — `handleInboundMessageHandler`, the very function
+ * handed to `inngest.createFunction` — rather than a restatement of its
+ * branching, which could drift from the lines it claims to track. Every step
+ * runs for real; the names it recorded are the assertion, because a gate's
+ * whole effect is which steps the run contains.
+ *
+ * A run that stops at a terminal step reports `result: undefined`; a run that
+ * ends on its own — a skip, or a throttled no-op that sends nothing — reports
+ * what the handler returned, which is itself part of what these tests check.
+ */
+async function runHandler(
+  data: Record<string, unknown> = {},
+): Promise<{ ran: string[]; result: unknown }> {
+  const ran: string[] = [];
+  const step = {
+    run: async (name: string, fn: () => unknown) => {
+      ran.push(name);
+      if (TERMINAL_STEPS.has(name)) throw new StepStop(name);
+      return await fn();
+    },
+  };
+
+  try {
+    const result = await handleInboundMessageHandler({
+      event: {
+        name: 'message.received',
+        data: { messageId: inboundMessageId, accountId, conversationId, ...data },
+      },
+      step,
+      runId: '01JRUNSTEPSHIM',
+    } as unknown as Parameters<typeof handleInboundMessageHandler>[0]);
+    return { ran, result };
+  } catch (error) {
+    if (!(error instanceof StepStop)) throw error;
+    return { ran, result: undefined };
+  }
+}
 
 describe('handleInboundMessage cores', () => {
   it('loads authoritative tenant and delivery context', async () => {
@@ -245,36 +299,6 @@ describe('handleInboundMessage cores', () => {
 
     const context = await loadInboundJobContext({
       messageId: inboundMessageId,
-      accountId,
-      conversationId,
-    });
-
-    expect(context?.aiActive).toBe(false);
-    expect(context?.manualHandling).toBe(true);
-  });
-
-  // The 2nd..Nth message of a capped day. The gate compensates its day-fact
-  // away for a turned-away customer, so each later message hits the cap afresh
-  // and the once-a-day handoff throttle skips — which used to be silence for
-  // everyone. Owning the thread is what turns those messages into the
-  // manual-reply nudge instead.
-  it('flags manual handling for the messages that follow a cap handoff', async () => {
-    await handOffCappedConversation({ accountId, conversationId, customerId });
-
-    const [second] = await db
-      .insert(messages)
-      .values({
-        accountId,
-        conversationId,
-        externalId: `wamid.IN.CAP.${Date.now()}.${++sequence}`,
-        role: 'customer',
-        channel: 'whatsapp',
-        content: 'Jam ende duke pritur',
-      })
-      .returning({ id: messages.id });
-
-    const context = await loadInboundJobContext({
-      messageId: second.id,
       accountId,
       conversationId,
     });
@@ -758,577 +782,430 @@ describe('handleInboundMessage cores', () => {
   });
 
   /**
-   * The affirmative collision (2026-08-14). A yes confirms an unanswered
-   * reminder and it also accepts the handoff offer — and the reminder handler
-   * runs first and returns before the engine, so with both outstanding a yes
-   * confirmed an appointment the customer had not been asked about while their
-   * accepted handoff silently never happened.
+   * The reminders kill switch (`lib/reminders/flag.ts`) at the boundary it was
+   * built for: with reminders off, nothing may read the customer's words before
+   * the assistant does. A bare "Ok" answering a reminder that really did go out
+   * is the sharpest case, because it is exactly the message `parseReplyIntent`
+   * confirms an appointment on.
    *
-   * The rule: whichever question was asked most recently wins. It only decides
-   * messages BOTH subsystems could claim, which is why they now read "yes" out
-   * of one shared definition (lib/language/reply-intent.ts). While the offer
-   * demanded exact equality with PO and the reminder accepted 'dakord', 'ok' and
-   * 'po' plus one word, everything in that gap skipped the comparison entirely
-   * and went to the reminder by default — the same bug, one spelling narrower.
-   *
-   * Each test mirrors the Inngest body — precedence gate, then the reminder
-   * step, then the engine.
+   * Both tests run the same fixture through the same shipped handler and
+   * differ only in the flag, so the disabled case cannot pass by the fixture
+   * having quietly stopped being reminder-eligible.
    */
-  describe('most-recent-question-wins on an affirmative', () => {
-    const usage = {
-      inputTokens: {
-        total: 20,
-        noCache: 20,
-        cacheRead: undefined,
-        cacheWrite: undefined,
-      },
-      outputTokens: { total: 6, text: 6, reasoning: undefined },
-    };
+  describe('the reminders kill switch', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
 
-    /** Both deterministic paths answer without a model; running it is failure. */
-    function refusingModel() {
-      return new MockLanguageModelV3({
-        doGenerate: async () => {
-          throw new Error('model should not run');
-        },
-      });
-    }
-
-    /** An ordinary conversational turn — what a message neither subsystem
-     * claims has to reach. */
-    function answeringModel(text: string) {
-      return new MockLanguageModelV3({
-        provider: 'openrouter',
-        modelId: 'mock-model',
-        doGenerate: async () => ({
-          content: [{ type: 'text' as const, text }],
-          finishReason: { unified: 'stop' as const, raw: undefined },
-          usage,
-          warnings: [],
-        }),
-      });
-    }
-
-    function bookingModel(startsAt: Date) {
-      return new MockLanguageModelV3({
-        provider: 'openrouter',
-        modelId: 'mock-model',
-        doGenerate: async () => ({
-          content: [
-            {
-              type: 'tool-call' as const,
-              toolCallId: 'book-1',
-              toolName: 'book_appointment',
-              input: JSON.stringify({
-                starts_at: startsAt.toISOString(),
-                service_type: 'Vlerësim i parë',
-              }),
-            },
-          ],
-          finishReason: { unified: 'tool-calls' as const, raw: undefined },
-          usage,
-          warnings: [],
-        }),
-      });
-    }
-
-    /**
-     * Arms the collision. Both offsets are minutes *before* the inbound message,
-     * so which question was asked last is fixed by the fixture and never by the
-     * wall clock the suite happens to run at. Omit either one to leave that
-     * subsystem with nothing outstanding.
-     */
-    async function seedCollision(options: {
-      reminderSentMinutesBefore?: number;
-      offerMinutesBefore?: number;
-      content?: string;
-    }): Promise<{ inbound: InboundMessage; appointmentId: string | null }> {
-      await db.delete(events).where(eq(events.accountId, accountId));
-      const at = new Date();
-      await db
-        .update(messages)
-        .set({ content: options.content ?? 'PO', createdAt: at })
-        .where(eq(messages.id, inboundMessageId));
-
-      if (options.offerMinutesBefore !== undefined) {
-        const offeredAt = new Date(
-          at.getTime() - options.offerMinutesBefore * MINUTE,
-        );
-        // The out-of-scope question the offer answered — the message the anchor
-        // points at, and whose timestamp dates the offer.
-        const [anchor] = await db
-          .insert(messages)
-          .values({
-            accountId,
-            conversationId,
-            externalId: `wamid.ASK.${Date.now()}.${++sequence}`,
-            role: 'customer',
-            channel: 'whatsapp',
-            content: 'A bëni edhe masazh sportiv?',
-            createdAt: offeredAt,
-          })
-          .returning({ id: messages.id });
-        await db.insert(messages).values({
+    /** A sent, unanswered reminder plus an inbound "Ok" that answers it. */
+    async function seedAnsweredReminder() {
+      const startsAt = addHours(new Date(), 30);
+      const [appointment] = await db
+        .insert(appointments)
+        .values({
+          accountId,
+          customerId,
+          startsAt,
+          endsAt: addHours(startsAt, 1),
+          status: 'pending',
+          serviceType: 'Treatment',
+        })
+        .returning({ id: appointments.id });
+      const [reminderMessage] = await db
+        .insert(messages)
+        .values({
           accountId,
           conversationId,
-          replyToMessageId: anchor.id,
+          externalId: `wamid.REMINDER.${Date.now()}.${sequence}`,
           role: 'ai',
           channel: 'whatsapp',
-          content: handoffOfferMessage(businessLabel(null)),
-          model: 'requested/model',
-          provider: 'Azure',
-          createdAt: new Date(offeredAt.getTime() + 1000),
-        });
-        await db
-          .update(conversations)
-          .set({ handoffOfferMessageId: anchor.id })
-          .where(eq(conversations.id, conversationId));
-      }
-
-      let appointmentId: string | null = null;
-      if (options.reminderSentMinutesBefore !== undefined) {
-        const sentAt = new Date(
-          at.getTime() - options.reminderSentMinutesBefore * MINUTE,
-        );
-        const startsAt = addHours(at, 30);
-        const [appointment] = await db
-          .insert(appointments)
-          .values({
-            accountId,
-            customerId,
-            startsAt,
-            endsAt: addHours(startsAt, 1),
-            status: 'pending',
-            serviceType: 'Treatment',
-          })
-          .returning({ id: appointments.id });
-        appointmentId = appointment.id;
-        const [reminderMessage] = await db
-          .insert(messages)
-          .values({
-            accountId,
-            conversationId,
-            externalId: `wamid.REM.${Date.now()}.${++sequence}`,
-            role: 'ai',
-            channel: 'whatsapp',
-            content: 'Kujtesë: keni takim nesër.',
-            model: 'deterministic-reminder',
-            provider: 'internal',
-            createdAt: sentAt,
-          })
-          .returning({ id: messages.id });
-        await db.insert(reminderJobs).values({
-          accountId,
-          appointmentId: appointment.id,
-          scheduledFor: subHours(startsAt, 24),
-          inngestRunId: `run-collision-${++sequence}`,
-          status: 'sent',
-          sentAt,
-          messageId: reminderMessage.id,
-        });
-      }
-
-      const context = (await loadInboundJobContext({
-        messageId: inboundMessageId,
+          content: 'Reminder',
+          model: 'deterministic-reminder',
+          provider: 'internal',
+        })
+        .returning({ id: messages.id });
+      await db.insert(reminderJobs).values({
         accountId,
-        conversationId,
-      }))!;
+        appointmentId: appointment.id,
+        scheduledFor: subHours(startsAt, 24),
+        inngestRunId: `run-flag-${sequence}`,
+        status: 'sent',
+        sentAt: new Date(),
+        messageId: reminderMessage.id,
+      });
+      await db
+        .update(messages)
+        .set({ content: 'Ok' })
+        .where(eq(messages.id, inboundMessageId));
+
+      return { appointmentId: appointment.id };
+    }
+
+    async function bookingState(appointmentId: string) {
+      const [appointment] = await db
+        .select({ status: appointments.status })
+        .from(appointments)
+        .where(eq(appointments.id, appointmentId));
+      const [job] = await db
+        .select({ responseType: reminderJobs.responseType })
+        .from(reminderJobs)
+        .where(eq(reminderJobs.appointmentId, appointmentId));
+      const replies = await db
+        .select({ model: messages.model })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.role, 'ai'),
+            eq(messages.replyToMessageId, inboundMessageId),
+          ),
+        );
       return {
-        inbound: {
-          ...context.inbound,
-          occurredAt: new Date(context.inbound.occurredAt),
-        },
-        appointmentId,
+        status: appointment.status,
+        responseType: job.responseType,
+        replies,
       };
     }
 
-    /** Precedence gate, reminder step, engine — in the Inngest body's order. */
-    async function runBody(
-      inbound: InboundMessage,
-      model: MockLanguageModelV3,
-    ) {
-      const claim = await resolveInboundClaim(inbound);
-      const reminder: ReminderHandlingResult =
-        claim === 'reminder'
-          ? await handleReminderResponse({ inbound })
-          : { kind: 'none' };
-      const outbound =
-        reminder.kind === 'outbound'
-          ? reminder.outbound
-          : await runTurnCore({
-              inboundMessage: inbound,
-              model,
-              modelId: 'requested/model',
-            });
-      return { claim, reminder, outbound };
-    }
+    it('hands a reminder reply to the AI turn while reminders are off', async () => {
+      vi.stubEnv('REMINDERS_ENABLED', 'false');
+      const { appointmentId } = await seedAnsweredReminder();
 
-    async function conversationRow() {
-      const [conversation] = await db
-        .select()
-        .from(conversations)
-        .where(eq(conversations.id, conversationId));
-      return conversation;
-    }
+      const { ran } = await runHandler();
 
-    async function escalationEvents() {
-      return db
-        .select({ type: events.type })
+      // Short-circuited, not overruled: neither reminder step is in the run at
+      // all, so nothing inspected the customer's words ahead of the assistant,
+      // and the message reached the ordinary AI turn.
+      expect(ran).toEqual([
+        'load-context',
+        'check-conversation-cap',
+        'run-ai-turn',
+      ]);
+
+      const state = await bookingState(appointmentId);
+      expect(state.status).toBe('pending');
+      expect(state.responseType).toBeNull();
+      // The run stopped before any send, so a reply row here could only be the
+      // deterministic confirmation this switch exists to stop.
+      expect(state.replies).toHaveLength(0);
+    });
+
+    it('still confirms deterministically while reminders are on', async () => {
+      vi.stubEnv('REMINDERS_ENABLED', 'true');
+      const { appointmentId } = await seedAnsweredReminder();
+
+      const { ran } = await runHandler();
+
+      // The same fixture, the same handler, one env var apart: the reminder
+      // steps are back, and they claim the message before the AI turn.
+      expect(ran).toEqual([
+        'load-context',
+        'handle-reminder-response',
+        'send-reminder-response',
+      ]);
+
+      const state = await bookingState(appointmentId);
+      expect(state.status).toBe('confirmed');
+      expect(state.responseType).toBe('confirm');
+      expect(state.replies).toEqual([
+        { model: 'deterministic-reminder-response' },
+      ]);
+    });
+  });
+  /**
+   * A voice note or a photo now reaches the professional. Before this the
+   * branch was customer-facing only: the media got one Albanian notice per
+   * conversation per day and the professional got no signal at all beyond the
+   * passive unread badge — and the *second* photo of the day, which the notice
+   * throttle answers with `skip`, was silence for both sides at once.
+   *
+   * Both tests drive the shipped handler through the step shim, so what they
+   * assert is the step list the run actually contains. `push.dispatched` is
+   * the observable end of the dispatch: `dispatchPushForEvent` writes it after
+   * clearing the `manualReply` preference gate, with no push subscriptions
+   * needed (and so no network).
+   */
+  describe('a non-text inbound tells the professional', () => {
+    beforeEach(async () => {
+      await db.delete(events).where(eq(events.accountId, accountId));
+      await db
+        .update(messages)
+        .set({ content: '[foto]' })
+        .where(eq(messages.id, inboundMessageId));
+    });
+
+    /** The counts-only metric row `dispatchPushForEvent` leaves behind. */
+    async function pushDispatches() {
+      return await db
+        .select({ payload: events.payload })
         .from(events)
         .where(
+          and(eq(events.accountId, accountId), eq(events.type, 'push.dispatched')),
+        );
+    }
+
+    async function noticeCount() {
+      const rows = await db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(
           and(
-            eq(events.accountId, accountId),
-            eq(events.type, 'conversation.escalated'),
+            eq(messages.accountId, accountId),
+            eq(messages.model, NON_TEXT_NOTICE_MODEL),
+          ),
+        );
+      return rows.length;
+    }
+
+    it('pushes on the day the customer notice is sent', async () => {
+      const { ran } = await runHandler({ nonText: true });
+
+      // The push comes before the notice, not after it: nothing downstream can
+      // decide the professional hears nothing.
+      expect(ran).toEqual([
+        'load-context',
+        'notify-non-text',
+        'prepare-non-text-notice',
+        'send-non-text-notice',
+      ]);
+
+      const dispatches = await pushDispatches();
+      expect(dispatches).toHaveLength(1);
+      expect(dispatches[0].payload).toMatchObject({
+        accountId,
+        sourceEvent: 'conversation.needs_reply',
+      });
+    });
+
+    it('still pushes for a second media message the same day, with no second notice', async () => {
+      // Today's notice already went out, so `prepareNonTextNotice` throttles
+      // this one — the exact path that used to end the run in total silence.
+      await db
+        .update(conversations)
+        .set({ nonTextNoticeAt: new Date() })
+        .where(eq(conversations.id, conversationId));
+
+      const { ran, result } = await runHandler({ nonText: true });
+
+      expect(ran).toEqual([
+        'load-context',
+        'notify-non-text',
+        'prepare-non-text-notice',
+      ]);
+      expect(result).toEqual({ nonText: true, noticeSent: false });
+
+      // The customer is not told twice...
+      expect(await noticeCount()).toBe(0);
+      // ...and the professional is still told, which is the whole point.
+      const dispatches = await pushDispatches();
+      expect(dispatches).toHaveLength(1);
+      expect(dispatches[0].payload).toMatchObject({
+        accountId,
+        sourceEvent: 'conversation.needs_reply',
+      });
+    });
+
+    it('leaves the assistant on — notifying is not stopping the AI', async () => {
+      await runHandler({ nonText: true });
+
+      const [conversation] = await db
+        .select({
+          aiActive: conversations.aiActive,
+          escalationState: conversations.escalationState,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).not.toBe('requested');
+    });
+  });
+  /**
+   * The cap is a *transient* condition — it clears at month rollover, or the
+   * moment the professional upgrades — so hitting it now writes no conversation
+   * state at all. It used to hand-roll `ai_active = false, escalation_state =
+   * 'requested'`: permanent state that only the professional toggling the
+   * thread back could undo, for a reason that undoes itself.
+   *
+   * Both tests drive the shipped handler through the step shim, so the step
+   * list the run actually contains is the assertion. The two reminder steps in
+   * every list are the suite-wide `REMINDERS_ENABLED=true` from
+   * `vitest.config.ts`; no reminder is seeded, so they claim nothing.
+   */
+  describe('a capped conversation', () => {
+    const FREE_LIMIT = getPlan('free').conversationsPerMonth;
+    // Two instants one calendar month apart, both derived from the run's own
+    // clock: what these exercise is the *rollover*, never a date.
+    const AFTER_ROLLOVER = testNowUtc({ dayOfMonth: 15 });
+    const AT_CAP = subMonths(AFTER_ROLLOVER, 1);
+
+    beforeEach(async () => {
+      await db.delete(events).where(eq(events.accountId, accountId));
+      await db
+        .delete(conversationDays)
+        .where(eq(conversationDays.accountId, accountId));
+      // Metering keys the month off the professional's timezone.
+      await db
+        .update(accounts)
+        .set({ timezone: 'UTC', plan: 'free' })
+        .where(eq(accounts.id, accountId));
+
+      // Spend the whole month on other customers, so the fixture's own day-fact
+      // is the one that tips the gate over.
+      const { localDay, monthKey } = conversationDayKeys(AT_CAP, 'UTC');
+      const filler = await db
+        .insert(customers)
+        .values(
+          Array.from({ length: FREE_LIMIT }, (_, index) => {
+            const phone = `44770091${String(index).padStart(4, '0')}`;
+            return { accountId, name: `Filler ${index}`, phone, waId: phone };
+          }),
+        )
+        .returning({ id: customers.id });
+      await db.insert(conversationDays).values(
+        filler.map((customer) => ({
+          accountId,
+          customerId: customer.id,
+          localDay,
+          monthKey,
+          firstMessageId: crypto.randomUUID(),
+        })),
+      );
+
+      // The metering instant is the customer message's own timestamp, not the
+      // wall clock, so dating the message is what puts it inside the capped
+      // month.
+      await db
+        .update(messages)
+        .set({ createdAt: AT_CAP })
+        .where(eq(messages.id, inboundMessageId));
+    });
+
+    afterAll(async () => {
+      await db
+        .delete(conversationDays)
+        .where(eq(conversationDays.accountId, accountId));
+    });
+
+    /** Static holding messages actually sent to the customer. */
+    async function holdingMessages() {
+      return await db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.accountId, accountId),
+            eq(messages.model, CAP_HANDOFF_MODEL),
           ),
         );
     }
 
-    it('escalates instead of confirming when the offer is the newer question', async () => {
-      const { inbound, appointmentId } = await seedCollision({
-        reminderSentMinutesBefore: 90,
-        offerMinutesBefore: 5,
-      });
+    /** The counts-only metric row `dispatchPushForEvent` leaves behind. */
+    async function pushDispatches() {
+      return await db
+        .select({ payload: events.payload })
+        .from(events)
+        .where(
+          and(eq(events.accountId, accountId), eq(events.type, 'push.dispatched')),
+        );
+    }
 
-      const model = refusingModel();
-      const { claim, reminder, outbound } = await runBody(inbound, model);
+    async function threadState() {
+      const [row] = await db
+        .select({
+          aiActive: conversations.aiActive,
+          escalationState: conversations.escalationState,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      return row;
+    }
 
-      expect(claim).toBe('handoff_offer');
-      expect(reminder.kind).toBe('none');
-      // Deterministic on both sides: no model round produced this reply.
-      expect(model.doGenerateCalls).toHaveLength(0);
-      const [stored] = await db
-        .select()
-        .from(messages)
-        .where(eq(messages.id, outbound.id));
-      expect(stored.model).toBe(HANDOFF_ACCEPTED_MODEL);
-
-      const conversation = await conversationRow();
-      expect(conversation.aiActive).toBe(false);
-      expect(conversation.escalationState).toBe('requested');
-      expect(conversation.handoffOfferMessageId).toBeNull();
-      expect(await escalationEvents()).toEqual([
-        { type: 'conversation.escalated' },
-      ]);
-
-      // The appointment the customer was never asked about is untouched.
-      const [appointment] = await db
-        .select()
-        .from(appointments)
-        .where(eq(appointments.id, appointmentId!));
-      expect(appointment.status).toBe('pending');
-      const [job] = await db
-        .select()
-        .from(reminderJobs)
-        .where(eq(reminderJobs.appointmentId, appointmentId!));
-      expect(job.responseType).toBeNull();
-    });
-
-    /**
-     * The measured defect (2026-08-14). With the offer as the newer question by
-     * 85 minutes, "po faleminderit" ("yes, thank you") went to the reminder: the
-     * appointment was confirmed, nothing escalated, and the customer's question
-     * was dropped. Not because precedence decided it — because the offer could
-     * not claim the message at all, so precedence never saw it. Same bug the
-     * timestamp rule was written for, one spelling narrower.
-     */
-    it('escalates on "po faleminderit" when the offer is the newer question', async () => {
-      const { inbound, appointmentId } = await seedCollision({
-        reminderSentMinutesBefore: 90,
-        offerMinutesBefore: 5,
-        content: 'po faleminderit',
-      });
-
-      const model = refusingModel();
-      const { claim, reminder, outbound } = await runBody(inbound, model);
-
-      expect(claim).toBe('handoff_offer');
-      expect(reminder.kind).toBe('none');
-      expect(model.doGenerateCalls).toHaveLength(0);
-      const [stored] = await db
-        .select()
-        .from(messages)
-        .where(eq(messages.id, outbound.id));
-      expect(stored.model).toBe(HANDOFF_ACCEPTED_MODEL);
-
-      const conversation = await conversationRow();
-      expect(conversation.aiActive).toBe(false);
-      expect(conversation.escalationState).toBe('requested');
-      expect(conversation.handoffOfferMessageId).toBeNull();
-      expect(await escalationEvents()).toEqual([
-        { type: 'conversation.escalated' },
-      ]);
-
-      // The appointment the customer was never asked about is untouched.
-      const [appointment] = await db
-        .select()
-        .from(appointments)
-        .where(eq(appointments.id, appointmentId!));
-      expect(appointment.status).toBe('pending');
-      const [job] = await db
-        .select()
-        .from(reminderJobs)
-        .where(eq(reminderJobs.appointmentId, appointmentId!));
-      expect(job.responseType).toBeNull();
-    });
-
-    /**
-     * The other half, and why the fix is one shared definition rather than a
-     * wider offer: the same words with the reminder as the newer question still
-     * confirm the appointment. Broadening what the offer can claim only puts the
-     * message in front of the timestamp rule; it does not hand it to the offer.
-     */
-    it('confirms on "po faleminderit" when the reminder is the newer question', async () => {
-      const { inbound, appointmentId } = await seedCollision({
-        reminderSentMinutesBefore: 5,
-        offerMinutesBefore: 90,
-        content: 'po faleminderit',
-      });
-
-      const model = refusingModel();
-      const { claim, reminder, outbound } = await runBody(inbound, model);
-
-      expect(claim).toBe('reminder');
-      expect(reminder.kind).toBe('outbound');
-      expect(model.doGenerateCalls).toHaveLength(0);
-      expect(outbound.content).toContain('u konfirmua');
-
-      const [appointment] = await db
-        .select()
-        .from(appointments)
-        .where(eq(appointments.id, appointmentId!));
-      expect(appointment.status).toBe('confirmed');
-      const [job] = await db
-        .select()
-        .from(reminderJobs)
-        .where(eq(reminderJobs.appointmentId, appointmentId!));
-      expect(job.responseType).toBe('confirm');
-
-      const conversation = await conversationRow();
-      expect(conversation.aiActive).toBe(true);
-      expect(conversation.escalationState).toBe('idle');
-      expect(conversation.handoffOfferMessageId).toBeNull();
-      expect(await escalationEvents()).toEqual([]);
-    });
-
-    /**
-     * Albanian 'po' is also the progressive particle, so "Po pyesja për oraret"
-     * is "I was asking about the hours" — a question, not a yes. Neither
-     * subsystem may claim it, even with the offer as the newest question: it has
-     * to reach the model as an ordinary turn. This is the guard the shared
-     * definition had to carry across, and the reason the offer cannot simply
-     * accept anything that starts with "po".
-     */
-    it('leaves the progressive particle to the model, claiming it for neither', async () => {
-      const { inbound, appointmentId } = await seedCollision({
-        reminderSentMinutesBefore: 90,
-        offerMinutesBefore: 5,
-        content: 'Po pyesja për oraret',
-      });
-
-      const model = answeringModel('Jemi hapur 9:00–17:00.');
-      const { claim, reminder, outbound } = await runBody(inbound, model);
-
-      // The offer cannot claim it, so there is nothing to weigh and the message
-      // stays on the reminder path — which hands it to the AI turn.
-      expect(claim).toBe('reminder');
-      expect(reminder.kind).toBe('fallback');
-      expect(model.doGenerateCalls).toHaveLength(1);
-      expect(outbound.content).toBe('Jemi hapur 9:00–17:00.');
-
-      const [appointment] = await db
-        .select()
-        .from(appointments)
-        .where(eq(appointments.id, appointmentId!));
-      expect(appointment.status).toBe('pending');
-      const [job] = await db
-        .select()
-        .from(reminderJobs)
-        .where(eq(reminderJobs.appointmentId, appointmentId!));
-      expect(job.responseType).toBeNull();
-
-      const conversation = await conversationRow();
-      expect(conversation.aiActive).toBe(true);
-      expect(conversation.escalationState).toBe('idle');
-      expect(conversation.handoffOfferMessageId).toBeNull();
-      expect(await escalationEvents()).toEqual([]);
-    });
-
-    it('confirms the appointment and lapses the offer when the reminder is the newer question', async () => {
-      const { inbound, appointmentId } = await seedCollision({
-        reminderSentMinutesBefore: 5,
-        offerMinutesBefore: 90,
-      });
-
-      const model = refusingModel();
-      const { claim, reminder, outbound } = await runBody(inbound, model);
-
-      expect(claim).toBe('reminder');
-      expect(reminder.kind).toBe('outbound');
-      expect(model.doGenerateCalls).toHaveLength(0);
-      expect(outbound.content).toContain('u konfirmua');
-
-      const [appointment] = await db
-        .select()
-        .from(appointments)
-        .where(eq(appointments.id, appointmentId!));
-      expect(appointment.status).toBe('confirmed');
-      const [job] = await db
-        .select()
-        .from(reminderJobs)
-        .where(eq(reminderJobs.appointmentId, appointmentId!));
-      expect(job.responseType).toBe('confirm');
-
-      const conversation = await conversationRow();
-      expect(conversation.aiActive).toBe(true);
-      expect(conversation.escalationState).toBe('idle');
-      // The customer answered the reminder, not the offer, so the offer lapses
-      // here rather than staying armed against a later, unrelated message.
-      expect(conversation.handoffOfferMessageId).toBeNull();
-      expect(await escalationEvents()).toEqual([]);
-    });
-
-    /**
-     * 'dakord' and 'ok' are everyday Albanian for yes — 'ok' is written far more
-     * often than 'dakord' in texting — and an unanswered reminder has always
-     * confirmed a booking on either. The offer accepted neither, which is the
-     * asymmetry this removes.
-     *
-     * The widening is bounded by the offer's own rule rather than by its
-     * wording: only the message directly after the offer can accept it, so a
-     * casual "ok" is read as acceptance exactly where "ok" is answering the
-     * offer. The cost of being wrong there is an escalation to the PT, who sees
-     * the customer's real question — recoverable, and the safe direction.
-     */
-    it.each(['dakord', 'ok'])(
-      'accepts an outstanding offer on %j',
-      async (content) => {
-        const { inbound } = await seedCollision({
-          offerMinutesBefore: 5,
-          content,
-        });
-
-        const model = refusingModel();
-        const { claim, reminder, outbound } = await runBody(inbound, model);
-
-        expect(claim).toBe('handoff_offer');
-        expect(reminder.kind).toBe('none');
-        expect(model.doGenerateCalls).toHaveLength(0);
-        const [stored] = await db
-          .select()
-          .from(messages)
-          .where(eq(messages.id, outbound.id));
-        expect(stored.model).toBe(HANDOFF_ACCEPTED_MODEL);
-
-        const conversation = await conversationRow();
-        expect(conversation.aiActive).toBe(false);
-        expect(conversation.escalationState).toBe('requested');
-        expect(conversation.handoffOfferMessageId).toBeNull();
-        expect(await escalationEvents()).toEqual([
-          { type: 'conversation.escalated' },
-        ]);
-      },
-    );
-
-    it('confirms the reminder on a bare po when no offer is outstanding', async () => {
-      const { inbound, appointmentId } = await seedCollision({
-        reminderSentMinutesBefore: 5,
-        content: 'po',
-      });
-
-      const model = refusingModel();
-      const { claim, reminder, outbound } = await runBody(inbound, model);
-
-      expect(claim).toBe('reminder');
-      expect(reminder.kind).toBe('outbound');
-      expect(model.doGenerateCalls).toHaveLength(0);
-      expect(outbound.content).toContain('u konfirmua');
-
-      const [appointment] = await db
-        .select()
-        .from(appointments)
-        .where(eq(appointments.id, appointmentId!));
-      expect(appointment.status).toBe('confirmed');
-      expect(await escalationEvents()).toEqual([]);
-    });
-
-    it('still books a proposed slot on a bare po with neither a reminder nor an offer', async () => {
+    it('still pushes for a later message the same capped day, and sends no second holding message', async () => {
+      // Today's holding message already went out, so `prepareCapHandoff`
+      // throttles this one. This is the path that used to lean on the thread
+      // having been taken from the assistant: the follow-up then reached the
+      // professional through the manual-handling branch. It hits the cap gate
+      // afresh instead — the gate compensates its day-fact away for a
+      // turned-away customer — and the push happens there, ahead of the
+      // throttle.
       await db
-        .update(accounts)
-        .set({ timezone: 'Europe/Tirane' })
-        .where(eq(accounts.id, accountId));
-      await db.delete(availabilityRules).where(eq(availabilityRules.accountId, accountId));
-      await db.insert(availabilityRules).values({
+        .update(conversations)
+        .set({ limitHandoffAt: AT_CAP })
+        .where(eq(conversations.id, conversationId));
+
+      const { ran, result } = await runHandler();
+
+      expect(ran).toEqual([
+        'load-context',
+        'handle-reminder-response',
+        'check-conversation-cap',
+        'notify-capped-conversation',
+        'prepare-cap-handoff',
+      ]);
+      expect(result).toEqual({ capped: true, handoffSent: false });
+
+      // The customer is not told twice...
+      expect(await holdingMessages()).toHaveLength(0);
+      // ...the professional is told anyway...
+      const dispatches = await pushDispatches();
+      expect(dispatches).toHaveLength(1);
+      expect(dispatches[0].payload).toMatchObject({
         accountId,
-        weekday: 1,
-        startTime: '09:00:00',
-        endTime: '17:00:00',
+        sourceEvent: 'conversation.needs_reply',
       });
-      const startsAt = zonedTime(MONDAY, 9);
-      const { inbound } = await seedCollision({ content: 'po' });
-
-      const { claim, reminder, outbound } = await runBody(
-        inbound,
-        bookingModel(startsAt),
-      );
-
-      expect(claim).toBe('reminder');
-      expect(reminder.kind).toBe('none');
-      expect(outbound.content).toContain(
-        formatAppointmentTime(startsAt, 'Europe/Tirane'),
-      );
-
-      const [appointment] = await db
-        .select()
-        .from(appointments)
-        .where(eq(appointments.customerId, customerId));
-      expect(appointment.startsAt).toEqual(startsAt);
-      expect(await escalationEvents()).toEqual([]);
+      // ...and the assistant still owns the thread.
+      expect(await threadState()).toEqual({
+        aiActive: true,
+        escalationState: 'idle',
+      });
     });
 
-    /**
-     * Two questions asked in the same millisecond. `resolveInboundClaim`
-     * compares with a strict `>`, so a tie is not a tie-break at all: the
-     * reminder keeps the message, every time. Pinned because the comparison is
-     * the whole rule — flipping it to `>=` would silently move an exactly-tied
-     * turn from a confirmation to an escalation, and nothing else would notice.
-     *
-     * Reachable in practice despite the odds: Postgres stores these to the
-     * microsecond but a JS `Date` truncates to the millisecond, so an offer made
-     * up to 999µs after a reminder was sent still compares equal here.
-     *
-     * Run repeatedly against fresh fixtures: one pass could not tell a fixed
-     * rule from a coin flip.
-     */
-    it('breaks an exact timestamp tie deterministically, in the reminder’s favour', async () => {
-      const claims: InboundClaim[] = [];
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        // The seed books a fresh appointment each pass and they would overlap.
-        await db.delete(appointments).where(eq(appointments.accountId, accountId));
-        const { inbound, appointmentId } = await seedCollision({
-          reminderSentMinutesBefore: 30,
-          offerMinutesBefore: 30,
-        });
+    it('answers by itself again once the cap clears', async () => {
+      const capped = await runHandler();
 
-        // Assert the tie is real rather than assuming the fixture produced one:
-        // both offsets are the same distance from the same instant.
-        const [conversation] = await db
-          .select({ anchor: conversations.handoffOfferMessageId })
-          .from(conversations)
-          .where(eq(conversations.id, conversationId));
-        const [anchor] = await db
-          .select({ createdAt: messages.createdAt })
-          .from(messages)
-          .where(eq(messages.id, conversation.anchor!));
-        const [job] = await db
-          .select({ sentAt: reminderJobs.sentAt })
-          .from(reminderJobs)
-          .where(eq(reminderJobs.appointmentId, appointmentId!));
-        expect(anchor.createdAt.getTime()).toBe(job.sentAt!.getTime());
+      expect(capped.ran).toEqual([
+        'load-context',
+        'handle-reminder-response',
+        'check-conversation-cap',
+        'notify-capped-conversation',
+        'prepare-cap-handoff',
+        'send-cap-handoff',
+      ]);
+      // Turned away, but nothing was written down about it.
+      expect(await threadState()).toEqual({
+        aiActive: true,
+        escalationState: 'idle',
+      });
 
-        claims.push(await resolveInboundClaim(inbound));
-      }
+      // The month rolls over, and that is the only thing that happens: nobody
+      // toggles the thread back, nothing repairs it. The next message is simply
+      // dated in a month whose conversation count starts at zero.
+      const [next] = await db
+        .insert(messages)
+        .values({
+          accountId,
+          conversationId,
+          externalId: `wamid.IN.ROLLOVER.${Date.now()}.${++sequence}`,
+          role: 'customer',
+          channel: 'whatsapp',
+          content: 'A keni kohë të hënën?',
+          createdAt: AFTER_ROLLOVER,
+        })
+        .returning({ id: messages.id });
+      inboundMessageId = next.id;
 
-      expect(claims).toEqual(['reminder', 'reminder', 'reminder']);
+      const { ran } = await runHandler();
+
+      // An ordinary AI turn — no cap steps, no human in the loop.
+      expect(ran).toEqual([
+        'load-context',
+        'handle-reminder-response',
+        'check-conversation-cap',
+        'run-ai-turn',
+      ]);
+      expect(await threadState()).toEqual({
+        aiActive: true,
+        escalationState: 'idle',
+      });
     });
   });
 });

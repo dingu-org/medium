@@ -245,7 +245,7 @@ describe('dispatchTool', () => {
 
   // Offering is not escalating. Nothing is handed over until the customer
   // accepts, so this tool must leave the conversation exactly as it found it —
-  // the engine is what remembers that an offer is outstanding.
+  // the offer message in the history is the only record that one was made.
   it('changes no conversation state when the assistant only offers a handoff', async () => {
     const result = await dispatchTool(
       'offer_human_handoff',
@@ -260,7 +260,6 @@ describe('dispatchTool', () => {
       .where(eq(conversations.id, conversationId));
     expect(conversation.aiActive).toBe(true);
     expect(conversation.escalationState).toBe('idle');
-    expect(conversation.handoffOfferMessageId).toBeNull();
 
     const rows = await db
       .select()

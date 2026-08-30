@@ -88,11 +88,34 @@ function PrefSwitch({
   );
 }
 
-export function NotificationPrefs({ prefs }: { prefs: NotificationPrefs }) {
+export function NotificationPrefs({
+  prefs,
+  remindersEnabled,
+}: {
+  prefs: NotificationPrefs;
+  /**
+   * Read on the server (lib/reminders/flag.ts) and handed down, because the
+   * flag has no `NEXT_PUBLIC_` twin. Required rather than defaulted: there is
+   * one caller, and a silent default would let an omission decide whether a
+   * parked feature is advertised.
+   */
+  remindersEnabled: boolean;
+}) {
   const online = useOnlineStatus();
+  // Reminders are parked (lib/reminders/flag.ts). `reminderFailure` stays in
+  // NOTIFICATION_PREF_KEYS as dormant config — the stored preference is
+  // preserved for the rebuild — but nothing can send a reminder, so nothing can
+  // report one failing. A toggle for a notification that can never arrive is a
+  // promise the product no longer keeps, so hide the row with the feature.
+  const groups = remindersEnabled
+    ? GROUPS
+    : GROUPS.map((group) => ({
+        ...group,
+        rows: group.rows.filter((row) => row.key !== 'reminderFailure'),
+      })).filter((group) => group.rows.length > 0);
   return (
     <>
-      {GROUPS.map((group) => (
+      {groups.map((group) => (
         <GroupedList key={group.title} title={group.title}>
           {group.rows.map((row) => (
             <GroupedListRow

@@ -18,10 +18,30 @@ import {
 import {
   getConversationUsage,
   getReminderUsage,
+  type ReminderUsage,
   warnThreshold,
 } from './usage';
+import { remindersEnabled } from '@/lib/reminders/flag';
 
 const DAY_MS = 86_400_000;
+
+/**
+ * Reminders are parked — see lib/reminders/flag.ts. Nothing schedules or sends
+ * one, so the meter can only ever read zero, and the billing page hides it
+ * while the feature is off. Standing in for the two COUNT queries behind
+ * `getReminderUsage` keeps them off every billing page load.
+ *
+ * Identical to the shape `getReminderUsage` returns for a missing account, so
+ * "no reminder usage" has one representation rather than two.
+ */
+const PARKED_REMINDER_USAGE: ReminderUsage = {
+  delivered: 0,
+  inFlight: 0,
+  used: 0,
+  limit: 0,
+  remaining: 0,
+  monthKey: '',
+};
 
 export type BillingLifecycleState =
   | 'active'
@@ -137,7 +157,9 @@ export async function getBillingSnapshot(
 
   const [conversations, reminders, receiptRows, paidPeriodRows] = await Promise.all([
     getConversationUsage(accountId, now),
-    getReminderUsage(accountId, now),
+    remindersEnabled()
+      ? getReminderUsage(accountId, now)
+      : PARKED_REMINDER_USAGE,
     db
       .select({
         id: billingOrders.id,

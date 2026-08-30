@@ -169,23 +169,27 @@ describe('runModelTurn', () => {
     );
   });
 
-  // escalate_to_human is the only MUTATING_TOOLS member that can reach a handoff
-  // now: the three confirmable mutations stop the loop and speak for themselves,
-  // so a successful one never gets to leave the turn speechless.
+  // Only a FAILED mutation can reach a handoff now: a successful booking stops
+  // the loop and speaks for itself, and a successful escalation stops it and
+  // sends the escalation sentence. What is left is an attempt that went wrong
+  // and then went speechless — real state may or may not have moved, and the
+  // engine cannot tell, so a person gets it.
   it('requests a handoff when a mutation is followed by an empty response', async () => {
     const model = new MockLanguageModelV3({
       provider: 'openrouter',
       modelId: 'test-model',
       doGenerate: sequence(
-        toolCallResult('call-1', 'escalate_to_human', {
-          reason: 'Customer asked for the therapist.',
-        }),
+        toolStepResult([bookingCall]),
         textResult('', 12, 6, 0.000012),
       ),
     });
     const dispatch = async (): Promise<ToolResult> => ({
-      ok: true,
-      data: { escalated: true },
+      ok: false,
+      error: {
+        code: 'conflict',
+        message: 'Slot is no longer available',
+        retryable: false,
+      },
     });
 
     const result = await runModelTurn({
@@ -210,18 +214,23 @@ describe('runModelTurn', () => {
   it('requests a handoff when the step limit follows a mutation attempt', async () => {
     const model = new MockLanguageModelV3({
       doGenerate: sequence(
-        toolCallResult('call-1', 'escalate_to_human', {
-          reason: 'Customer asked for the therapist.',
-        }),
+        toolStepResult([bookingCall]),
         ...Array.from({ length: 4 }, (_, index) =>
           toolCallResult(`call-${index + 2}`, 'list_upcoming_appointments', {}),
         ),
       ),
     });
-    const dispatch = async (): Promise<ToolResult> => ({
-      ok: true,
-      data: { accepted: true },
-    });
+    const dispatch = async (toolName: ToolName): Promise<ToolResult> =>
+      toolName === 'book_appointment'
+        ? {
+            ok: false,
+            error: {
+              code: 'conflict',
+              message: 'Slot is no longer available',
+              retryable: false,
+            },
+          }
+        : { ok: true, data: { appointments: [] } };
 
     const result = await runModelTurn({
       model,
@@ -327,16 +336,17 @@ describe('runModelTurn', () => {
     expect(model.doGenerateCalls).toHaveLength(2);
   });
 
-  // No deterministic copy exists for an escalation, so the model still has to
-  // write the handoff sentence — CONFIRMABLE_MUTATIONS must stay narrower than
-  // MUTATING_TOOLS.
-  it('keeps looping after escalate_to_human', async () => {
+  // Inverted 2026-08-30. A handed-over conversation has one fixed sentence left
+  // to send (`escalationMessage`), so asking the model for another round could
+  // only produce prose the engine would discard — and it used to produce exactly
+  // that: free-form wording on the one path where the words matter most.
+  it('stops the loop after escalate_to_human', async () => {
     const model = new MockLanguageModelV3({
       doGenerate: sequence(
         toolCallResult('call-1', 'escalate_to_human', {
           reason: 'Customer asked for the therapist.',
         }),
-        textResult('Ia kalova bisedën praktikës.'),
+        textResult('This round is never requested.'),
       ),
     });
     const dispatch = async (): Promise<ToolResult> => ({
@@ -352,9 +362,43 @@ describe('runModelTurn', () => {
       dispatch,
     });
 
+    expect(result).toMatchObject({ outcome: 'escalation' });
+    // The engine writes the sentence, so nothing the model said is carried.
+    expect(result).not.toHaveProperty('text');
+    expect(model.doGenerateCalls).toHaveLength(1);
+  });
+
+  // Nothing was handed over, so there is nothing to confirm: the turn has to
+  // carry on and answer the customer in the model's own words. Same shape as the
+  // failed offer below, and the reason `escalatedToHuman` reads the tool
+  // *result* rather than the call.
+  it('keeps looping when the escalation call came back as an error', async () => {
+    const model = new MockLanguageModelV3({
+      doGenerate: sequence(
+        toolCallResult('call-1', 'escalate_to_human', { reason: '' }),
+        textResult('Po e shikoj se si mund t’ju ndihmoj.'),
+      ),
+    });
+    const dispatch = async (): Promise<ToolResult> => ({
+      ok: false,
+      error: {
+        code: 'not_found',
+        message: 'Conversation not found',
+        retryable: false,
+      },
+    });
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'I want to talk to a person' }],
+      toolContext,
+      dispatch,
+    });
+
     expect(result).toMatchObject({
       outcome: 'response',
-      text: 'Ia kalova bisedën praktikës.',
+      text: 'Po e shikoj se si mund t’ju ndihmoj.',
     });
     expect(model.doGenerateCalls).toHaveLength(2);
   });
@@ -446,6 +490,45 @@ describe('runModelTurn', () => {
       model,
       system: 'system',
       messages: [{ role: 'user', content: 'Po, atë orar' }],
+      toolContext,
+      dispatch,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'appointment_mutation',
+      effect: bookedEffect,
+    });
+  });
+
+  /**
+   * A step that books and escalates has done both, and the customer must not
+   * lose the booking: the escalation reaches them through the person who now
+   * owns the thread, but nothing else will ever tell them the appointment
+   * exists. Pins the branch order in `runModelTurn` — mutation, then escalation,
+   * then offer.
+   */
+  it('prefers a committed booking over an escalation in the same step', async () => {
+    const model = new MockLanguageModelV3({
+      doGenerate: sequence(
+        toolStepResult([
+          bookingCall,
+          {
+            toolCallId: 'escalate-1',
+            toolName: 'escalate_to_human',
+            input: { reason: 'Customer also asked to speak to someone.' },
+          },
+        ]),
+      ),
+    });
+    const dispatch = async (toolName: ToolName): Promise<ToolResult> =>
+      toolName === 'book_appointment'
+        ? { ok: true, data: {}, effect: bookedEffect }
+        : { ok: true, data: { escalated: true } };
+
+    const result = await runModelTurn({
+      model,
+      system: 'system',
+      messages: [{ role: 'user', content: 'Po, atë orar — dhe dua të flas me dikë' }],
       toolContext,
       dispatch,
     });

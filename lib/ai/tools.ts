@@ -130,14 +130,16 @@ export function createConversationTools(
     }),
     escalate_to_human: tool({
       description:
-        'Hand the conversation to the PT when the customer requests a human or scheduling cannot be resolved safely.',
+        'Hand the conversation to the PT when the customer requests a human, when scheduling cannot be resolved safely, or when the customer agrees to your offer to pass a question on. The system sends the customer a fixed confirmation; do not write one.',
       inputSchema: dispatchableSchema(toolSchemas.escalate_to_human),
       execute: (input) => dispatch('escalate_to_human', input, ctx),
     }),
     // Offering is not escalating: nothing is handed over until the customer
     // answers the offer, so this tool changes no conversation state. The engine
-    // reads the successful call, sends its own fixed sentence, and remembers
-    // that the offer is outstanding.
+    // reads the successful call and sends its own fixed sentence. Nothing
+    // records that an offer is outstanding — when the customer agrees, you are
+    // reading that agreement out of the history and calling `escalate_to_human`
+    // yourself.
     offer_human_handoff: tool({
       description:
         'Offer to pass a question you cannot answer to the business. Use it for anything outside booking, rescheduling, cancelling, or the practice details you were given, instead of guessing an answer.',

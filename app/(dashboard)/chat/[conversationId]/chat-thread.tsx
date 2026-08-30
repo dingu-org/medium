@@ -65,6 +65,13 @@ type Props = {
   connectionStatus: string | null;
   upcomingAppointment: { startsAt: string; serviceType: string | null } | null;
   capReached?: boolean;
+  /**
+   * `remindersEnabled()` read on the server (lib/reminders/flag.ts) and handed
+   * down, because the flag has no `NEXT_PUBLIC_` twin. Required, not defaulted:
+   * the one caller always passes it, and a silent default here would decide a
+   * billed feature's visibility by omission.
+   */
+  remindersEnabled: boolean;
 };
 
 type OptimisticMessage = LiveMessage & {
@@ -93,6 +100,7 @@ export function ChatThread({
   connectionStatus,
   upcomingAppointment,
   capReached = false,
+  remindersEnabled,
 }: Props) {
   const router = useRouter();
   const { messages, mergeMessages } = useMessages(
@@ -624,8 +632,16 @@ export function ChatThread({
           onSend={onSend}
           onSendTemplate={sendReminder}
           sending={sending}
+          // With reminders parked this is false for every thread, which is what
+          // empties the `windowClosed` composer: outside the 24h window WhatsApp
+          // allows only an approved template, so the professional is left with
+          // the explanation card and no send. Deliberate — re-engagement is a
+          // separate future feature. The server action refuses independently
+          // (chat/actions.ts); this only keeps a dead button off the screen.
           templateAvailable={Boolean(
-            upcomingAppointment && connectionStatus === 'active',
+            remindersEnabled &&
+              upcomingAppointment &&
+              connectionStatus === 'active',
           )}
           templatePending={statePending}
         />

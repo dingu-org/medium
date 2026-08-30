@@ -9,6 +9,7 @@ import {
   accounts,
   reminderJobs,
 } from '@/lib/db/schema';
+import { remindersEnabled } from '@/lib/reminders/flag';
 
 const DIRECTORY_LIMIT = 250;
 // The directory only needs recent history for the "last visit" line, so bound
@@ -232,7 +233,9 @@ export async function getClientDetail(
         eq(conversations.channel, 'whatsapp'),
       ),
     )
-    .where(and(eq(customers.id, customerId), eq(customers.accountId, accountId)))
+    .where(
+      and(eq(customers.id, customerId), eq(customers.accountId, accountId)),
+    )
     .limit(1);
   if (!customer) return null;
 
@@ -250,10 +253,17 @@ export async function getClientDetail(
     .from(appointments)
     .leftJoin(reminderJobs, eq(reminderJobs.appointmentId, appointments.id))
     .where(
-      and(eq(appointments.accountId, accountId), eq(appointments.customerId, customerId)),
+      and(
+        eq(appointments.accountId, accountId),
+        eq(appointments.customerId, customerId),
+      ),
     )
     .orderBy(desc(appointments.startsAt));
 
+  // Reminders are parked — see lib/reminders/flag.ts. Every `reminder_jobs` row
+  // still on disk predates the switch, so the read model must not report one:
+  // an appointment carries no reminder while the feature is off.
+  const showReminders = remindersEnabled();
   const mapped: AppointmentView[] = rows.map((row) => ({
     id: row.id,
     customerName: customer.name,
@@ -265,9 +275,10 @@ export async function getClientDetail(
     serviceType: row.serviceType,
     status: row.status,
     notes: row.notes,
-    reminder: row.reminderStatus
-      ? { status: row.reminderStatus, responseType: row.reminderResponse }
-      : null,
+    reminder:
+      showReminders && row.reminderStatus
+        ? { status: row.reminderStatus, responseType: row.reminderResponse }
+        : null,
   }));
   const now = Date.now();
   const upcoming = mapped

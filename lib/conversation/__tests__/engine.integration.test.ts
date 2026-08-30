@@ -25,6 +25,7 @@ import {
 } from '@/lib/db/schema';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
+import { escalationMessage, handoffOfferMessage } from '../customer-copy';
 import { ConversationEngineError } from '../errors';
 import { handoffFailedTurn, runTurnCore } from '../engine';
 import type { InboundMessage } from '../types';
@@ -93,6 +94,12 @@ const fridayAt = (hour: number) =>
 const HISTORY_AT = new Date(testNow().getTime() - 30 * DAY);
 /** A turn time a few days before the Monday every booking fixture targets. */
 const BEFORE_MONDAY = new Date(MONDAY.getTime() - 5 * DAY);
+
+// The one sentence every handed-over path sends — a model escalation, an
+// accepted offer, a dead turn, and the billing cap. The fixture account is named
+// Movement Clinic, so this is what its customers read in all four cases.
+const ESCALATION = escalationMessage('Movement Clinic');
+const OFFER = handoffOfferMessage('Movement Clinic');
 
 function responseModel(text = 'I can help with that.') {
   return new MockLanguageModelV3({
@@ -288,14 +295,6 @@ function offerModel() {
       billedMetadata,
     ),
   ]);
-}
-
-function refusingModel() {
-  return new MockLanguageModelV3({
-    doGenerate: vi.fn(() => {
-      throw new Error('model should not run');
-    }),
-  });
 }
 
 let accountId = '';
@@ -737,9 +736,7 @@ describe('runTurnCore', () => {
       modelId: 'requested/model',
     });
 
-    expect(result.content).toContain(
-      'Nuk munda ta konfirmoj me siguri rezultatin e fundit të rezervimit',
-    );
+    expect(result.content).toBe(ESCALATION);
     const [stored] = await db
       .select()
       .from(messages)
@@ -761,14 +758,18 @@ describe('runTurnCore', () => {
     expect(conversation.escalationState).toBe('requested');
   });
 
-  it('still replies when the model already escalated in the same turn', async () => {
+  // The escalation stops the loop, so the second scripted round is never
+  // requested: the model does not write this sentence and cannot vary it.
+  it('sends the fixed sentence when the model escalates', async () => {
+    const model = escalateThenEmptyModel();
     const result = await runTurnCore({
       inboundMessage: inbound,
-      model: escalateThenEmptyModel(),
+      model,
       modelId: 'requested/model',
     });
 
-    expect(result.content).toContain('Këtë bisedë ia kalova Movement Clinic');
+    expect(result.content).toBe(ESCALATION);
+    expect(model.doGenerateCalls).toHaveLength(1);
 
     const [conversation] = await db
       .select()
@@ -785,7 +786,7 @@ describe('runTurnCore', () => {
     expect(eventRows).toEqual([{ type: 'conversation.escalated' }]);
   });
 
-  it('hands off with neutral wording on an already human-owned conversation', async () => {
+  it('hands off on an already human-owned conversation', async () => {
     await db
       .update(conversations)
       .set({ aiActive: false, escalationState: 'requested' })
@@ -793,8 +794,7 @@ describe('runTurnCore', () => {
 
     const result = await handoffFailedTurn({ inboundMessage: inbound });
 
-    expect(result.content).toContain('Kam një problem teknik');
-    expect(result.content).not.toContain('rezervimit');
+    expect(result.content).toBe(ESCALATION);
   });
 
   it('creates one idempotent final-failure handoff for Phase 5', async () => {
@@ -802,10 +802,7 @@ describe('runTurnCore', () => {
     const second = await handoffFailedTurn({ inboundMessage: inbound });
 
     expect(second).toEqual(first);
-    // Any exhausted inbound failure lands here, including turns with no
-    // booking in flight — so no booking-specific wording.
-    expect(first.content).toContain('Kam një problem teknik');
-    expect(first.content).not.toContain('rezervimit');
+    expect(first.content).toBe(ESCALATION);
     const [stored] = await db
       .select()
       .from(messages)
@@ -822,8 +819,8 @@ describe('runTurnCore', () => {
 
   // Nothing pattern-matches the customer's words any more (2026-08-14): the
   // message content is irrelevant to the failed-turn handoff, which always
-  // escalates and always sends the same neutral technical copy.
-  it('uses the neutral copy whatever the dead turn was about', async () => {
+  // escalates and always sends the one escalation sentence.
+  it('uses the same sentence whatever the dead turn was about', async () => {
     await db
       .update(messages)
       .set({ content: 'Kam dhimbje në gjoks' })
@@ -831,7 +828,7 @@ describe('runTurnCore', () => {
 
     const result = await handoffFailedTurn({ inboundMessage: inbound });
 
-    expect(result.content).toContain('Kam një problem teknik');
+    expect(result.content).toBe(ESCALATION);
 
     const [conversation] = await db
       .select()
@@ -847,7 +844,15 @@ describe('runTurnCore', () => {
     expect(stored).toMatchObject({ model: 'deterministic-failure-handoff' });
   });
 
-  it('uses the booking wording when the dead turn left a booking behind', async () => {
+  /**
+   * The failed-turn handoff used to pick between two sentences, choosing the
+   * booking-specific one by looking for an appointment created since the inbound
+   * message arrived. Both the choice and the second sentence are gone: it told a
+   * customer their booking might have failed on the strength of a state guess
+   * made in a fresh invocation that remembers nothing of the dead turn, and a
+   * customer can act on neither answer. One sentence, whatever happened.
+   */
+  it('never mentions the booking, even when the dead turn left one behind', async () => {
     await db.insert(appointments).values({
       accountId,
       customerId,
@@ -859,24 +864,7 @@ describe('runTurnCore', () => {
 
     const result = await handoffFailedTurn({ inboundMessage: inbound });
 
-    expect(result.content).toContain('rezervimit');
-    expect(result.content).not.toContain('problem teknik');
-  });
-
-  it('keeps the neutral wording for a booking that predates the failed message', async () => {
-    await db.insert(appointments).values({
-      accountId,
-      customerId,
-      startsAt: mondayAt(9),
-      endsAt: mondayAt(9, 45),
-      serviceType: 'Vlerësim i parë',
-      createdAt: new Date(HISTORY_AT.getTime() + MINUTE),
-    });
-
-    const result = await handoffFailedTurn({ inboundMessage: inbound });
-
-    expect(result.content).toContain('Kam një problem teknik');
-    expect(result.content).not.toContain('rezervimit');
+    expect(result.content).toBe(ESCALATION);
   });
 
   // DELIBERATE, 2026-08-14: nothing pattern-matches the inbound message before
@@ -925,15 +913,21 @@ describe('runTurnCore', () => {
     },
   );
 
-  // The handoff offer (2026-08-14). The model alone decides a request is out of
-  // scope; the engine answers with one static sentence and remembers which
-  // message it answered, so only the message directly after it can accept.
+  /**
+   * The handoff offer. The model alone decides a request is out of scope; the
+   * engine answers with one static sentence.
+   *
+   * Since 2026-08-30 the model also decides what the answer to that offer means.
+   * The offer used to end in "reply PO" and the engine matched the next message
+   * against an Albanian keyword list, anchored to the message the offer answered
+   * so only the immediately-next reply could accept. The matching is what broke:
+   * "ok, jo", "ok nuk dua" and "Ok, e kuptova" — six ordinary ways of declining
+   * — all parsed as a yes, because `jo` is an ambiguous particle that never
+   * overrode a leading `ok`. The offer is a plain question now, the reply is an
+   * ordinary message, and agreeing is one more reason for the model to call
+   * `escalate_to_human`.
+   */
   describe('handoff offer', () => {
-    const OFFER =
-      "Mund të ndihmoj vetëm me takimet. Nëse dëshironi t'ia kaloj këtë pyetje Movement Clinic, përgjigjuni me PO.";
-    const ACCEPTED =
-      "Patjetër. Këtë bisedë ia kalova Movement Clinic; do t'ju përgjigjen sapo të jenë të lirë.";
-
     it('offers to pass the question on when the model declines to answer', async () => {
       const model = offerModel();
       const result = await runTurnCore({
@@ -946,9 +940,8 @@ describe('runTurnCore', () => {
       expect(model.doGenerateCalls).toHaveLength(1);
 
       const conversation = await conversationRow();
-      // Armed, but nothing has been handed over yet: the assistant keeps the
-      // conversation until the customer answers the offer.
-      expect(conversation.handoffOfferMessageId).toBe(inbound.id);
+      // Nothing has been handed over: offering is not escalating, and no state
+      // records that an offer is outstanding — the message itself is the record.
       expect(conversation.aiActive).toBe(true);
       expect(conversation.escalationState).toBe('idle');
       expect(
@@ -971,31 +964,42 @@ describe('runTurnCore', () => {
       });
     });
 
-    it('escalates when the very next message is the acceptance word', async () => {
+    /**
+     * The replacement for the deleted keyword acceptance, end to end: turn one
+     * offers, turn two the customer agrees in their own words, and the model —
+     * which can see the offer in the history it is given — escalates. What the
+     * customer then reads is the engine's fixed sentence, not the model's.
+     */
+    it('escalates with the fixed sentence when the model reads the acceptance from history', async () => {
       await runTurnCore({
         inboundMessage: inbound,
         model: offerModel(),
         modelId: 'requested/model',
       });
 
-      const accept = await nextInbound('PO', 1);
-      const model = refusingModel();
+      const accept = await nextInbound('po mire, ma kalo ti', 1);
+      const model = sequenceModel([
+        toolCallStep(
+          'escalate-1',
+          'escalate_to_human',
+          { reason: 'The customer accepted the offer to pass their question on.' },
+          billedMetadata,
+        ),
+      ]);
       const result = await runTurnCore({
         inboundMessage: accept,
         model,
         modelId: 'requested/model',
       });
 
-      // Deterministic: the acceptance never reaches the model.
-      expect(model.doGenerateCalls).toHaveLength(0);
-      expect(result.content).toBe(ACCEPTED);
+      // The offer really was in front of the model: that is the whole mechanism
+      // now, and the reason acceptance can be phrased any way at all.
+      expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain(OFFER);
+      expect(result.content).toBe(ESCALATION);
 
       const conversation = await conversationRow();
       expect(conversation.aiActive).toBe(false);
       expect(conversation.escalationState).toBe('requested');
-      expect(conversation.handoffOfferMessageId).toBeNull();
-
-      // Same escalation as `escalate_to_human`: one durable event, one push.
       expect(
         await db
           .select({ type: events.type })
@@ -1003,142 +1007,47 @@ describe('runTurnCore', () => {
           .where(eq(events.accountId, accountId)),
       ).toEqual([{ type: 'conversation.escalated' }]);
 
+      // A billed round decided this, so it carries that round's real metadata —
+      // the old deterministic acceptance stamped internal/zero and under-reported
+      // every escalation turn on the cost dashboard.
       const [stored] = await db
         .select()
         .from(messages)
         .where(eq(messages.id, result.id));
       expect(stored).toMatchObject({
-        model: 'deterministic-handoff-accepted',
-        provider: 'internal',
-        tokensIn: 0,
-        tokensOut: 0,
-        aiCostMicrousd: 0,
+        model: 'requested/model',
+        provider: 'Azure',
+        tokensIn: 21,
+        tokensOut: 7,
+        cachedTokens: 5,
+        aiCostMicrousd: 123,
       });
     });
 
     /**
-     * The offer asks for one word and still should — telling a customer exactly
-     * what to type is good UX — but it accepts what customers actually type,
-     * because the reminder subsystem does and the two have to agree on what a
-     * yes is (lib/language/reply-intent.ts). While the offer demanded exact
-     * equality with PO, any of these arriving with an unanswered reminder
-     * outstanding was taken by the reminder without the precedence rule in
-     * `resolveInboundClaim` ever weighing it.
+     * The failure the keyword rule could not survive. "ok, jo" is a decline, and
+     * `parseReplyIntent` reads it as a *confirm* — a leading `ok` that the
+     * ambiguous `jo` never overrides — so the old engine escalated on it. The
+     * model reads it correctly, and the point of this test is that nothing but
+     * the model looks at the words: the turn goes wherever the model takes it.
      */
-    it.each(['dakord', 'ok', 'Okay.', 'po faleminderit', 'PO.'])(
-      'escalates when the next message is the affirmative %j',
-      async (content) => {
-        await runTurnCore({
-          inboundMessage: inbound,
-          model: offerModel(),
-          modelId: 'requested/model',
-        });
-
-        const accept = await nextInbound(content, 1);
-        const model = refusingModel();
-        const result = await runTurnCore({
-          inboundMessage: accept,
-          model,
-          modelId: 'requested/model',
-        });
-
-        expect(model.doGenerateCalls).toHaveLength(0);
-        expect(result.content).toBe(ACCEPTED);
-
-        const conversation = await conversationRow();
-        expect(conversation.aiActive).toBe(false);
-        expect(conversation.escalationState).toBe('requested');
-        expect(conversation.handoffOfferMessageId).toBeNull();
-        expect(
-          await db
-            .select({ type: events.type })
-            .from(events)
-            .where(eq(events.accountId, accountId)),
-        ).toEqual([{ type: 'conversation.escalated' }]);
-      },
-    );
-
-    /**
-     * The guard the shared definition had to keep. Albanian 'po' is also the
-     * progressive particle, so "Po pyesja për oraret" is "I was asking about the
-     * hours" — an ordinary question that must reach the model, not a yes to an
-     * offer the customer never accepted.
-     */
-    it('leaves the progressive particle to the model', async () => {
+    it('lets the model read a decline the keyword rule got wrong', async () => {
       await runTurnCore({
         inboundMessage: inbound,
         model: offerModel(),
         modelId: 'requested/model',
       });
 
-      const question = await nextInbound('Po pyesja për oraret', 1);
-      const model = responseModel('Jemi hapur 9:00–17:00.');
+      const decline = await nextInbound('ok, jo faleminderit', 1);
+      const model = responseModel('Në rregull. Nëse doni një takim, më shkruani.');
       const result = await runTurnCore({
-        inboundMessage: question,
+        inboundMessage: decline,
         model,
         modelId: 'requested/model',
       });
 
       expect(model.doGenerateCalls).toHaveLength(1);
-      expect(result.content).toBe('Jemi hapur 9:00–17:00.');
-
-      const conversation = await conversationRow();
-      expect(conversation.aiActive).toBe(true);
-      expect(conversation.escalationState).toBe('idle');
-      expect(conversation.handoffOfferMessageId).toBeNull();
-      expect(
-        await db
-          .select({ type: events.type })
-          .from(events)
-          .where(eq(events.accountId, accountId)),
-      ).toEqual([]);
-    });
-
-    it('lapses cleanly when the next message is an unrelated question', async () => {
-      await runTurnCore({
-        inboundMessage: inbound,
-        model: offerModel(),
-        modelId: 'requested/model',
-      });
-
-      const question = await nextInbound('A keni orar të lirë të hënën?', 1);
-      const result = await runTurnCore({
-        inboundMessage: question,
-        model: responseModel('Të hënën kam të lirë në 9:00.'),
-        modelId: 'requested/model',
-      });
-
-      expect(result.content).toBe('Të hënën kam të lirë në 9:00.');
-      const conversation = await conversationRow();
-      expect(conversation.handoffOfferMessageId).toBeNull();
-      expect(conversation.aiActive).toBe(true);
-      expect(conversation.escalationState).toBe('idle');
-    });
-
-    // The whole reason acceptance is scoped to one message: a customer who says
-    // PO later means it about whatever was said last, not about a stale offer.
-    it('does not escalate when the acceptance word arrives one message later', async () => {
-      await runTurnCore({
-        inboundMessage: inbound,
-        model: offerModel(),
-        modelId: 'requested/model',
-      });
-      await runTurnCore({
-        inboundMessage: await nextInbound('A keni orar të lirë të hënën?', 1),
-        model: responseModel('Të hënën kam të lirë në 9:00.'),
-        modelId: 'requested/model',
-      });
-
-      const late = await nextInbound('PO', 2);
-      const model = responseModel('Sigurisht, po e rezervoj atë orar.');
-      const result = await runTurnCore({
-        inboundMessage: late,
-        model,
-        modelId: 'requested/model',
-      });
-
-      expect(model.doGenerateCalls).toHaveLength(1);
-      expect(result.content).toBe('Sigurisht, po e rezervoj atë orar.');
+      expect(result.content).toBe('Në rregull. Nëse doni një takim, më shkruani.');
 
       const conversation = await conversationRow();
       expect(conversation.aiActive).toBe(true);
@@ -1151,155 +1060,9 @@ describe('runTurnCore', () => {
       ).toEqual([]);
     });
 
-    /**
-     * The anchor is the only record that an acceptance is owed, so nothing may
-     * consume it before the escalation is durable — it used to be cleared
-     * first, in its own statement, and a crash in between lost the accepted
-     * handoff for good: the retry found no anchor and ran an ordinary turn.
-     *
-     * The crash here is the escalation's own transaction failing, which is the
-     * widest version of the window: everything between reading the anchor and
-     * finishing the escalation is inside it.
-     */
-    it('still escalates on the retry when the escalation dies mid-acceptance', async () => {
-      await runTurnCore({
-        inboundMessage: inbound,
-        model: offerModel(),
-        modelId: 'requested/model',
-      });
-      const accept = await nextInbound('PO', 1);
-
-      // The escalation's is the first transaction the acceptance opens.
-      const txSpy = vi
-        .spyOn(db, 'transaction')
-        .mockRejectedValueOnce(new Error('escalation transaction died'));
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
-      const crashed = refusingModel();
-      await expect(
-        runTurnCore({
-          inboundMessage: accept,
-          model: crashed,
-          modelId: 'requested/model',
-        }),
-      ).rejects.toThrow('Handoff-offer escalation failed');
-      txSpy.mockRestore();
-
-      // Nothing was consumed: the retry sees exactly what this attempt saw.
-      const afterCrash = await conversationRow();
-      expect(afterCrash.handoffOfferMessageId).toBe(inbound.id);
-      expect(afterCrash.aiActive).toBe(true);
-      expect(afterCrash.escalationState).toBe('idle');
-      expect(
-        await db
-          .select({ type: events.type })
-          .from(events)
-          .where(eq(events.accountId, accountId)),
-      ).toEqual([]);
-
-      const retried = refusingModel();
-      const result = await runTurnCore({
-        inboundMessage: accept,
-        model: retried,
-        modelId: 'requested/model',
-      });
-
-      expect(result.content).toBe(ACCEPTED);
-      // Never an ordinary turn: the acceptance is still deterministic.
-      expect(crashed.doGenerateCalls).toHaveLength(0);
-      expect(retried.doGenerateCalls).toHaveLength(0);
-
-      const settled = await conversationRow();
-      expect(settled.aiActive).toBe(false);
-      expect(settled.escalationState).toBe('requested');
-      expect(settled.handoffOfferMessageId).toBeNull();
-      // Escalating twice is harmless — the second call finds the conversation
-      // already human-owned — but it must not double-notify the PT.
-      expect(
-        await db
-          .select({ type: events.type })
-          .from(events)
-          .where(eq(events.accountId, accountId)),
-      ).toEqual([{ type: 'conversation.escalated' }]);
-    });
-
-    /**
-     * The other half of the window: the escalation committed and the reply that
-     * confirms it did not. The anchor rides in the reply's transaction, so it
-     * rolls back with it — no state may claim the acceptance completed, and the
-     * conversation must not fall back to an ordinary AI turn once a human owns
-     * it.
-     */
-    it('keeps the escalation and the anchor consistent when the accepted reply fails', async () => {
-      await runTurnCore({
-        inboundMessage: inbound,
-        model: offerModel(),
-        modelId: 'requested/model',
-      });
-      const accept = await nextInbound('PO', 1);
-
-      const realTransaction = db.transaction.bind(db) as typeof db.transaction;
-      let transactions = 0;
-      const txSpy = vi.spyOn(db, 'transaction').mockImplementation(((
-        ...args: Parameters<typeof db.transaction>
-      ) => {
-        transactions += 1;
-        // 1 = the escalation (let it commit), 2 = the anchor clear + reply.
-        return transactions === 2
-          ? Promise.reject(new Error('reply transaction died'))
-          : realTransaction(...args);
-      }) as typeof db.transaction);
-
-      await expect(
-        runTurnCore({
-          inboundMessage: accept,
-          model: refusingModel(),
-          modelId: 'requested/model',
-        }),
-      ).rejects.toThrow('reply transaction died');
-      txSpy.mockRestore();
-
-      const afterCrash = await conversationRow();
-      // The escalation is durable — the promise is kept by a person either way.
-      expect(afterCrash.aiActive).toBe(false);
-      expect(afterCrash.escalationState).toBe('requested');
-      // …and the acceptance is still recorded as owed rather than half-done.
-      expect(afterCrash.handoffOfferMessageId).toBe(inbound.id);
-      expect(
-        await db
-          .select({ id: messages.id })
-          .from(messages)
-          .where(
-            and(
-              eq(messages.role, 'ai'),
-              eq(messages.replyToMessageId, accept.id),
-            ),
-          ),
-      ).toEqual([]);
-
-      // The retry hands the thread to the human who now owns it instead of
-      // answering as if nothing had been escalated.
-      const retried = refusingModel();
-      await expect(
-        runTurnCore({
-          inboundMessage: accept,
-          model: retried,
-          modelId: 'requested/model',
-        }),
-      ).rejects.toMatchObject({
-        code: 'conversation_inactive',
-      } satisfies Partial<ConversationEngineError>);
-      expect(retried.doGenerateCalls).toHaveLength(0);
-      expect(
-        await db
-          .select({ type: events.type })
-          .from(events)
-          .where(eq(events.accountId, accountId)),
-      ).toEqual([{ type: 'conversation.escalated' }]);
-    });
-
-    // 'po' is how a customer takes a proposed slot. With no offer outstanding it
-    // is an ordinary message and has to book, not hand the conversation over.
-    it('books a proposed slot on a bare po when no offer is outstanding', async () => {
+    // 'po' is how a customer takes a proposed slot. Nothing intercepts it any
+    // more, so it is simply an ordinary message that books.
+    it('books a proposed slot on a bare po', async () => {
       const accept = await nextInbound('po', 1);
       const result = await runTurnCore({
         inboundMessage: accept,

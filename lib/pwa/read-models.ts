@@ -30,6 +30,7 @@ import { getConversationUsage } from '@/lib/billing/usage';
 import { resolveEffectivePlan } from '@/lib/billing/entitlements';
 import { getPlan, type PlanId } from '@/lib/billing/plans';
 import { privacyName } from '@/lib/format/name';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
 import { formatWeekdayShort } from '@/lib/i18n';
 import { getServices, type ServiceRecord } from '@/lib/services/queries';
@@ -265,6 +266,13 @@ export async function getCalendarSnapshot(
     getServices(accountId, { activeOnly: true }),
   ]);
 
+  // Reminders are parked — see lib/reminders/flag.ts. Strip at source, the way
+  // `lib/today/queries.ts` and `lib/clients/queries.ts` do, so the offline
+  // calendar cache the browser keeps carries no reminder state while the
+  // feature is off. The left join stays (same as its siblings): it costs one
+  // index lookup and keeps the row shape stable for the rebuild.
+  const showReminders = remindersEnabled();
+
   const items: CalendarAppointmentSnapshot[] = rows.map((r) => {
     const tzStart = new TZDate(r.startsAt, timezone);
     return {
@@ -278,13 +286,14 @@ export async function getCalendarSnapshot(
       serviceType: r.serviceType,
       status: r.status as CalendarAppointmentSnapshot['status'],
       notes: r.notes,
-      reminder: r.reminderStatus
-        ? {
-            status: r.reminderStatus,
-            responseType: r.reminderResponse,
-            skippedReason: r.reminderSkippedReason,
-          }
-        : null,
+      reminder:
+        showReminders && r.reminderStatus
+          ? {
+              status: r.reminderStatus,
+              responseType: r.reminderResponse,
+              skippedReason: r.reminderSkippedReason,
+            }
+          : null,
       dayKey: format(tzStart, 'yyyy-MM-dd'),
       startLabel: format(tzStart, 'HH:mm'),
     };

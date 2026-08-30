@@ -6,7 +6,7 @@ This document explains what the product is, who the three actors are, and how on
 
 ## Who it's for
 
-Medium targets small service businesses that already take bookings by message: one person or a small team, one phone number, no front desk. Physiotherapy is the pilot vertical, but nothing in the product model depends on it — the same loop fits a barber, a nail salon, or a personal trainer, and no customer-facing sentence names a discipline (`lib/conversation/handoff-offer.ts`).
+Medium targets small service businesses that already take bookings by message: one person or a small team, one phone number, no front desk. Physiotherapy is the pilot vertical, but nothing in the product model depends on it — the same loop fits a barber, a nail salon, or a personal trainer, and no customer-facing sentence names a discipline (`lib/conversation/customer-copy.ts`).
 
 Two boundaries are deliberate and shape everything else: the assistant speaks one language, formal Albanian, and works on one channel, WhatsApp.
 
@@ -32,8 +32,8 @@ These terms mean one thing across the code and the docs. Use them literally; the
 | **conversation-day** | The billing unit: one customer active on one local day.                                        | table `conversation_days`                                            |
 | **connection**       | A WhatsApp Business number linked to an account.                                               | table `whatsapp_connections`                                         |
 | **escalation**       | The assistant switching a conversation to human handling.                                      | `escalateConversationToHuman`, event `conversation.escalated`        |
-| **handoff offer**    | The assistant's one fixed question offering to pass a request to a person, and its acceptance. | tool `offer_human_handoff`, `conversations.handoff_offer_message_id` |
-| **cap handoff**      | The static reply plus human ownership applied when the monthly conversation cap is hit.        | `lib/billing/cap-handoff.ts`                                         |
+| **handoff offer**    | The assistant's one fixed question offering to pass a request to a person. The model reads the answer. | tool `offer_human_handoff`, then `escalate_to_human`          |
+| **cap notice**       | The fixed reply sent when the monthly conversation cap is hit. Notifies; the assistant keeps the thread. | `lib/billing/cap-handoff.ts`                                 |
 | **takeover**         | The owner switching a conversation to themselves.                                              | `setTakeover`, event `conversation.taken_over`                       |
 | **echo pause**       | The two-hour assistant pause that follows the owner replying from the WhatsApp Business app.   | `conversations.ai_pause_reason = 'whatsapp_business_app_echo'`       |
 | **resume offer**     | The push asking the owner to hand a thread back after an hour of silence.                      | event `conversation.resume_offered`                                  |

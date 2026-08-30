@@ -1,18 +1,20 @@
 /**
- * How a short customer reply is read, for every subsystem that reads one.
+ * How a short customer reply is read.
  *
- * It lives here rather than in `lib/reminders` because two subsystems ask the
- * customer a yes/no question and both get answered in the same words: an
- * unanswered reminder ("do you confirm?") and the handoff offer ("reply PO and
- * I'll pass this on"). While both are outstanding they compete for the same
- * message, and the rule that settles it is which question was asked most
- * recently (`resolveInboundClaim` in
- * lib/inngest/functions/handle-inbound-message.ts). That rule only works if the
- * two agree on what an affirmative IS. They did not: the offer demanded exact
- * equality with PO while the reminder accepted 'dakord', 'ok', and 'po' plus one
- * word, so "po faleminderit" was never weighed at all — the reminder took it,
- * the appointment was confirmed, and the customer's real question was dropped.
- * One definition, one place, no spelling technicality deciding the winner.
+ * One caller left: the reminder response handler, which asks the customer a
+ * yes/no question ("do you confirm?") and has to read the answer without a model
+ * round. Reminders are dormant behind `lib/reminders/flag.ts`, so in practice
+ * nothing runs this today — it is kept, and kept tested, because the feature is
+ * being rebuilt rather than removed.
+ *
+ * It used to be shared with the assistant's handoff offer, which accepted a
+ * reply by keyword the same way. That is gone (2026-08-30): matching Albanian
+ * keywords could not be made to work — `"ok, jo"`, `"ok nuk dua"` and
+ * `"Ok, e kuptova"` all parse as a *confirm* below, because `jo` is an ambiguous
+ * particle that never overrides a leading `ok`, and the ways of declining are
+ * not enumerable. The model reads the customer's answer now. Nothing here should
+ * grow a second caller: a new subsystem that needs to know what a customer meant
+ * should ask the model, not this file.
  */
 export type ReplyIntent =
   | 'confirm'
@@ -209,19 +211,4 @@ export function parseReplyIntent(input: string): ReplyIntent | null {
   // "Jo, nuk dua ta anuloj, thjesht dua ta ndryshoj orën" — which says the
   // opposite — as a cancellation, so everything else goes to the AI turn.
   return explicitIntent(tokens[0]);
-}
-
-/**
- * Whether this message says yes — the product's only definition of it.
- *
- * Deliberately the full parse and not a keyword lookup, because everything that
- * makes a "yes" *not* a yes lives in the parse: "Ok, anuloj" is a cancellation
- * wearing an acknowledgement (so it is not affirmative for anyone), and
- * "Po pyesja për oraret" is the progressive particle heading an ordinary
- * question. Whatever a subsystem does with an affirmative — confirm a booking,
- * accept a handoff offer — it has to agree with every other subsystem about
- * which messages are one, or the message goes to whoever happens to run first.
- */
-export function isAffirmative(input: string): boolean {
-  return parseReplyIntent(input) === 'confirm';
 }

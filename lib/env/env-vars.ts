@@ -187,6 +187,19 @@ export const ENV_VARS: readonly EnvVarSpec[] = [
     description: 'JSON override of Meta per-conversation pricing.',
   },
 
+  // --------------------------------------------------------------- reminders
+  {
+    name: 'REMINDERS_ENABLED',
+    requiredIn: NONE,
+    mustDiffer: false,
+    secret: false,
+    description:
+      "Feature switch for appointment reminders. Only the exact string 'true' " +
+      'turns them on; unset in every environment today. The feature is parked, ' +
+      'not deleted, until template ownership and turn precedence are designed — ' +
+      'see lib/reminders/flag.ts.',
+  },
+
   // ----------------------------------------------------------------------- ai
   {
     name: 'OPENROUTER_API_KEY',

@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { getClientDetail } from '@/lib/clients/queries';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import { createServerClient } from '@/lib/supabase/server';
 import { ClientDetail } from './client-detail';
 
@@ -16,5 +17,5 @@ export default async function ClientPage({
   if (!user) redirect('/sign-in');
   const client = await getClientDetail(user.id, id);
   if (!client) notFound();
-  return <ClientDetail client={client} />;
+  return <ClientDetail client={client} remindersEnabled={remindersEnabled()} />;
 }

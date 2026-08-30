@@ -1,4 +1,4 @@
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import {
   generateText,
   stepCountIs,
@@ -23,25 +23,15 @@ import { effectiveAssistantIdentity } from '@/lib/billing/entitlements';
 import type { PlanId } from '@/lib/billing/plans';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 import type { DB, DBTransaction } from '@/lib/db';
-import {
-  appointments,
-  conversations,
-  messages,
-  customers,
-  accounts,
-} from '@/lib/db/schema';
+import { conversations, messages, customers, accounts } from '@/lib/db/schema';
 import { createLogger, logger, serializeError } from '@/lib/log';
 import { getServiceClient, withAuditLog } from '@/lib/tenancy';
 import { ConversationEngineError } from './errors';
 import {
-  armHandoffOffer,
   businessLabel,
-  clearHandoffOffer,
-  handoffAcceptedMessage,
+  escalationMessage,
   handoffOfferMessage,
-  handoffOfferOutcome,
-  HANDOFF_ACCEPTED_MODEL,
-} from './handoff-offer';
+} from './customer-copy';
 import type {
   InboundMessage,
   OutboundMessage,
@@ -64,9 +54,10 @@ const MUTATING_TOOLS = new Set<ToolName>([
 
 // Deliberately not the same set as MUTATING_TOOLS, and the two must never be
 // merged: that set decides whether an empty turn is a handoff, and an escalation
-// belongs in it. This one decides whether a deterministic confirmation exists to
-// send in place of the model's own words — none exists for an escalation, so the
-// model must still speak there.
+// belongs in it. This one is narrower — it decides which calls are announced by
+// `appointmentConfirmationContent`, which speaks about an appointment. An
+// escalation is announced too (`escalationMessage`, via its own outcome), just
+// not by that function, so it does not belong here either.
 const CONFIRMABLE_MUTATIONS = new Set<ToolName>([
   'book_appointment',
   'reschedule_appointment',
@@ -124,6 +115,42 @@ const stopOnHandoffOffer: StopCondition<ConversationTools> = ({ steps }) => {
   return latest ? offeredHandoff(latest) : false;
 };
 
+/** A successful `escalate_to_human` call in this step. */
+function escalatedToHuman(step: StepResult<ConversationTools>): boolean {
+  return step.toolResults.some((toolResult) => {
+    if (toolResult.toolName !== 'escalate_to_human') return false;
+    const output = toolResult.output;
+    return Boolean(
+      output && typeof output === 'object' && (output as ToolResult).ok,
+    );
+  });
+}
+
+/**
+ * A handed-over conversation has nothing left for the model to say: the
+ * confirmation is one fixed sentence (`escalationMessage`), so another round
+ * could only produce prose the engine would discard. The same saving the
+ * booking confirmation and the offer already make.
+ *
+ * This is also what makes the model the judge of acceptance, which is the whole
+ * of C1. The offer no longer asks for a keyword and no code matches one: the
+ * customer's answer arrives as an ordinary message, the model reads the offer it
+ * is answering out of the conversation history, and agreeing is just another
+ * reason to call `escalate_to_human` (see its tool description in
+ * lib/ai/tools.ts).
+ *
+ * **The assumption that carries**: the offer has to still be visible in the flat
+ * {@link HISTORY_LIMIT}-message window the turn is given. Normally it is the
+ * message immediately before the reply, so this holds comfortably. An offer
+ * answered twenty-plus messages later has scrolled out and is simply re-offered
+ * — no worse than the anchor rule it replaces, where only the immediately-next
+ * message could accept at all.
+ */
+const stopOnEscalation: StopCondition<ConversationTools> = ({ steps }) => {
+  const latest = steps.at(-1);
+  return latest ? escalatedToHuman(latest) : false;
+};
+
 type Dispatch = (
   toolName: ToolName,
   input: unknown,
@@ -144,8 +171,6 @@ type PersistedContext = {
   address: string | null;
   retentionDays: number;
   assistantPaused: boolean;
-  /** Customer message an outstanding handoff offer answered; null when none. */
-  handoffOfferMessageId: string | null;
   // Billing plan state (Phase 16 C1). Pre-wiring only: selected here so the
   // C2/C3 retention/identity gating has the fields; nothing acts on them yet.
   plan: PlanId;
@@ -176,6 +201,9 @@ export type ModelTurnResult =
     })
   | (ModelTurnMetadata & {
       outcome: 'handoff_offer';
+    })
+  | (ModelTurnMetadata & {
+      outcome: 'escalation';
     });
 
 function getOpenRouterStepMetadata(providerMetadata: unknown): {
@@ -218,6 +246,7 @@ export async function runModelTurn(args: {
     stopWhen: [
       stepCountIs(STEP_LIMIT),
       stopOnConfirmedMutation,
+      stopOnEscalation,
       stopOnHandoffOffer,
     ],
     temperature: 0.2,
@@ -298,6 +327,15 @@ export async function runModelTurn(args: {
     };
   }
 
+  // Below the mutation branch and above the offer, and the order is the whole
+  // point: a model that books a slot and escalates in the same step has done
+  // both, but only the booking is news the customer must not lose — the
+  // escalation reaches them through the professional who now owns the thread.
+  // An offer, by contrast, is a question the escalation has already answered.
+  if (lastStep && escalatedToHuman(lastStep)) {
+    return { outcome: 'escalation', ...metadata };
+  }
+
   // Below the mutation branch (a committed change outranks an offer to answer
   // something else) and above the text branch, for the same reason the
   // confirmation is: the offer is one fixed sentence, so any prose the model
@@ -343,7 +381,6 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       messageCreatedAt: messages.createdAt,
       conversationId: conversations.id,
       conversationAiActive: conversations.aiActive,
-      handoffOfferMessageId: conversations.handoffOfferMessageId,
       customerId: customers.id,
       name: accounts.name,
       timezone: accounts.timezone,
@@ -393,7 +430,6 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       occurredAt: row.messageCreatedAt,
     },
     conversationAiActive: row.conversationAiActive,
-    handoffOfferMessageId: row.handoffOfferMessageId,
     name: row.name,
     timezone: row.timezone,
     aiName: row.aiName,
@@ -464,7 +500,7 @@ async function persistReply(args: {
   tokensOut: number;
   cachedTokens: number;
   costMicrousd: number;
-  /** Set to join a caller's transaction (the handoff offer arms itself in one). */
+  /** Set to join a caller's transaction. */
   executor?: Executor;
 }): Promise<OutboundMessage> {
   const executor = args.executor ?? getServiceClient(args.inbound.accountId).db;
@@ -549,83 +585,29 @@ async function escalateToHuman(
 }
 
 /**
- * Send the one static offer and arm it against this inbound message, in a
- * single transaction. Order matters more than it looks: an armed offer whose
- * message never reached the customer would make an ordinary "po" — how a customer
- * takes a proposed slot — silently escalate a conversation nobody offered
- * anything to, so the two facts commit together or not at all.
+ * Send the one static offer.
  *
  * The wording is deterministic but a billed model round produced it, exactly
  * like an appointment confirmation, so it carries the round's real metadata.
+ *
+ * Nothing is remembered about the offer, and nothing needs to be: it used to be
+ * anchored to the customer message it answered so that the very next reply — and
+ * only that one — could accept it by keyword. The model reads the offer out of
+ * the history instead, so an offer is now just a message the assistant sent.
  */
 async function persistHandoffOffer(
   context: PersistedContext,
   metadata: ModelTurnMetadata & { model: string },
 ): Promise<OutboundMessage> {
-  const svc = getServiceClient(context.inbound.accountId);
-  return svc.db.transaction(async (tx) => {
-    const outbound = await persistReply({
-      inbound: context.inbound,
-      content: handoffOfferMessage(businessLabel(context.name)),
-      model: metadata.model,
-      provider: metadata.provider,
-      tokensIn: metadata.tokensIn,
-      tokensOut: metadata.tokensOut,
-      cachedTokens: metadata.cachedTokens,
-      costMicrousd: metadata.costMicrousd,
-      executor: tx,
-    });
-    await armHandoffOffer(tx, context.inbound);
-    return outbound;
-  });
-}
-
-/**
- * The customer answered the outstanding offer with the acceptance word. Escalate
- * exactly as `escalate_to_human` does — the assistant is off for this
- * conversation until the practitioner turns it back on — and confirm in one
- * fixed sentence, so the customer is not left with silence after saying yes.
- *
- * Nothing here may run before the escalation, and that includes disarming the
- * offer. The anchor is the only record that an acceptance is owed: clearing it
- * first — as this path used to, in its own statement — meant a crash before the
- * escalation left a retry with no anchor to read, so it fell through to an
- * ordinary turn and the handoff the customer had accepted never happened. With
- * the escalation durable first, a crash anywhere after it still leaves the
- * anchor armed, and the retry escalates again (idempotently: the second
- * `escalate_to_human` finds the conversation already human-owned).
- *
- * The clear then rides in the reply's transaction rather than standing alone,
- * so the last remaining gap — anchor gone, promise unsent — cannot open either:
- * both commit or neither does, and a retry re-runs the whole acceptance.
- */
-async function acceptHandoffOffer(
-  context: PersistedContext,
-  offerMessageId: string,
-): Promise<OutboundMessage> {
-  await escalateToHuman(
-    context,
-    'The customer accepted the offer to pass their question to the practice.',
-    'Handoff-offer escalation failed',
-  );
-  const svc = getServiceClient(context.inbound.accountId);
-  return svc.db.transaction(async (tx) => {
-    await clearHandoffOffer({
-      inbound: context.inbound,
-      offerMessageId,
-      executor: tx,
-    });
-    return persistReply({
-      inbound: context.inbound,
-      content: handoffAcceptedMessage(businessLabel(context.name)),
-      model: HANDOFF_ACCEPTED_MODEL,
-      provider: 'internal',
-      tokensIn: 0,
-      tokensOut: 0,
-      cachedTokens: 0,
-      costMicrousd: 0,
-      executor: tx,
-    });
+  return persistReply({
+    inbound: context.inbound,
+    content: handoffOfferMessage(businessLabel(context.name)),
+    model: metadata.model,
+    provider: metadata.provider,
+    tokensIn: metadata.tokensIn,
+    tokensOut: metadata.tokensOut,
+    cachedTokens: metadata.cachedTokens,
+    costMicrousd: metadata.costMicrousd,
   });
 }
 
@@ -640,46 +622,21 @@ function logAssistantPausedSkip(context: PersistedContext): void {
   );
 }
 
-// 'booking_unconfirmed' is only truthful when the turn actually attempted a
-// mutation; a turn that never got off the ground (provider outage, empty
-// response) must not tell a customer with no booking that their booking could
-// not be confirmed.
-type FailedTurnCopy = 'booking_unconfirmed' | 'technical_failure';
-
-// The failure path runs in a fresh invocation with no memory of what the dead
-// turn managed to do, so the only available mutation signal is state: an
-// appointment this customer gained at or after the inbound message arrived.
-// Reschedules and cancellations leave no such trace, but the copy this selects
-// is booking-specific anyway.
-async function bookedSinceInbound(context: PersistedContext): Promise<boolean> {
-  const svc = getServiceClient(context.inbound.accountId);
-  const [row] = await svc.db
-    .select({ id: appointments.id })
-    .from(appointments)
-    .where(
-      and(
-        eq(appointments.accountId, context.inbound.accountId),
-        eq(appointments.customerId, context.inbound.customerId),
-        gte(appointments.createdAt, context.inbound.occurredAt),
-      ),
-    )
-    .limit(1);
-  return Boolean(row);
-}
-
-function failedTurnHandoffResponse(
-  copy: FailedTurnCopy,
-  name: string,
-): string {
-  if (copy === 'technical_failure') {
-    return `Kam një problem teknik dhe nuk mund t'ju përgjigjem tani. Këtë bisedë ia kalova ${name}; do t'ju përgjigjen sapo të jenë të lirë.`;
-  }
-  return `Nuk munda ta konfirmoj me siguri rezultatin e fundit të rezervimit. Këtë bisedë ia kalova ${name} që ta verifikojnë dhe t'ju përgjigjen.`;
-}
-
+/**
+ * The turn ended without anything to say after touching real state, so a person
+ * takes it. The customer is told the one escalation sentence and nothing else.
+ *
+ * There used to be two sentences chosen between: a neutral technical one, and a
+ * booking-specific "I could not confirm the result of your last booking" picked
+ * by looking for an appointment created since the inbound message arrived. Both
+ * are gone. The second was the worse of the two — it told a customer with no
+ * booking that their booking might have failed, on the strength of a state guess
+ * made in a fresh invocation that remembers nothing of the dead turn — and the
+ * first advertised a malfunction the customer can do nothing with. What is
+ * useful and true is identical in both cases: a person has this now.
+ */
 async function runFailedTurnHandoff(
   context: PersistedContext,
-  copy: FailedTurnCopy,
   metadata: ModelTurnMetadata & { model: string },
 ): Promise<OutboundMessage> {
   await escalateToHuman(
@@ -690,13 +647,7 @@ async function runFailedTurnHandoff(
 
   return persistReply({
     inbound: context.inbound,
-    // Was an English 'the physical therapy practice', which was wrong twice
-    // over: it named a discipline in a horizontal product, and it rendered a
-    // stray English noun phrase inside an Albanian sentence.
-    content: failedTurnHandoffResponse(
-      copy,
-      businessLabel(context.name),
-    ),
+    content: escalationMessage(businessLabel(context.name)),
     model: metadata.model,
     provider: metadata.provider,
     tokensIn: metadata.tokensIn,
@@ -742,27 +693,6 @@ async function runTurnCoreUnlocked(args: {
       'assistant_paused',
       'Assistant is globally paused; no reply generated or sent',
     );
-  }
-
-  // An offer is answered before anything else, and answered exactly once: only
-  // the message directly after it can accept, so a "po" that arrives later — or
-  // one that takes a proposed time slot — falls through to a normal turn.
-  //
-  // Reading the anchor is separate from clearing it: an acceptance disarms the
-  // offer inside `acceptHandoffOffer`, after the escalation is durable. Only a
-  // lapse clears it here, where there is nothing left to lose.
-  if (context.handoffOfferMessageId) {
-    const outcome = await handoffOfferOutcome({
-      inbound: context.inbound,
-      offerMessageId: context.handoffOfferMessageId,
-    });
-    if (outcome === 'accepted') {
-      return acceptHandoffOffer(context, context.handoffOfferMessageId);
-    }
-    await clearHandoffOffer({
-      inbound: context.inbound,
-      offerMessageId: context.handoffOfferMessageId,
-    });
   }
 
   const history = await loadHistory(context.inbound);
@@ -832,15 +762,29 @@ async function runTurnCoreUnlocked(args: {
     });
   }
 
+  // The tool already handed the conversation over; all that is owed here is the
+  // fixed sentence saying so. Deterministic wording on a billed round, so it
+  // carries the round's real metadata rather than the internal/zero stamp the
+  // no-model paths use.
+  if (result.outcome === 'escalation') {
+    return persistReply({
+      inbound: context.inbound,
+      content: escalationMessage(businessLabel(context.name)),
+      model: args.modelId,
+      provider: result.provider,
+      tokensIn: result.tokensIn,
+      tokensOut: result.tokensOut,
+      cachedTokens: result.cachedTokens,
+      costMicrousd: result.costMicrousd,
+    });
+  }
+
   if (result.outcome === 'handoff_offer') {
     return persistHandoffOffer(context, { ...result, model: args.modelId });
   }
 
   if (result.outcome === 'handoff_required') {
-    return runFailedTurnHandoff(context, 'booking_unconfirmed', {
-      ...result,
-      model: args.modelId,
-    });
+    return runFailedTurnHandoff(context, { ...result, model: args.modelId });
   }
 
   return persistReply({
@@ -960,22 +904,16 @@ export async function handoffFailedTurn(args: {
     if (existing) return existing;
 
     // Reached from onFailure after every attempt was exhausted, for any cause
-    // (provider outage, timeout, empty read-only response) — so the neutral
-    // technical wording unless the dead turn left a booking behind.
-    return runFailedTurnHandoff(
-      context,
-      (await bookedSinceInbound(context))
-        ? 'booking_unconfirmed'
-        : 'technical_failure',
-      {
-        model: 'deterministic-failure-handoff',
-        provider: 'internal',
-        tokensIn: 0,
-        tokensOut: 0,
-        cachedTokens: 0,
-        costMicrousd: 0,
-      },
-    );
+    // (provider outage, timeout, empty read-only response). No model round
+    // happened, so the internal/zero stamp.
+    return runFailedTurnHandoff(context, {
+      model: 'deterministic-failure-handoff',
+      provider: 'internal',
+      tokensIn: 0,
+      tokensOut: 0,
+      cachedTokens: 0,
+      costMicrousd: 0,
+    });
   });
 }
 

@@ -1,4 +1,5 @@
 import { and, count, eq, gte, inArray, isNotNull, isNull } from 'drizzle-orm';
+import type { GetFunctionInput } from 'inngest';
 import { addHours, addMinutes, subHours } from 'date-fns';
 import { db } from '@/lib/db';
 import {
@@ -14,6 +15,7 @@ import {
 } from '@/lib/billing/usage';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import { inngest } from '../client';
 import {
   REMINDER_TEMPLATE_PRIORITY,
@@ -255,6 +257,16 @@ export async function loadReminderAttempt(args: {
   | { kind: 'skipped'; reason: string }
   | { kind: 'retry'; reason: string }
 > {
+  // Reminders are parked (lib/reminders/flag.ts). This is the FIRST check, ahead
+  // of the `stale_run` read below, so it costs no query — and it is what drains
+  // the runs that were already asleep in `wait-until-reminder` when the flag
+  // flipped. They wake, fall straight through the existing skip branch, park
+  // their row as `skipped/reminders_disabled` and exit. `reminder.skipped` is
+  // not in NOTIFICATION_TYPES, so no professional is told anything.
+  if (!remindersEnabled()) {
+    return { kind: 'skipped', reason: 'reminders_disabled' };
+  }
+
   const now = args.now ?? new Date();
   const [job] = await db
     .select()
@@ -529,6 +541,192 @@ async function recordReminderAttemptFailure(args: {
   if (eventId) await tryPublishOutboxEvent(eventId);
 }
 
+/**
+ * The handler is a named export so the disabled path can be exercised directly:
+ * `sendReminder` is an `InngestFunction` whose handler is private, and there is
+ * no test engine in this repo. `createFunction` receives this same function, so
+ * what the tests call is what Inngest runs.
+ */
+export async function sendReminderHandler({
+  event,
+  runId,
+  step,
+}: GetFunctionInput<
+  typeof inngest,
+  'appointment.booked' | 'appointment.rescheduled'
+>) {
+  // Reminders are parked (lib/reminders/flag.ts). Gating here rather than
+  // unregistering the function is deliberate: runs already sleeping in
+  // `wait-until-reminder` (up to 24h, plus ~18h of template-retry sleeps) would
+  // die as "function not found" with their `reminder_jobs` rows frozen at
+  // `scheduled` forever. Returning before `computeReminderSchedule` writes no
+  // row at all, so a new booking shows no reminder badge — `reminderBadge(null)`
+  // is null, not a "skipped" chip.
+  if (!remindersEnabled()) {
+    return { skipped: 'reminders_disabled' };
+  }
+
+  let startsAt: Date;
+  let accountId: string;
+  let appointmentId: string;
+  switch (event.name) {
+    case 'appointment.booked':
+      startsAt = new Date(event.data.startsAt);
+      accountId = event.data.accountId;
+      appointmentId = event.data.appointmentId;
+      break;
+    case 'appointment.rescheduled':
+      startsAt = new Date(event.data.to.startsAt);
+      accountId = event.data.accountId;
+      appointmentId = event.data.appointmentId;
+      break;
+    default:
+      return { skipped: 'unsupported_trigger' };
+  }
+
+  const schedule = computeReminderSchedule(
+    startsAt,
+    new Date(event.ts ?? Date.now()),
+  );
+  if (schedule.kind === 'skipped') {
+    await step.run('record-short-notice-skip', () =>
+      recordShortNoticeSkip({
+        accountId,
+        appointmentId,
+        startsAt,
+        runId,
+        reason: schedule.reason,
+      }),
+    );
+    await step.sendEvent('emit-short-notice-reminder-skipped', {
+      name: 'reminder.skipped',
+      data: { accountId, appointmentId, reason: schedule.reason },
+    });
+    return { skipped: schedule.reason };
+  }
+
+  await step.run('record-reminder-schedule', () =>
+    upsertReminderSchedule({
+      accountId,
+      appointmentId,
+      scheduledFor: schedule.scheduledFor,
+      runId,
+    }),
+  );
+  await step.sleepUntil('wait-until-reminder', schedule.scheduledFor);
+
+  for (let attempt = 1; attempt <= MAX_TEMPLATE_ATTEMPTS; attempt++) {
+    const state = await step.run(`load-reminder-attempt-${attempt}`, () =>
+      loadReminderAttempt({
+        accountId,
+        appointmentId,
+        runId,
+        scheduledFor: schedule.scheduledFor,
+      }),
+    );
+
+    if (state.kind === 'skipped') {
+      const marked = await step.run(`record-reminder-skip-${attempt}`, () =>
+        markReminder({
+          appointmentId,
+          runId,
+          status:
+            state.reason === 'appointment_cancelled'
+              ? 'cancelled'
+              : 'skipped',
+          attempts: attempt,
+          skippedReason: state.reason,
+        }),
+      );
+      // Another run owns the row now (a reschedule re-armed it): its cycle is
+      // the live one, so this run leaves quietly rather than announcing a skip.
+      if (!marked) return { skipped: state.reason };
+      await step.sendEvent(`emit-reminder-skipped-${attempt}`, {
+        name: 'reminder.skipped',
+        data: { accountId, appointmentId, reason: state.reason },
+      });
+      // The reminder cap is a hard stop: notify the PT once this month
+      // (billing.limit_reached → push/bell), on top of the flagged badge.
+      if (state.reason === 'plan_reminder_quota') {
+        await step.run(`emit-reminder-quota-reached-${attempt}`, () =>
+          emitReminderLimitReachedOnce(accountId, new Date()),
+        );
+      }
+      return { skipped: state.reason };
+    }
+
+    if (state.kind === 'retry') {
+      if (attempt === MAX_TEMPLATE_ATTEMPTS) {
+        await step.run('record-reminder-failure', () =>
+          recordReminderAttemptFailure({
+            accountId,
+            appointmentId,
+            runId,
+            attempts: attempt,
+            reason: state.reason,
+          }),
+        );
+        return { failed: state.reason };
+      }
+      await step.run(`record-reminder-requeue-${attempt}`, () =>
+        markReminder({
+          appointmentId,
+          runId,
+          status: 'requeued',
+          attempts: attempt,
+          lastError: state.reason,
+        }),
+      );
+      await step.sleep(
+        `wait-reminder-retry-${attempt}`,
+        `${TEMPLATE_RETRY_HOURS}h`,
+      );
+      continue;
+    }
+
+    const localTime = formatAppointmentTime(
+      new Date(state.context.startsAt),
+      state.context.timezone,
+    );
+    const name = state.context.name?.trim() || 'praktika';
+    const content = `Kujtesë: ${customerFirstName(state.context.customerName)}, takimi juaj me ${name} është më ${localTime}.`;
+    const message = await step.run('prepare-reminder-message', () =>
+      prepareReminderMessage({
+        accountId,
+        appointmentId,
+        conversationId: state.context.conversationId!,
+        templateId: state.template.id,
+        content,
+      }),
+    );
+    const externalId = await step.run('send-reminder-template', () =>
+      sendReminderTemplateOnce({
+        messageId: message.id,
+        connectionId: state.context.connectionId!,
+        recipient: state.context.recipient!,
+        templateName: state.template.name,
+        language: state.template.language,
+        variables: templateVariables({
+          template: state.template,
+          customerName: state.context.customerName,
+          name: state.context.name,
+          localTime,
+        }),
+      }),
+    );
+    await step.run('persist-reminder-delivery', () =>
+      persistReminderDelivery({
+        appointmentId,
+        messageId: message.id,
+        externalId,
+      }),
+    );
+    return { sent: externalId };
+  }
+
+  throw new Error('Reminder attempt loop exhausted unexpectedly');
+}
+
 export const sendReminder = inngest.createFunction(
   {
     id: 'send-reminder',
@@ -577,165 +775,5 @@ export const sendReminder = inngest.createFunction(
     },
   },
   [{ event: 'appointment.booked' }, { event: 'appointment.rescheduled' }],
-  async ({ event, runId, step }) => {
-    let startsAt: Date;
-    let accountId: string;
-    let appointmentId: string;
-    switch (event.name) {
-      case 'appointment.booked':
-        startsAt = new Date(event.data.startsAt);
-        accountId = event.data.accountId;
-        appointmentId = event.data.appointmentId;
-        break;
-      case 'appointment.rescheduled':
-        startsAt = new Date(event.data.to.startsAt);
-        accountId = event.data.accountId;
-        appointmentId = event.data.appointmentId;
-        break;
-      default:
-        return { skipped: 'unsupported_trigger' };
-    }
-
-    const schedule = computeReminderSchedule(
-      startsAt,
-      new Date(event.ts ?? Date.now()),
-    );
-    if (schedule.kind === 'skipped') {
-      await step.run('record-short-notice-skip', () =>
-        recordShortNoticeSkip({
-          accountId,
-          appointmentId,
-          startsAt,
-          runId,
-          reason: schedule.reason,
-        }),
-      );
-      await step.sendEvent('emit-short-notice-reminder-skipped', {
-        name: 'reminder.skipped',
-        data: { accountId, appointmentId, reason: schedule.reason },
-      });
-      return { skipped: schedule.reason };
-    }
-
-    await step.run('record-reminder-schedule', () =>
-      upsertReminderSchedule({
-        accountId,
-        appointmentId,
-        scheduledFor: schedule.scheduledFor,
-        runId,
-      }),
-    );
-    await step.sleepUntil('wait-until-reminder', schedule.scheduledFor);
-
-    for (let attempt = 1; attempt <= MAX_TEMPLATE_ATTEMPTS; attempt++) {
-      const state = await step.run(`load-reminder-attempt-${attempt}`, () =>
-        loadReminderAttempt({
-          accountId,
-          appointmentId,
-          runId,
-          scheduledFor: schedule.scheduledFor,
-        }),
-      );
-
-      if (state.kind === 'skipped') {
-        const marked = await step.run(`record-reminder-skip-${attempt}`, () =>
-          markReminder({
-            appointmentId,
-            runId,
-            status:
-              state.reason === 'appointment_cancelled'
-                ? 'cancelled'
-                : 'skipped',
-            attempts: attempt,
-            skippedReason: state.reason,
-          }),
-        );
-        // Another run owns the row now (a reschedule re-armed it): its cycle is
-        // the live one, so this run leaves quietly rather than announcing a skip.
-        if (!marked) return { skipped: state.reason };
-        await step.sendEvent(`emit-reminder-skipped-${attempt}`, {
-          name: 'reminder.skipped',
-          data: { accountId, appointmentId, reason: state.reason },
-        });
-        // The reminder cap is a hard stop: notify the PT once this month
-        // (billing.limit_reached → push/bell), on top of the flagged badge.
-        if (state.reason === 'plan_reminder_quota') {
-          await step.run(`emit-reminder-quota-reached-${attempt}`, () =>
-            emitReminderLimitReachedOnce(accountId, new Date()),
-          );
-        }
-        return { skipped: state.reason };
-      }
-
-      if (state.kind === 'retry') {
-        if (attempt === MAX_TEMPLATE_ATTEMPTS) {
-          await step.run('record-reminder-failure', () =>
-            recordReminderAttemptFailure({
-              accountId,
-              appointmentId,
-              runId,
-              attempts: attempt,
-              reason: state.reason,
-            }),
-          );
-          return { failed: state.reason };
-        }
-        await step.run(`record-reminder-requeue-${attempt}`, () =>
-          markReminder({
-            appointmentId,
-            runId,
-            status: 'requeued',
-            attempts: attempt,
-            lastError: state.reason,
-          }),
-        );
-        await step.sleep(
-          `wait-reminder-retry-${attempt}`,
-          `${TEMPLATE_RETRY_HOURS}h`,
-        );
-        continue;
-      }
-
-      const localTime = formatAppointmentTime(
-        new Date(state.context.startsAt),
-        state.context.timezone,
-      );
-      const name = state.context.name?.trim() || 'praktika';
-      const content = `Kujtesë: ${customerFirstName(state.context.customerName)}, takimi juaj me ${name} është më ${localTime}.`;
-      const message = await step.run('prepare-reminder-message', () =>
-        prepareReminderMessage({
-          accountId,
-          appointmentId,
-          conversationId: state.context.conversationId!,
-          templateId: state.template.id,
-          content,
-        }),
-      );
-      const externalId = await step.run('send-reminder-template', () =>
-        sendReminderTemplateOnce({
-          messageId: message.id,
-          connectionId: state.context.connectionId!,
-          recipient: state.context.recipient!,
-          templateName: state.template.name,
-          language: state.template.language,
-          variables: templateVariables({
-            template: state.template,
-            customerName: state.context.customerName,
-            name: state.context.name,
-            localTime,
-          }),
-        }),
-      );
-      await step.run('persist-reminder-delivery', () =>
-        persistReminderDelivery({
-          appointmentId,
-          messageId: message.id,
-          externalId,
-        }),
-      );
-      return { sent: externalId };
-    }
-
-    throw new Error('Reminder attempt loop exhausted unexpectedly');
-  },
+  sendReminderHandler,
 );

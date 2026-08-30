@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAffirmative, parseReplyIntent } from '../reply-intent';
+import { parseReplyIntent } from '../reply-intent';
 
 describe('parseReplyIntent', () => {
   it.each([
@@ -258,61 +258,4 @@ describe('parseReplyIntent', () => {
       expect(parseReplyIntent(input)).toBeNull();
     },
   );
-});
-
-/**
- * The affirmative is shared, and that is the point of it living here: an
- * unanswered reminder confirms a booking with it, and the handoff offer is
- * accepted by it (lib/conversation/handoff-offer.ts). The offer used to spell it
- * differently — exact equality with PO — so everything in the gap between the
- * two spellings never reached the most-recent-question-wins comparison at all.
- */
-describe('isAffirmative', () => {
-  it.each([
-    'po',
-    'PO',
-    'Po',
-    '  po  ',
-    'po\n',
-    // Punctuation is not part of the answer: only letters and digits survive
-    // tokenising, so a full stop or a question mark cannot make a yes miss.
-    'PO.',
-    'Po?',
-    'dakord',
-    'ok',
-    'Okay.',
-    'KONFIRMO',
-    // 'po' plus exactly one word still reads as the answer — and this is the
-    // shape the offer rejected while the reminder accepted it, which is how a
-    // customer's real question got dropped for an appointment they were never
-    // asked about.
-    'po faleminderit',
-    'Po, vij',
-  ])('reads %j as a yes', (input) => {
-    expect(isAffirmative(input)).toBe(true);
-  });
-
-  // Albanian keyboards drop 'ë'/'ç' and phone keyboards rewrite the apostrophe,
-  // so the same yes has to survive every way of typing it.
-  it('folds diacritics before deciding', () => {
-    expect(isAffirmative('Pò')).toBe(true);
-    expect(isAffirmative('po'.normalize('NFD'))).toBe(true);
-  });
-
-  it.each([
-    // The progressive particle. "Po pyesja për oraret" is "I was asking about
-    // the hours" — a question, and neither subsystem may take it.
-    'Po pyesja për oraret',
-    'po ju lutem',
-    'Po, por a mund ta ndryshoj orën?',
-    // An explicit command outranks the particle in front of it, so an
-    // acknowledged cancellation is nobody's yes.
-    'Ok anuloj',
-    'Ok, stop',
-    'jo',
-    'si',
-    '',
-  ])('does not read %j as a yes', (input) => {
-    expect(isAffirmative(input)).toBe(false);
-  });
 });

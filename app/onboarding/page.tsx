@@ -5,6 +5,7 @@ import { PLANS } from '@/lib/billing/plans';
 import { Button } from '@/components/ui/button';
 import { formatLek, t } from '@/lib/i18n';
 import { getOnboardingState } from '@/lib/onboarding/state';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import { getServices } from '@/lib/services/queries';
 import { createServerClient } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,10 @@ import {
 function PlanStep() {
   const free = PLANS.free;
   const solo = PLANS.solo;
+  // Reminders are parked (lib/reminders/flag.ts). `remindersPerMonth` stays in
+  // PLANS as dormant config, but a plan card must not promise an allowance for
+  // a feature the product will not run — so the bullet goes with the feature.
+  const showReminders = remindersEnabled();
   return (
     <section className="border-border bg-card mt-8 rounded-lg border p-4 text-left">
       <h2 className="text-lg font-semibold">{t.billing.onboardingTitle}</h2>
@@ -35,7 +40,9 @@ function PlanStep() {
           <p className="font-heading font-semibold">{t.billing.planFree}</p>
           <ul className="text-ink-2 mt-2 space-y-1 text-[13px]">
             <li>{t.billing.featConversations(free.conversationsPerMonth)}</li>
-            <li>{t.billing.featReminders(free.remindersPerMonth)}</li>
+            {showReminders && (
+              <li>{t.billing.featReminders(free.remindersPerMonth)}</li>
+            )}
             <li>{t.billing.featOneService}</li>
           </ul>
         </div>
@@ -48,7 +55,9 @@ function PlanStep() {
           </div>
           <ul className="text-ink-2 mt-2 space-y-1 text-[13px]">
             <li>{t.billing.featConversations(solo.conversationsPerMonth)}</li>
-            <li>{t.billing.featReminders(solo.remindersPerMonth)}</li>
+            {showReminders && (
+              <li>{t.billing.featReminders(solo.remindersPerMonth)}</li>
+            )}
             <li>{t.billing.featEverything}</li>
           </ul>
           {solo.price && (

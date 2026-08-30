@@ -56,7 +56,18 @@ export function ChatComposer({
       <div className="mx-auto max-w-md px-4 py-3">
         {state === 'windowClosed' ? (
           <>
-            <div className="border-line mb-3 flex items-start gap-2 rounded-[18px] border bg-[#f4f4f1] px-3 py-3">
+            {/* The bottom margin belongs to the gap ABOVE the template button.
+                With reminders gated off, `templateAvailable` is always false and
+                this card is the whole composer, so keeping the margin would
+                leave a dangling 12px strip that reads as a control failing to
+                render. The card alone is the intended state: it explains that
+                the 24h window closed and that the customer has to write first. */}
+            <div
+              className={cn(
+                'border-line flex items-start gap-2 rounded-[18px] border bg-[#f4f4f1] px-3 py-3',
+                templateAvailable && 'mb-3',
+              )}
+            >
               <Clock className="text-ink-3 mt-px h-4 w-4 shrink-0" aria-hidden />
               <p className="text-ink-2 min-w-0 flex-1 text-[12.5px] leading-snug">
                 {t.chat.windowClosedText}

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getCalendarSnapshot } from '@/lib/pwa/read-models';
+import { remindersEnabled } from '@/lib/reminders/flag';
 import { createServerClient } from '@/lib/supabase/server';
 import { CalendarClient } from './calendar-client';
 
@@ -35,6 +36,7 @@ export default async function CalendarPage({
       weekDays={snapshot.weekDays}
       appointments={snapshot.appointments}
       activeServices={snapshot.activeServices}
+      remindersEnabled={remindersEnabled()}
     />
   );
 }

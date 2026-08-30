@@ -157,7 +157,7 @@ Two things happen after a successful fan-out. A counts-only `push.dispatched` ev
 
 The Inngest wrapper adds durability and idempotency. `dispatch-push-notification` subscribes to the ten event names in the matrix (every push event except `conversation.needs_reply`), sets `idempotency: 'event.id'` so retries can't double-send, and returns the dispatch result as the step output so a run's history records how many browsers each event reached.
 
-The two direct callers skip Inngest because they already run inside a durable, idempotent step: the inbound job's `notify-manual-reply` step (whose function is keyed on the message id) and `handOffCappedConversation`.
+The three direct callers skip Inngest because they already run inside a durable, idempotent step of the inbound job, whose function is keyed on the message id: `notify-manual-reply`, `notify-non-text` (every non-text inbound, including the ones whose customer-facing notice is throttled away), and `notify-capped-conversation`, which calls `notifyCappedConversation`.
 
 ## Browser subscription lifecycle
 

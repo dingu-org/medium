@@ -1,6 +1,6 @@
 # Assistant conversation engine
 
-Every inbound WhatsApp message from a customer produces exactly one reply, and a fixed precedence picks which subsystem writes it: a deterministic reminder answer, a nudge on a human-owned thread, a non-text notice, a cap handoff, or an AI turn. An AI turn is idempotent, tool-bound, Albanian-only, and ends in one of four outcomes, three of which replace the model's own prose with fixed text. This document explains the inbound pipeline, the engine that runs a turn, the tools and prompt the model works with, and how a model is chosen per plan and environment. The paths a conversation takes out of the assistant and into a person — escalation, the handoff offer, takeover, the cap handoff, and the failure handoff — are covered in [human handoff](./human-handoff.md).
+Every inbound WhatsApp message from a customer produces exactly one reply, and a fixed precedence picks which subsystem writes it: a deterministic reminder answer, a nudge on a human-owned thread, a non-text notice, a cap handoff, or an AI turn. An AI turn is idempotent, tool-bound, Albanian-only, and ends in one of five outcomes, four of which replace the model's own prose with fixed text. This document explains the inbound pipeline, the engine that runs a turn, the tools and prompt the model works with, and how a model is chosen per plan and environment. The paths a conversation takes out of the assistant and into a person — escalation, the handoff offer, takeover, the cap handoff, and the failure handoff — are covered in [human handoff](./human-handoff.md).
 
 ## The inbound job
 
@@ -12,10 +12,8 @@ flowchart TD
     LOAD -->|no row| S1["skipped: conversation_not_found"]
     LOAD -->|no active connection| S2["skipped: delivery_context_missing"]
     LOAD --> GATE{"assistant paused globally<br/>or non-text body?"}
-    GATE -->|no| CLAIM["resolveInboundClaim"]
+    GATE -->|no| REM["handleReminderResponse"]
     GATE -->|yes| ACTIVE{"ai_active?"}
-    CLAIM -->|handoff offer claims it| ACTIVE
-    CLAIM -->|reminder claims it| REM["handleReminderResponse"]
     REM -->|outbound| SEND1["Send reply, store the wamid"]
     REM -->|none| ACTIVE
     REM -->|fallback| CAP{"conversation-day cap"}
@@ -29,7 +27,7 @@ flowchart TD
     NT -->|no| CAP
     CAP -->|"assistant paused: gate skipped"| TURN["AI turn"]
     CAP -->|under cap| TURN
-    CAP -->|at cap| CAPH["Hand the thread over, push,<br/>one static message per local day"]
+    CAP -->|at cap| CAPH["Push, and one fixed message<br/>per local day; the thread stays with the AI"]
     CAPH --> SEND3["Send reply, store the wamid"]
     TURN -->|skipped| S5["skipped: engine reason"]
     TURN --> SEND4["Send reply, store the wamid"]
@@ -52,18 +50,13 @@ The job's return value names the path taken, which makes an Inngest run readable
 | `{ capped: true, handoffSent }`             | The monthly conversation cap was reached.                                                                                          |
 | `{ outboundMessageId, externalId, replay }` | An AI turn answered. `replay` is true when the reply had already been delivered.                                                   |
 
-## Precedence between a reminder and a handoff offer
+## Nothing reads the customer's words before the assistant
 
-Two subsystems ask the customer a yes-or-no question, and one word answers both: an unanswered reminder asks for a confirmation, and the handoff offer asks the customer to reply `PO`. `resolveInboundClaim` settles which one claims an affirmative, and it runs ahead of the reminder handler because that handler returns an outbound and ends the run, putting the engine — and with it the offer's acceptance — out of reach.
+The reminder response handler is the only code left that inspects a customer message before the model does, and it is dormant behind `remindersEnabled()` (`lib/reminders/flag.ts`), so today nothing does. With the flag off, `handle-reminder-response` is not even a step in the run: the message falls straight through to the AI turn.
 
-The rule is that whichever question was asked more recently claims the message:
+There used to be a second reader. The handoff offer asked the customer to reply `PO` and matched the answer against the same Albanian keyword list, which meant two subsystems could claim one word — so `resolveInboundClaim` arbitrated by whichever question was asked more recently, in a `resolve-turn-precedence` step ahead of the reminder handler. All of it is gone (2026-08-30): the model reads the acceptance out of the conversation history instead, so there is no second claimant and nothing to arbitrate. Why the keyword rule could not be repaired is set out in [human handoff](./human-handoff.md#the-model-reads-the-answer).
 
-1. No outstanding offer, or the message is not an acceptance of it, means the reminder keeps the message. `handoffOfferOutcome` accepts only an affirmative that is literally the next customer message after the anchored one, so everything else — `ANULO`, `RICAKTO`, a sentence — never reaches the comparison.
-2. An offer with no pending reminder claims the message.
-3. Otherwise the offer claims it only when `offer.offeredAt` is **strictly** newer than the reminder's `sent_at`. Postgres keeps these timestamps to the microsecond and a JavaScript `Date` truncates to the millisecond, so exact ties happen; a tie goes to the reminder, because confirming an appointment the customer holds is recoverable.
-4. When the reminder wins, the offer is cleared on the spot rather than left armed against some later, unrelated message.
-
-Both sides read "affirmative" from one function, `isAffirmative` in `lib/language/reply-intent.ts`, so the comparison never turns on a spelling technicality. That parse also rejects an affirmative particle carrying a contrary command (`Ok, anuloj`) and the Albanian progressive particle heading a statement (`Po pyesja…`), which is why those go to an ordinary AI turn instead of being claimed by either side. The keyword semantics belong to [reminders](./reminders.md). The cases are pinned in `lib/inngest/functions/__tests__/handle-inbound-message.integration.test.ts` under "most-recent-question-wins on an affirmative".
+`parseReplyIntent` survives in `lib/language/reply-intent.ts` for the dormant reminder handler alone; `isAffirmative`, its shared entry point, is deleted. A new subsystem that needs to know what a customer meant should ask the model, not that file.
 
 ## One reply per inbound message
 
@@ -86,27 +79,29 @@ The turn runs in this order:
 2. **Short-circuit** on an existing AI reply to this inbound message.
 3. **Refuse an inactive conversation** unless `allowInactive` is set: `conversation_inactive`.
 4. **Refuse a globally paused assistant**: `assistant_paused`, logged once as `ai.assistant_paused`. This is the single choke point for the pause, which is why the non-text branch in the inbound job carries its own copy of the check.
-5. **Answer an outstanding handoff offer**, described in [human handoff](./human-handoff.md).
-6. **Build the messages array** from the last 20 rows of the conversation, oldest first. `customer` maps to the model role `user`; both `ai` and `account` map to `assistant`, so an owner's manual reply is history the model can read.
-7. **Build the system prompt** from account fields, the active services from `lib/services/queries.ts`, and the plan-gated assistant identity.
-8. **Run the model loop** and turn its outcome into a stored reply.
+5. **Build the messages array** from the last 20 rows of the conversation, oldest first. `customer` maps to the model role `user`; both `ai` and `account` map to `assistant`, so an owner's manual reply is history the model can read. That window is also what carries an outstanding handoff offer to the model, since nothing else records one.
+6. **Build the system prompt** from account fields, the active services from `lib/services/queries.ts`, and the plan-gated assistant identity.
+7. **Run the model loop** and turn its outcome into a stored reply.
 
 `runReminderTurn` passes `allowInactive: true` so a reminder answer is handled even during a takeover, appends a reminder addendum to the system prompt, and sets `cancellationActor: 'customer'` so a cancellation in that context is recorded as the customer's rather than the assistant's.
 
 ## Turn outcomes
 
-`runModelTurn` calls `generateText` with `temperature: 0.2`, `maxOutputTokens: 500`, `maxRetries: 0`, a 30-second timeout, and three stop conditions: `stepCountIs(5)`, a confirmable appointment change, and a successful handoff offer. It returns one of four outcomes, checked in this order.
+`runModelTurn` calls `generateText` with `temperature: 0.2`, `maxOutputTokens: 500`, `maxRetries: 0`, a 30-second timeout, and four stop conditions: `stepCountIs(5)`, a confirmable appointment change, a successful escalation, and a successful handoff offer. It returns one of five outcomes, checked in this order.
 
 | Outcome                | Trigger                                                                                                       | Reply the customer receives                                        |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `appointment_mutation` | The last step returned an `effect` from `book_appointment`, `reschedule_appointment`, or `cancel_appointment` | `appointmentConfirmationContent`, rendered in the account timezone |
+| `escalation`           | The last step returned a successful `escalate_to_human`                                                       | `escalationMessage`, naming the business                           |
 | `handoff_offer`        | The last step returned a successful `offer_human_handoff`                                                     | One fixed sentence                                                 |
 | `response`             | The last step produced non-empty text                                                                         | The model's text                                                   |
-| `handoff_required`     | No text, and some step called a mutating tool                                                                 | The failure-handoff sentence, after escalating                     |
+| `handoff_required`     | No text, and some step called a mutating tool                                                                 | `escalationMessage`, after escalating                              |
 
-The order is the contract. `result.text` is the _last_ step's text, so prose the model wrote alongside the stopping tool call would otherwise take precedence; discarding that prose is what guarantees one message per change, in wording the product controls.
+The order is the contract. `result.text` is the _last_ step's text, so prose the model wrote alongside the stopping tool call would otherwise take precedence; discarding that prose is what guarantees one message per change, in wording the product controls. The mutation outranks the escalation for a reason of its own: a step that books and escalates must announce the booking, because nothing else will ever tell the customer the appointment exists, while the escalation reaches them through the person who now owns the thread.
 
-Two tool sets drive this and they are deliberately different. `MUTATING_TOOLS` controls whether a speechless turn becomes a handoff, and includes `escalate_to_human` because that call changed real state. `CONFIRMABLE_MUTATIONS` selects whether fixed confirmation text exists to send instead of the model's words, and excludes `escalate_to_human` because no such text exists for an escalation — the model still has to produce the reply there. `offer_human_handoff` is in neither: offering changes nothing, so a turn that offers and then dies is safe to retry from scratch.
+Two tool sets drive this and they are deliberately different. `MUTATING_TOOLS` controls whether a speechless turn becomes a handoff, and includes `escalate_to_human` because that call changed real state. `CONFIRMABLE_MUTATIONS` is narrower: it selects the calls announced by `appointmentConfirmationContent`, which speaks about an appointment. An escalation is announced too, by its own outcome and its own sentence, so it does not belong in that set either. `offer_human_handoff` is in neither: offering changes nothing, so a turn that offers and then dies is safe to retry from scratch.
+
+Only a *failed* mutation can now reach `handoff_required`: a successful booking stops the loop and speaks for itself, and a successful escalation stops the loop and sends the escalation sentence.
 
 When a turn produces no text and called no mutating tool, the engine raises `empty_response` or `step_limit_reached` and the run retries. A single step that commits more than one appointment change logs `ai.multi_mutation_turn`; only the last is announced, so the others happened silently.
 
@@ -122,7 +117,7 @@ When a turn produces no text and called no mutating tool, the engine raises `emp
 | `reschedule_appointment`     | `appointment_id`, `new_starts_at`             | Moves the appointment; returns a `rescheduled` effect             |
 | `cancel_appointment`         | `appointment_id`, optional `reason`           | Cancels as `cancellationActor`; returns a `cancelled` effect      |
 | `escalate_to_human`          | `reason`                                      | Sets `ai_active = false` and `escalation_state = 'requested'`     |
-| `offer_human_handoff`        | `reason`                                      | Pure signal; the engine sends the sentence and arms the anchor    |
+| `offer_human_handoff`        | `reason`                                      | Pure signal; the engine sends the sentence and records nothing    |
 
 The `effect` field is a sibling of `data`, not a field inside it: `data` is the result shape the tool promises the model, and the effect is engine plumbing that must not become part of it. What the appointment tools call is explained in [appointments and availability](./appointments-availability.md).
 
@@ -148,7 +143,7 @@ A terminal appointment and a taken slot share the `conflict` code but not the me
 Three of those sections carry rules that other parts of the system depend on:
 
 - **Language lock.** Albanian is the only output language, addressing the customer as _Ju_, whatever language the customer writes in. A request to switch language is answered as an ordinary request — one short Albanian sentence — and never treated as an attack.
-- **Scope.** The assistant handles exactly four things: booking, rescheduling, cancelling, and answering about the services, prices, and availability in the business context. Anything else calls `offer_human_handoff`. There is no topic list to match against; the classification happens in the model, from the request in front of it.
+- **Scope.** The assistant handles exactly four things: booking, rescheduling, cancelling, and answering about the services, prices, and availability in the business context. Anything else calls `offer_human_handoff`, and a customer who then agrees to the offer is a reason to call `escalate_to_human`. There is no topic list to match against, and no keyword list behind the offer: both the scope decision and the reading of the customer's answer happen in the model, from the messages in front of it.
 - **Tool rules.** After a successful change, or a successful offer, the turn ends at the tool call — the system supplies the sentence. At most one appointment change per reply, and a move is a `reschedule_appointment`, never a cancel followed by a book.
 
 The business-context block, headed `## Practice context` in the built prompt, lists the business name, optional title and address, assistant name, timezone, current time in both UTC and business-local form, configured retention, the greeting, and the active services with durations and prices. With no active services it says so explicitly and forbids offering one. It closes by forbidding any address, title, or price that is not listed above it, and by repeating the language lock.
@@ -192,10 +187,9 @@ The `messages.model` column carries a marker naming the path that wrote the repl
 | `deterministic-appointment-event` | `lib/inngest/functions/appointment-events.ts` |
 | `deterministic-cap-handoff`       | `lib/billing/cap-handoff.ts`                  |
 | `deterministic-non-text-notice`   | `lib/conversation/non-text.ts`                |
-| `deterministic-handoff-accepted`  | `lib/conversation/handoff-offer.ts`           |
 | `deterministic-failure-handoff`   | `lib/conversation/engine.ts`                  |
 
-Three fixed-text replies are deliberately absent from that list. The appointment confirmation, the handoff offer, and the in-turn failure handoff all carry the real metadata of the model round that produced the tool call, because a billed round did happen. Only the exhausted-retries handoff, which runs in a fresh invocation with no round behind it, is stamped `deterministic-failure-handoff`. Stamping the other three `internal` would under-report every booking turn.
+Four fixed-text replies are deliberately absent from that list. The appointment confirmation, the handoff offer, the escalation sentence, and the in-turn failure handoff all carry the real metadata of the model round that produced the tool call, because a billed round did happen. Only the exhausted-retries handoff, which runs in a fresh invocation with no round behind it, is stamped `deterministic-failure-handoff`. Stamping the other four `internal` would under-report every booking and escalation turn. (`deterministic-handoff-accepted` is gone with the keyword acceptance it marked, which was the one escalation that genuinely had no round behind it.)
 
 ## Cost telemetry
 

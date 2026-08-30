@@ -37,13 +37,24 @@ function stripDow(date: Date): string {
   return formatWeekday(date).replace(/^E /, '').slice(0, 3);
 }
 
-/** Status dot colour, per the product spec (canvas CAL map). */
-function statusDot(appt: CalendarAppointment): string {
+/**
+ * Status dot colour, per the product spec (canvas CAL map).
+ *
+ * Two of the colours are reminder-driven. Reminders are parked (see
+ * lib/reminders/flag.ts), and while they are off the dot must fall through to
+ * the plain appointment status — otherwise a `reminder_jobs` row left over from
+ * before the switch would still paint a red or orange dot for a state the PT
+ * can no longer see explained anywhere else on the screen.
+ */
+function statusDot(
+  appt: CalendarAppointment,
+  remindersEnabled: boolean,
+): string {
   if (appt.status === 'cancelled') return 'bg-destructive';
   if (appt.status === 'rescheduled') return 'bg-primary';
   if (appt.status === 'completed') return 'bg-[var(--neutral-400)]';
   if (appt.status === 'no_show') return 'bg-destructive';
-  const r = appt.reminder;
+  const r = remindersEnabled ? appt.reminder : null;
   if (
     r?.responseType === 'cancel' ||
     r?.responseType === 'reschedule_requested'
@@ -65,6 +76,7 @@ export function CalendarClient({
   weekDays,
   appointments,
   activeServices,
+  remindersEnabled,
 }: {
   accountId: string;
   timezone: string;
@@ -74,6 +86,13 @@ export function CalendarClient({
   weekDays: WeekDay[];
   appointments: CalendarAppointment[];
   activeServices: ServiceRecord[];
+  /**
+   * Reminders are parked — see lib/reminders/flag.ts. Read on the server by
+   * this screen's page and handed down, because the flag is server-only (no
+   * `NEXT_PUBLIC_` twin). False hides the reminder pill and neutralises the
+   * two reminder-driven status-dot colours.
+   */
+  remindersEnabled: boolean;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<CalendarAppointment | null>(null);
@@ -156,7 +175,10 @@ export function CalendarClient({
 
   return (
     <div className="pb-16">
-      <RealtimeRefresher table="appointments" filter={`account_id=eq.${accountId}`} />
+      <RealtimeRefresher
+        table="appointments"
+        filter={`account_id=eq.${accountId}`}
+      />
 
       {/* Canvas CalHeader: seg left, true-centered title, "Sot" pill right. */}
       <div className="relative flex min-h-11 items-center justify-between">
@@ -183,7 +205,7 @@ export function CalendarClient({
         <button
           type="button"
           onClick={() => navigate(todayKey, view)}
-          className="text-primary relative h-9 shrink-0 rounded-full bg-card px-5 text-[13px] font-bold shadow-[var(--shadow-card)] transition-colors hover:bg-[#f7f7f4] before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
+          className="text-primary bg-card relative h-9 shrink-0 rounded-full px-5 text-[13px] font-bold shadow-[var(--shadow-card)] transition-colors before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] hover:bg-[#f7f7f4]"
         >
           {t.calendar.todayBtn}
         </button>
@@ -194,9 +216,12 @@ export function CalendarClient({
           type="button"
           aria-label={t.calendar.prevWeek}
           onClick={() => shiftDays(-7)}
-          className="relative -ml-2 flex h-11 w-8 shrink-0 items-center justify-center before:absolute before:inset-y-0 before:-left-3 before:right-0 before:content-['']"
+          className="relative -ml-2 flex h-11 w-8 shrink-0 items-center justify-center before:absolute before:inset-y-0 before:right-0 before:-left-3 before:content-['']"
         >
-          <ChevronLeft className="text-ink-3/70 h-[18px] w-[18px]" aria-hidden />
+          <ChevronLeft
+            className="text-ink-3/70 h-[18px] w-[18px]"
+            aria-hidden
+          />
         </button>
         <div className="grid flex-1 grid-cols-7">
           {weekDays.map((day) => {
@@ -233,9 +258,12 @@ export function CalendarClient({
           type="button"
           aria-label={t.calendar.nextWeek}
           onClick={() => shiftDays(7)}
-          className="relative -mr-2 flex h-11 w-8 shrink-0 items-center justify-center before:absolute before:inset-y-0 before:left-0 before:-right-3 before:content-['']"
+          className="relative -mr-2 flex h-11 w-8 shrink-0 items-center justify-center before:absolute before:inset-y-0 before:-right-3 before:left-0 before:content-['']"
         >
-          <ChevronRight className="text-ink-3/70 h-[18px] w-[18px]" aria-hidden />
+          <ChevronRight
+            className="text-ink-3/70 h-[18px] w-[18px]"
+            aria-hidden
+          />
         </button>
       </div>
 
@@ -262,6 +290,7 @@ export function CalendarClient({
                     appt={appt}
                     pendingMutations={pendingByAppointmentId.get(appt.id) ?? []}
                     onOpen={openAppt}
+                    remindersEnabled={remindersEnabled}
                   />
                 ))}
               </ul>
@@ -303,7 +332,7 @@ export function CalendarClient({
                       — {t.calendar.free}
                     </p>
                   ) : (
-                    <ul className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+                    <ul className="bg-card [&>*+*]:border-sep overflow-hidden rounded-lg shadow-[var(--shadow-card)] [&>*+*]:border-t">
                       {list.map((appt) => (
                         <AppointmentRow
                           key={appt.id}
@@ -312,6 +341,7 @@ export function CalendarClient({
                             pendingByAppointmentId.get(appt.id) ?? []
                           }
                           onOpen={openAppt}
+                          remindersEnabled={remindersEnabled}
                         />
                       ))}
                     </ul>
@@ -325,6 +355,7 @@ export function CalendarClient({
       <AppointmentSheet
         appointment={selected}
         timezone={timezone}
+        remindersEnabled={remindersEnabled}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
@@ -338,10 +369,12 @@ function AppointmentCard({
   appt,
   pendingMutations,
   onOpen,
+  remindersEnabled,
 }: {
   appt: CalendarAppointment;
   pendingMutations: PendingMutation[];
   onOpen: (a: CalendarAppointment) => void;
+  remindersEnabled: boolean;
 }) {
   const pendingLabel = getPendingAppointmentLabel(pendingMutations);
   const faded = appt.status === 'cancelled' || appt.status === 'completed';
@@ -355,14 +388,14 @@ function AppointmentCard({
         type="button"
         onClick={() => onOpen(appt)}
         className={cn(
-          'hover:bg-muted/40 flex w-full gap-3 rounded-lg bg-card p-4 text-left shadow-[var(--shadow-card)] transition-colors',
+          'hover:bg-muted/40 bg-card flex w-full gap-3 rounded-lg p-4 text-left shadow-[var(--shadow-card)] transition-colors',
           faded && 'opacity-60',
         )}
       >
         <span className="w-[52px] shrink-0">
           <span
             className={cn(
-              'font-heading block text-[17px] font-semibold tracking-[-0.02em] tabular-nums whitespace-nowrap',
+              'font-heading block text-[17px] font-semibold tracking-[-0.02em] whitespace-nowrap tabular-nums',
               appt.status === 'cancelled' && 'line-through',
             )}
           >
@@ -373,7 +406,10 @@ function AppointmentCard({
           </span>
         </span>
         <span
-          className={cn('w-[3px] shrink-0 rounded-full', statusDot(appt))}
+          className={cn(
+            'w-[3px] shrink-0 rounded-full',
+            statusDot(appt, remindersEnabled),
+          )}
           aria-hidden
         />
         <span className="min-w-0 flex-1">
@@ -390,11 +426,13 @@ function AppointmentCard({
           )}
           <span className="mt-2 flex items-center gap-2 empty:mt-0">
             {pendingLabel && (
-              <SyncChip failed={pendingMutations.some((m) => m.status === 'failed')}>
+              <SyncChip
+                failed={pendingMutations.some((m) => m.status === 'failed')}
+              >
                 {pendingLabel}
               </SyncChip>
             )}
-            <ReminderBadge reminder={appt.reminder} />
+            {remindersEnabled && <ReminderBadge reminder={appt.reminder} />}
           </span>
         </span>
       </button>
@@ -407,10 +445,12 @@ function AppointmentRow({
   appt,
   pendingMutations,
   onOpen,
+  remindersEnabled,
 }: {
   appt: CalendarAppointment;
   pendingMutations: PendingMutation[];
   onOpen: (a: CalendarAppointment) => void;
+  remindersEnabled: boolean;
 }) {
   const pendingLabel = getPendingAppointmentLabel(pendingMutations);
   return (
@@ -421,7 +461,10 @@ function AppointmentRow({
         className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
       >
         <span
-          className={cn('h-2.5 w-2.5 shrink-0 rounded-full', statusDot(appt))}
+          className={cn(
+            'h-2.5 w-2.5 shrink-0 rounded-full',
+            statusDot(appt, remindersEnabled),
+          )}
           aria-hidden="true"
         />
         <span className="font-heading w-[46px] shrink-0 text-sm font-semibold tracking-[-0.01em] tabular-nums">
@@ -438,13 +481,15 @@ function AppointmentRow({
           )}
         </span>
         {pendingLabel ? (
-          <SyncChip failed={pendingMutations.some((m) => m.status === 'failed')}>
+          <SyncChip
+            failed={pendingMutations.some((m) => m.status === 'failed')}
+          >
             {pendingLabel}
           </SyncChip>
         ) : (
           <StatusBadge status={appt.status} />
         )}
-        <ReminderBadge reminder={appt.reminder} />
+        {remindersEnabled && <ReminderBadge reminder={appt.reminder} />}
       </button>
     </li>
   );
