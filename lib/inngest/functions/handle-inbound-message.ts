@@ -16,8 +16,8 @@ import {
 import { sendFreeForm } from '@/lib/channels/whatsapp/client';
 import { resolveEffectivePlan } from '@/lib/billing/entitlements';
 import {
-  handOffCappedConversation,
   markCapHandoff,
+  notifyCappedConversation,
   prepareCapHandoff,
 } from '@/lib/billing/cap-handoff';
 import type { PlanId } from '@/lib/billing/plans';
@@ -675,13 +675,22 @@ export async function handleInboundMessageHandler({
 
     if (gate.status === 'at_cap') {
       // The assistant is out of conversations for the month, so this customer
-      // needs a person — no offer to make, nothing to ask. Hand the thread
-      // over and push before the customer's holding message: whatever happens
-      // to the send, the PT knows someone is waiting. This is also what keeps
-      // the 2nd..Nth message of a capped day visible — they take the
-      // manual-handling path above instead of hitting the throttled handoff.
-      await step.run('hand-off-capped-conversation', () =>
-        handOffCappedConversation({
+      // needs a person — no offer to make, nothing to ask. Push before the
+      // customer's holding message: whatever happens to the send, the PT knows
+      // someone is waiting.
+      //
+      // Notify only. The cap is transient — it clears at month rollover or the
+      // moment the PT upgrades — so it writes no conversation state at all;
+      // `ai_active` stays true and the next inbound after the cap clears takes
+      // an ordinary AI turn with no human rescue. See `notifyCappedConversation`.
+      //
+      // That is also why this step sits here rather than relying on the
+      // manual-handling nudge above: the 2nd..Nth message of a capped day still
+      // reaches the PT because every one of them hits this gate afresh (the gate
+      // compensates its day-fact away for a turned-away customer), and this push
+      // runs before the once-a-day `prepareCapHandoff` throttle can skip.
+      await step.run('notify-capped-conversation', () =>
+        notifyCappedConversation({
           accountId: context.inbound.accountId,
           conversationId: context.inbound.conversationId,
           customerId: context.inbound.customerId,

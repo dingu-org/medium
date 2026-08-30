@@ -5,12 +5,9 @@
  * of an AI turn. The PT's inbox and manual chat are never blocked; only the
  * automated AI reply is.
  *
- * Since 2026-08-14 the PT is also *told*. At the cap the assistant genuinely
- * cannot serve this customer, so unlike an out-of-scope question there is nothing
- * to offer and nothing to ask: the conversation is handed to the PT the way any
- * escalation is, and a `conversation.needs_reply` push says a customer is
- * waiting. Before that the customer got a holding message, the PT got nothing,
- * and the thread still looked AI-handled in the inbox.
+ * Since 2026-08-14 the PT is also *told*: a `conversation.needs_reply` push says
+ * a customer is waiting. Before that the customer got a holding message and the
+ * PT got nothing.
  *
  * `deterministic-cap-handoff` joins the existing deterministic model markers
  * (`deterministic-reminder-response`, `deterministic-failure-handoff`); C4 will
@@ -99,51 +96,41 @@ export async function markCapHandoff(args: {
 }
 
 /**
- * Hand a capped conversation to the PT and tell them a customer is waiting.
+ * Tell the PT a capped customer is waiting. Notify only — the conversation is
+ * left exactly as it was.
  *
- * The flag is the same one every human handoff sets (`ai_active = false`,
- * `escalation_state = 'requested'`) rather than a cap-specific state: the thread
- * is human-owned in exactly the sense the inbox, the chat banner and the Today
- * list already understand, and inventing a third value that all three would
- * treat identically buys nothing. The transition guard on `ai_active` makes a
- * repeat a no-op.
+ * This used to also write `ai_active = false, escalation_state = 'requested'`,
+ * hand-rolling the transition that `escalateConversationToHuman` owns. Two
+ * things were wrong with that. The state is *permanent* and only a human undoes
+ * it (the PT toggling the thread back from the chat screen), while the reason
+ * for it is *transient*: the cap clears at month rollover or the moment the PT
+ * upgrades. A billing condition should never need a human rescue to unwind. And
+ * a conversation-level escalation is not a billing fact to begin with — a
+ * customer at the cap asked for nothing, so nothing about the thread changed.
  *
- * That flag is also what keeps the 2nd..Nth message of a capped day from
- * vanishing. The cap gate compensates its day-fact away when it turns a customer
- * away, so every later message that day hits the cap afresh and the once-a-day
- * handoff throttle returns `skip` — which used to mean silence for everyone.
- * With the conversation human-owned, those messages take the manual-handling
- * path in `handle-inbound-message` instead, which pushes the same
- * `conversation.needs_reply` nudge. The push tag is per-conversation, so a burst
- * collapses into one notification on the device.
+ * With nothing written, resuming needs no code: once the cap clears, the next
+ * inbound finds `ai_active` still true and takes an ordinary AI turn.
+ *
+ * The 2nd..Nth message of a capped day still reaches the PT, by a different
+ * route than before. The cap gate compensates its day-fact away when it turns a
+ * customer away, so every later message that day hits the cap afresh and lands
+ * here again — ahead of the once-a-day `prepareCapHandoff` throttle that keeps
+ * the *customer* from being told twice. The push tag is per-conversation, so a
+ * burst collapses into one notification on the device.
  *
  * The push is deliberately `conversation.needs_reply` ("new message") and not
  * `conversation.escalated` ("X asked to talk to you"): at the cap the customer
- * asked for nothing. It does mean no resume offer is armed for this thread —
- * that is the honest outcome, since while the PT is at their cap the assistant
- * would only hit it again on the next message; the PT hands the thread back to
- * the assistant from the chat screen, which clears the flag as it does for any
- * escalation.
+ * asked for nothing. Push yes, bell no — the value of a "reply now" nudge decays
+ * in hours, and the durable records are the unread badge and the monthly
+ * `billing.limit_reached` event, which both already reach the PT.
  */
-export async function handOffCappedConversation(args: {
+export async function notifyCappedConversation(args: {
   accountId: string;
   conversationId: string;
   customerId: string;
   traceId?: string;
-}): Promise<{ flagged: boolean; push: DispatchResult }> {
-  const [updated] = await db
-    .update(conversations)
-    .set({ aiActive: false, escalationState: 'requested' })
-    .where(
-      and(
-        eq(conversations.id, args.conversationId),
-        eq(conversations.accountId, args.accountId),
-        eq(conversations.aiActive, true),
-      ),
-    )
-    .returning({ id: conversations.id });
-
-  const push = await dispatchPushForEvent({
+}): Promise<DispatchResult> {
+  return await dispatchPushForEvent({
     name: 'conversation.needs_reply',
     data: {
       accountId: args.accountId,
@@ -152,6 +139,4 @@ export async function handOffCappedConversation(args: {
       traceId: args.traceId,
     },
   });
-
-  return { flagged: Boolean(updated), push };
 }

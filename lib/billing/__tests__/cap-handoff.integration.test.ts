@@ -20,8 +20,8 @@ vi.mock('@/lib/notifications/push', () => ({
 
 import {
   CAP_HANDOFF_MODEL,
-  handOffCappedConversation,
   markCapHandoff,
+  notifyCappedConversation,
   prepareCapHandoff,
 } from '@/lib/billing/cap-handoff';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -193,21 +193,24 @@ describe('cap handoff — telling the professional', () => {
     return row;
   }
 
-  it('hands the thread to the professional and pushes that a customer is waiting', async () => {
-    const result = await handOffCappedConversation({
+  /**
+   * The whole of B1, in one pair of assertions: the professional is told, and
+   * that is *all* that happens.
+   *
+   * This used to also write `ai_active = false, escalation_state = 'requested'`
+   * — permanent state only a human undoes — for a reason that is transient: the
+   * cap clears at month rollover or the moment the PT upgrades. Leaving the
+   * conversation untouched is what lets the next inbound after the cap clears
+   * take an ordinary AI turn with nobody rescuing the thread.
+   */
+  it('pushes without taking the thread from the assistant', async () => {
+    const result = await notifyCappedConversation({
       accountId,
       conversationId,
       customerId,
     });
 
-    expect(result.flagged).toBe(true);
-    // The thread stops looking AI-handled: it is human-owned in exactly the
-    // sense the inbox, the chat banner and the Today list already read.
-    expect(await readConversation()).toEqual({
-      aiActive: false,
-      escalationState: 'requested',
-    });
-
+    expect(result).toMatchObject({ status: 'sent' });
     expect(sendPush).toHaveBeenCalledTimes(1);
     const [pushedAccountId, payload] = sendPush.mock.calls[0];
     expect(pushedAccountId).toBe(accountId);
@@ -218,48 +221,27 @@ describe('cap handoff — telling the professional', () => {
     // "A customer wrote", not "a customer asked to speak with you": at the cap
     // the customer asked for nothing.
     expect(payload.title).toBe('Mesazh i ri');
-  });
 
-  // The gate compensates its day-fact away when it turns a customer away, so
-  // every later message that day hits the cap afresh and the once-a-day handoff
-  // throttle returns `skip`. That used to mean silence for everyone; the flag is
-  // what keeps the professional seeing a waiting customer.
-  it('leaves the professional owning the thread for the rest of a capped day', async () => {
-    const first = await seedInbound('Message one');
-    await prepareCapHandoff({
-      inbound: first,
-      timezone: 'UTC',
-      instant: DAY_ONE,
-    });
-    await handOffCappedConversation({ accountId, conversationId, customerId });
-    await markCapHandoff({ accountId, conversationId, instant: DAY_ONE });
-
-    const second = await seedInbound('Message two, same day');
-    const repeat = await prepareCapHandoff({
-      inbound: second,
-      timezone: 'UTC',
-      instant: new Date(DAY_ONE.getTime() + HOUR),
-    });
-
-    expect(repeat).toMatchObject({ action: 'skip' });
-    expect(await countHandoffReplies()).toBe(1);
+    // The thread is exactly as the assistant left it.
     expect(await readConversation()).toEqual({
-      aiActive: false,
-      escalationState: 'requested',
+      aiActive: true,
+      escalationState: 'idle',
     });
   });
 
-  it('is a no-op flag once the thread is already human-owned, and still pushes', async () => {
-    await handOffCappedConversation({ accountId, conversationId, customerId });
-    const again = await handOffCappedConversation({
-      accountId,
-      conversationId,
-      customerId,
-    });
+  // The 2nd..Nth message of a capped day lands here again — the gate
+  // compensates its day-fact away for a turned-away customer, so every later
+  // message hits the cap afresh. There is no flag left to be a no-op about:
+  // each one pushes, and the per-conversation tag collapses the burst on the
+  // device.
+  it('pushes again on a repeat, and still leaves the thread alone', async () => {
+    await notifyCappedConversation({ accountId, conversationId, customerId });
+    await notifyCappedConversation({ accountId, conversationId, customerId });
 
-    expect(again.flagged).toBe(false);
-    // A customer is waiting either way, and the per-conversation push tag
-    // collapses the burst on the device.
     expect(sendPush).toHaveBeenCalledTimes(2);
+    expect(await readConversation()).toEqual({
+      aiActive: true,
+      escalationState: 'idle',
+    });
   });
 });

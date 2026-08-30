@@ -18,13 +18,14 @@ vi.mock('@/lib/events/outbox', () => ({
 
 import { APICallError } from 'ai';
 import { MockLanguageModelV3 } from 'ai/test';
-import { addHours, subHours } from 'date-fns';
+import { addHours, subHours, subMonths } from 'date-fns';
 import { and, eq } from 'drizzle-orm';
 import { NonRetriableError } from 'inngest';
 import { db } from '@/lib/db';
 import {
   appointments,
   availabilityRules,
+  conversationDays,
   conversations,
   eventOutbox,
   events,
@@ -35,7 +36,9 @@ import {
   whatsappConnections,
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
-import { handOffCappedConversation } from '@/lib/billing/cap-handoff';
+import { CAP_HANDOFF_MODEL } from '@/lib/billing/cap-handoff';
+import { getPlan } from '@/lib/billing/plans';
+import { conversationDayKeys } from '@/lib/billing/usage';
 import { runTurnCore } from '@/lib/conversation/engine';
 import { ConversationEngineError } from '@/lib/conversation/errors';
 import {
@@ -68,7 +71,7 @@ import {
   sendInboundReply,
   type InboundClaim,
 } from '../handle-inbound-message';
-import { DAY, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
+import { DAY, MINUTE, testNow, testNowUtc, zonedTime } from '@/tests/support/clock';
 
 // The booking turn below books against a Monday-only availability rule, so the
 // fixture needs a real Monday — derived, and a week out so the booking is in the
@@ -304,36 +307,6 @@ describe('handleInboundMessage cores', () => {
 
     const context = await loadInboundJobContext({
       messageId: inboundMessageId,
-      accountId,
-      conversationId,
-    });
-
-    expect(context?.aiActive).toBe(false);
-    expect(context?.manualHandling).toBe(true);
-  });
-
-  // The 2nd..Nth message of a capped day. The gate compensates its day-fact
-  // away for a turned-away customer, so each later message hits the cap afresh
-  // and the once-a-day handoff throttle skips — which used to be silence for
-  // everyone. Owning the thread is what turns those messages into the
-  // manual-reply nudge instead.
-  it('flags manual handling for the messages that follow a cap handoff', async () => {
-    await handOffCappedConversation({ accountId, conversationId, customerId });
-
-    const [second] = await db
-      .insert(messages)
-      .values({
-        accountId,
-        conversationId,
-        externalId: `wamid.IN.CAP.${Date.now()}.${++sequence}`,
-        role: 'customer',
-        channel: 'whatsapp',
-        content: 'Jam ende duke pritur',
-      })
-      .returning({ id: messages.id });
-
-    const context = await loadInboundJobContext({
-      messageId: second.id,
       accountId,
       conversationId,
     });
@@ -1627,6 +1600,199 @@ describe('handleInboundMessage cores', () => {
         .where(eq(conversations.id, conversationId));
       expect(conversation.aiActive).toBe(true);
       expect(conversation.escalationState).not.toBe('requested');
+    });
+  });
+  /**
+   * The cap is a *transient* condition — it clears at month rollover, or the
+   * moment the professional upgrades — so hitting it now writes no conversation
+   * state at all. It used to hand-roll `ai_active = false, escalation_state =
+   * 'requested'`: permanent state that only the professional toggling the
+   * thread back could undo, for a reason that undoes itself.
+   *
+   * Both tests drive the shipped handler through the step shim, so the step
+   * list the run actually contains is the assertion. The two reminder steps in
+   * every list are the suite-wide `REMINDERS_ENABLED=true` from
+   * `vitest.config.ts`; no reminder is seeded, so they claim nothing.
+   */
+  describe('a capped conversation', () => {
+    const FREE_LIMIT = getPlan('free').conversationsPerMonth;
+    // Two instants one calendar month apart, both derived from the run's own
+    // clock: what these exercise is the *rollover*, never a date.
+    const AFTER_ROLLOVER = testNowUtc({ dayOfMonth: 15 });
+    const AT_CAP = subMonths(AFTER_ROLLOVER, 1);
+
+    beforeEach(async () => {
+      await db.delete(events).where(eq(events.accountId, accountId));
+      await db
+        .delete(conversationDays)
+        .where(eq(conversationDays.accountId, accountId));
+      // Metering keys the month off the professional's timezone.
+      await db
+        .update(accounts)
+        .set({ timezone: 'UTC', plan: 'free' })
+        .where(eq(accounts.id, accountId));
+
+      // Spend the whole month on other customers, so the fixture's own day-fact
+      // is the one that tips the gate over.
+      const { localDay, monthKey } = conversationDayKeys(AT_CAP, 'UTC');
+      const filler = await db
+        .insert(customers)
+        .values(
+          Array.from({ length: FREE_LIMIT }, (_, index) => {
+            const phone = `44770091${String(index).padStart(4, '0')}`;
+            return { accountId, name: `Filler ${index}`, phone, waId: phone };
+          }),
+        )
+        .returning({ id: customers.id });
+      await db.insert(conversationDays).values(
+        filler.map((customer) => ({
+          accountId,
+          customerId: customer.id,
+          localDay,
+          monthKey,
+          firstMessageId: crypto.randomUUID(),
+        })),
+      );
+
+      // The metering instant is the customer message's own timestamp, not the
+      // wall clock, so dating the message is what puts it inside the capped
+      // month.
+      await db
+        .update(messages)
+        .set({ createdAt: AT_CAP })
+        .where(eq(messages.id, inboundMessageId));
+    });
+
+    afterAll(async () => {
+      await db
+        .delete(conversationDays)
+        .where(eq(conversationDays.accountId, accountId));
+    });
+
+    /** Static holding messages actually sent to the customer. */
+    async function holdingMessages() {
+      return await db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.accountId, accountId),
+            eq(messages.model, CAP_HANDOFF_MODEL),
+          ),
+        );
+    }
+
+    /** The counts-only metric row `dispatchPushForEvent` leaves behind. */
+    async function pushDispatches() {
+      return await db
+        .select({ payload: events.payload })
+        .from(events)
+        .where(
+          and(eq(events.accountId, accountId), eq(events.type, 'push.dispatched')),
+        );
+    }
+
+    async function threadState() {
+      const [row] = await db
+        .select({
+          aiActive: conversations.aiActive,
+          escalationState: conversations.escalationState,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      return row;
+    }
+
+    it('still pushes for a later message the same capped day, and sends no second holding message', async () => {
+      // Today's holding message already went out, so `prepareCapHandoff`
+      // throttles this one. This is the path that used to lean on the thread
+      // having been taken from the assistant: the follow-up then reached the
+      // professional through the manual-handling branch. It hits the cap gate
+      // afresh instead — the gate compensates its day-fact away for a
+      // turned-away customer — and the push happens there, ahead of the
+      // throttle.
+      await db
+        .update(conversations)
+        .set({ limitHandoffAt: AT_CAP })
+        .where(eq(conversations.id, conversationId));
+
+      const { ran, result } = await runHandler();
+
+      expect(ran).toEqual([
+        'load-context',
+        'resolve-turn-precedence',
+        'handle-reminder-response',
+        'check-conversation-cap',
+        'notify-capped-conversation',
+        'prepare-cap-handoff',
+      ]);
+      expect(result).toEqual({ capped: true, handoffSent: false });
+
+      // The customer is not told twice...
+      expect(await holdingMessages()).toHaveLength(0);
+      // ...the professional is told anyway...
+      const dispatches = await pushDispatches();
+      expect(dispatches).toHaveLength(1);
+      expect(dispatches[0].payload).toMatchObject({
+        accountId,
+        sourceEvent: 'conversation.needs_reply',
+      });
+      // ...and the assistant still owns the thread.
+      expect(await threadState()).toEqual({
+        aiActive: true,
+        escalationState: 'idle',
+      });
+    });
+
+    it('answers by itself again once the cap clears', async () => {
+      const capped = await runHandler();
+
+      expect(capped.ran).toEqual([
+        'load-context',
+        'resolve-turn-precedence',
+        'handle-reminder-response',
+        'check-conversation-cap',
+        'notify-capped-conversation',
+        'prepare-cap-handoff',
+        'send-cap-handoff',
+      ]);
+      // Turned away, but nothing was written down about it.
+      expect(await threadState()).toEqual({
+        aiActive: true,
+        escalationState: 'idle',
+      });
+
+      // The month rolls over, and that is the only thing that happens: nobody
+      // toggles the thread back, nothing repairs it. The next message is simply
+      // dated in a month whose conversation count starts at zero.
+      const [next] = await db
+        .insert(messages)
+        .values({
+          accountId,
+          conversationId,
+          externalId: `wamid.IN.ROLLOVER.${Date.now()}.${++sequence}`,
+          role: 'customer',
+          channel: 'whatsapp',
+          content: 'A keni kohë të hënën?',
+          createdAt: AFTER_ROLLOVER,
+        })
+        .returning({ id: messages.id });
+      inboundMessageId = next.id;
+
+      const { ran } = await runHandler();
+
+      // An ordinary AI turn — no cap steps, no human in the loop.
+      expect(ran).toEqual([
+        'load-context',
+        'resolve-turn-precedence',
+        'handle-reminder-response',
+        'check-conversation-cap',
+        'run-ai-turn',
+      ]);
+      expect(await threadState()).toEqual({
+        aiActive: true,
+        escalationState: 'idle',
+      });
     });
   });
 });
