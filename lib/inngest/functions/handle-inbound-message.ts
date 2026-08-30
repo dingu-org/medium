@@ -561,6 +561,38 @@ export async function handleInboundMessageHandler({
   // the thread gets the nudge, not an assistant talking over them) and before
   // the cap gate (no model round happened, so nothing is metered).
   if (nonText) {
+    // Every non-text inbound tells the professional, before any branch below
+    // can decide the customer hears nothing. Until now a photo produced a
+    // customer-facing notice and no professional-facing signal at all, and the
+    // *second* photo of the day produced nothing for anyone: the notice is
+    // throttled to one per conversation per day, so silence on both sides. The
+    // push is unconditional here for that reason — the throttled path and the
+    // globally-paused path are exactly the ones that need it most.
+    //
+    // No new event type. `conversation.needs_reply` ("Mesazh i ri — X të
+    // dërgoi një mesazh") is accurate: the professional opens the thread and
+    // reads `[foto]` / `[mesazh zanor]` for themselves. It also maps to the
+    // existing `manualReply` preference, so this needs no Settings toggle and
+    // no `NOTIFICATION_TYPES` entry.
+    //
+    // Push yes, bell no: this is a "reply now" nudge whose value decays in
+    // hours, and the durable record is the unread badge the webhook's
+    // `messages` row already writes. The per-conversation device tag
+    // (`conversation-${id}-reply`) collapses a burst of media into one
+    // notification, so this cannot spam. Non-text still never sets
+    // `aiActive = false` — notifying and stopping the AI are independent.
+    await step.run('notify-non-text', () =>
+      dispatchPushForEvent({
+        name: 'conversation.needs_reply',
+        data: {
+          accountId: context.inbound.accountId,
+          conversationId: context.inbound.conversationId,
+          customerId: context.inbound.customerId,
+          traceId: event.data.traceId,
+        },
+      }),
+    );
+
     // The engine is the single skip choke point for text; this branch never
     // reaches it, so it owns the same line for a globally paused assistant.
     if (context.assistantPaused) {

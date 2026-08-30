@@ -43,6 +43,7 @@ import {
   handoffOfferMessage,
   HANDOFF_ACCEPTED_MODEL,
 } from '@/lib/conversation/handoff-offer';
+import { NON_TEXT_NOTICE_MODEL } from '@/lib/conversation/non-text';
 import type { InboundMessage } from '@/lib/conversation/types';
 import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { getNotificationData } from '@/lib/notifications/query';
@@ -156,6 +157,63 @@ afterEach(() => {
 afterAll(async () => {
   if (accountId) await createServiceClient().auth.admin.deleteUser(accountId);
 });
+
+/** Thrown by the step shim to end a run at its first terminal step. */
+class StepStop extends Error {}
+
+/**
+ * The steps past which a run leaves this process: it sends to WhatsApp, or
+ * hands the message to the model. The shim stops at whichever comes first, so
+ * no test driving the whole handler can make a network call however a gate
+ * behaves.
+ */
+const TERMINAL_STEPS = new Set([
+  'run-ai-turn',
+  'run-reminder-ai-turn',
+  'send-reminder-response',
+  'send-non-text-notice',
+  'send-cap-handoff',
+  'send-outbound',
+]);
+
+/**
+ * Drives the shipped handler — `handleInboundMessageHandler`, the very function
+ * handed to `inngest.createFunction` — rather than a restatement of its
+ * branching, which could drift from the lines it claims to track. Every step
+ * runs for real; the names it recorded are the assertion, because a gate's
+ * whole effect is which steps the run contains.
+ *
+ * A run that stops at a terminal step reports `result: undefined`; a run that
+ * ends on its own — a skip, or a throttled no-op that sends nothing — reports
+ * what the handler returned, which is itself part of what these tests check.
+ */
+async function runHandler(
+  data: Record<string, unknown> = {},
+): Promise<{ ran: string[]; result: unknown }> {
+  const ran: string[] = [];
+  const step = {
+    run: async (name: string, fn: () => unknown) => {
+      ran.push(name);
+      if (TERMINAL_STEPS.has(name)) throw new StepStop(name);
+      return await fn();
+    },
+  };
+
+  try {
+    const result = await handleInboundMessageHandler({
+      event: {
+        name: 'message.received',
+        data: { messageId: inboundMessageId, accountId, conversationId, ...data },
+      },
+      step,
+      runId: '01JRUNSTEPSHIM',
+    } as unknown as Parameters<typeof handleInboundMessageHandler>[0]);
+    return { ran, result };
+  } catch (error) {
+    if (!(error instanceof StepStop)) throw error;
+    return { ran, result: undefined };
+  }
+}
 
 describe('handleInboundMessage cores', () => {
   it('loads authoritative tenant and delivery context', async () => {
@@ -1393,60 +1451,6 @@ describe('handleInboundMessage cores', () => {
       return { appointmentId: appointment.id };
     }
 
-    /** Thrown by the step shim to end a run at its first terminal step. */
-    class StepStop extends Error {}
-
-    /**
-     * The steps past which a run leaves this process: it sends to WhatsApp, or
-     * hands the message to the model. The shim stops at whichever comes first,
-     * so no test here can make a network call however the gate behaves.
-     */
-    const TERMINAL_STEPS = new Set([
-      'run-ai-turn',
-      'run-reminder-ai-turn',
-      'send-reminder-response',
-      'send-non-text-notice',
-      'send-cap-handoff',
-      'send-outbound',
-    ]);
-
-    /**
-     * Drives the shipped handler — `handleInboundMessageHandler`, the very
-     * function handed to `inngest.createFunction` — rather than a restatement
-     * of its gate, which could drift from the line it claims to track. Every
-     * step runs for real; the names it recorded are the assertion, because the
-     * gate's whole effect is which steps the run contains:
-     * `resolve-turn-precedence` and `handle-reminder-response` are there or
-     * they are not, and the terminal step names which path the run committed
-     * to.
-     */
-    async function runHandler(): Promise<string[]> {
-      const ran: string[] = [];
-      const step = {
-        run: async (name: string, fn: () => unknown) => {
-          ran.push(name);
-          if (TERMINAL_STEPS.has(name)) throw new StepStop(name);
-          return await fn();
-        },
-      };
-
-      try {
-        await handleInboundMessageHandler({
-          event: {
-            name: 'message.received',
-            data: { messageId: inboundMessageId, accountId, conversationId },
-          },
-          step,
-          runId: '01JRUNKILLSWITCH',
-        } as unknown as Parameters<typeof handleInboundMessageHandler>[0]);
-        throw new Error(`handler returned without a terminal step: ${ran}`);
-      } catch (error) {
-        if (!(error instanceof StepStop)) throw error;
-      }
-
-      return ran;
-    }
-
     async function bookingState(appointmentId: string) {
       const [appointment] = await db
         .select({ status: appointments.status })
@@ -1476,7 +1480,7 @@ describe('handleInboundMessage cores', () => {
       vi.stubEnv('REMINDERS_ENABLED', 'false');
       const { appointmentId } = await seedAnsweredReminder();
 
-      const ran = await runHandler();
+      const { ran } = await runHandler();
 
       // Short-circuited, not overruled: neither reminder step is in the run at
       // all, so nothing inspected the customer's words ahead of the assistant,
@@ -1499,7 +1503,7 @@ describe('handleInboundMessage cores', () => {
       vi.stubEnv('REMINDERS_ENABLED', 'true');
       const { appointmentId } = await seedAnsweredReminder();
 
-      const ran = await runHandler();
+      const { ran } = await runHandler();
 
       // The same fixture, the same handler, one env var apart: the reminder
       // steps are back, and they claim the message before the AI turn.
@@ -1516,6 +1520,113 @@ describe('handleInboundMessage cores', () => {
       expect(state.replies).toEqual([
         { model: 'deterministic-reminder-response' },
       ]);
+    });
+  });
+  /**
+   * A voice note or a photo now reaches the professional. Before this the
+   * branch was customer-facing only: the media got one Albanian notice per
+   * conversation per day and the professional got no signal at all beyond the
+   * passive unread badge — and the *second* photo of the day, which the notice
+   * throttle answers with `skip`, was silence for both sides at once.
+   *
+   * Both tests drive the shipped handler through the step shim, so what they
+   * assert is the step list the run actually contains. `push.dispatched` is
+   * the observable end of the dispatch: `dispatchPushForEvent` writes it after
+   * clearing the `manualReply` preference gate, with no push subscriptions
+   * needed (and so no network).
+   */
+  describe('a non-text inbound tells the professional', () => {
+    beforeEach(async () => {
+      await db.delete(events).where(eq(events.accountId, accountId));
+      await db
+        .update(messages)
+        .set({ content: '[foto]' })
+        .where(eq(messages.id, inboundMessageId));
+    });
+
+    /** The counts-only metric row `dispatchPushForEvent` leaves behind. */
+    async function pushDispatches() {
+      return await db
+        .select({ payload: events.payload })
+        .from(events)
+        .where(
+          and(eq(events.accountId, accountId), eq(events.type, 'push.dispatched')),
+        );
+    }
+
+    async function noticeCount() {
+      const rows = await db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.accountId, accountId),
+            eq(messages.model, NON_TEXT_NOTICE_MODEL),
+          ),
+        );
+      return rows.length;
+    }
+
+    it('pushes on the day the customer notice is sent', async () => {
+      const { ran } = await runHandler({ nonText: true });
+
+      // The push comes before the notice, not after it: nothing downstream can
+      // decide the professional hears nothing.
+      expect(ran).toEqual([
+        'load-context',
+        'notify-non-text',
+        'prepare-non-text-notice',
+        'send-non-text-notice',
+      ]);
+
+      const dispatches = await pushDispatches();
+      expect(dispatches).toHaveLength(1);
+      expect(dispatches[0].payload).toMatchObject({
+        accountId,
+        sourceEvent: 'conversation.needs_reply',
+      });
+    });
+
+    it('still pushes for a second media message the same day, with no second notice', async () => {
+      // Today's notice already went out, so `prepareNonTextNotice` throttles
+      // this one — the exact path that used to end the run in total silence.
+      await db
+        .update(conversations)
+        .set({ nonTextNoticeAt: new Date() })
+        .where(eq(conversations.id, conversationId));
+
+      const { ran, result } = await runHandler({ nonText: true });
+
+      expect(ran).toEqual([
+        'load-context',
+        'notify-non-text',
+        'prepare-non-text-notice',
+      ]);
+      expect(result).toEqual({ nonText: true, noticeSent: false });
+
+      // The customer is not told twice...
+      expect(await noticeCount()).toBe(0);
+      // ...and the professional is still told, which is the whole point.
+      const dispatches = await pushDispatches();
+      expect(dispatches).toHaveLength(1);
+      expect(dispatches[0].payload).toMatchObject({
+        accountId,
+        sourceEvent: 'conversation.needs_reply',
+      });
+    });
+
+    it('leaves the assistant on — notifying is not stopping the AI', async () => {
+      await runHandler({ nonText: true });
+
+      const [conversation] = await db
+        .select({
+          aiActive: conversations.aiActive,
+          escalationState: conversations.escalationState,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      expect(conversation.aiActive).toBe(true);
+      expect(conversation.escalationState).not.toBe('requested');
     });
   });
 });

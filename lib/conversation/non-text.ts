@@ -18,6 +18,11 @@
  * The reply carries the same handoff offer the assistant makes for anything
  * out of scope (`handoff-offer.ts`), because "I cannot read this" is exactly
  * the case where a person should take over if the customer wants one.
+ *
+ * Telling the *professional* is the inbound job's own step (`notify-non-text`
+ * in `handle-inbound-message.ts`), not this module's: it fires on every
+ * non-text inbound, including the ones the day-throttle below answers with
+ * `skip`, so a second photo is never silence on both sides.
  */
 import { and, eq } from 'drizzle-orm';
 import { conversationDayKeys } from '@/lib/billing/usage';
