@@ -76,7 +76,8 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
 
 export async function isPushSubscribed(): Promise<boolean> {
   if (!isPushSupported()) return false;
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) return false;
   return (await registration.pushManager.getSubscription()) !== null;
 }
 
@@ -91,7 +92,8 @@ export async function subscribeToPush(): Promise<PushPermissionState> {
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return permission as PushPermissionState;
 
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) return 'unsupported';
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
     const key = await getVapidPublicKey();
@@ -130,7 +132,8 @@ export async function reconcilePushSubscription(): Promise<void> {
   if (Notification.permission !== 'granted') return;
   if (isPushOptedOut()) return;
 
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) return;
   let subscription = await registration.pushManager.getSubscription();
   if (subscription) {
     if (await isEndpointOwned(subscription.endpoint)) return;
@@ -158,7 +161,10 @@ export async function unsubscribeFromPush(
 ): Promise<void> {
   if (!isPushSupported()) return;
   if (options.optOut) setPushOptedOut(true);
-  const registration = await navigator.serviceWorker.ready;
+  // getRegistration(), not .ready — dev never registers a worker (see
+  // pwa-provider.tsx), and .ready then hangs forever, taking sign-out with it.
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) return;
   const subscription = await registration.pushManager.getSubscription();
   if (!subscription) return;
 
