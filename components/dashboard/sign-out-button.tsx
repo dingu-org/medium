@@ -11,23 +11,22 @@ export function SignOutMenuItem() {
   const [pending, startTransition] = useTransition();
 
   return (
-    <DropdownMenuItem asChild>
-      <button
-        type="button"
-        className="w-full cursor-pointer text-left"
-        disabled={pending}
-        onClick={() => {
-          startTransition(async () => {
-            // Same order as the settings row: revoke push while the session is
-            // still valid, then drop local data.
-            await unsubscribeFromPush().catch(() => undefined);
-            await clearPwaData().catch(() => undefined);
-            await signOut();
-          });
-        }}
-      >
-        {t.account.signOut}
-      </button>
+    <DropdownMenuItem
+      disabled={pending}
+      // onSelect (not the child button's onClick) — Radix closes/unmounts
+      // the menu on pointerup before the click event would otherwise reach
+      // an asChild button, so a nested onClick handler silently never fires.
+      onSelect={() => {
+        startTransition(async () => {
+          // Same order as the settings row: revoke push while the session is
+          // still valid, then drop local data.
+          await unsubscribeFromPush().catch(() => undefined);
+          await clearPwaData().catch(() => undefined);
+          await signOut();
+        });
+      }}
+    >
+      {t.account.signOut}
     </DropdownMenuItem>
   );
 }
