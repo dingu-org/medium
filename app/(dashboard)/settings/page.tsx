@@ -9,7 +9,6 @@ import {
   User,
 } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import { AssistantCard } from '@/components/settings/assistant-card';
 import { VersionFoot } from '@/components/settings/version-foot';
 import { GroupedList, GroupedListRow } from '@/components/ui/grouped-list';
 import { t } from '@/lib/i18n';
@@ -21,8 +20,6 @@ import {
 } from '@/lib/settings/availability-summary';
 import { createServerClient } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils';
-import { setAssistantPaused } from './assistant/actions';
-import { ProfileCard } from './profile-card';
 import { SignOutRow } from './sign-out-row';
 
 export const metadata = { title: `${t.settings.hubTitle} · Medium` };
@@ -51,10 +48,6 @@ const WA_VALUES: Record<string, string> = {
   revoked: t.settings.reconnect,
 };
 
-function cityOf(address: string): string {
-  return address.split(',').pop()?.trim() ?? '';
-}
-
 export default async function SettingsPage() {
   const supabase = await createServerClient();
   const {
@@ -68,11 +61,6 @@ export default async function SettingsPage() {
     getAvailabilityWeekdays(user.id),
   ]);
   const activeCount = services.filter((s) => s.active).length;
-  const email = user.email ?? '';
-  const profileName = snapshot.fullName || snapshot.name || email;
-  const profileSubtitle = [snapshot.title, cityOf(snapshot.address)]
-    .filter(Boolean)
-    .join(' · ');
   const waValue =
     WA_VALUES[snapshot.whatsappStatus ?? ''] ??
     t.settings.connectionBadgeNotConnected;
@@ -84,17 +72,6 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <ProfileCard
-        name={profileName}
-        subtitle={profileSubtitle || undefined}
-        email={email}
-        href="/settings/profile"
-      />
-      <AssistantCard
-        paused={snapshot.assistantPaused}
-        onToggle={setAssistantPaused}
-      />
-
       <GroupedList title={t.settings.groupPraktika}>
         <GroupedListRow
           href="/settings/profile"
