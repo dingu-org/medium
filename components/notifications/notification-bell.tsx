@@ -158,7 +158,7 @@ function FeedGroup({
   return (
     <section>
       <SectionLabel>{title}</SectionLabel>
-      <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+      <div className="border-line overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
         {items.map((item) => {
           const Icon = ICONS[item.icon];
           return (
@@ -167,7 +167,7 @@ function FeedGroup({
               type="button"
               onClick={() => onOpen(item.href)}
               className={cn(
-                'hover:bg-muted/50 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors',
+                'hover:bg-muted/50 active:bg-muted/50 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors',
                 unread && 'bg-[#fbfcfe]',
               )}
             >

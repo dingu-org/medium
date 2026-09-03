@@ -7,7 +7,6 @@ import {
   Clock,
   MessageSquare,
 } from 'lucide-react';
-import { TZDate } from '@date-fns/tz';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -28,7 +27,7 @@ import { SectionLabel } from '@/components/ui/section-label';
 import { Textarea } from '@/components/ui/textarea';
 import { queueAppointmentMutation } from '@/lib/pwa/mutation-client';
 import type { TodayAppointment, TodaySnapshot } from '@/lib/today/queries';
-import { formatWeekdayDate, t } from '@/lib/i18n';
+import { t } from '@/lib/i18n';
 
 export function TodayClient({
   snapshot,
@@ -51,9 +50,6 @@ export function TodayClient({
   const [cancelReason, setCancelReason] = useState('');
   const [pending, startTransition] = useTransition();
   const quiet = snapshot.attention.length === 0 && !snapshot.next;
-  const dateLabel = formatWeekdayDate(
-    new TZDate(new Date(snapshot.now), snapshot.timezone),
-  );
 
   function closeCancel() {
     setCancelTarget(null);
@@ -94,14 +90,9 @@ export function TodayClient({
         />
       )}
 
-      {/* Canvas TopBar sub line — sits right under the chrome title. */}
-      <p className="text-ink-3 -mt-1 mb-6 text-[13.5px] tracking-[-0.005em]">
-        {dateLabel}
-      </p>
-
       <section className="mb-6">
         <SectionLabel>{t.today.weekLabel}</SectionLabel>
-        <div className="flex items-center rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
+        <div className="border-line flex items-center rounded-lg border bg-card p-4 shadow-[var(--shadow-card)]">
           <WeekStat
             value={snapshot.week.messagesReceived}
             label={t.today.messages}
@@ -118,7 +109,7 @@ export function TodayClient({
 
       {quiet ? (
         <>
-          <div className="flex items-center gap-3 rounded-lg bg-[var(--success-50)] px-4 py-5 shadow-[var(--shadow-card)]">
+          <div className="border-line flex items-center gap-3 rounded-lg border bg-[var(--success-50)] px-4 py-5 shadow-[var(--shadow-card)]">
             <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-white">
               <Check
                 className="h-5 w-5 text-[var(--success-500)]"
@@ -162,7 +153,7 @@ export function TodayClient({
                 {snapshot.attention.map((item) => (
                   <div
                     key={`${item.kind}-${item.customerId}`}
-                    className="rounded-lg bg-card p-4 shadow-[var(--shadow-card)]"
+                    className="border-line rounded-lg border bg-card p-4 shadow-[var(--shadow-card)]"
                   >
                     <div className="flex gap-3">
                       <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[var(--attention-50)] text-[var(--attention-500)]">
@@ -225,7 +216,7 @@ export function TodayClient({
           {snapshot.later.length > 0 && (
             <section className="mb-6">
               <SectionLabel>Më vonë sot</SectionLabel>
-              <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+              <div className="border-line overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
                 {snapshot.later.map((appointment) => (
                   <LaterRow
                     key={appointment.id}
@@ -346,7 +337,7 @@ function NextAppointment({
     <button
       type="button"
       onClick={() => onOpen(appointment)}
-      className="hover:bg-muted/40 flex w-full items-center gap-3 rounded-lg bg-card p-4 text-left shadow-[var(--shadow-card)] transition-colors"
+      className="border-line hover:bg-muted/40 active:bg-muted/40 flex w-full items-center gap-3 rounded-lg border bg-card p-4 text-left shadow-[var(--shadow-card)] transition-colors"
     >
       <span className="flex w-16 shrink-0 flex-col items-start">
         <span className="font-heading text-[26px] leading-none font-semibold tracking-[-0.03em] tabular-nums whitespace-nowrap">
@@ -382,7 +373,7 @@ function LaterRow({
     <button
       type="button"
       onClick={() => onOpen(appointment)}
-      className="hover:bg-muted/40 flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left transition-colors"
+      className="hover:bg-muted/40 active:bg-muted/40 flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left transition-colors"
     >
       <span className="font-heading w-[46px] shrink-0 text-sm font-semibold tracking-[-0.02em] tabular-nums whitespace-nowrap">
         {appointment.startLabel}

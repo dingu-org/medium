@@ -41,7 +41,7 @@ export function PlanCard({ snapshot }: { snapshot: BillingSnapshot }) {
   const attention = snapshot.state === 'grace' || snapshot.state === 'expiring';
 
   return (
-    <div className="rounded-lg bg-card p-5 shadow-[var(--shadow-card)]">
+    <div className="border-line rounded-lg border bg-card p-5 shadow-[var(--shadow-card)]">
       <div className="flex items-center justify-between">
         <span className="text-[11.5px] font-bold tracking-[0.07em] uppercase text-ink-3">
           {t.billing.title}

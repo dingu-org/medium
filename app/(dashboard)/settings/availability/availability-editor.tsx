@@ -530,7 +530,7 @@ function TimezoneSheet({
                   <button
                     type="button"
                     onClick={() => onPick(tz)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/60"
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/60 active:bg-muted/60"
                   >
                     <span
                       className={cn(

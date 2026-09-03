@@ -23,8 +23,8 @@ export function RoundButton({
   const classes = cn(
     'relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-foreground transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/20 disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-5',
     plain
-      ? 'bg-transparent hover:bg-muted'
-      : 'bg-card shadow-[var(--shadow-card)] hover:bg-[#f7f7f4]',
+      ? 'bg-transparent hover:bg-muted active:bg-muted'
+      : 'border-line bg-card border shadow-[var(--shadow-card)] hover:bg-[#f7f7f4] active:bg-[#f7f7f4]',
     className,
   );
   // Slot.Root needs exactly one child, so `dot` only renders on the plain

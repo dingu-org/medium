@@ -22,7 +22,7 @@ export function GroupedList({
           {title}
         </p>
       )}
-      <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:inset-x-4 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-sep">
+      <div className="border-line overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-card)] [&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:inset-x-4 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-sep">
         {children}
       </div>
       {footer && (
@@ -108,7 +108,7 @@ export function GroupedListRow({
   );
   const rowClassName = cn(
     'flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left',
-    interactive && 'transition-colors hover:bg-muted/60',
+    interactive && 'transition-colors hover:bg-muted/60 active:bg-muted/60',
     className,
   );
 

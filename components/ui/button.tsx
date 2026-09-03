@@ -9,20 +9,20 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-[var(--shadow-glow)] [a]:hover:bg-[#3552e5] hover:bg-[#3552e5]",
+        default: "bg-primary text-primary-foreground shadow-[var(--shadow-glow)] [a]:hover:bg-[#3552e5] hover:bg-[#3552e5] active:bg-[#3552e5]",
         outline:
-          "bg-card text-foreground shadow-[var(--shadow-card)] hover:bg-[#f7f7f4] aria-expanded:bg-[#f7f7f4] aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border-line bg-card text-foreground shadow-[var(--shadow-card)] hover:bg-[#f7f7f4] active:bg-[#f7f7f4] aria-expanded:bg-[#f7f7f4] aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 dark:active:bg-input/50",
         secondary:
-          "bg-[#f1f1ee] text-secondary-foreground hover:bg-[var(--neutral-150)] aria-expanded:bg-[#f1f1ee] aria-expanded:text-secondary-foreground",
+          "bg-[#f1f1ee] text-secondary-foreground hover:bg-[var(--neutral-150)] active:bg-[var(--neutral-150)] aria-expanded:bg-[#f1f1ee] aria-expanded:text-secondary-foreground",
         tinted:
-          "bg-[var(--brand-50)] text-[var(--brand-600)] hover:bg-[#dde4ff] aria-expanded:bg-[#dde4ff]",
-        dark: "bg-dock text-white hover:bg-[var(--neutral-800)]",
+          "bg-[var(--brand-50)] text-[var(--brand-600)] hover:bg-[#dde4ff] active:bg-[#dde4ff] aria-expanded:bg-[#dde4ff]",
+        dark: "bg-dock text-white hover:bg-[var(--neutral-800)] active:bg-[var(--neutral-800)]",
         ghost:
-          "text-foreground hover:bg-muted aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "text-foreground hover:bg-muted active:bg-muted aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50 dark:active:bg-muted/50",
         "ghost-danger":
-          "text-destructive hover:bg-[var(--danger-50)] aria-expanded:bg-[var(--danger-50)]",
+          "text-destructive hover:bg-[var(--danger-50)] active:bg-[var(--danger-50)] aria-expanded:bg-[var(--danger-50)]",
         destructive:
-          "bg-destructive text-white shadow-[var(--shadow-card)] hover:bg-[var(--danger-600)] focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/90 dark:hover:bg-destructive dark:focus-visible:ring-destructive/40",
+          "bg-destructive text-white shadow-[var(--shadow-card)] hover:bg-[var(--danger-600)] active:bg-[var(--danger-600)] focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/90 dark:hover:bg-destructive dark:active:bg-destructive dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

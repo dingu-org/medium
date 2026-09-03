@@ -81,7 +81,6 @@ export function AssistantIdentity({
     <>
       <GroupedList
         title={t.settings.assistantIdentityGroup}
-        footer={t.settings.assistantIdentityFooter}
         className={cn(!online && 'pointer-events-none opacity-55')}
       >
         <GroupedListRow
@@ -101,11 +100,11 @@ export function AssistantIdentity({
       </GroupedList>
 
       {locked && (
-        <div className="border-border bg-card rounded-lg border p-4">
+        <div className="border-line rounded-lg border bg-card p-4 shadow-[var(--shadow-card)]">
           <p className="text-ink-2 text-[13px] leading-5">
             {t.billing.gateIdentity}
           </p>
-          <Button asChild size="sm" className="mt-3">
+          <Button asChild className="mt-3 w-full shadow-none">
             <Link href="/settings/billing">{t.billing.gateCta}</Link>
           </Button>
         </div>

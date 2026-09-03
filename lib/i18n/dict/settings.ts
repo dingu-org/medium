@@ -215,8 +215,6 @@ export const settings = {
 
   // Assistant identity (Asistenti screen — Identiteti group)
   assistantIdentityGroup: 'Identiteti',
-  assistantIdentityFooter:
-    'Kur klienti kërkon të flasë me ty — ose Medium nuk kupton — biseda kalon te ti automatikisht.',
   assistantGreetingRow: 'Prezantimi',
   assistantValueUnset: 'Pa vendosur',
   assistantNameHelp: 'Emri me të cilin Medium u prezantohet pacientëve.',

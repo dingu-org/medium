@@ -70,7 +70,7 @@ export function DevicePushCard() {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-3 rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
+      <div className="border-line flex items-center gap-3 rounded-lg border bg-card p-4 shadow-[var(--shadow-card)]">
         <span
           className="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[var(--brand-50)]"
           aria-hidden="true"

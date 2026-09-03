@@ -366,7 +366,7 @@ function QuickAct({
         href={href}
         target={external && !href.startsWith('tel:') ? '_blank' : undefined}
         rel={external ? 'noreferrer' : undefined}
-        className={cn(classes, 'hover:bg-muted/50 transition-colors')}
+        className={cn(classes, 'hover:bg-muted/50 active:bg-muted/50 transition-colors')}
       >
         {inner}
       </a>
@@ -403,7 +403,7 @@ function AppointmentList({
       {appointments.length === 0 ? (
         <p className="text-ink-3 px-1 text-sm">{empty}</p>
       ) : (
-        <div className="bg-card [&>*+*]:border-sep overflow-hidden rounded-lg shadow-[var(--shadow-card)] [&>*+*]:border-t">
+        <div className="border-line bg-card [&>*+*]:border-sep overflow-hidden rounded-lg border shadow-[var(--shadow-card)] [&>*+*]:border-t">
           {appointments.map((appointment) => {
             const zoned = new TZDate(new Date(appointment.startsAt), timezone);
             return (
@@ -411,7 +411,7 @@ function AppointmentList({
                 key={appointment.id}
                 type="button"
                 onClick={() => onOpen(appointment)}
-                className="hover:bg-muted/50 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
+                className="hover:bg-muted/50 active:bg-muted/50 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
               >
                 <span className="min-w-0 flex-1">
                   <span

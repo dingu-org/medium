@@ -53,7 +53,7 @@ export function TemplatePreview({ status }: { status: TplStatus }) {
   const meta = STATUS_META[status ?? 'preparing'];
   const Icon = meta.icon;
   return (
-    <div className="rounded-lg bg-card p-4 shadow-[var(--shadow-card)]">
+    <div className="border-line rounded-lg border bg-card p-4 shadow-[var(--shadow-card)]">
       <div className="mb-3 flex items-center gap-2">
         <WhatsAppMark size={15} />
         <span className="text-[11.5px] font-bold uppercase tracking-[0.07em] text-ink-3">

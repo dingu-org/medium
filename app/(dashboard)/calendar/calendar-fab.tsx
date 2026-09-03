@@ -343,7 +343,7 @@ function AppointmentForm({
                     <button
                       type="button"
                       onClick={() => setSelected(p)}
-                      className="border-border hover:bg-muted/50 flex min-h-11 w-full items-center rounded-md border px-4 py-2 text-left text-sm"
+                      className="border-border hover:bg-muted/50 active:bg-muted/50 flex min-h-11 w-full items-center rounded-md border px-4 py-2 text-left text-sm"
                     >
                       <span className="font-medium">{p.name}</span>{' '}
                       <span className="text-muted-foreground">{p.phone}</span>
@@ -446,7 +446,7 @@ function MenuItem({
     <button
       type="button"
       onClick={onClick}
-      className="border-line hover:bg-muted/50 flex w-full items-center gap-3 rounded-[12px] border bg-card px-4 py-3 text-left transition-colors"
+      className="border-line hover:bg-muted/50 active:bg-muted/50 flex w-full items-center gap-3 rounded-[12px] border bg-card px-4 py-3 text-left transition-colors"
     >
       <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[10px] bg-[var(--brand-50)]">
         <Icon className="text-primary h-[19px] w-[19px]" aria-hidden="true" />

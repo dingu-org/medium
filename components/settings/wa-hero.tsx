@@ -14,7 +14,7 @@ export function WAHero({
   state?: ChannelChipState;
 }) {
   return (
-    <div className="mb-6 rounded-lg bg-card p-5 text-center shadow-[var(--shadow-card)]">
+    <div className="border-line mb-6 rounded-lg border bg-card p-5 text-center shadow-[var(--shadow-card)]">
       <div className="mb-3 flex justify-center">
         <span className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--success-50)]">
           <WhatsAppMark size={26} />

@@ -77,7 +77,7 @@ export default async function BillingSettingsPage({
         <PlanCard snapshot={snapshot} />
 
         {/* Usage meters — capacity, never punitive. */}
-        <section className="bg-card rounded-lg p-4 shadow-[var(--shadow-card)]">
+        <section className="border-line bg-card rounded-lg border p-4 shadow-[var(--shadow-card)]">
           <h2 className="text-ink-3 text-[11.5px] font-bold tracking-[0.07em] uppercase">
             {t.billing.usageTitle}
           </h2>
@@ -101,7 +101,7 @@ export default async function BillingSettingsPage({
 
         {/* Yearly-Solo reassurance — no form, they already hold the best plan. */}
         {slot.kind === 'reassure' && (
-          <section className="bg-card rounded-lg p-4 shadow-[var(--shadow-card)]">
+          <section className="border-line bg-card rounded-lg border p-4 shadow-[var(--shadow-card)]">
             <h2 className="font-heading text-foreground text-lg font-semibold">
               {t.billing.reassureTitle}
             </h2>
@@ -116,7 +116,7 @@ export default async function BillingSettingsPage({
           (slot.kind === 'upgrade' ||
             slot.kind === 'switch' ||
             slot.kind === 'renew') && (
-            <section className="bg-card rounded-lg p-4 shadow-[var(--shadow-card)]">
+            <section className="border-line bg-card rounded-lg border p-4 shadow-[var(--shadow-card)]">
               <h2 className="font-heading text-foreground text-lg font-semibold">
                 {CHECKOUT_COPY[slot.kind].title}
               </h2>
@@ -143,7 +143,7 @@ export default async function BillingSettingsPage({
               {t.billing.receiptsEmpty}
             </p>
           ) : (
-            <ul className="bg-card mt-2 overflow-hidden rounded-lg shadow-[var(--shadow-card)]">
+            <ul className="border-line bg-card mt-2 overflow-hidden rounded-lg border shadow-[var(--shadow-card)]">
               {snapshot.receipts.map((receipt) => {
                 const date = formatDate(
                   new TZDate(new Date(receipt.createdAt), snapshot.timezone),
