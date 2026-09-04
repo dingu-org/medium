@@ -3,7 +3,7 @@
 import { addDays, format } from 'date-fns';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { t, formatDate, formatDateLong, formatWeekday } from '@/lib/i18n';
+import { t, formatWeekday } from '@/lib/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
 import { ReminderBadge, StatusBadge } from '@/components/appointments/badges';
@@ -159,29 +159,17 @@ export function CalendarClient({
     );
   }
 
-  const anchorDate = dateFromKey(anchorKey);
-  const weekHasToday = weekDays.some((d) => d.isToday);
-  const weekRangeLabel = `${format(dateFromKey(weekDays[0].key), 'd')}–${formatDate(dateFromKey(weekDays[6].key))}`;
-  const headerTitle =
-    view === 'week' ? weekRangeLabel : formatWeekday(anchorDate);
-  const headerSub =
-    view === 'week'
-      ? weekHasToday
-        ? t.calendar.currentWeek
-        : null
-      : formatDateLong(anchorDate);
-
   const dayList = byDay.get(anchorKey) ?? [];
 
   return (
-    <div className="pb-16">
+    <div className="flex min-h-0 flex-1 flex-col">
       <RealtimeRefresher
         table="appointments"
         filter={`account_id=eq.${accountId}`}
       />
 
-      {/* Canvas CalHeader: seg left, true-centered title, "Sot" pill right. */}
-      <div className="relative flex min-h-11 items-center justify-between">
+      {/* Canvas CalHeader: seg left, "Sot" pill right. */}
+      <div className="flex min-h-11 shrink-0 items-center justify-between">
         <SegmentedControl
           ariaLabel={t.calendar.title}
           value={view === 'day' ? 'day' : 'week'}
@@ -192,26 +180,16 @@ export function CalendarClient({
           ]}
           className="w-[124px]"
         />
-        <div className="pointer-events-none absolute inset-y-0 right-24 left-24 flex flex-col items-center justify-center">
-          <p className="font-heading text-lg leading-tight font-semibold tracking-[-0.025em] whitespace-nowrap">
-            {headerTitle}
-          </p>
-          {headerSub && (
-            <p className="text-ink-3 mt-1 text-xs whitespace-nowrap">
-              {headerSub}
-            </p>
-          )}
-        </div>
         <button
           type="button"
           onClick={() => navigate(todayKey, view)}
-          className="text-primary bg-card relative h-9 shrink-0 rounded-full px-5 text-[13px] font-bold shadow-[var(--shadow-card)] transition-colors before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] hover:bg-[#f7f7f4]"
+          className="border-line text-primary bg-card relative h-9 shrink-0 rounded-full border px-5 text-[13px] font-bold shadow-[var(--shadow-card)] transition-colors before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] hover:bg-[#f7f7f4] active:bg-[#f7f7f4]"
         >
           {t.calendar.todayBtn}
         </button>
       </div>
 
-      <div className="mt-3 mb-4 flex items-center">
+      <div className="mt-3 mb-4 flex shrink-0 items-center">
         <button
           type="button"
           aria-label={t.calendar.prevWeek}
@@ -267,90 +245,94 @@ export function CalendarClient({
         </button>
       </div>
 
-      {view === 'day' ? (
-        <div>
-          {dayList.length === 0 ? (
-            <EmptyState
-              icon={CalendarDays}
-              title={t.calendar.emptyDayTitle}
-              description={t.calendar.emptyDayText}
-              className="pt-14"
-            />
-          ) : (
-            <>
-              <p className="flex items-baseline gap-2 px-0.5 pb-2">
-                <span className="font-heading text-lg font-semibold tracking-[-0.02em]">
-                  {t.calendar.apptCount(dayList.length)}
-                </span>
-              </p>
-              <ul className="space-y-3">
-                {dayList.map((appt) => (
-                  <AppointmentCard
-                    key={appt.id}
-                    appt={appt}
-                    pendingMutations={pendingByAppointmentId.get(appt.id) ?? []}
-                    onOpen={openAppt}
-                    remindersEnabled={remindersEnabled}
-                  />
-                ))}
-              </ul>
-              <p className="text-ink-3 px-6 pt-6 text-center text-[12.5px] leading-normal">
-                {t.calendar.restOfDayFree}
-                <br />
-                {t.calendar.mediumWillReply}
-              </p>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {appointments.length === 0 && (
-            <EmptyState
-              icon={CalendarDays}
-              title={t.calendar.weekEmpty}
-              description={t.calendar.weekEmptyDesc}
-              className="pt-14"
-            />
-          )}
+      <div className="min-h-0 flex-1 overflow-y-auto pb-[calc(6rem+max(16px,env(safe-area-inset-bottom)))]">
+        {view === 'day' ? (
+          <div>
+            {dayList.length === 0 ? (
+              <EmptyState
+                icon={CalendarDays}
+                title={t.calendar.emptyDayTitle}
+                description={t.calendar.emptyDayText}
+                className="pt-14"
+              />
+            ) : (
+              <>
+                <p className="flex items-baseline gap-2 px-0.5 pb-2">
+                  <span className="font-heading text-lg font-semibold tracking-[-0.02em]">
+                    {t.calendar.apptCount(dayList.length)}
+                  </span>
+                </p>
+                <ul className="space-y-3">
+                  {dayList.map((appt) => (
+                    <AppointmentCard
+                      key={appt.id}
+                      appt={appt}
+                      pendingMutations={
+                        pendingByAppointmentId.get(appt.id) ?? []
+                      }
+                      onOpen={openAppt}
+                      remindersEnabled={remindersEnabled}
+                    />
+                  ))}
+                </ul>
+                <p className="text-ink-3 px-6 pt-6 text-center text-[12.5px] leading-normal">
+                  {t.calendar.restOfDayFree}
+                  <br />
+                  {t.calendar.mediumWillReply}
+                </p>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {appointments.length === 0 && (
+              <EmptyState
+                icon={CalendarDays}
+                title={t.calendar.weekEmpty}
+                description={t.calendar.weekEmptyDesc}
+                className="pt-14"
+              />
+            )}
 
-          {appointments.length > 0 &&
-            weekDays.map((day) => {
-              const list = byDay.get(day.key) ?? [];
-              return (
-                <div key={day.key}>
-                  <p
-                    className={cn(
-                      'mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase',
-                      day.isToday ? 'text-primary' : 'text-ink-3',
-                    )}
-                  >
-                    {day.label}
-                    {day.isToday && ` ${t.calendar.todayLabel.toLowerCase()}`}
-                  </p>
-                  {list.length === 0 ? (
-                    <p className="text-ink-3 px-0.5 text-[13px]">
-                      — {t.calendar.free}
+            {appointments.length > 0 &&
+              weekDays.map((day) => {
+                const list = byDay.get(day.key) ?? [];
+                return (
+                  <div key={day.key}>
+                    <p
+                      className={cn(
+                        'mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase',
+                        day.isToday ? 'text-primary' : 'text-ink-3',
+                      )}
+                    >
+                      {day.label}
+                      {day.isToday && ` ${t.calendar.todayLabel.toLowerCase()}`}
                     </p>
-                  ) : (
-                    <ul className="bg-card [&>*+*]:border-sep overflow-hidden rounded-lg shadow-[var(--shadow-card)] [&>*+*]:border-t">
-                      {list.map((appt) => (
-                        <AppointmentRow
-                          key={appt.id}
-                          appt={appt}
-                          pendingMutations={
-                            pendingByAppointmentId.get(appt.id) ?? []
-                          }
-                          onOpen={openAppt}
-                          remindersEnabled={remindersEnabled}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
-        </div>
-      )}
+                    {list.length === 0 ? (
+                      <p className="text-ink-3 px-0.5 text-[13px]">
+                        — {t.calendar.free}
+                      </p>
+                    ) : (
+                      <ul className="border-line bg-card [&>*+*]:border-sep overflow-hidden rounded-lg border shadow-[var(--shadow-card)] [&>*+*]:border-t">
+                        {list.map((appt) => (
+                          <AppointmentRow
+                            key={appt.id}
+                            appt={appt}
+                            pendingMutations={
+                              pendingByAppointmentId.get(appt.id) ?? []
+                            }
+                            onOpen={openAppt}
+                            remindersEnabled={remindersEnabled}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </div>
 
       <AppointmentSheet
         appointment={selected}
@@ -388,7 +370,7 @@ function AppointmentCard({
         type="button"
         onClick={() => onOpen(appt)}
         className={cn(
-          'hover:bg-muted/40 bg-card flex w-full gap-3 rounded-lg p-4 text-left shadow-[var(--shadow-card)] transition-colors',
+          'border-line hover:bg-muted/40 active:bg-muted/40 bg-card flex w-full gap-3 rounded-lg border p-4 text-left shadow-[var(--shadow-card)] transition-colors',
           faded && 'opacity-60',
         )}
       >
@@ -458,7 +440,7 @@ function AppointmentRow({
       <button
         type="button"
         onClick={() => onOpen(appt)}
-        className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
+        className="hover:bg-muted/40 active:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
       >
         <span
           className={cn(

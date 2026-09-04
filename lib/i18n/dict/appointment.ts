@@ -21,13 +21,21 @@ export const appointment = {
   cancelTitle: 'Anulo takimin?',
   cancelBody: "Pacienti do të njoftohet menjëherë. Ky veprim s'kthehet.",
   cancelConfirm: 'Anulo takimin',
-  cancelBodyAlt: 'Anulo këtë takim? Pacienti do të njoftohet.',
   cancelBack: 'Mbrapa',
   bookedToast: 'Takimi u rezervua',
   markedComplete: 'U shënua si i kryer.',
   markedNoShow: 'U shënua si mungesë.',
   rescheduled: 'Takimi u ricaktua.',
   cancelled: 'Takimi u anulua.',
+
+  // Confirmation dialogs (detail sheet actions)
+  completeTitle: 'Shëno si të kryer?',
+  completeBody: 'Takimi do të shënohet si i kryer.',
+  noShowTitle: 'Shëno si mungesë?',
+  noShowBody: 'Takimi do të shënohet si mungesë e pacientit.',
+  rescheduleConfirmTitle: 'Ricakto takimin?',
+  rescheduleConfirmBody: (time: string) =>
+    `Takimi do të zhvendoset te ${time}.`,
 
   // Reschedule mode
   pickNewTime: 'Zgjidh një kohë të re',

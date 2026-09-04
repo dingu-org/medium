@@ -40,6 +40,9 @@ export function DashboardChrome({
   const searchParams = useSearchParams();
   const title = TITLES[pathname];
   const topLevel = Boolean(title);
+  // Calendar has its own internally scrolling list; keep the header, view
+  // controls, and week strip pinned by fixing the page to the viewport.
+  const fixedViewport = pathname === '/calendar';
 
   // The chat list keeps its ?q= search but hides the field behind the
   // canvas TopBar search button (medium4 chat/chat-list.jsx).
@@ -54,11 +57,7 @@ export function DashboardChrome({
       params.set('search', '1');
     }
     action = (
-      <RoundButton
-        asChild
-        aria-label={t.chat.searchLabel}
-        aria-expanded={open}
-      >
+      <RoundButton asChild aria-label={t.chat.searchLabel} aria-expanded={open}>
         <Link href={`/chat${params.size ? `?${params}` : ''}`} replace>
           <Search className="h-5 w-5" strokeWidth={1.7} aria-hidden />
         </Link>
@@ -75,7 +74,12 @@ export function DashboardChrome({
   }
 
   return (
-    <div className="bg-background min-h-dvh">
+    <div
+      className={cn(
+        'bg-card',
+        fixedViewport ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-dvh',
+      )}
+    >
       {topLevel && (
         <TopHeader
           title={title}
@@ -102,9 +106,11 @@ export function DashboardChrome({
       )}
       <main
         className={cn(
-          'mx-auto max-w-md',
+          'mx-auto w-full max-w-md',
           topLevel
-            ? 'px-4 pt-2 pb-[calc(6rem+max(16px,env(safe-area-inset-bottom)))]'
+            ? fixedViewport
+              ? 'flex min-h-0 flex-1 flex-col px-4 pt-2'
+              : 'px-4 pt-2 pb-[calc(6rem+max(16px,env(safe-area-inset-bottom)))]'
             : 'pt-[env(safe-area-inset-top)]',
         )}
       >

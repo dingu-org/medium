@@ -214,7 +214,7 @@ function ConversationGroup({
   return (
     <section>
       <SectionLabel danger={danger}>{title}</SectionLabel>
-      <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+      <div className="border-line overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
         {rows.map((row) => {
           const alert = row.escalation_state !== 'idle';
           // The assistant is temporarily paused (e.g. WhatsApp Business app echo)
@@ -248,7 +248,7 @@ function ConversationGroup({
             <Link
               key={row.id}
               href={`/chat/${row.id}`}
-              className="hover:bg-muted/50 flex items-center gap-3 px-4 py-3"
+              className="hover:bg-muted/50 active:bg-muted/50 flex items-center gap-3 px-4 py-3"
             >
               <InitialsAvatar
                 name={privacyName(row.customer_name)}

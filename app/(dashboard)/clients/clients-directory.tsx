@@ -103,12 +103,12 @@ export function ClientsDirectory({
               ? `${snapshot.rows.length} ${snapshot.rows.length === 1 ? 'rezultat' : 'rezultate'}`
               : `${snapshot.total} ${snapshot.total === 1 ? 'klient' : 'klientë'}`}
           </SectionLabel>
-          <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
+          <div className="border-line overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-card)] [&>*+*]:border-t [&>*+*]:border-sep">
             {snapshot.rows.map((client) => (
               <Link
                 key={client.id}
                 href={`/clients/${client.id}`}
-                className="hover:bg-muted/50 flex items-center gap-3 px-4 py-3"
+                className="hover:bg-muted/50 active:bg-muted/50 flex items-center gap-3 px-4 py-3"
               >
                 <InitialsAvatar name={client.name} size={44} />
                 <span className="min-w-0 flex-1">

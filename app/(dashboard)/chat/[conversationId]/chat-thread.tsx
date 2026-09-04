@@ -457,6 +457,7 @@ export function ChatThread({
         <NavBar
           backHref="/chat"
           title={customerName}
+          className="static border-b-0 bg-card"
           right={
             <>
               <RoundButton asChild aria-label={t.chat.callCustomer}>

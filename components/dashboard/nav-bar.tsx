@@ -28,27 +28,33 @@ export function NavBar({
   return (
     <header
       className={cn(
-        'relative flex h-16 shrink-0 items-center px-4',
+        'bg-card border-line sticky top-0 z-10 flex h-16 shrink-0 items-center border-b',
         className,
       )}
     >
-      {backHref ? (
-        <RoundButton asChild aria-label={t.actions.back}>
-          <Link href={backHref}>
+      {/* `relative` lives here rather than on <header> so the title below stays
+          pinned to this row even when a caller overrides the header's own
+          position (e.g. chat-thread's `static`) — twMerge would otherwise drop
+          `relative`/`sticky` as conflicting position utilities. */}
+      <div className="relative flex h-full w-full items-center px-4">
+        {backHref ? (
+          <RoundButton asChild aria-label={t.actions.back}>
+            <Link href={backHref}>
+              <ChevronLeft className="size-[22px]" strokeWidth={1.9} />
+            </Link>
+          </RoundButton>
+        ) : onBack ? (
+          <RoundButton onClick={onBack} aria-label={t.actions.back}>
             <ChevronLeft className="size-[22px]" strokeWidth={1.9} />
-          </Link>
-        </RoundButton>
-      ) : onBack ? (
-        <RoundButton onClick={onBack} aria-label={t.actions.back}>
-          <ChevronLeft className="size-[22px]" strokeWidth={1.9} />
-        </RoundButton>
-      ) : null}
-      <div className="pointer-events-none absolute inset-y-0 right-[60px] left-[60px] flex items-center justify-center">
-        <span className="truncate font-heading text-[17px] font-bold tracking-[-0.015em] text-foreground">
-          {title}
-        </span>
+          </RoundButton>
+        ) : null}
+        <div className="pointer-events-none absolute inset-y-0 right-[60px] left-[60px] flex items-center justify-center">
+          <span className="truncate font-heading text-[17px] font-bold tracking-[-0.015em] text-foreground">
+            {title}
+          </span>
+        </div>
+        <div className="z-[1] ml-auto flex items-center gap-2">{right}</div>
       </div>
-      <div className="z-[1] ml-auto flex items-center gap-2">{right}</div>
     </header>
   );
 }

@@ -78,7 +78,7 @@ export function ChatComposer({
                 type="button"
                 onClick={onSendTemplate}
                 disabled={templatePending}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--brand-50)] text-sm font-semibold text-[var(--brand-600)] transition-colors hover:bg-[#dde4ff] disabled:pointer-events-none disabled:opacity-40"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--brand-50)] text-sm font-semibold text-[var(--brand-600)] transition-colors hover:bg-[#dde4ff] active:bg-[#dde4ff] disabled:pointer-events-none disabled:opacity-40"
               >
                 {templatePending ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

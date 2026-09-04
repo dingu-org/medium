@@ -26,7 +26,7 @@ export function AssistantCard({
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-lg bg-card px-4 shadow-[var(--shadow-card)]',
+        'border-line flex items-center gap-3 rounded-lg border bg-card px-4 shadow-[var(--shadow-card)]',
         big ? 'py-5' : 'py-4',
       )}
     >

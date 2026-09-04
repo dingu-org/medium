@@ -77,7 +77,7 @@ export default async function WhatsAppSettingsPage() {
           variant="reconnect"
           note={t.settings.whatsappReconnectNote}
         >
-          <div className="bg-card rounded-lg p-5 text-center shadow-[var(--shadow-card)]">
+          <div className="border-line bg-card rounded-lg border p-5 text-center shadow-[var(--shadow-card)]">
             <div className="mb-3 flex justify-center">
               <span className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--danger-50)]">
                 <Phone className="text-destructive h-6 w-6" />
@@ -115,7 +115,7 @@ export default async function WhatsAppSettingsPage() {
           variant="connect"
           note={t.settings.whatsappConnectNote}
         >
-          <div className="bg-card flex flex-col gap-4 rounded-lg p-4 shadow-[var(--shadow-card)]">
+          <div className="border-line bg-card flex flex-col gap-4 rounded-lg border p-4 shadow-[var(--shadow-card)]">
             {t.settings.whatsappConnectBullets.map((b, i) => {
               const Icon = BULLET_ICONS[i];
               return (
