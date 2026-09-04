@@ -169,13 +169,19 @@ export function ConnectWhatsApp({
           config_id: configId,
           response_type: 'code',
           override_default_response_type: true,
-          // Embedded Signup v4: `extras` is purposely empty. The flow version and
-          // the coexistence intent now live in the Facebook Login for Business
-          // configuration behind `configId` — the operator ticked "WhatsApp
-          // Business app user onboarding" there on 2026-08-14 — so the v3-era
-          // `featureType` / `sessionInfoVersion` keys are gone.
-          // See docs/whatsapp/embedded-signup-v4-setup.md.
-          extras: { setup: {} },
+          // Embedded Signup v4. `featureType` selects the onboarding branch and
+          // must still be sent even though the Facebook Login for Business
+          // configuration behind `configId` also has "WhatsApp Business app user
+          // onboarding" ticked (2026-08-14): the 2026-09-04 live test proved the
+          // config toggle alone is not enough — Meta opened the standard Cloud
+          // API number picker and rejected the operator's existing Business-app
+          // number. Meta's current v4 + Coexistence docs still require this key.
+          // `setup: {}` is the v4 payload shape; the v3-era `sessionInfoVersion`
+          // stays gone. See docs/research/whatsapp-business-app-number-onboarding.md.
+          extras: {
+            featureType: 'whatsapp_business_app_onboarding',
+            setup: {},
+          },
         });
       });
 
