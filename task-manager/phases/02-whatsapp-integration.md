@@ -45,7 +45,7 @@ The remaining task lists below assume this wiring exists — any task that emits
 
 Implemented via Meta's current JS-SDK popup flow (2026-05-22 decision log), which diverges from the legacy redirect/`state` wording the items below were written against.
 
-- [x] "Connect WhatsApp Business app" button on `/settings` — runs `FB.login({ config_id, response_type:'code', override_default_response_type:true, extras:{ featureType:'whatsapp_business_app_onboarding', sessionInfoVersion:'3' } })`, captures `phone_number_id` when present plus `waba_id` from the `WA_EMBEDDED_SIGNUP` postMessage, POSTs `{ code, phoneNumberId?, wabaId, mode:'coexistence' }` (`app/(dashboard)/settings/connect-whatsapp.tsx`).
+- [x] "Connect WhatsApp Business app" button on `/settings` — runs `FB.login({ config_id, response_type:'code', override_default_response_type:true, extras:{ featureType:'whatsapp_business_app_onboarding', setup:{} } })`, captures `phone_number_id` when present plus `waba_id` and the finish event from the `WA_EMBEDDED_SIGNUP` postMessage, POSTs `{ code, phoneNumberId?, wabaId, mode }` where `mode` is derived from the finish event (`app/(dashboard)/settings/connect-whatsapp.tsx`, `whatsapp-signup.ts`). Embedded Signup v4 (`5777b0a`, 2026-08-14); `featureType` was dropped in that migration and **restored 2026-09-04** after a live run showed the popup fell back to the Cloud API number picker and rejected the existing Business-app number without it — source-level regression test in `__tests__/connect-whatsapp.test.ts`, research in `docs/research/whatsapp-business-app-number-onboarding.md`.
 - [x] Callback handler (`POST`):
   - [x] CSRF via same-origin Origin check + authenticated session (replaces the signed `state` token — the JS-SDK flow has no redirect round-trip).
   - [x] Exchange auth code for the business token — single `GET /<v>/oauth/access_token` (no separate short→long swap; that's the legacy user-token path).
@@ -57,7 +57,7 @@ Implemented via Meta's current JS-SDK popup flow (2026-05-22 decision log), whic
 - [x] Error UI per spec doc §9 — rejection / duplicate number / abandoned flow (toast keyed on the typed error kind; abandoned = no `authResponse`).
 - [x] Unique index on `whatsapp_connections.phone_number_id` (migration `0005`) backs the 409 path + the unambiguous webhook lookup.
 
-> **Deprecation — act before 2026-10-15.** Meta retires Embedded Signup v2 on that date and the migration target is v4. The client currently sends `sessionInfoVersion: '3'` (`app/(dashboard)/settings/connect-whatsapp.tsx`). Not yet owned by any phase — schedule it before the cutoff.
+> **Deprecation — migrated 2026-08-14 (`5777b0a`).** Meta retires Embedded Signup v2/v3 on 2026-10-15; the client is on v4: `extras` is `{ featureType: 'whatsapp_business_app_onboarding', setup: {} }` and the connection mode is derived from the popup's finish event. Only the v3-era `sessionInfoVersion` key was removed — `featureType` is still required to launch the Coexistence branch (proven by the 2026-09-04 live run; it was briefly dropped in the migration and restored the same day). Still unproven against a live phone — see the E2E item under Notes.
 
 ### Meta-side configuration (dashboard / Graph API — not code)
 
