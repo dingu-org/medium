@@ -1,9 +1,9 @@
 import { PolicySection } from '../policy-section';
 
 export const metadata = {
-  title: 'Si i rezervon takimet asistenti · Ndihmë · Medium',
+  title: 'Si i rezervon takimet asistenti · Ndihmë · medium',
   description:
-    'Si komunikon asistenti i Medium me klientët dhe si i rezervon, ricakton ose anulon takimet.',
+    'Si komunikon asistenti i medium me klientët dhe si i rezervon, ricakton ose anulon takimet.',
 };
 
 export default function HelpAiBookingsPage() {
@@ -14,7 +14,7 @@ export default function HelpAiBookingsPage() {
           Si i rezervon takimet asistenti
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Asistenti i Medium bisedon me klientët tuaj në WhatsApp dhe
+          Asistenti i medium bisedon me klientët tuaj në WhatsApp dhe
           menaxhon rezervimet brenda kufijve që ju vendosni.
         </p>
       </header>
@@ -55,7 +55,7 @@ export default function HelpAiBookingsPage() {
         <p>
           WhatsApp-i lejon përgjigje të lira vetëm brenda 24 orëve nga mesazhi
           i fundit i klientit. Brenda kësaj dritareje asistenti përgjigjet
-          normalisht. Pasi ajo mbyllet, biseda nuk mund të rihapet nga Medium —
+          normalisht. Pasi ajo mbyllet, biseda nuk mund të rihapet nga medium —
           klienti duhet të shkruajë sërish, dhe dritarja hapet përsëri për 24
           orë.
         </p>

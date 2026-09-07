@@ -1,9 +1,9 @@
 import { PolicySection } from '../policy-section';
 
 export const metadata = {
-  title: 'Lidh WhatsApp-in · Ndihmë · Medium',
+  title: 'Lidh WhatsApp-in · Ndihmë · medium',
   description:
-    'Si të lidhësh numrin tënd të WhatsApp Business me Medium në pak minuta.',
+    'Si të lidhësh numrin tënd të WhatsApp Business me medium në pak minuta.',
 };
 
 export default function HelpWhatsAppPage() {
@@ -15,7 +15,7 @@ export default function HelpWhatsAppPage() {
         </h1>
         <p className="text-muted-foreground text-base leading-7">
           Numri yt i WhatsApp Business është mënyra si klientët bisedojnë me
-          Medium. Lidhja zgjat vetëm pak minuta.
+          medium. Lidhja zgjat vetëm pak minuta.
         </p>
       </header>
 

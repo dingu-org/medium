@@ -1,16 +1,16 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: 'Ndihmë · Medium',
+  title: 'Ndihmë · medium',
   description:
-    'Udhëzime të shkurtra për të lidhur WhatsApp-in, caktuar oraret, kuptuar si rezervon takime asistenti i Medium dhe njohur planet e pagesat.',
+    'Udhëzime të shkurtra për të lidhur WhatsApp-in, caktuar oraret, kuptuar si rezervon takime asistenti i medium dhe njohur planet e pagesat.',
 };
 
 const guides = [
   {
     href: '/help/whatsapp',
     title: 'Lidh WhatsApp-in',
-    description: 'Si të lidhësh numrin tënd të WhatsApp Business me Medium.',
+    description: 'Si të lidhësh numrin tënd të WhatsApp Business me medium.',
   },
   {
     href: '/help/availability',
@@ -40,7 +40,7 @@ export default function HelpIndexPage() {
           Ndihmë
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Katër udhëzues të shkurtër për t&apos;u nisur me Medium.
+          Katër udhëzues të shkurtër për t&apos;u nisur me medium.
         </p>
       </header>
 

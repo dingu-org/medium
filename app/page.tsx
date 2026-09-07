@@ -5,9 +5,9 @@ import { hasSupabaseConfig } from '@/lib/supabase/env';
 import { createServerClient } from '@/lib/supabase/server';
 
 export const metadata = {
-  title: 'Medium — asistenti që rezervon takime në WhatsApp',
+  title: 'medium — asistenti që rezervon takime në WhatsApp',
   description:
-    'Medium bisedon me klientët tuaj në WhatsApp, cakton takime dhe i mban orët tuaja të mbushura — ndërsa ju qëndroni në kontroll.',
+    'medium bisedon me klientët tuaj në WhatsApp, cakton takime dhe i mban orët tuaja të mbushura — ndërsa ju qëndroni në kontroll.',
 };
 
 export default async function Home({

@@ -3,9 +3,9 @@ import { disclosedAiProviderNames } from '../../privacy/ai-providers';
 import { LanguageSwitch, LegalSection } from '../../legal-section';
 
 export const metadata: Metadata = {
-  title: 'Privacy policy · Medium',
+  title: 'Privacy policy · medium',
   description:
-    'How Medium handles account, customer, WhatsApp, and scheduling data.',
+    'How medium handles account, customer, WhatsApp, and scheduling data.',
   alternates: {
     canonical: '/en/privacy',
     languages: {
@@ -32,7 +32,7 @@ export default function EnglishPrivacyPolicyPage() {
           Privacy policy
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Medium helps appointment-based professionals — physical therapists,
+          medium helps appointment-based professionals — physical therapists,
           dentists, stylists, trainers, consultants, and others — manage
           customer conversations and appointments over WhatsApp. This policy
           explains what data we process, why we process it, and how privacy
@@ -43,12 +43,12 @@ export default function EnglishPrivacyPolicyPage() {
 
       <LegalSection title="Roles">
         <p>
-          Each professional or business using Medium is the controller for
-          their customer data. Medium acts as a processor and handles that
+          Each professional or business using medium is the controller for
+          their customer data. medium acts as a processor and handles that
           data under instructions from the business.
         </p>
         <p>
-          For account data about the business owner, Medium acts as controller
+          For account data about the business owner, medium acts as controller
           so we can provide, secure, and support the service.
         </p>
       </LegalSection>
@@ -77,7 +77,7 @@ export default function EnglishPrivacyPolicyPage() {
           <li>
             Billing and subscription data, such as the selected plan, billing
             period, expiry and renewal dates, payment status, POK order
-            identifiers, amounts, and receipts. Medium does not store card
+            identifiers, amounts, and receipts. medium does not store card
             numbers, CVV codes, or other cardholder data — those are handled
             directly by POK.
           </li>
@@ -131,8 +131,8 @@ export default function EnglishPrivacyPolicyPage() {
       <LegalSection title="Payments">
         <p>
           POK (pokpay.io) processes card payments for paid plans. Card details
-          are entered with POK and are never received or stored by Medium.
-          Medium stores only the order reference, amount, currency, status, and
+          are entered with POK and are never received or stored by medium.
+          medium stores only the order reference, amount, currency, status, and
           period returned by POK — the information needed to activate or renew
           the plan and to show receipts.
         </p>
@@ -140,7 +140,7 @@ export default function EnglishPrivacyPolicyPage() {
 
       <LegalSection title="Subprocessors">
         <p>
-          Medium relies on a small set of service providers to operate the
+          medium relies on a small set of service providers to operate the
           product:
         </p>
         <ul>
@@ -178,7 +178,7 @@ export default function EnglishPrivacyPolicyPage() {
 
       <LegalSection title="Security">
         <p>
-          Medium uses tenant-scoped database rules, TLS in transit, encrypted
+          medium uses tenant-scoped database rules, TLS in transit, encrypted
           WhatsApp access tokens, audit logging for customer-data access, and
           least-privilege application paths. Primary app data is hosted in
           EU-region infrastructure where available.
@@ -201,7 +201,7 @@ export default function EnglishPrivacyPolicyPage() {
 
       <LegalSection title="Cookies and local storage">
         <p>
-          Medium uses authentication cookies, service worker storage, IndexedDB,
+          medium uses authentication cookies, service worker storage, IndexedDB,
           and browser storage needed to keep users signed in, support offline
           dashboard access, queue offline changes, and remember PWA state. The
           current MVP does not use third-party marketing analytics cookies on

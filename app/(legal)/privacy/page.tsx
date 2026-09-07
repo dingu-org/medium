@@ -3,9 +3,9 @@ import { disclosedAiProviderNames } from './ai-providers';
 import { LanguageSwitch, LegalSection } from '../legal-section';
 
 export const metadata: Metadata = {
-  title: 'Politika e privatësisë · Medium',
+  title: 'Politika e privatësisë · medium',
   description:
-    'Si i trajton Medium të dhënat e llogarisë, të klientëve, të WhatsApp-it dhe të takimeve.',
+    'Si i trajton medium të dhënat e llogarisë, të klientëve, të WhatsApp-it dhe të takimeve.',
   alternates: {
     canonical: '/privacy',
     // The Albanian version is canonical, so it is also the x-default.
@@ -33,7 +33,7 @@ export default function PrivacyPolicyPage() {
           Politika e privatësisë
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Medium i ndihmon profesionistët me orar takimesh — fizioterapistë,
+          medium i ndihmon profesionistët me orar takimesh — fizioterapistë,
           dentistë, stilistë, trajnerë, konsulentë dhe të tjerë — të
           menaxhojnë bisedat me klientët dhe takimet përmes WhatsApp-it. Kjo
           politikë shpjegon cilat të dhëna përpunojmë, pse i përpunojmë dhe si
@@ -44,12 +44,12 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection title="Rolet">
         <p>
-          Çdo profesionist ose biznes që përdor Medium është kontrolluesi i të
-          dhënave të klientëve të vet. Medium vepron si përpunues dhe i
+          Çdo profesionist ose biznes që përdor medium është kontrolluesi i të
+          dhënave të klientëve të vet. medium vepron si përpunues dhe i
           trajton ato të dhëna sipas udhëzimeve të biznesit.
         </p>
         <p>
-          Për të dhënat e llogarisë së pronarit të biznesit, Medium vepron si
+          Për të dhënat e llogarisë së pronarit të biznesit, medium vepron si
           kontrollues, që të mund ta ofrojë, ta sigurojë dhe ta mbështesë
           shërbimin.
         </p>
@@ -79,7 +79,7 @@ export default function PrivacyPolicyPage() {
           <li>
             Të dhëna të faturimit dhe të abonimit, si plani i zgjedhur, periudha
             e faturimit, datat e skadimit dhe të rinovimit, statusi i pagesës,
-            identifikuesit e porosive POK, shumat dhe faturat. Medium nuk ruan
+            identifikuesit e porosive POK, shumat dhe faturat. medium nuk ruan
             numra kartash, kode CVV apo të dhëna të tjera të mbajtësit të kartës
             — ato trajtohen drejtpërdrejt nga POK.
           </li>
@@ -144,7 +144,7 @@ export default function PrivacyPolicyPage() {
         <p>
           POK (pokpay.io) përpunon pagesat me kartë për planet me pagesë. Të
           dhënat e kartës futen te POK dhe nuk merren e nuk ruhen kurrë nga
-          Medium. Medium ruan vetëm referencën e porosisë, shumën, monedhën,
+          medium. medium ruan vetëm referencën e porosisë, shumën, monedhën,
           statusin dhe periudhën e kthyer nga POK — informacionin e nevojshëm
           për të aktivizuar ose për të rinovuar planin dhe për të shfaqur
           faturat.
@@ -153,7 +153,7 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection title="Nënpërpunuesit">
         <p>
-          Medium mbështetet te një grup i vogël ofruesish shërbimi për ta
+          medium mbështetet te një grup i vogël ofruesish shërbimi për ta
           mbajtur produktin në punë:
         </p>
         <ul>
@@ -200,7 +200,7 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection title="Siguria">
         <p>
-          Medium përdor rregulla të bazës së të dhënave të kufizuara për çdo
+          medium përdor rregulla të bazës së të dhënave të kufizuara për çdo
           biznes, TLS gjatë transmetimit, tokena të enkriptuar aksesi për
           WhatsApp, regjistrim auditimi për aksesin te të dhënat e klientëve
           dhe rrugë aplikacioni me privilegjet më të vogla të nevojshme. Të
@@ -226,7 +226,7 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection title="Cookies dhe ruajtja lokale">
         <p>
-          Medium përdor cookie vërtetimi, ruajtje nga service worker-i,
+          medium përdor cookie vërtetimi, ruajtje nga service worker-i,
           IndexedDB dhe ruajtje në shfletues, të nevojshme për t&apos;i mbajtur
           përdoruesit të identifikuar, për të mbështetur aksesin jashtë linje te
           paneli, për të vendosur në radhë ndryshimet jashtë linje dhe për të

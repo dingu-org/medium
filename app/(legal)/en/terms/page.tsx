@@ -3,9 +3,9 @@ import { disclosedAiProviderNames } from '../../privacy/ai-providers';
 import { LanguageSwitch, LegalSection } from '../../legal-section';
 
 export const metadata: Metadata = {
-  title: 'Terms of service · Medium',
+  title: 'Terms of service · medium',
   description:
-    'Terms for using Medium, the WhatsApp scheduling assistant for appointment-based businesses.',
+    'Terms for using medium, the WhatsApp scheduling assistant for appointment-based businesses.',
   alternates: {
     canonical: '/en/terms',
     languages: {
@@ -32,7 +32,7 @@ export default function EnglishTermsPage() {
           Terms of service
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          These terms govern access to Medium, a scheduling assistant that
+          These terms govern access to medium, a scheduling assistant that
           helps businesses of any appointment-based profession manage WhatsApp
           conversations, appointments, reminders, and related dashboard
           workflows.
@@ -40,12 +40,12 @@ export default function EnglishTermsPage() {
         <LanguageSwitch href="/terms" lang="sq" label="Versioni në shqip" />
       </header>
 
-      <LegalSection title="Who may use Medium">
+      <LegalSection title="Who may use medium">
         <p>
-          Medium is for businesses and their staff, not for consumer or
+          medium is for businesses and their staff, not for consumer or
           customer self-service use. You must be allowed to act for the
           business you register and to connect the WhatsApp Business account
-          you use with Medium.
+          you use with medium.
         </p>
       </LegalSection>
 
@@ -75,7 +75,7 @@ export default function EnglishTermsPage() {
 
       <LegalSection title="WhatsApp and third-party services">
         <p>
-          Medium depends on Meta WhatsApp Business APIs, Supabase, Vercel,
+          medium depends on Meta WhatsApp Business APIs, Supabase, Vercel,
           Inngest, OpenRouter, {disclosedAiProviderNames()}, and other
           infrastructure providers. Your use of WhatsApp is also subject to
           Meta WhatsApp Business terms and policies.
@@ -89,7 +89,7 @@ export default function EnglishTermsPage() {
 
       <LegalSection title="AI and service limits">
         <p>
-          The Medium AI is designed for scheduling workflows only. It must not
+          The medium AI is designed for scheduling workflows only. It must not
           be used for professional advice specific to your service, emergency
           triage, legal advice, billing disputes, or insurance decisions.
         </p>
@@ -102,8 +102,8 @@ export default function EnglishTermsPage() {
 
       <LegalSection title="Customer data">
         <p>
-          For customer data, the business is the controller and Medium is the
-          processor. You instruct Medium to process customer data only as needed
+          For customer data, the business is the controller and medium is the
+          processor. You instruct medium to process customer data only as needed
           to provide the scheduling assistant, dashboard, reminders, support,
           security, retention, and audit-log functions.
         </p>
@@ -111,7 +111,7 @@ export default function EnglishTermsPage() {
 
       <LegalSection title="Service changes and availability">
         <p>
-          Medium is an early-stage service. Features may change, be paused, or
+          medium is an early-stage service. Features may change, be paused, or
           be removed as the product improves or as third-party platform
           requirements change. We aim to keep the service reliable, but we do
           not guarantee uninterrupted availability.
@@ -121,7 +121,7 @@ export default function EnglishTermsPage() {
       <LegalSection title="Acceptable use">
         <ul>
           <li>
-            Do not use Medium for spam, deceptive messaging, harassment, or
+            Do not use medium for spam, deceptive messaging, harassment, or
             unlawful content.
           </li>
           <li>
@@ -133,7 +133,7 @@ export default function EnglishTermsPage() {
             service.
           </li>
           <li>
-            Do not use Medium to make emergency, professional-advice, legal,
+            Do not use medium to make emergency, professional-advice, legal,
             billing, or insurance decisions.
           </li>
         </ul>
@@ -141,7 +141,7 @@ export default function EnglishTermsPage() {
 
       <LegalSection title="Plans and fees">
         <p>
-          Medium offers a free plan and a paid Solo plan. The Solo plan costs
+          medium offers a free plan and a paid Solo plan. The Solo plan costs
           2,500 ALL per month or 25,000 ALL per year (two months free),
           VAT-inclusive. The current prices, billing periods, and plan limits
           are shown in the app and may change with notice. You are responsible
@@ -197,22 +197,22 @@ export default function EnglishTermsPage() {
       <LegalSection title="Payments">
         <p>
           Card payments are processed by POK (pokpay.io). Card details are
-          entered with POK and never pass through or are stored by Medium.
+          entered with POK and never pass through or are stored by medium.
         </p>
       </LegalSection>
 
       <LegalSection title="Suspension and termination">
         <p>
-          You may stop using Medium at any time. We may suspend or terminate
+          You may stop using medium at any time. We may suspend or terminate
           access if you breach these terms, create security or legal risk,
           violate WhatsApp policies, or use the product in a way that could harm
-          customers, businesses, Medium, or third-party platforms.
+          customers, businesses, medium, or third-party platforms.
         </p>
       </LegalSection>
 
       <LegalSection title="Disclaimers and liability">
         <p>
-          Medium is provided as available and without warranties to the fullest
+          medium is provided as available and without warranties to the fullest
           extent permitted by law. We are not liable for indirect, incidental,
           special, consequential, exemplary, or lost profit damages. Nothing in
           these terms limits liability that cannot legally be limited.

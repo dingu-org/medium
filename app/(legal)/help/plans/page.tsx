@@ -4,7 +4,7 @@ import { formatLek } from '@/lib/i18n';
 import { remindersEnabled } from '@/lib/reminders/flag';
 
 export const metadata = {
-  title: 'Planet dhe pagesat · Ndihmë · Medium',
+  title: 'Planet dhe pagesat · Ndihmë · medium',
   description:
     'Çfarë përfshijnë planet Falas dhe Solo, si maten bisedat, dhe si kalon te Solo.',
 };
@@ -24,7 +24,7 @@ export default function HelpPlansPage() {
           Planet dhe pagesat
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Medium ka dy plane: Falas për të nisur dhe Solo për bizneset me më
+          medium ka dy plane: Falas për të nisur dhe Solo për bizneset me më
           shumë biseda. Këtu shpjegohet çfarë përfshin secili, si maten kufijtë
           dhe si kalon nga njëri te tjetri.
         </p>

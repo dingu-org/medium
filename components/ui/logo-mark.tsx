@@ -1,4 +1,5 @@
-/** Medium logo mark: circular "m." — ink (or light, on dark backgrounds) circle, blue dot. */
+/** medium logo mark: circular "m." — blue circle with a black dot on light
+ * backgrounds, light circle with a blue dot on dark backgrounds. */
 export function LogoMark({
   size = 46,
   variant = 'light',
@@ -6,8 +7,9 @@ export function LogoMark({
   size?: number;
   variant?: 'light' | 'dark';
 }) {
-  const circleFill = variant === 'dark' ? '#EDEDED' : '#171717';
+  const circleFill = variant === 'dark' ? '#EDEDED' : '#3B5BFE';
   const textFill = variant === 'dark' ? '#0A0A0A' : '#FFFFFF';
+  const dotFill = variant === 'dark' ? '#2E6BFF' : '#000000';
 
   return (
     <svg width={size} height={size} viewBox="0 0 220 220" aria-hidden="true">
@@ -21,7 +23,7 @@ export function LogoMark({
         fontSize="96"
         fill={textFill}
       >
-        m<tspan fill="#2E6BFF">.</tspan>
+        m<tspan fill={dotFill}>.</tspan>
       </text>
     </svg>
   );

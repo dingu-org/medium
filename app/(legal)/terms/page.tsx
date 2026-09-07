@@ -3,9 +3,9 @@ import { disclosedAiProviderNames } from '../privacy/ai-providers';
 import { LanguageSwitch, LegalSection } from '../legal-section';
 
 export const metadata: Metadata = {
-  title: 'Kushtet e shërbimit · Medium',
+  title: 'Kushtet e shërbimit · medium',
   description:
-    'Kushtet për përdorimin e Medium, asistentit të takimeve në WhatsApp për bizneset me orar takimesh.',
+    'Kushtet për përdorimin e medium, asistentit të takimeve në WhatsApp për bizneset me orar takimesh.',
   alternates: {
     canonical: '/terms',
     // The Albanian version is canonical, so it is also the x-default.
@@ -33,7 +33,7 @@ export default function TermsPage() {
           Kushtet e shërbimit
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Këto kushte rregullojnë aksesin te Medium, një asistent takimesh që i
+          Këto kushte rregullojnë aksesin te medium, një asistent takimesh që i
           ndihmon bizneset e çdo profesioni me orar takimesh të menaxhojnë
           bisedat në WhatsApp, takimet, kujtesat dhe rrjedhat përkatëse të
           punës në panel.
@@ -41,12 +41,12 @@ export default function TermsPage() {
         <LanguageSwitch href="/en/terms" lang="en" label="English version" />
       </header>
 
-      <LegalSection title="Kush mund ta përdorë Medium">
+      <LegalSection title="Kush mund ta përdorë medium">
         <p>
-          Medium është për bizneset dhe përdoruesit e tyre, jo për përdorim
+          medium është për bizneset dhe përdoruesit e tyre, jo për përdorim
           vetëshërbimi nga konsumatorët apo klientët. Ju duhet të keni të
           drejtën të veproni në emër të biznesit që regjistroni dhe të lidhni
-          llogarinë WhatsApp Business që përdorni me Medium.
+          llogarinë WhatsApp Business që përdorni me medium.
         </p>
       </LegalSection>
 
@@ -77,7 +77,7 @@ export default function TermsPage() {
 
       <LegalSection title="WhatsApp dhe shërbimet e palëve të treta">
         <p>
-          Medium varet nga API-të e Meta WhatsApp Business, Supabase, Vercel,
+          medium varet nga API-të e Meta WhatsApp Business, Supabase, Vercel,
           Inngest, OpenRouter, {disclosedAiProviderNames()} dhe nga ofrues të
           tjerë infrastrukture. Përdorimi juaj i WhatsApp-it i nënshtrohet
           gjithashtu kushteve dhe politikave të Meta WhatsApp Business.
@@ -91,7 +91,7 @@ export default function TermsPage() {
 
       <LegalSection title="Inteligjenca artificiale dhe kufijtë e shërbimit">
         <p>
-          Inteligjenca artificiale e Medium është ndërtuar vetëm për rrjedhat e
+          Inteligjenca artificiale e medium është ndërtuar vetëm për rrjedhat e
           caktimit të takimeve. Ajo nuk duhet përdorur për këshilla
           profesionale specifike për shërbimin tuaj, për triazh urgjencash,
           për këshilla ligjore, për mosmarrëveshje faturimi apo për vendime
@@ -106,8 +106,8 @@ export default function TermsPage() {
 
       <LegalSection title="Të dhënat e klientëve">
         <p>
-          Për të dhënat e klientëve, biznesi është kontrolluesi dhe Medium
-          është përpunuesi. Ju e udhëzoni Medium t&apos;i përpunojë të dhënat e
+          Për të dhënat e klientëve, biznesi është kontrolluesi dhe medium
+          është përpunuesi. Ju e udhëzoni medium t&apos;i përpunojë të dhënat e
           klientëve vetëm aq sa nevojitet për të ofruar asistentin e takimeve,
           panelin, kujtesat, mbështetjen, sigurinë, ruajtjen e të dhënave dhe
           funksionet e regjistrit të auditimit.
@@ -116,7 +116,7 @@ export default function TermsPage() {
 
       <LegalSection title="Ndryshimet dhe disponueshmëria e shërbimit">
         <p>
-          Medium është një shërbim në fazë të hershme. Funksionet mund të
+          medium është një shërbim në fazë të hershme. Funksionet mund të
           ndryshojnë, të pezullohen ose të hiqen ndërsa produkti përmirësohet
           ose ndërsa ndryshojnë kërkesat e platformave të palëve të treta.
           Synojmë ta mbajmë shërbimin të besueshëm, por nuk garantojmë
@@ -127,7 +127,7 @@ export default function TermsPage() {
       <LegalSection title="Përdorimi i pranueshëm">
         <ul>
           <li>
-            Mos e përdorni Medium për mesazhe të padëshiruara (spam), për
+            Mos e përdorni medium për mesazhe të padëshiruara (spam), për
             mesazhe mashtruese, për ngacmim ose për përmbajtje të paligjshme.
           </li>
           <li>
@@ -139,7 +139,7 @@ export default function TermsPage() {
             shërbimit.
           </li>
           <li>
-            Mos e përdorni Medium për vendime urgjence, këshillimi profesional,
+            Mos e përdorni medium për vendime urgjence, këshillimi profesional,
             ligjore, faturimi apo sigurimesh.
           </li>
         </ul>
@@ -147,7 +147,7 @@ export default function TermsPage() {
 
       <LegalSection title="Planet dhe tarifat">
         <p>
-          Medium ofron një plan falas dhe një plan me pagesë Solo. Plani Solo
+          medium ofron një plan falas dhe një plan me pagesë Solo. Plani Solo
           kushton 2.500 ALL në muaj ose 25.000 ALL në vit (dy muaj falas), me
           TVSH-në të përfshirë. Çmimet aktuale, periudhat e faturimit dhe
           kufijtë e planeve shfaqen në aplikacion dhe mund të ndryshojnë me
@@ -206,23 +206,23 @@ export default function TermsPage() {
       <LegalSection title="Pagesat">
         <p>
           Pagesat me kartë përpunohen nga POK (pokpay.io). Të dhënat e kartës
-          futen te POK dhe nuk kalojnë e nuk ruhen kurrë nga Medium.
+          futen te POK dhe nuk kalojnë e nuk ruhen kurrë nga medium.
         </p>
       </LegalSection>
 
       <LegalSection title="Pezullimi dhe ndërprerja">
         <p>
-          Ju mund ta ndaloni përdorimin e Medium në çdo kohë. Ne mund ta
+          Ju mund ta ndaloni përdorimin e medium në çdo kohë. Ne mund ta
           pezullojmë ose ta ndërpresim aksesin nëse shkelni këto kushte, nëse
           krijoni rrezik sigurie ose ligjor, nëse shkelni politikat e
           WhatsApp-it ose nëse e përdorni produktin në një mënyrë që mund të
-          dëmtojë klientët, bizneset, Medium ose platformat e palëve të treta.
+          dëmtojë klientët, bizneset, medium ose platformat e palëve të treta.
         </p>
       </LegalSection>
 
       <LegalSection title="Përjashtimet e garancive dhe përgjegjësia">
         <p>
-          Medium ofrohet ashtu siç është i disponueshëm dhe pa garanci, në masën
+          medium ofrohet ashtu siç është i disponueshëm dhe pa garanci, në masën
           më të plotë të lejuar nga ligji. Ne nuk jemi përgjegjës për dëme
           indirekte, aksidentale, të veçanta, pasuese, shembullore ose për
           humbje fitimi. Asgjë në këto kushte nuk e kufizon përgjegjësinë që nuk

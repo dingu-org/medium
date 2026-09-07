@@ -9,11 +9,11 @@ import Link from 'next/link';
  * group-wide. */
 export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="bg-background text-foreground min-h-dvh">
-      <header className="bg-background border-b">
+    <div className="bg-card text-foreground min-h-dvh">
+      <header className="bg-card border-b">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4 md:px-5">
           <Link href="/" className="font-heading inline-flex min-h-11 items-center text-base font-medium">
-            Medium
+            medium
           </Link>
           <nav className="flex items-center gap-4 text-sm [&>a]:inline-flex [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:items-center [&>a]:justify-center">
             <Link
@@ -46,7 +46,7 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
       <main className="mx-auto max-w-3xl px-4 py-10 sm:py-14 md:px-5">{children}</main>
       <footer className="border-t">
         <div className="text-muted-foreground mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm md:px-5">
-          <span>E drejta e autorit 2026 Medium</span>
+          <span>E drejta e autorit 2026 medium</span>
           <span>Kontakt: klaididingu@gmail.com</span>
         </div>
       </footer>

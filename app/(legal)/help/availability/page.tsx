@@ -1,7 +1,7 @@
 import { PolicySection } from '../policy-section';
 
 export const metadata = {
-  title: 'Cakto oraret e punës · Ndihmë · Medium',
+  title: 'Cakto oraret e punës · Ndihmë · medium',
   description:
     'Si të vendosësh orët javore dhe periudhat e bllokuara që asistenti t’i respektojë.',
 };
@@ -14,7 +14,7 @@ export default function HelpAvailabilityPage() {
           Cakto oraret e punës
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Orari yt i disponueshmërisë tregon Medium-it kur mund të rezervojë
+          Orari yt i disponueshmërisë tregon medium-it kur mund të rezervojë
           takime.
         </p>
       </header>
