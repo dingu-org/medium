@@ -2,7 +2,7 @@
 
 > Living document. Update at the end of every working session.
 
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-07
 **Current phase:** A cross-phase production-readiness hardening run is in flight on branch `prod-readiness` (Wave 1 of 5 — deadline + known defects — complete 2026-08-14 and merged into `main`; see In flight). Otherwise: Phase 12 (Pre-launch) — codeable items complete (2026-07-12); remaining work is external/manual launch verification — see Blockers + Notion; see `phases/12-pre-launch.md`. Previous: Phase 11 (Observability) — ☑ complete (2026-07-12); see `phases/11-observability.md`. Phase 9 (Web Push notifications) remains closed out to the limit of what's verifiable without a physical device. A single multi-trigger Inngest function (`dispatch-push-notification`) turns `notification.requested`, `conversation.escalated`, `conversation.resume_offered`, `wa.connection.revoked`, and `reminder.failed` into Web Push via a `sendPush` dispatcher (`web-push`, VAPID from Phase 0) that deletes 404/410 subscriptions and never logs endpoint/keys. Escalation emits a durable `conversation.escalated` event (also surfaced in the bell). Two Settings toggles (`connection`, `resumeOffer`) join the existing five; all seven gate their push. Per-browser Settings toggle + one-time post-onboarding banner, `push`/`notificationclick` service-worker handlers (verified in generated `public/sw.js`), migration `0015_phase9_push_subscription_unique` (applied to hosted dev). Remaining on Phase 9 is genuinely device-only: a real-browser permission grant + delivered/deep-linking push, iOS delivery on an installed PWA, and confirming `VAPID_*` in Vercel Preview + Production. Phase 13 remains complete and PR-review hardened.
 **Days into build:** 7
 
@@ -32,6 +32,10 @@
 Status legend: ☐ not started · ◐ in flight · ☑ complete · ⊘ skipped
 
 ---
+
+## Completed review — 2026-09-07
+
+- Directory structure and endpoint analysis complete. Reviewed all 10 HTTP route handlers and proposed staged module improvements in [directory-structure-review.md](proposals/directory-structure-review.md). All existing URLs are preserved by the proposal; external dependencies, unresolved POK webhook usage, migration/rollback rules and implementation acceptance checks are recorded. Static/document verification only; no runtime code or external settings changed. Implementation remains pending and existing phase blockers are unchanged.
 
 ## In flight
 
