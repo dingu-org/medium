@@ -3,8 +3,10 @@ import {
   CalendarCheck,
   CalendarClock,
   Check,
+  CheckCheck,
   Clock3,
   MessageCircle,
+  Phone,
   Send,
   ShieldCheck,
   Users,
@@ -21,7 +23,7 @@ import { cn } from '@/lib/utils';
 // Demo number used for the "try it on WhatsApp" CTAs — same number referenced
 // in the ops runbook (workstream A), copied literally rather than shared.
 const WA_NUMBER = '355694005556';
-const WA_PREFILL = 'Përshëndetje, dua të provoj Medium.';
+const WA_PREFILL = 'Përshëndetje, dua të provoj medium.';
 const waHref = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(WA_PREFILL)}`;
 
 const steps = [
@@ -34,7 +36,7 @@ const steps = [
   {
     num: '02',
     icon: CalendarCheck,
-    title: 'Medium përgjigjet dhe rezervon',
+    title: 'medium përgjigjet dhe rezervon',
     body: 'Asistenti propozon orë të lira, konfirmon takimin dhe e shton në kalendar — vetëm.',
   },
   {
@@ -54,7 +56,7 @@ const features = [
   {
     icon: CalendarClock,
     title: 'Rezervim automatik',
-    body: 'Medium cakton takime 24 orë në ditë, pavarësisht orarit tënd.',
+    body: 'medium cakton takime 24 orë në ditë, pavarësisht orarit tënd.',
     reminders: false,
   },
   {
@@ -66,7 +68,7 @@ const features = [
   {
     icon: Clock3,
     title: 'Orët e tua, të respektuara',
-    body: 'Cakto disponueshmërinë dhe shërbimet; Medium nuk rezervon kurrë jashtë tyre.',
+    body: 'Cakto disponueshmërinë dhe shërbimet; medium nuk rezervon kurrë jashtë tyre.',
     reminders: false,
   },
   {
@@ -79,7 +81,7 @@ const features = [
 
 export function LandingPage() {
   return (
-    <div className="bg-background text-foreground min-h-dvh">
+    <div className="bg-card text-foreground min-h-dvh">
       <SiteHeader />
       <main>
         <Hero />
@@ -96,16 +98,16 @@ export function LandingPage() {
 
 function SiteHeader() {
   return (
-    <header className="border-line/70 bg-background/95 sticky top-0 z-40 border-b backdrop-blur">
+    <header className="border-line/70 bg-card/95 sticky top-0 z-40 border-b backdrop-blur">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 md:px-5">
         <Link
           href="/"
           className="flex min-h-11 items-center gap-3"
-          aria-label="Medium"
+          aria-label="medium"
         >
           <LogoMark size={32} />
           <span className="font-heading text-lg font-semibold tracking-tight">
-            Medium
+            medium
           </span>
         </Link>
         <div className="flex items-center gap-2">
@@ -137,17 +139,17 @@ function Hero() {
             Asistenti që u përgjigjet klientëve dhe rezervon takimet e tyre.
           </h1>
           <p className="text-ink-2 mt-5 text-lg leading-relaxed">
-            Medium bisedon me klientët tuaj në WhatsApp, cakton takime dhe i
+            medium bisedon me klientët tuaj në WhatsApp, cakton takime dhe i
             mban orët tuaja të mbushura — ndërsa ju qëndroni në kontroll.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 inline-flex flex-col items-stretch gap-3">
             <Button asChild size="lg">
-              <Link href="/sign-up">Fillo tani</Link>
+              <Link href="/sign-up">Nis me krijimin e llogarisë</Link>
             </Button>
-            <Button asChild size="lg" variant="tinted">
+            <Button asChild size="lg" variant="link">
               <a href={waHref} target="_blank" rel="noopener noreferrer">
                 <WhatsAppMark size={18} />
-                Provoje në WhatsApp
+                Më pyet diçka në WhatsApp
               </a>
             </Button>
           </div>
@@ -165,44 +167,68 @@ function Hero() {
   );
 }
 
+// Dummy transcript for the phone mockup, styled after the real thread screen
+// (components/ui/chat-bubble.tsx, components/chat/status-row.tsx,
+// components/chat/composer.tsx) rather than the generic bubbles it replaced.
+const mockThread = [
+  {
+    role: 'customer',
+    time: '10:24',
+    text: 'Përshëndetje, dua një takim këtë javë.',
+  },
+  {
+    role: 'ai',
+    time: '10:24',
+    text: 'Sigurisht, Elira! Kam të lira të mërkurën në 10:00 ose të enjten në 14:30. Cila ju shkon?',
+  },
+  { role: 'customer', time: '10:25', text: 'Të enjten, ju lutem.' },
+  {
+    role: 'ai',
+    time: '10:25',
+    text: "Ju rezervova të enjten, 8 maj, ora 14:30. Do t'ju dërgojmë një kujtesë një ditë para.",
+  },
+  {
+    role: 'account',
+    time: '10:26',
+    text: 'Faleminderit, Elira — shihemi të enjten!',
+  },
+] as const;
+
 function PhoneMock() {
   return (
     <div
       className="bg-dock w-[280px] rounded-[36px] p-2 shadow-[var(--shadow-dock)]"
       aria-hidden
     >
-      <div className="bg-background relative flex h-[560px] flex-col overflow-hidden rounded-[28px]">
-        <div className="border-line bg-card flex items-center gap-3 border-b px-4 py-3 pt-7">
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-500)]">
-            <span className="font-heading text-sm font-semibold text-white">
-              M
-            </span>
-            <span className="bg-sage absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full" />
+      <div className="bg-card relative flex h-[600px] flex-col overflow-hidden rounded-[28px]">
+        <div className="border-line bg-card flex h-14 shrink-0 items-center gap-3 border-b px-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand-50)] text-[12px] font-semibold text-[var(--brand-600)]">
+            EK
           </div>
-          <div>
-            <p className="font-heading text-sm font-semibold">Medium</p>
-            <p className="text-xs text-[var(--success-500)]">në linjë</p>
-          </div>
-          <span className="ml-auto">
-            <WhatsAppMark size={18} />
-          </span>
+          <p className="font-heading min-w-0 flex-1 truncate text-[14px] font-semibold">
+            Elira Krasniqi
+          </p>
+          <Phone className="text-ink-3 h-[17px] w-[17px] shrink-0" aria-hidden />
         </div>
-        <div className="flex flex-1 flex-col gap-2 overflow-hidden p-4">
-          <ChatBubble out>Përshëndetje, dua një takim këtë javë.</ChatBubble>
-          <ChatBubble>
-            Sigurisht. Kam të lirë të mërkurën në 10:00 ose të enjten në
-            14:30. Cila ju shkon?
-          </ChatBubble>
-          <ChatBubble out>Të enjten.</ChatBubble>
-          <ChatBubble>
-            Mirë, ju kam rezervuar të enjten më 8 maj në orën 14:30.
-          </ChatBubble>
+        <div className="border-line flex h-8 shrink-0 items-center gap-2 border-b bg-[var(--brand-50)] px-4">
+          <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[var(--brand-500)]" />
+          <p className="flex-1 truncate text-[11px] font-medium text-[var(--brand-600)]">
+            medium po përgjigjet
+          </p>
+          <div className="flex h-[14px] w-6 shrink-0 items-center rounded-full bg-[var(--brand-500)] p-[2px]">
+            <span className="ml-auto h-[10px] w-[10px] rounded-full bg-white" />
+          </div>
+        </div>
+        <div className="flex flex-1 flex-col justify-end gap-2 overflow-hidden px-3 py-3">
+          {mockThread.map((message, i) => (
+            <MockBubble key={i} {...message} />
+          ))}
         </div>
         <div className="border-line bg-card flex items-center gap-2 border-t px-3 py-3">
-          <div className="border-line bg-muted text-ink-3 flex h-8 flex-1 items-center rounded-full border px-3 text-xs">
-            Mesazh
+          <div className="border-line bg-muted text-ink-3 flex h-9 flex-1 items-center rounded-full border px-3 text-xs">
+            Shkruaj një mesazh…
           </div>
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand-500)] text-white">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--brand-500)] text-white">
             <Send className="h-4 w-4" aria-hidden />
           </div>
         </div>
@@ -211,29 +237,50 @@ function PhoneMock() {
   );
 }
 
-function ChatBubble({
-  out = false,
-  children,
-}: {
-  out?: boolean;
-  children: React.ReactNode;
-}) {
+function MockBubble({
+  role,
+  time,
+  text,
+}: (typeof mockThread)[number]) {
+  const mine = role === 'account';
   return (
-    <div
-      className={
-        out
-          ? 'ml-auto max-w-[80%] rounded-2xl rounded-br-md bg-[var(--brand-500)] px-3 py-2 text-[13px] leading-snug text-white'
-          : 'border-line bg-card mr-auto max-w-[80%] rounded-2xl rounded-bl-md border px-3 py-2 text-[13px] leading-snug'
-      }
-    >
-      {children}
+    <div className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
+      <div className="max-w-[82%]">
+        {role === 'ai' && (
+          <div className="text-primary mb-1 inline-flex items-center gap-1 font-mono text-[10px] font-medium tracking-[0.04em]">
+            <span className="bg-sage h-1.5 w-1.5 rounded-full" aria-hidden />
+            medium
+          </div>
+        )}
+        <div
+          className={cn(
+            'rounded-[14px] px-3 py-1.5 text-[12.5px] leading-snug',
+            mine && 'bg-primary text-primary-foreground rounded-br-[4px]',
+            role === 'ai' &&
+              'rounded-bl-[4px] bg-[var(--brand-50)] text-[var(--brand-600)]',
+            role === 'customer' &&
+              'border-line bg-card rounded-bl-[4px] border',
+          )}
+        >
+          {text}
+        </div>
+        <div
+          className={cn(
+            'text-ink-3 mt-0.5 flex items-center gap-1 px-1 font-mono text-[9.5px]',
+            mine ? 'justify-end' : 'justify-start',
+          )}
+        >
+          <span>{time}</span>
+          {mine && <CheckCheck className="text-primary h-3 w-3" aria-hidden />}
+        </div>
+      </div>
     </div>
   );
 }
 
 function HowItWorks() {
   return (
-    <section id="how" className="py-16 sm:py-24">
+    <section id="how" className="border-line border-t py-16 sm:py-24">
       <div className="mx-auto max-w-5xl px-4 md:px-5">
         <div className="max-w-xl">
           <span className="text-[12px] font-bold tracking-[0.08em] text-[var(--brand-500)] uppercase">
@@ -243,14 +290,24 @@ function HowItWorks() {
             Tre hapa. Pa zakone të reja për të mësuar.
           </h2>
           <p className="text-ink-2 mt-2 text-base">
-            Medium qëndron aty ku janë tashmë klientët tuaj — dhe e bën
+            medium qëndron aty ku janë tashmë klientët tuaj — dhe e bën
             planifikimin në heshtje për ju.
           </p>
         </div>
-        <div className="mt-10 grid gap-8 sm:grid-cols-3">
-          {steps.map((step) => (
-            <div key={step.num} className="relative">
-              <span className="font-heading text-ink-3 absolute top-0 right-0 text-xs font-semibold tabular-nums">
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {steps.map((step, i) => (
+            <div
+              key={step.num}
+              className={cn(
+                'border-line bg-card relative rounded-2xl border p-5 shadow-[var(--shadow-card)]',
+                // Same odd-count handling as Features: full width at the
+                // 2-column breakpoint, reset to normal at the 3-up layout.
+                steps.length % 2 === 1 &&
+                  i === steps.length - 1 &&
+                  'sm:col-span-2 lg:col-span-1',
+              )}
+            >
+              <span className="font-heading text-ink-3 absolute top-5 right-5 text-xs font-semibold tabular-nums">
                 {step.num}
               </span>
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--brand-50)] text-[var(--brand-500)]">
@@ -283,19 +340,23 @@ function Features() {
           <h2 className="font-heading mt-3 text-3xl font-semibold tracking-tight">
             Një koleg i qetë për recepsionin.
           </h2>
+          <p className="text-ink-2 mt-2 text-base">
+            Detyrat e vogla që ju zënë kohë çdo ditë, tani kryhen vetë.
+          </p>
         </div>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {shown.map((feature, i) => (
             <div
               key={feature.title}
               className={cn(
-                'border-line bg-background rounded-2xl border p-5 shadow-[var(--shadow-card)]',
+                'border-line bg-card rounded-2xl border p-5 shadow-[var(--shadow-card)]',
                 // Dropping the reminder card leaves an odd count, and a lone
                 // half-width card beside an empty cell reads as a broken grid
-                // on the public site. Let a trailing odd card span the row.
+                // at the sm breakpoint. Let a trailing odd card span the row —
+                // reset at lg, where 3 columns fit an odd count evenly.
                 shown.length % 2 === 1 &&
                   i === shown.length - 1 &&
-                  'sm:col-span-2',
+                  'sm:col-span-2 lg:col-span-1',
               )}
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--brand-50)] text-[var(--brand-500)]">
@@ -348,16 +409,16 @@ function Pricing() {
           <p className="text-ink-2 mt-2 text-base">{t.billing.landingSub}</p>
         </div>
 
-        <div className="mt-10 grid items-start gap-4 sm:grid-cols-3">
+        <div className="mt-10 grid gap-4 sm:grid-cols-3">
           {/* Falas */}
-          <div className="border-line bg-card rounded-2xl border p-5 shadow-[var(--shadow-card)]">
+          <div className="border-line bg-card flex h-full flex-col rounded-2xl border p-5 shadow-[var(--shadow-card)]">
             <h3 className="font-heading text-lg font-semibold">
               {t.billing.planFree}
             </h3>
             <p className="text-ink-3 mt-2 text-sm">
               {t.billing.landingStartFree}
             </p>
-            <ul className="text-ink-2 mt-5 space-y-2 text-sm">
+            <ul className="text-ink-2 mt-5 flex-1 space-y-2 text-sm">
               <PriceFeature>
                 {t.billing.featConversations(free.conversationsPerMonth)}
               </PriceFeature>
@@ -374,7 +435,7 @@ function Pricing() {
           </div>
 
           {/* Solo — favored */}
-          <div className="rounded-2xl border-2 border-[var(--brand-500)] bg-[var(--brand-50)] p-5 shadow-[var(--shadow-card)]">
+          <div className="flex h-full flex-col rounded-2xl border-2 border-[var(--brand-500)] bg-[var(--brand-50)] p-5 shadow-[var(--shadow-card)]">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-lg font-semibold">
                 {t.billing.planSolo}
@@ -396,7 +457,7 @@ function Pricing() {
                 </p>
               </div>
             )}
-            <ul className="text-ink-2 mt-5 space-y-2 text-sm">
+            <ul className="text-ink-2 mt-5 flex-1 space-y-2 text-sm">
               <PriceFeature>
                 {t.billing.featConversations(solo.conversationsPerMonth)}
               </PriceFeature>
@@ -415,7 +476,7 @@ function Pricing() {
           </div>
 
           {/* Dual / Multi — coming soon (muted) */}
-          <div className="border-line rounded-2xl border border-dashed p-5 opacity-70">
+          <div className="border-line flex h-full flex-col rounded-2xl border border-dashed p-5 opacity-70">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-ink-2 text-lg font-semibold">
                 Dual / Multi
@@ -452,7 +513,7 @@ function PriceFeature({ children }: { children: React.ReactNode }) {
 
 function WhoItsFor() {
   return (
-    <section className="py-16 text-center sm:py-24">
+    <section className="border-line border-t py-16 text-center sm:py-24">
       <div className="mx-auto max-w-3xl px-4 md:px-5">
         <span className="text-[12px] font-bold tracking-[0.08em] text-[var(--brand-500)] uppercase">
           Për kë është
@@ -462,7 +523,7 @@ function WhoItsFor() {
         </h2>
         <p className="text-ink-2 mt-2 text-lg leading-relaxed">
           Fizioterapistë, dentistë, stilistë, trajnerë, konsulentë — nëse dita
-          juaj ndahet në takime, Medium i mban ato të mbushura pa ju zënë kohën
+          juaj ndahet në takime, medium i mban ato të mbushura pa ju zënë kohën
           pas telefonit.
         </p>
       </div>
@@ -476,7 +537,7 @@ function CtaBand() {
       <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-4 text-center md:px-5">
         <LogoMark size={40} variant="dark" />
         <h2 className="font-heading max-w-xl text-3xl font-semibold tracking-tight text-white">
-          Lëre Medium të mbajë bisedat. Ti mbaj klientët.
+          Lëre medium të mbajë bisedat. Ti mbaj klientët.
         </h2>
         <p className="max-w-md text-base text-white/72">
           Nis një bisedë tani dhe shih si e rezervon një takim.
@@ -497,9 +558,9 @@ function SiteFooter() {
           <LogoMark size={24} />
           <div>
             <p className="text-ink-2 text-sm">
-              Mediumi mes biznesit tënd dhe klientëve të tij.
+              mediumi mes biznesit tënd dhe klientëve të tij.
             </p>
-            <p className="text-ink-3 text-xs">© 2026 Medium</p>
+            <p className="text-ink-3 text-xs">© 2026 medium</p>
           </div>
         </div>
         <div className="text-ink-2 flex gap-4 text-sm [&>a]:inline-flex [&>a]:min-h-11 [&>a]:items-center">
