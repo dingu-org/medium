@@ -37,7 +37,7 @@ export default function HelpAvailabilityPage() {
 
       <PolicySection title="Zona kohore">
         <p>
-          Orët interpretohen sipas zonës kohore të praktikës tënde, të vendosur
+          Orët interpretohen sipas zonës kohore të biznesit tënd, të vendosur
           te profili. Sigurohu që zona kohore është e saktë përpara se të
           fillosh të pranosh rezervime.
         </p>

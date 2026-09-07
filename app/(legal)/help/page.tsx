@@ -16,13 +16,13 @@ const guides = [
     href: '/help/availability',
     title: 'Cakto oraret e punës',
     description:
-      'Si të vendosësh orët javore dhe periudhat e bllokuara për praktikën tënde.',
+      'Si të vendosësh orët javore dhe periudhat e bllokuara për biznesin tënd.',
   },
   {
     href: '/help/ai-bookings',
     title: 'Si i rezervon takimet asistenti',
     description:
-      'Si komunikon asistenti me pacientët dhe kur ia kalon bisedën një njeriu.',
+      'Si komunikon asistenti me klientët dhe kur ia kalon bisedën një njeriu.',
   },
   {
     href: '/help/plans',

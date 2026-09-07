@@ -32,21 +32,23 @@ export default function EnglishPrivacyPolicyPage() {
           Privacy policy
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Medium helps physical therapists manage customer conversations and
-          appointments over WhatsApp. This policy explains what data we process,
-          why we process it, and how privacy requests are handled.
+          Medium helps appointment-based professionals — physical therapists,
+          dentists, stylists, trainers, consultants, and others — manage
+          customer conversations and appointments over WhatsApp. This policy
+          explains what data we process, why we process it, and how privacy
+          requests are handled.
         </p>
         <LanguageSwitch href="/privacy" lang="sq" label="Versioni në shqip" />
       </header>
 
       <LegalSection title="Roles">
         <p>
-          Each physical therapist or practice using Medium is the controller for
-          their customer data. Medium acts as a processor and handles that data
-          under instructions from the practice.
+          Each professional or business using Medium is the controller for
+          their customer data. Medium acts as a processor and handles that
+          data under instructions from the business.
         </p>
         <p>
-          For account data about the practice owner, Medium acts as controller
+          For account data about the business owner, Medium acts as controller
           so we can provide, secure, and support the service.
         </p>
       </LegalSection>
@@ -54,7 +56,7 @@ export default function EnglishPrivacyPolicyPage() {
       <LegalSection title="Data we process">
         <ul>
           <li>
-            Account data, such as email address, practice name, timezone, and
+            Account data, such as email address, business name, timezone, and
             product settings.
           </li>
           <li>
@@ -94,7 +96,7 @@ export default function EnglishPrivacyPolicyPage() {
             To book, reschedule, cancel, remind, and confirm appointments.
           </li>
           <li>
-            To let the practice review chats, take over conversations, and
+            To let the business review chats, take over conversations, and
             manage availability.
           </li>
           <li>
@@ -113,9 +115,10 @@ export default function EnglishPrivacyPolicyPage() {
           Production AI requests are routed through OpenRouter to{' '}
           {disclosedAiProviderNames()} for scheduling-related responses, and any
           of them may serve a given request. The app sends only the conversation
-          and scheduling context needed to answer the customer. The AI is
-          instructed not to diagnose, provide medical advice, handle
-          emergencies, or discuss legal, billing, or insurance matters.
+          and scheduling context needed to answer the customer. The AI handles
+          only booking, rescheduling, and cancelling appointments; any other
+          request — professional advice, an emergency, a legal matter, or a
+          billing or insurance question — is handed off to the business.
         </p>
         <p>
           Production requests use privacy controls that request zero data
@@ -164,7 +167,7 @@ export default function EnglishPrivacyPolicyPage() {
 
       <LegalSection title="Retention">
         <p>
-          Message retention is controlled per practice. The default retention
+          Message retention is controlled per business. The default retention
           period is 90 days, and older messages are purged by a scheduled job.
           Appointment, customer, account, and audit data are kept while needed to
           provide the service, meet legal obligations, resolve disputes, and
@@ -184,9 +187,9 @@ export default function EnglishPrivacyPolicyPage() {
 
       <LegalSection title="Your choices and rights">
         <p>
-          Practices can update account and retention settings in the dashboard.
-          Customers should first contact their practice for access, correction,
-          deletion, or objection requests because the practice controls the
+          Businesses can update account and retention settings in the dashboard.
+          Customers should first contact the business for access, correction,
+          deletion, or objection requests because the business controls the
           customer relationship.
         </p>
         <p>

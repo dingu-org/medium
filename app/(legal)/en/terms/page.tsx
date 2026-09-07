@@ -5,7 +5,7 @@ import { LanguageSwitch, LegalSection } from '../../legal-section';
 export const metadata: Metadata = {
   title: 'Terms of service · Medium',
   description:
-    'Terms for using Medium, the WhatsApp scheduling assistant for practices.',
+    'Terms for using Medium, the WhatsApp scheduling assistant for appointment-based businesses.',
   alternates: {
     canonical: '/en/terms',
     languages: {
@@ -32,26 +32,27 @@ export default function EnglishTermsPage() {
           Terms of service
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          These terms govern access to Medium, a scheduling assistant that helps
-          practices manage WhatsApp conversations, appointments, reminders, and
-          related dashboard workflows.
+          These terms govern access to Medium, a scheduling assistant that
+          helps businesses of any appointment-based profession manage WhatsApp
+          conversations, appointments, reminders, and related dashboard
+          workflows.
         </p>
         <LanguageSwitch href="/terms" lang="sq" label="Versioni në shqip" />
       </header>
 
       <LegalSection title="Who may use Medium">
         <p>
-          Medium is for practices and business users, not for consumer or
-          customer self-service use. You must be allowed to act for the practice
-          you register and to connect the WhatsApp Business account you use with
-          Medium.
+          Medium is for businesses and their staff, not for consumer or
+          customer self-service use. You must be allowed to act for the
+          business you register and to connect the WhatsApp Business account
+          you use with Medium.
         </p>
       </LegalSection>
 
       <LegalSection title="Your responsibilities">
         <ul>
           <li>
-            Provide accurate account, practice, availability, and WhatsApp
+            Provide accurate account, business, availability, and WhatsApp
             connection details.
           </li>
           <li>
@@ -63,11 +64,11 @@ export default function EnglishTermsPage() {
           </li>
           <li>
             Review appointments, conversations, reminders, and escalations for
-            your practice.
+            your business.
           </li>
           <li>
-            Comply with applicable privacy, healthcare, consumer, and messaging
-            laws.
+            Comply with applicable privacy, consumer, messaging, and
+            industry-specific laws.
           </li>
         </ul>
       </LegalSection>
@@ -86,11 +87,11 @@ export default function EnglishTermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="AI and clinical limits">
+      <LegalSection title="AI and service limits">
         <p>
           The Medium AI is designed for scheduling workflows only. It must not
-          be used for diagnosis, medical advice, emergency triage, legal advice,
-          billing disputes, or insurance decisions.
+          be used for professional advice specific to your service, emergency
+          triage, legal advice, billing disputes, or insurance decisions.
         </p>
         <p>
           You remain responsible for supervising the assistant, keeping a human
@@ -101,7 +102,7 @@ export default function EnglishTermsPage() {
 
       <LegalSection title="Customer data">
         <p>
-          For customer data, the practice is the controller and Medium is the
+          For customer data, the business is the controller and Medium is the
           processor. You instruct Medium to process customer data only as needed
           to provide the scheduling assistant, dashboard, reminders, support,
           security, retention, and audit-log functions.
@@ -132,8 +133,8 @@ export default function EnglishTermsPage() {
             service.
           </li>
           <li>
-            Do not use Medium to make emergency, diagnostic, legal, billing, or
-            insurance decisions.
+            Do not use Medium to make emergency, professional-advice, legal,
+            billing, or insurance decisions.
           </li>
         </ul>
       </LegalSection>
@@ -188,7 +189,7 @@ export default function EnglishTermsPage() {
           the number of reminders. When usage reaches 100% of a limit, the
           assistant stops sending automated replies, sends a single handoff
           message telling the customer that someone will follow up, and flags the
-          conversation for review. The practice&apos;s own inbox and manual
+          conversation for review. The business&apos;s own inbox and manual
           replies are never blocked by these limits.
         </p>
       </LegalSection>
@@ -205,7 +206,7 @@ export default function EnglishTermsPage() {
           You may stop using Medium at any time. We may suspend or terminate
           access if you breach these terms, create security or legal risk,
           violate WhatsApp policies, or use the product in a way that could harm
-          customers, practices, Medium, or third-party platforms.
+          customers, businesses, Medium, or third-party platforms.
         </p>
       </LegalSection>
 

@@ -5,7 +5,7 @@ import { LanguageSwitch, LegalSection } from '../legal-section';
 export const metadata: Metadata = {
   title: 'Politika e privatësisë · Medium',
   description:
-    'Si i trajton Medium të dhënat e llogarisë, të pacientëve, të WhatsApp-it dhe të takimeve.',
+    'Si i trajton Medium të dhënat e llogarisë, të klientëve, të WhatsApp-it dhe të takimeve.',
   alternates: {
     canonical: '/privacy',
     // The Albanian version is canonical, so it is also the x-default.
@@ -33,21 +33,23 @@ export default function PrivacyPolicyPage() {
           Politika e privatësisë
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Medium i ndihmon fizioterapistët të menaxhojnë bisedat me pacientët
-          dhe takimet përmes WhatsApp-it. Kjo politikë shpjegon cilat të dhëna
-          përpunojmë, pse i përpunojmë dhe si trajtohen kërkesat për privatësi.
+          Medium i ndihmon profesionistët me orar takimesh — fizioterapistë,
+          dentistë, stilistë, trajnerë, konsulentë dhe të tjerë — të
+          menaxhojnë bisedat me klientët dhe takimet përmes WhatsApp-it. Kjo
+          politikë shpjegon cilat të dhëna përpunojmë, pse i përpunojmë dhe si
+          trajtohen kërkesat për privatësi.
         </p>
         <LanguageSwitch href="/en/privacy" lang="en" label="English version" />
       </header>
 
       <LegalSection title="Rolet">
         <p>
-          Çdo fizioterapist ose praktikë që përdor Medium është kontrolluesi i
-          të dhënave të pacientëve të vet. Medium vepron si përpunues dhe i
-          trajton ato të dhëna sipas udhëzimeve të praktikës.
+          Çdo profesionist ose biznes që përdor Medium është kontrolluesi i të
+          dhënave të klientëve të vet. Medium vepron si përpunues dhe i
+          trajton ato të dhëna sipas udhëzimeve të biznesit.
         </p>
         <p>
-          Për të dhënat e llogarisë së pronarit të praktikës, Medium vepron si
+          Për të dhënat e llogarisë së pronarit të biznesit, Medium vepron si
           kontrollues, që të mund ta ofrojë, ta sigurojë dhe ta mbështesë
           shërbimin.
         </p>
@@ -56,7 +58,7 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="Të dhënat që përpunojmë">
         <ul>
           <li>
-            Të dhëna të llogarisë, si adresa e email-it, emri i praktikës, zona
+            Të dhëna të llogarisë, si adresa e email-it, emri i biznesit, zona
             kohore dhe cilësimet e produktit.
           </li>
           <li>
@@ -65,7 +67,7 @@ export default function PrivacyPolicyPage() {
             enkriptuar të aksesit, statusi i cilësisë dhe statusi i shablloneve.
           </li>
           <li>
-            Të dhëna të pacientëve dhe të takimeve, si emrat, numrat e
+            Të dhëna të klientëve dhe të takimeve, si emrat, numrat e
             telefonit, bisedat, mesazhet, orët e takimeve, statusi i takimeve,
             shënimet dhe përgjigjet ndaj kujtesave.
           </li>
@@ -93,7 +95,7 @@ export default function PrivacyPolicyPage() {
         <ul>
           <li>
             Për të vërtetuar përdoruesit dhe për t&apos;i mbajtur të ndara të
-            dhënat e çdo praktike.
+            dhënat e çdo biznesi.
           </li>
           <li>
             Për të marrë, për të dërguar dhe për të shfaqur bisedat në WhatsApp.
@@ -103,7 +105,7 @@ export default function PrivacyPolicyPage() {
             dhe për të konfirmuar takimet.
           </li>
           <li>
-            Për t&apos;i mundësuar praktikës të shohë bisedat, të marrë përsipër
+            Për t&apos;i mundësuar biznesit të shohë bisedat, të marrë përsipër
             bisedën dhe të menaxhojë oraret.
           </li>
           <li>
@@ -124,10 +126,10 @@ export default function PrivacyPolicyPage() {
           OpenRouter te {disclosedAiProviderNames()} për përgjigjet që lidhen me
           caktimin e takimeve, dhe secili prej tyre mund t&apos;i shërbejë një
           kërkese të dhënë. Aplikacioni dërgon vetëm bisedën dhe kontekstin e
-          takimeve që nevojiten për t&apos;i përgjigjur pacientit. Inteligjenca
-          artificiale është e udhëzuar të mos diagnostikojë, të mos japë
-          këshilla mjekësore, të mos trajtojë urgjencat dhe të mos diskutojë
-          çështje ligjore, faturimi apo sigurimesh.
+          takimeve që nevojiten për t&apos;i përgjigjur klientit. Inteligjenca
+          artificiale trajton vetëm rezervimin, ricaktimin dhe anulimin e
+          takimeve; çdo kërkesë tjetër — këshillë profesionale, urgjencë,
+          çështje ligjore, faturimi apo sigurimesh — i kalohet biznesit.
         </p>
         <p>
           Kërkesat në prodhim përdorin kontrolle privatësie që kërkojnë
@@ -186,10 +188,10 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection title="Ruajtja e të dhënave">
         <p>
-          Ruajtja e mesazheve kontrollohet nga secila praktikë. Periudha e
+          Ruajtja e mesazheve kontrollohet nga secili biznes. Periudha e
           parazgjedhur e ruajtjes është 90 ditë, dhe mesazhet më të vjetra
           fshihen nga një punë e planifikuar. Të dhënat e takimeve, të
-          pacientëve, të llogarisë dhe të auditimit ruhen për aq kohë sa
+          klientëve, të llogarisë dhe të auditimit ruhen për aq kohë sa
           nevojiten për të ofruar shërbimin, për të përmbushur detyrimet
           ligjore, për të zgjidhur mosmarrëveshjet dhe për të ruajtur sigurinë.
           Metrikat e përgjithshme dhe të anonimizuara mund të ruhen pa afat.
@@ -199,8 +201,8 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="Siguria">
         <p>
           Medium përdor rregulla të bazës së të dhënave të kufizuara për çdo
-          praktikë, TLS gjatë transmetimit, tokena të enkriptuar aksesi për
-          WhatsApp, regjistrim auditimi për aksesin te të dhënat e pacientëve
+          biznes, TLS gjatë transmetimit, tokena të enkriptuar aksesi për
+          WhatsApp, regjistrim auditimi për aksesin te të dhënat e klientëve
           dhe rrugë aplikacioni me privilegjet më të vogla të nevojshme. Të
           dhënat kryesore të aplikacionit strehohen në infrastrukturë në rajonin
           e BE-së atje ku kjo është e mundur.
@@ -209,10 +211,10 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection title="Zgjedhjet dhe të drejtat tuaja">
         <p>
-          Praktikat mund t&apos;i përditësojnë cilësimet e llogarisë dhe të
-          ruajtjes në panel. Pacientët duhet të kontaktojnë fillimisht praktikën
+          Bizneset mund t&apos;i përditësojnë cilësimet e llogarisë dhe të
+          ruajtjes në panel. Klientët duhet të kontaktojnë fillimisht biznesin
           e tyre për kërkesa aksesi, korrigjimi, fshirjeje ose kundërshtimi,
-          sepse praktika e kontrollon marrëdhënien me pacientin.
+          sepse biznesi e kontrollon marrëdhënien me klientin.
         </p>
         <p>
           Kërkesat për privatësi mund të dërgohen edhe te klaididingu@gmail.com.

@@ -28,8 +28,8 @@ const steps = [
   {
     num: '01',
     icon: MessageCircle,
-    title: 'Pacienti shkruan',
-    body: 'Pacienti dërgon një mesazh në WhatsApp, si te çdo bisedë tjetër.',
+    title: 'Klienti shkruan',
+    body: 'Klienti dërgon një mesazh në WhatsApp, si te çdo bisedë tjetër.',
   },
   {
     num: '02',
@@ -54,7 +54,7 @@ const features = [
   {
     icon: CalendarClock,
     title: 'Rezervim automatik',
-    body: 'Medium cakton takime 24 orë në ditë, edhe kur klinika është mbyllur.',
+    body: 'Medium cakton takime 24 orë në ditë, pavarësisht orarit tënd.',
     reminders: false,
   },
   {
@@ -134,10 +134,10 @@ function Hero() {
             Asistent takimesh për WhatsApp
           </span>
           <h1 className="font-heading mt-4 text-4xl leading-[1.1] font-semibold tracking-tight sm:text-5xl">
-            Asistenti që u përgjigjet pacientëve dhe rezervon takimet e tyre.
+            Asistenti që u përgjigjet klientëve dhe rezervon takimet e tyre.
           </h1>
           <p className="text-ink-2 mt-5 text-lg leading-relaxed">
-            Medium bisedon me pacientët tuaj në WhatsApp, cakton takime dhe i
+            Medium bisedon me klientët tuaj në WhatsApp, cakton takime dhe i
             mban orët tuaja të mbushura — ndërsa ju qëndroni në kontroll.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
@@ -190,13 +190,8 @@ function PhoneMock() {
         <div className="flex flex-1 flex-col gap-2 overflow-hidden p-4">
           <ChatBubble out>Përshëndetje, dua një takim këtë javë.</ChatBubble>
           <ChatBubble>
-            Sigurisht. Cili shërbim ju duhet — vlerësim i parë apo seancë
-            vijuese?
-          </ChatBubble>
-          <ChatBubble out>Vijuese.</ChatBubble>
-          <ChatBubble>
-            Kam të lirë të mërkurën në 10:00 ose të enjten në 14:30. Cila ju
-            shkon?
+            Sigurisht. Kam të lirë të mërkurën në 10:00 ose të enjten në
+            14:30. Cila ju shkon?
           </ChatBubble>
           <ChatBubble out>Të enjten.</ChatBubble>
           <ChatBubble>
@@ -248,7 +243,7 @@ function HowItWorks() {
             Tre hapa. Pa zakone të reja për të mësuar.
           </h2>
           <p className="text-ink-2 mt-2 text-base">
-            Medium qëndron aty ku janë tashmë pacientët tuaj — dhe e bën
+            Medium qëndron aty ku janë tashmë klientët tuaj — dhe e bën
             planifikimin në heshtje për ju.
           </p>
         </div>
@@ -312,7 +307,7 @@ function Features() {
               <p className="text-ink-2 mt-2 text-sm">
                 {feature.body ?? (
                   <>
-                    Pacientët marrin një kujtesë një ditë para dhe konfirmojnë
+                    Klientët marrin një kujtesë një ditë para dhe konfirmojnë
                     me{' '}
                     <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em] text-[var(--brand-600)]">
                       KONFIRMO
@@ -430,7 +425,7 @@ function Pricing() {
               </span>
             </div>
             <p className="text-ink-3 mt-2 text-sm leading-6">
-              Për praktika me disa terapistë. Së shpejti.
+              Për biznese me disa profesionistë. Së shpejti.
             </p>
           </div>
         </div>
@@ -463,13 +458,12 @@ function WhoItsFor() {
           Për kë është
         </span>
         <h2 className="font-heading mt-3 text-3xl font-semibold tracking-tight">
-          Ndërtuar për fizioterapeutët. Po zgjerohet te çdo profesionist i
-          pavarur.
+          Për çdo profesionist që punon me takime.
         </h2>
         <p className="text-ink-2 mt-2 text-lg leading-relaxed">
-          Medium nisi me fizioterapinë, ku çdo takim i humbur ka rëndësi. Më pas
-          vjen për këdo që jeton me kalendarin e vet — dentistë, trajnerë,
-          konsulentë.
+          Fizioterapistë, dentistë, stilistë, trajnerë, konsulentë — nëse dita
+          juaj ndahet në takime, Medium i mban ato të mbushura pa ju zënë kohën
+          pas telefonit.
         </p>
       </div>
     </section>
@@ -482,7 +476,7 @@ function CtaBand() {
       <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-4 text-center md:px-5">
         <LogoMark size={40} variant="dark" />
         <h2 className="font-heading max-w-xl text-3xl font-semibold tracking-tight text-white">
-          Lëre Medium të mbajë bisedat. Ti mbaj pacientët.
+          Lëre Medium të mbajë bisedat. Ti mbaj klientët.
         </h2>
         <p className="max-w-md text-base text-white/72">
           Nis një bisedë tani dhe shih si e rezervon një takim.

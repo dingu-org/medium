@@ -7,7 +7,7 @@ import { createServerClient } from '@/lib/supabase/server';
 export const metadata = {
   title: 'Medium — asistenti që rezervon takime në WhatsApp',
   description:
-    'Medium bisedon me pacientët tuaj në WhatsApp, cakton takime dhe i mban orët tuaja të mbushura — ndërsa ju qëndroni në kontroll.',
+    'Medium bisedon me klientët tuaj në WhatsApp, cakton takime dhe i mban orët tuaja të mbushura — ndërsa ju qëndroni në kontroll.',
 };
 
 export default async function Home({

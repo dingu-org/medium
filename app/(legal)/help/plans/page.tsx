@@ -24,7 +24,7 @@ export default function HelpPlansPage() {
           Planet dhe pagesat
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Medium ka dy plane: Falas për të nisur dhe Solo për praktikat me më
+          Medium ka dy plane: Falas për të nisur dhe Solo për bizneset me më
           shumë biseda. Këtu shpjegohet çfarë përfshin secili, si maten kufijtë
           dhe si kalon nga njëri te tjetri.
         </p>
@@ -60,14 +60,14 @@ export default function HelpPlansPage() {
 
       <PolicySection title="Si maten bisedat">
         <p>
-          Një “bisedë” është një pacient që të shkruan brenda një dite —
-          numërohet vetëm një herë në ditë për të njëjtin pacient, sipas zonës
-          kohore të praktikës tënde. Nuk ka rëndësi sa mesazhe shkëmbeni atë
+          Një “bisedë” është një klient që të shkruan brenda një dite —
+          numërohet vetëm një herë në ditë për të njëjtin klient, sipas zonës
+          kohore të biznesit tënd. Nuk ka rëndësi sa mesazhe shkëmbeni atë
           ditë.
         </p>
         {showReminders ? (
           <p>
-            Kujtesat numërohen veç dhe vetëm kur dërgohen te pacienti. Të dyja
+            Kujtesat numërohen veç dhe vetëm kur dërgohen te klienti. Të dyja
             numëratoret nisin nga zero në fillim të çdo muaji.
           </p>
         ) : (
@@ -78,7 +78,7 @@ export default function HelpPlansPage() {
       <PolicySection title="Kur arrin kufirin">
         <p>
           Kur mbaron kufiri mujor, asistenti ndalon vetëm përgjigjet automatike.
-          Pacientit i dërgohet një mesazh i vetëm që dikush nga praktika do t’i
+          Klientit i dërgohet një mesazh i vetëm që dikush nga biznesi do t’i
           përgjigjet, dhe biseda shënohet që ta shohësh.
         </p>
         <p>

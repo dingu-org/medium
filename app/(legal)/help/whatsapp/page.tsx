@@ -14,7 +14,7 @@ export default function HelpWhatsAppPage() {
           Lidh WhatsApp-in
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Numri yt i WhatsApp Business është mënyra si pacientët bisedojnë me
+          Numri yt i WhatsApp Business është mënyra si klientët bisedojnë me
           Medium. Lidhja zgjat vetëm pak minuta.
         </p>
       </header>
@@ -33,14 +33,14 @@ export default function HelpWhatsAppPage() {
         <p>
           Pas lidhjes, aplikacioni WhatsApp Business në telefonin tënd vazhdon
           të punojë si më parë — asgjë nuk fshihet dhe nuk bllokohet. Nëse i
-          përgjigjesh vetë një pacienti nga telefoni, asistenti tërhiqet nga
+          përgjigjesh vetë një klienti nga telefoni, asistenti tërhiqet nga
           ajo bisedë për rreth dy orë, që të mos flisni njëkohësisht.
         </p>
       </PolicySection>
 
       <PolicySection title="Pas lidhjes">
         <p>
-          Nuk ka asgjë tjetër për të pritur. Pacientët mund të të shkruajnë
+          Nuk ka asgjë tjetër për të pritur. Klientët mund të të shkruajnë
           menjëherë dhe asistenti u përgjigjet.
         </p>
       </PolicySection>

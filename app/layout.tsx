@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   applicationName: 'Medium',
   title: 'Medium',
   description:
-    'Asistent për menaxhimin e takimeve në WhatsApp për fizioterapistë.',
+    'Asistent për menaxhimin e takimeve në WhatsApp për çdo profesionist që punon me orar takimesh.',
   manifest: '/manifest.json',
   icons: {
     icon: [

@@ -3,7 +3,7 @@ import { PolicySection } from '../policy-section';
 export const metadata = {
   title: 'Si i rezervon takimet asistenti · Ndihmë · Medium',
   description:
-    'Si komunikon asistenti i Medium me pacientët dhe si i rezervon, ricakton ose anulon takimet.',
+    'Si komunikon asistenti i Medium me klientët dhe si i rezervon, ricakton ose anulon takimet.',
 };
 
 export default function HelpAiBookingsPage() {
@@ -14,14 +14,14 @@ export default function HelpAiBookingsPage() {
           Si i rezervon takimet asistenti
         </h1>
         <p className="text-muted-foreground text-base leading-7">
-          Asistenti i Medium bisedon me pacientët tuaj në WhatsApp dhe
+          Asistenti i Medium bisedon me klientët tuaj në WhatsApp dhe
           menaxhon rezervimet brenda kufijve që ju vendosni.
         </p>
       </header>
 
       <PolicySection title="Si komunikon">
         <p>
-          Asistenti i përgjigjet pacientit në shqip formal (Ju), me ton të
+          Asistenti i përgjigjet klientit në shqip formal (Ju), me ton të
           qetë dhe të drejtpërdrejtë. Nëse pyetet, thotë hapur që është
           automatik.
         </p>
@@ -29,8 +29,8 @@ export default function HelpAiBookingsPage() {
 
       <PolicySection title="Si rezervon">
         <p>
-          Kur pacienti kërkon një takim, asistenti kontrollon disponueshmërinë
-          tuaj dhe propozon 3–5 orë të lira në 2–3 ditë. Pasi pacienti
+          Kur klienti kërkon një takim, asistenti kontrollon disponueshmërinë
+          tuaj dhe propozon 3–5 orë të lira në 2–3 ditë. Pasi klienti
           konfirmon datën, orën dhe shërbimin, asistenti e rezervon takimin.
         </p>
       </PolicySection>
@@ -38,13 +38,13 @@ export default function HelpAiBookingsPage() {
       <PolicySection title="Ricaktim dhe anulim">
         <p>
           Asistenti mund të ricaktojë ose anulojë një takim ekzistues me
-          kërkesë të pacientit, brenda po atyre kufijve të disponueshmërisë.
+          kërkesë të klientit, brenda po atyre kufijve të disponueshmërisë.
         </p>
       </PolicySection>
 
       <PolicySection title="Kur ia kalon një njeriu">
         <p>
-          Asistenti ia kalon bisedën juve kur pacienti kërkon të flasë me një
+          Asistenti ia kalon bisedën juve kur klienti kërkon të flasë me një
           person, kur kërkesa del jashtë planifikimit të takimeve, ose kur
           përmenden simptoma urgjente — në këto raste nuk vazhdon vetë
           planifikimin.
@@ -54,9 +54,9 @@ export default function HelpAiBookingsPage() {
       <PolicySection title="Dritarja 24-orëshe">
         <p>
           WhatsApp-i lejon përgjigje të lira vetëm brenda 24 orëve nga mesazhi
-          i fundit i pacientit. Brenda kësaj dritareje asistenti përgjigjet
+          i fundit i klientit. Brenda kësaj dritareje asistenti përgjigjet
           normalisht. Pasi ajo mbyllet, biseda nuk mund të rihapet nga Medium —
-          pacienti duhet të shkruajë sërish, dhe dritarja hapet përsëri për 24
+          klienti duhet të shkruajë sërish, dhe dritarja hapet përsëri për 24
           orë.
         </p>
       </PolicySection>

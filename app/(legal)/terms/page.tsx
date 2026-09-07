@@ -5,7 +5,7 @@ import { LanguageSwitch, LegalSection } from '../legal-section';
 export const metadata: Metadata = {
   title: 'Kushtet e shërbimit · Medium',
   description:
-    'Kushtet për përdorimin e Medium, asistentit të takimeve në WhatsApp për praktikat.',
+    'Kushtet për përdorimin e Medium, asistentit të takimeve në WhatsApp për bizneset me orar takimesh.',
   alternates: {
     canonical: '/terms',
     // The Albanian version is canonical, so it is also the x-default.
@@ -34,17 +34,18 @@ export default function TermsPage() {
         </h1>
         <p className="text-muted-foreground text-base leading-7">
           Këto kushte rregullojnë aksesin te Medium, një asistent takimesh që i
-          ndihmon praktikat të menaxhojnë bisedat në WhatsApp, takimet, kujtesat
-          dhe rrjedhat përkatëse të punës në panel.
+          ndihmon bizneset e çdo profesioni me orar takimesh të menaxhojnë
+          bisedat në WhatsApp, takimet, kujtesat dhe rrjedhat përkatëse të
+          punës në panel.
         </p>
         <LanguageSwitch href="/en/terms" lang="en" label="English version" />
       </header>
 
       <LegalSection title="Kush mund ta përdorë Medium">
         <p>
-          Medium është për praktikat dhe përdoruesit e biznesit, jo për përdorim
-          vetëshërbimi nga konsumatorët apo pacientët. Ju duhet të keni të
-          drejtën të veproni në emër të praktikës që regjistroni dhe të lidhni
+          Medium është për bizneset dhe përdoruesit e tyre, jo për përdorim
+          vetëshërbimi nga konsumatorët apo klientët. Ju duhet të keni të
+          drejtën të veproni në emër të biznesit që regjistroni dhe të lidhni
           llogarinë WhatsApp Business që përdorni me Medium.
         </p>
       </LegalSection>
@@ -52,7 +53,7 @@ export default function TermsPage() {
       <LegalSection title="Përgjegjësitë tuaja">
         <ul>
           <li>
-            Të jepni të dhëna të sakta për llogarinë, praktikën, oraret dhe
+            Të jepni të dhëna të sakta për llogarinë, biznesin, oraret dhe
             lidhjen me WhatsApp.
           </li>
           <li>
@@ -60,16 +61,16 @@ export default function TermsPage() {
             akses të paautorizuar.
           </li>
           <li>
-            Të merrni çdo leje të nevojshme nga pacientët për të komunikuar
+            Të merrni çdo leje të nevojshme nga klientët për të komunikuar
             përmes WhatsApp-it.
           </li>
           <li>
             Të shqyrtoni takimet, bisedat, kujtesat dhe kalimet te njeriu për
-            praktikën tuaj.
+            biznesin tuaj.
           </li>
           <li>
-            Të respektoni ligjet e zbatueshme për privatësinë, kujdesin
-            shëndetësor, konsumatorët dhe mesazhet.
+            Të respektoni ligjet e zbatueshme për privatësinë, konsumatorët,
+            mesazhet dhe rregullat e sektorit tuaj.
           </li>
         </ul>
       </LegalSection>
@@ -88,12 +89,13 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="Inteligjenca artificiale dhe kufijtë klinikë">
+      <LegalSection title="Inteligjenca artificiale dhe kufijtë e shërbimit">
         <p>
           Inteligjenca artificiale e Medium është ndërtuar vetëm për rrjedhat e
-          caktimit të takimeve. Ajo nuk duhet përdorur për diagnozë, për
-          këshilla mjekësore, për triazh urgjencash, për këshilla ligjore, për
-          mosmarrëveshje faturimi apo për vendime sigurimesh.
+          caktimit të takimeve. Ajo nuk duhet përdorur për këshilla
+          profesionale specifike për shërbimin tuaj, për triazh urgjencash,
+          për këshilla ligjore, për mosmarrëveshje faturimi apo për vendime
+          sigurimesh.
         </p>
         <p>
           Ju mbeteni përgjegjës për mbikëqyrjen e asistentit, për të mbajtur të
@@ -102,11 +104,11 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="Të dhënat e pacientëve">
+      <LegalSection title="Të dhënat e klientëve">
         <p>
-          Për të dhënat e pacientëve, praktika është kontrolluesi dhe Medium
+          Për të dhënat e klientëve, biznesi është kontrolluesi dhe Medium
           është përpunuesi. Ju e udhëzoni Medium t&apos;i përpunojë të dhënat e
-          pacientëve vetëm aq sa nevojitet për të ofruar asistentin e takimeve,
+          klientëve vetëm aq sa nevojitet për të ofruar asistentin e takimeve,
           panelin, kujtesat, mbështetjen, sigurinë, ruajtjen e të dhënave dhe
           funksionet e regjistrit të auditimit.
         </p>
@@ -129,7 +131,7 @@ export default function TermsPage() {
             mesazhe mashtruese, për ngacmim ose për përmbajtje të paligjshme.
           </li>
           <li>
-            Mos u përpiqni të anashkaloni izolimin mes praktikave, kufijtë e
+            Mos u përpiqni të anashkaloni izolimin mes bizneseve, kufijtë e
             shpeshtësisë, vërtetimin e identitetit ose kontrollet e sigurisë.
           </li>
           <li>
@@ -137,8 +139,8 @@ export default function TermsPage() {
             shërbimit.
           </li>
           <li>
-            Mos e përdorni Medium për vendime urgjence, diagnostikuese, ligjore,
-            faturimi apo sigurimesh.
+            Mos e përdorni Medium për vendime urgjence, këshillimi profesional,
+            ligjore, faturimi apo sigurimesh.
           </li>
         </ul>
       </LegalSection>
@@ -195,8 +197,8 @@ export default function TermsPage() {
           Çdo plan përfshin një kufi mujor për numrin e bisedave dhe për numrin
           e kujtesave. Kur përdorimi arrin 100% të një kufiri, asistenti ndalon
           dërgimin e përgjigjeve automatike, dërgon një mesazh të vetëm kalimi
-          që i thotë pacientit se dikush do ta kontaktojë dhe e shënon bisedën
-          për shqyrtim. Kutia hyrëse e vetë praktikës dhe përgjigjet manuale nuk
+          që i thotë klientit se dikush do ta kontaktojë dhe e shënon bisedën
+          për shqyrtim. Kutia hyrëse e vetë biznesit dhe përgjigjet manuale nuk
           bllokohen kurrë nga këta kufij.
         </p>
       </LegalSection>
@@ -214,7 +216,7 @@ export default function TermsPage() {
           pezullojmë ose ta ndërpresim aksesin nëse shkelni këto kushte, nëse
           krijoni rrezik sigurie ose ligjor, nëse shkelni politikat e
           WhatsApp-it ose nëse e përdorni produktin në një mënyrë që mund të
-          dëmtojë pacientët, praktikat, Medium ose platformat e palëve të treta.
+          dëmtojë klientët, bizneset, Medium ose platformat e palëve të treta.
         </p>
       </LegalSection>
 
