@@ -68,11 +68,11 @@ export function SignInForm({
           )}
         </div>
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="relative">
             <Label htmlFor="password">{t.auth.signIn.password}</Label>
             <Link
               href="/forgot-password"
-              className="text-muted-foreground hover:text-foreground -my-3 inline-flex min-h-11 items-center text-xs"
+              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-0 inline-flex min-h-11 -translate-y-1/2 items-center text-xs"
             >
               {t.auth.signIn.forgot}
             </Link>
