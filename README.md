@@ -35,9 +35,6 @@ External accounts and live credentials are still required before Phase 0 is full
 
 ## Reference docs
 
-- [Task manager](task-manager/README.md)
-- [Project plan](task-manager/project-plan.md)
-- [Phase 0 checklist](task-manager/phases/00-bootstrap.md)
 - [Tech stack and architecture](docs/tech-stack-and-architecture.md)
 
 ## Commands
@@ -73,4 +70,4 @@ http://127.0.0.1:54324; Studio at http://127.0.0.1:54323.
 - `.env` is gitignored; `.env.example` is a working copy of it. Deployed
   credentials are never kept locally except as pulled, git-ignored
   `.env.vercel.*` files (see `docs/environments.md`).
-- The repo also contains planning docs under `task-manager/` and product/architecture docs under `docs/`.
+- Planning and task tracking live in Jira project MED and Confluence space MED (dingu.atlassian.net); product/architecture docs are under `docs/`.

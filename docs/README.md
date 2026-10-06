@@ -91,4 +91,3 @@ Three references live outside `docs/` and are worth knowing about.
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`CONTEXT.md`](../CONTEXT.md) | Get the ubiquitous language for environments — what "borrow", "the train", and "fail closed" mean here                                                               |
 | [`README.md`](../README.md)   | Set up the repo and run the commands (its "Current scope" section describes an early scaffold and uses the pre-rename vocabulary)                                    |
-| `task-manager/`               | See how the build was planned and sequenced — a historical log, not a description of the system; code wins over anything in `task-manager/phases/*` or `progress.md` |

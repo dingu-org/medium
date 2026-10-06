@@ -8,15 +8,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # How to plan and execute
 
-Trackers live in `task-manager/`.
+Tasks and the roadmap live in Jira project MED and Confluence space MED (dingu.atlassian.net). Read the "Medium Roadmap" page and the relevant epic before planning.
 
 For any task:
 
-1. Read what is already done and what is currently in flight in `task-manager/progress.md`.
-2. Read the relevant checklist for the current phase in `task-manager/phases/` and make an implementation plan for what is still required.
+1. Find the relevant Jira issue and its epic; read its description and linked issues.
+2. Make an implementation plan for what is still required.
 3. Implement the required changes.
 4. Test the changes.
-5. Mark the current in-flight work as done by updating the relevant tracker files in `task-manager/`.
+5. Update the Jira issue (status, comment) instead of editing files in `task-manager/`.
 
 # Communication
 
