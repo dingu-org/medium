@@ -177,7 +177,7 @@ export function ConnectWhatsApp({
           // API number picker and rejected the operator's existing Business-app
           // number. Meta's current v4 + Coexistence docs still require this key.
           // `setup: {}` is the v4 payload shape; the v3-era `sessionInfoVersion`
-          // stays gone. See docs/research/whatsapp-business-app-number-onboarding.md.
+          // stays gone. See docs/features/whatsapp-connection.md.
           extras: {
             featureType: 'whatsapp_business_app_onboarding',
             setup: {},

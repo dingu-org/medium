@@ -15,7 +15,6 @@ environment is, how configuration is verified, and the runbooks.
 | Meta           | fake creds (may borrow the test app) | owns the **test app**  | live app, exclusively       |
 | POK            | staging                    | staging                          | production                  |
 | AI model       | free model, no ZDR (plans.ts) | free model, no ZDR (plans.ts) | `claude-haiku-4.5` + fallback, ZDR (plans.ts) |
-| Sentry/PostHog | shared (dormant)           | shared                           | shared                      |
 | Push (VAPID)   | throwaway committed pair   | own pair                         | own pair                    |
 
 Other git branches do not deploy at all (`scripts/vercel-ignore-build.sh`).

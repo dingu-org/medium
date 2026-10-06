@@ -12,7 +12,7 @@ Three reading paths cover most reasons to open this directory. Follow one in ord
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A new engineer              | [Product overview](./product/overview.md) → [data model](./features/data-model.md) → [events and background jobs](./features/events-and-background-jobs.md) → [the assistant and conversation engine](./features/assistant-conversation-engine.md) |
 | A founder or product reader | [Product overview](./product/overview.md) → [the owner app](./product/owner-app.md) → [billing and plans](./features/billing-and-plans.md)                                                                                                         |
-| On call                     | [Runbook](./runbook.md) → [environments](./environments.md) → [events and background jobs](./features/events-and-background-jobs.md) → [observability and admin](./features/observability-and-admin.md)                                            |
+| On call                     | [Environments](./environments.md) → [events and background jobs](./features/events-and-background-jobs.md) → [observability and admin](./features/observability-and-admin.md) → [WhatsApp connection](./features/whatsapp-connection.md)           |
 
 ## Product
 
@@ -45,15 +45,11 @@ Each feature document owns one mechanism end to end and links out for everything
 
 ## Operations
 
-These documents tell you how to run and change the deployed system. They own their procedures; the feature documents link here rather than repeating them.
+This document tells you how to run and change the deployed system. The feature documents link here rather than repeating its procedures.
 
-| Document                                                                    | Read this to                                                                                                                                                                    |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Environments](./environments.md)                                           | Learn what development, preview, and production each own, how configuration is verified, and how to run migrations and rollbacks                                                |
-| [Runbook](./runbook.md)                                                     | Work the most likely incidents — revoked tokens, stuck jobs, failed sends — as a one-page reference                                                                             |
-| [Launch log review](./observability/launch-log-review.md)                   | Run the daily and weekly structured-log review checklist                                                                                                                        |
-| [WhatsApp Embedded Signup v4 setup](./whatsapp/embedded-signup-v4-setup.md) | Configure the Meta App Dashboard as an operator (an operator guide with dated, deadline-bound claims — verify against Meta before acting)                                       |
-| [Tech stack and architecture](./tech-stack-and-architecture.md)             | See the technical foundation and the reasoning behind each choice (predates the `accounts`/`customers` rename and refers to a product canvas directory that isn't in this repo) |
+| Document                          | Read this to                                                                                                                     |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| [Environments](./environments.md) | Learn what development, preview, and production each own, how configuration is verified, and how to run migrations and rollbacks |
 
 ## Privacy and legal
 
@@ -66,28 +62,20 @@ These support data-protection obligations and customer contracts. The mechanisms
 | [DPA template](./gdpr/dpa-template.md)   | Start a data-processing agreement for a business customer that asks for one (draft; needs legal review) |
 | [Key rotation](./gdpr/key-rotation.md)   | Rotate `TOKEN_ENCRYPTION_KEY` without breaking a single WhatsApp connection                             |
 
-## Design
-
-One document governs visual consistency in the app shell and components.
-
-| Document                                 | Read this to                                                                                      |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| [Spacing spec](./design/spacing-spec.md) | Apply the spacing, control-height, and hit-area values that `app/**` and `components/**` must use |
-
-## Research
-
-Market-validation material for the product, kept for the reasoning behind the plan and pricing decisions.
-
-| Document                                                           | Read this to                                                      |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| [Market validation survey](./research/medium-validation-survey.md) | Read the master survey spec both language versions are built from |
-| [Survey share kit](./research/survey-share-kit.md)                 | Reuse the ready-to-post copy for distributing the survey          |
-
 ## Elsewhere in the repo
 
-Three references live outside `docs/` and are worth knowing about.
+Two references live outside `docs/`.
 
-| Location                      | Read this to                                                                                                                                                         |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`CONTEXT.md`](../CONTEXT.md) | Get the ubiquitous language for environments — what "borrow", "the train", and "fail closed" mean here                                                               |
-| [`README.md`](../README.md)   | Set up the repo and run the commands (its "Current scope" section describes an early scaffold and uses the pre-rename vocabulary)                                    |
+| Location                      | Read this to                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| [`CONTEXT.md`](../CONTEXT.md) | Get the ubiquitous language for environments — what "borrow", "the train", and "fail closed" mean here |
+| [`README.md`](../README.md)   | Set up the repo, run the local stack, and find every `pnpm` command                                    |
+
+## Planning and tracking
+
+Plans, roadmap, and task state live in Atlassian at `dingu.atlassian.net`, not in this repo.
+
+| Location               | Read this to                                                                                  |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| Jira project `MED`     | Find open work, its status, and what is blocked                                               |
+| Confluence space `MED` | Read the **Medium Roadmap** and **Tech Stack and Integrations** pages for plans and rationale |

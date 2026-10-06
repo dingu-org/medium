@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
  * standard Cloud API number picker and rejected the operator's existing
  * WhatsApp Business app number. Meta's current v4 + Coexistence docs still
  * require this key in `extras`.
- * See docs/research/whatsapp-business-app-number-onboarding.md.
+ * See docs/features/whatsapp-connection.md.
  */
 const source = readFileSync(
   join(process.cwd(), 'app/(dashboard)/settings/connect-whatsapp.tsx'),
