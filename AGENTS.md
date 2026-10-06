@@ -16,7 +16,7 @@ For any task:
 2. Make an implementation plan for what is still required.
 3. Implement the required changes.
 4. Test the changes.
-5. Update the Jira issue (status, comment) instead of editing files in `task-manager/`.
+5. Update the Jira issue (status, comment).
 
 # Communication
 

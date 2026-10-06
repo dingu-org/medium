@@ -50,4 +50,3 @@ supabase/.temp/
 next-env.d.ts
 
 # Audit findings name unfixed weaknesses; this repo is public. Keep them out.
-task-manager/audits/

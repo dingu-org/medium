@@ -103,7 +103,7 @@ This is independent from selecting permissions in a login configuration. Verify 
 Repository state is contradictory and therefore unresolved:
 
 - A live Graph audit reported the two permissions as `live` in both apps.
-- `task-manager/progress.md:52,73` and `task-manager/phases/12-pre-launch.md:56` still say Business Verification and App Review/advanced access are pending for external onboarding.
+- The former `task-manager` trackers (now removed; see Jira MED-21 and MED-18) said Business Verification and App Review/advanced access were pending for external onboarding.
 
 Until the provider status itself is shown as approved, Medium has not demonstrated Meta's explicit Coexistence eligibility requirement.
 
