@@ -7,6 +7,7 @@
 import { desc, eq, inArray, and, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { billingOrders, accounts } from '@/lib/db/schema';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import type { ApplyOrderResult } from './payments';
 import { resolveEffectivePlan } from './entitlements';
 import {
@@ -224,7 +225,7 @@ export async function getBillingSnapshot(
   const currentPeriod = paidPeriodRows[0]?.period ?? null;
 
   return {
-    timezone: account?.timezone ?? 'Europe/Berlin',
+    timezone: account?.timezone ?? DEFAULT_TIMEZONE,
     plan: effective,
     storedPlan,
     planLifetime,

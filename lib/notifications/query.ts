@@ -2,6 +2,7 @@ import { and, count, desc, eq, gt, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { events, customers, accounts } from '@/lib/db/schema';
 import { privacyName } from '@/lib/format/name';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import {
   formatNotification,
   NOTIFICATION_TYPES,
@@ -27,7 +28,7 @@ export async function getNotificationData(
     .where(eq(accounts.id, accountId))
     .limit(1);
 
-  const timezone = account?.timezone ?? 'Europe/Berlin';
+  const timezone = account?.timezone ?? DEFAULT_TIMEZONE;
   const seenAt = account?.seenAt ?? null;
 
   const rows = await db
