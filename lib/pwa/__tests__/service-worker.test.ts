@@ -161,6 +161,44 @@ describe('PWA service worker routing', () => {
     ).toBe(false);
   });
 
+  // `navigationPreload: true` makes the browser fire every navigation itself.
+  // A navigation no route claims is then sent a second time and the preloaded
+  // response is thrown away — and /auth/callback's one-time OAuth code was
+  // already spent on the request nobody read.
+  it('claims every same-origin navigation, so no preloaded request is discarded', () => {
+    for (const path of [
+      '/auth/callback?code=abc',
+      '/auth/confirm?token_hash=abc&type=recovery',
+      '/sign-in',
+      '/',
+      '/today',
+    ]) {
+      const request = fakeRequest({ mode: 'navigate' });
+      const claimed = runtimeCaching.some((entry) =>
+        matcherOf(entry)(matchArgs(`https://app.example.test${path}`, request)),
+      );
+      expect(claimed, path).toBe(true);
+    }
+  });
+
+  it('never serves a non-dashboard navigation from cache', () => {
+    const request = fakeRequest({ mode: 'navigate' });
+    const entry = runtimeCaching.find((candidate) =>
+      matcherOf(candidate)(
+        matchArgs('https://app.example.test/auth/callback?code=abc', request),
+      ),
+    );
+    expect(entry?.handler).toBeInstanceOf(NetworkOnly);
+    // Another origin's navigation is not ours to answer.
+    expect(
+      runtimeCaching.some((candidate) =>
+        matcherOf(candidate)(
+          matchArgs('https://evil.example.test/auth/callback', request, false),
+        ),
+      ),
+    ).toBe(false);
+  });
+
   // A browser-initiated endpoint rotation is invisible to the app otherwise: the
   // server prunes the row on the next 404/410 dispatch and push dies silently.
   it('relays a browser-initiated push subscription rotation to open clients', async () => {

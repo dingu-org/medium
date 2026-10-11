@@ -62,6 +62,17 @@ export const runtimeCaching: RuntimeCaching[] = [
       ],
     }),
   },
+  // Every other navigation. `navigationPreload: true` below makes the browser
+  // send each navigation itself, in parallel with waking this worker; a
+  // navigation no route answers is then requested a second time and the
+  // preloaded response dropped. That is a wasted request everywhere and fatal
+  // on /auth/callback, whose one-time OAuth code is spent by the request nobody
+  // read. NetworkOnly hands back the preloaded response instead of refetching.
+  {
+    matcher: ({ request, sameOrigin }) =>
+      request.mode === 'navigate' && sameOrigin,
+    handler: new NetworkOnly(),
+  },
   {
     matcher: ({ request, sameOrigin, url }) =>
       request.method === 'GET' &&
