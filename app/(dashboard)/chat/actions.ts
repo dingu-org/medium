@@ -21,6 +21,7 @@ import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
 import { formatAppointmentTime } from '@/lib/format/appointment-time';
 import { logger, serializeError } from '@/lib/log';
+import { reminderBusinessName } from '@/lib/reminders/business-name';
 import { remindersEnabled } from '@/lib/reminders/flag';
 import { withAuditLog } from '@/lib/tenancy';
 import { instrumentedAction } from '@/lib/actions/instrument';
@@ -314,7 +315,7 @@ async function sendUpcomingReminderTemplateImpl(
     context.timezone,
   );
   const firstName = context.customerName.trim().split(/\s+/)[0] || 'Ju';
-  const name = context.name?.trim() || 'praktika';
+  const name = reminderBusinessName(context.name, definition.language);
   const variables =
     definition.variableSet === 'legacy'
       ? [firstName, localTime]

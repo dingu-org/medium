@@ -23,7 +23,7 @@ describe('buildSystemPrompt bundle safety', () => {
     });
 
     expect(prompt).toContain(
-      'You are an automated scheduling assistant for a solo physical therapist.',
+      'You are an automated scheduling assistant for a solo service professional.',
     );
   });
 });

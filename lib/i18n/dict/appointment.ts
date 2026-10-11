@@ -19,7 +19,7 @@ export const appointment = {
   cancelReasonLabel: 'Arsyeja (jo e detyrueshme)',
   cancelReasonPlaceholder: 'Pse po anulohet?',
   cancelTitle: 'Anulo takimin?',
-  cancelBody: "Pacienti do të njoftohet menjëherë. Ky veprim s'kthehet.",
+  cancelBody: "Klienti do të njoftohet menjëherë. Ky veprim s'kthehet.",
   cancelConfirm: 'Anulo takimin',
   cancelBack: 'Mbrapa',
   bookedToast: 'Takimi u rezervua',
@@ -32,7 +32,7 @@ export const appointment = {
   completeTitle: 'Shëno si të kryer?',
   completeBody: 'Takimi do të shënohet si i kryer.',
   noShowTitle: 'Shëno si mungesë?',
-  noShowBody: 'Takimi do të shënohet si mungesë e pacientit.',
+  noShowBody: 'Takimi do të shënohet si mungesë e klientit.',
   rescheduleConfirmTitle: 'Ricakto takimin?',
   rescheduleConfirmBody: (time: string) =>
     `Takimi do të zhvendoset te ${time}.`,
@@ -64,12 +64,12 @@ export const appointment = {
 
   // manual booking
   newTitle: 'Takim i ri',
-  customer: 'Pacienti',
+  customer: 'Klienti',
   service: 'Shërbimi',
   date: 'Data',
   time: 'Ora',
-  searchCustomer: 'Kërko pacient…',
-  addCustomer: 'Shto pacient',
+  searchCustomer: 'Kërko klient…',
+  addCustomer: 'Shto klient',
   customerName: 'Emri',
   customerPhone: 'Telefoni',
 } as const;

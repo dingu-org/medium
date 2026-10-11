@@ -88,7 +88,7 @@ The send is split into three steps so a retry can never pay for a second templat
 | 4     | `appointment_reminder_24h_fallback`    | `en_US`  | `v2`      |
 | 5     | `appointment_reminder_24h`             | `en_US`  | `legacy`  |
 
-A `v2` template takes three positional values: the customer's first name, the business name (falling back to `praktika` when the account has no name), and the appointment time. The `legacy` template takes two — first name and time — because it predates the business-name slot.
+A `v2` template takes three positional values: the customer's first name, the business name (falling back to `biznesin` for an Albanian template and `the business` for an English one when the account has no name; `reminderBusinessName` in `lib/reminders/business-name.ts`), and the appointment time. The `legacy` template takes two — first name and time — because it predates the business-name slot.
 
 The time is rendered by `formatAppointmentTime` in `lib/format/appointment-time.ts`, the product's single renderer of an appointment instant. Reminders, deterministic reminder replies, and appointment confirmations all quote the same booking, so they have to name it identically; see [appointments and availability](./appointments-availability.md).
 
@@ -216,14 +216,14 @@ The gate fails open when the limit cannot be resolved. Hitting it emits `billing
 
 ## What the owner sees
 
-`reminderBadge` in `components/appointments/badges.tsx` maps job state to a single badge on **Calendar**, on **Today**, and in the appointment sheet. The labels are quoted from `lib/i18n/dict/calendar.ts`, whose Albanian copy still calls a customer _pacient_ after the pilot vertical.
+`reminderBadge` in `components/appointments/badges.tsx` maps job state to a single badge on **Calendar**, on **Today**, and in the appointment sheet. The labels are quoted from `lib/i18n/dict/calendar.ts`.
 
 | Job status              | Response                     | Badge                      | Tone    |
 | ----------------------- | ---------------------------- | -------------------------- | ------- |
 | `scheduled`, `requeued` | —                            | Kujtesa në pritje          | warning |
 | `sent`                  | none                         | Kujtesa u dërgua           | neutral |
 | `sent`                  | `confirm`                    | Konfirmuar                 | success |
-| `sent`                  | `cancel`                     | Anuluar nga pacienti       | danger  |
+| `sent`                  | `cancel`                     | Anuluar nga klienti        | danger  |
 | `sent`                  | `reschedule_requested`       | Kërkon ricaktim            | warning |
 | `skipped`               | reason `plan_reminder_quota` | Kufiri i kujtesave u arrit | warning |
 | `skipped`               | any other reason             | Kujtesa u anashkalua       | neutral |

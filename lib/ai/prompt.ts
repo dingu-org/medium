@@ -54,14 +54,15 @@ function formatPracticeLocalTime(now: Date, timezone: string): string {
 }
 
 export function buildSystemPrompt(context: PromptContext): string {
-  const name =
-    sanitizePromptField(context.name ?? '') ||
-    'praktika e fizioterapisë';
+  // No stand-in for a missing business name: any placeholder would either name
+  // a vertical or be a name the business never chose, and the default greeting
+  // below is sent to customers verbatim.
+  const name = sanitizePromptField(context.name ?? '');
   const aiName =
     sanitizePromptField(context.aiName ?? '') || 'asistenti i rezervimeve';
   const greeting =
     sanitizePromptField(context.aiGreeting ?? '') ||
-    `Përshëndetje! Jam asistenti i rezervimeve për ${name}. Mund t'ju ndihmoj të rezervoni, ricaktoni ose anuloni një takim.`;
+    `Përshëndetje! Jam asistenti i rezervimeve${name ? ` për ${name}` : ''}. Mund t'ju ndihmoj të rezervoni, ricaktoni ose anuloni një takim.`;
   const now = context.now ?? new Date();
 
   const title = sanitizePromptField(context.title ?? '');
@@ -81,7 +82,7 @@ export function buildSystemPrompt(context: PromptContext): string {
 
 ## Practice context
 
-- Practice: ${name}
+- Practice: ${name || '(name not set — do not invent one)'}
 ${titleLine}${addressLine}- Assistant name: ${aiName}
 - Timezone: ${context.timezone}
 - Current time: ${now.toISOString()}

@@ -82,7 +82,7 @@ export function ClientsDirectory({
           description={
             query
               ? 'Provo një emër ose numër tjetër.'
-              : 'Sapo një pacient të shkruajë në WhatsApp, shtohet këtu vetë. Ose shto një me dorë.'
+              : 'Sapo një klient të shkruajë në WhatsApp, shtohet këtu vetë. Ose shto një me dorë.'
           }
           className="pt-14"
           action={

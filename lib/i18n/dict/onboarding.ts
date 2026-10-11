@@ -3,27 +3,27 @@ export const onboarding = {
   metaTitle: 'Fillo · Medium',
   welcomeTitle: 'Mirë se erdhe te Medium',
   welcomeSub:
-    "Asistenti yt që pret pacientët në WhatsApp dhe u rezervon takimet pa pasur nevojë t'i përgjigjesh çdo mesazhi.",
+    "Asistenti yt që pret klientët në WhatsApp dhe u rezervon takimet pa pasur nevojë t'i përgjigjesh çdo mesazhi.",
   start: 'Fillo',
   skip: 'Kalo për tani',
   goToApp: 'Shko te paneli',
   helpLink: 'Ke nevojë për ndihmë?',
   allSetTitle: 'U regjistrove.',
   allSetSub:
-    'Medium tashmë mund të pranojë rezervime në WhatsApp. Pacienti i parë që shkruan do të marrë përgjigje brenda sekondash.',
+    'Medium tashmë mund të pranojë rezervime në WhatsApp. Klienti i parë që shkruan do të marrë përgjigje brenda sekondash.',
 
   stepOf: (i: number, n: number) => `Hapi ${i} nga ${n}`,
   progress: (done: number, total: number) => `${done} nga ${total} të përfunduara`,
 
   steps: {
     profileTitle: 'Profili yt',
-    profileSub: 'Shto emrin e praktikës dhe të dhënat e biznesit.',
+    profileSub: 'Shto emrin e biznesit dhe të dhënat e kontaktit.',
     profileCta: 'Rregullo profilin',
     whatsappTitle: 'Lidh WhatsApp',
-    whatsappSub: 'Lidh numrin tënd të WhatsApp Business që pacientët të shkruajnë.',
+    whatsappSub: 'Lidh numrin tënd të WhatsApp Business që klientët të shkruajnë.',
     whatsappCta: 'Lidh',
     availabilityTitle: 'Cakto disponueshmërinë',
-    availabilitySub: 'Trego kur mund të rezervojnë pacientët.',
+    availabilitySub: 'Trego kur mund të rezervojnë klientët.',
     availabilityCta: 'Cakto orët',
     servicesTitle: 'Shto shërbimet',
     servicesSub: "Çfarë shërbimesh ofron dhe si t'u përgjigjet.",

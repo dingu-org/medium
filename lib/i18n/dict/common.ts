@@ -61,7 +61,7 @@ export const common = {
     empty: 'Asnjë njoftim ende.',
     emptyDescription: 'Rezervimet, anulimet dhe njoftimet do të shfaqen këtu.',
     unread: (n: number) => `Njoftimet, ${n} të palexuara`,
-    recentActivity: 'Aktiviteti i fundit në praktikën tënde',
+    recentActivity: 'Aktiviteti i fundit në biznesin tënd',
     groupNew: 'E re',
     groupEarlier: 'Më herët',
   },

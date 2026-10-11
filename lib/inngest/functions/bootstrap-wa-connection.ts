@@ -27,7 +27,7 @@ export const REMINDER_TEMPLATE: ReminderTemplateDefinition = {
   language: 'sq',
   body: 'Përshëndetje {{1}}, kjo është një kujtesë për takimin tuaj me {{2}} më {{3}}. Përgjigjuni KONFIRMO për ta konfirmuar, ANULO për ta anuluar ose RICAKTO për ta ndryshuar orarin.',
   variableSet: 'v2',
-  exampleValues: ['Ana', 'Fizio Vita', 'e hënë, 13 korrik, ora 09:00'],
+  exampleValues: ['Ana', 'Studio Vita', 'e hënë, 13 korrik, ora 09:00'],
 };
 
 export const FALLBACK_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
@@ -35,7 +35,7 @@ export const FALLBACK_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
   language: 'sq',
   body: 'Përshëndetje {{1}}, kujtesë: takimi juaj me {{2}} është më {{3}}. Përgjigjuni KONFIRMO, ANULO ose RICAKTO.',
   variableSet: 'v2',
-  exampleValues: ['Ana', 'Fizio Vita', 'e hënë, 13 korrik, ora 09:00'],
+  exampleValues: ['Ana', 'Studio Vita', 'e hënë, 13 korrik, ora 09:00'],
 };
 
 export const ENGLISH_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
@@ -43,7 +43,7 @@ export const ENGLISH_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
   language: 'en_US',
   body: 'Hi {{1}}, this is a reminder about your appointment with {{2}} on {{3}}. Reply CONFIRM to confirm, CANCEL to cancel, or RESCHEDULE to change the time.',
   variableSet: 'v2',
-  exampleValues: ['Ana', 'Fizio Vita', 'Monday, 13 July, 9:00 AM'],
+  exampleValues: ['Ana', 'Studio Vita', 'Monday, 13 July, 9:00 AM'],
 };
 
 export const ENGLISH_FALLBACK_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
@@ -51,7 +51,7 @@ export const ENGLISH_FALLBACK_REMINDER_TEMPLATE: ReminderTemplateDefinition = {
   language: 'en_US',
   body: 'Hi {{1}}, reminder: your appointment with {{2}} is on {{3}}. Reply CONFIRM, CANCEL, or RESCHEDULE.',
   variableSet: 'v2',
-  exampleValues: ['Ana', 'Fizio Vita', 'Monday, 13 July, 9:00 AM'],
+  exampleValues: ['Ana', 'Studio Vita', 'Monday, 13 July, 9:00 AM'],
 };
 
 export const LEGACY_REMINDER_TEMPLATE: ReminderTemplateDefinition = {

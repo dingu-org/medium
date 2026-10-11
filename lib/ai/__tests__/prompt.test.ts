@@ -33,7 +33,10 @@ describe('buildSystemPrompt', () => {
       now: new Date('2026-06-10T10:00:00.000Z'),
     });
 
-    expect(prompt).toContain('praktika e fizioterapisë');
+    expect(prompt).toContain(
+      "Përshëndetje! Jam asistenti i rezervimeve. Mund t'ju ndihmoj",
+    );
+    expect(prompt).toContain('- Practice: (name not set — do not invent one)');
     expect(prompt).toContain('Europe/Tirane');
     expect(prompt).toContain('2026-06-10T10:00:00.000Z');
     expect(prompt).toContain(
@@ -185,7 +188,7 @@ describe('buildSystemPrompt', () => {
     });
 
     expect(prompt).toContain(
-      'You are an automated scheduling assistant for a solo physical therapist.',
+      'You are an automated scheduling assistant for a solo service professional.',
     );
     expect(prompt).toContain('the customer as Ju');
     expect(prompt).toContain('# Scope and safety');
@@ -248,6 +251,26 @@ describe('buildSystemPrompt', () => {
     );
     expect(scope).toContain('You handle exactly four things');
     expect(scope).toContain('there is no list of topics to match against');
+  });
+
+  // A business with no name used to fall back to "praktika e fizioterapisë",
+  // which went to customers verbatim in the default greeting. The prompt must
+  // name no vertical anywhere, and nothing stands in for a missing name.
+  it('names no vertical when the business has no name', () => {
+    const prompt = buildSystemPrompt({ ...baseContext, name: null });
+
+    expect(prompt).not.toMatch(
+      /physical therap|physiotherap|fizioterap|patient|pacient|praktik/i,
+    );
+  });
+
+  it('names the business in the default greeting when it is set', () => {
+    const prompt = buildSystemPrompt(baseContext);
+
+    expect(prompt).toContain(
+      "Përshëndetje! Jam asistenti i rezervimeve për Movement Clinic. Mund t'ju ndihmoj",
+    );
+    expect(prompt).toContain('- Practice: Movement Clinic');
   });
 
   it('renders practice context and services after the language rules', () => {
