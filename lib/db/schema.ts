@@ -18,6 +18,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { DEFAULT_TIMEZONE } from '../i18n/timezone';
 
 const bytea = customType<{ data: Buffer; notNull: false; default: false }>({
   dataType() {
@@ -98,7 +99,7 @@ export const accounts = pgTable('accounts', {
   fullName: text('full_name'),
   title: text('title'),
   address: text('address'),
-  timezone: text('timezone').notNull().default('Europe/Berlin'),
+  timezone: text('timezone').notNull().default(DEFAULT_TIMEZONE),
   aiName: text('ai_name'),
   aiGreeting: text('ai_greeting'),
   // Global assistant kill-switch (Phase 15). When true the dispatcher generates

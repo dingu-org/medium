@@ -9,6 +9,7 @@ import {
   accounts,
   reminderJobs,
 } from '@/lib/db/schema';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { remindersEnabled } from '@/lib/reminders/flag';
 
 const DIRECTORY_LIMIT = 250;
@@ -198,7 +199,7 @@ export async function getClientDirectory(
 
   return {
     accountId,
-    timezone: account?.timezone ?? 'Europe/Tirane',
+    timezone: account?.timezone ?? DEFAULT_TIMEZONE,
     query: normalized,
     total: totals?.value ?? rows.length,
     truncated: (totals?.value ?? rows.length) > rows.length,

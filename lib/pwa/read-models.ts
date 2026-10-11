@@ -33,6 +33,7 @@ import { privacyName } from '@/lib/format/name';
 import { remindersEnabled } from '@/lib/reminders/flag';
 import { REMINDER_TEMPLATE_PRIORITY } from '@/lib/inngest/functions/bootstrap-wa-connection';
 import { formatWeekdayShort } from '@/lib/i18n';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { getServices, type ServiceRecord } from '@/lib/services/queries';
 import {
   NOTIFICATION_PREF_KEYS,
@@ -212,7 +213,7 @@ export async function getCalendarSnapshot(
     .from(accounts)
     .where(eq(accounts.id, accountId))
     .limit(1);
-  const timezone = account?.timezone ?? 'Europe/Berlin';
+  const timezone = account?.timezone ?? DEFAULT_TIMEZONE;
 
   const view: 'day' | 'week' = input.view === 'day' ? 'day' : 'week';
   const todayKey = format(new TZDate(new Date(), timezone), 'yyyy-MM-dd');
@@ -590,7 +591,7 @@ export async function getSettingsSnapshot(
     fullName: account?.fullName ?? '',
     title: account?.title ?? '',
     address: account?.address ?? '',
-    timezone: account?.timezone ?? 'Europe/Berlin',
+    timezone: account?.timezone ?? DEFAULT_TIMEZONE,
     aiName: account?.aiName ?? '',
     aiGreeting: account?.aiGreeting ?? '',
     assistantPaused: account?.assistantPaused ?? false,

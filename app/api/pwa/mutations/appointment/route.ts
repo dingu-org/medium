@@ -11,6 +11,7 @@ import {
 } from '@/lib/appointments';
 import { db } from '@/lib/db';
 import { appointments, accounts } from '@/lib/db/schema';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { getPwaAccountId } from '@/lib/pwa/auth';
 import { resolveBookingService } from '@/lib/services/queries';
 import { createManualCustomer } from '@/lib/clients/mutations';
@@ -211,7 +212,7 @@ async function bookManual(
     .from(accounts)
     .where(eq(accounts.id, accountId))
     .limit(1);
-  const timezone = account?.timezone ?? 'Europe/Berlin';
+  const timezone = account?.timezone ?? DEFAULT_TIMEZONE;
   const [year, month, day] = input.date.split('-').map(Number);
   const [h, m] = input.time.split(':').map(Number);
   const startsAt = new Date(

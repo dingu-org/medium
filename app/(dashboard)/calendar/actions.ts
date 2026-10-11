@@ -15,6 +15,7 @@ import {
 import { getFreeSlotsInternal } from '@/lib/appointments/availability';
 import { db } from '@/lib/db';
 import { appointments, customers, accounts } from '@/lib/db/schema';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
 import { resolveBookingService } from '@/lib/services/queries';
@@ -304,7 +305,7 @@ async function bookManualAppointmentImpl(input: {
     .from(accounts)
     .where(eq(accounts.id, accountId))
     .limit(1);
-  const timezone = account?.timezone ?? 'Europe/Berlin';
+  const timezone = account?.timezone ?? DEFAULT_TIMEZONE;
 
   const [year, month, day] = parsed.data.date.split('-').map(Number);
   const [h, m] = parsed.data.time.split(':').map(Number);

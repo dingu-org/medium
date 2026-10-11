@@ -33,6 +33,7 @@ import {
 } from '@/lib/db/schema';
 import { privacyName } from '@/lib/format/name';
 import { formatDate, formatTime, formatWeekdayShort } from '@/lib/i18n';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { remindersEnabled } from '@/lib/reminders/flag';
 
 export type TodayAppointment = AppointmentView & {
@@ -143,7 +144,7 @@ export async function getTodaySnapshot(
     .from(accounts)
     .where(eq(accounts.id, accountId))
     .limit(1);
-  const timezone = account?.timezone ?? 'Europe/Tirane';
+  const timezone = account?.timezone ?? DEFAULT_TIMEZONE;
   const zonedNow = new TZDate(now, timezone);
   const dayStart = new Date(startOfDay(zonedNow).getTime());
   const dayEnd = new Date(endOfDay(zonedNow).getTime());

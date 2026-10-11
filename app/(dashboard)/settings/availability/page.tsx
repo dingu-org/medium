@@ -6,6 +6,7 @@ import { db } from '@/lib/db';
 import { availabilityRules, blockedPeriods, accounts } from '@/lib/db/schema';
 import { t } from '@/lib/i18n';
 import { formatDate, formatTime } from '@/lib/i18n/datetime';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { createServerClient } from '@/lib/supabase/server';
 import { AvailabilityEditor, type BlockView } from './availability-editor';
 
@@ -45,7 +46,7 @@ export default async function AvailabilityPage() {
       .orderBy(asc(blockedPeriods.startsAt)),
   ]);
 
-  const timezone = account?.timezone ?? 'Europe/Berlin';
+  const timezone = account?.timezone ?? DEFAULT_TIMEZONE;
 
   // One range per weekday for the MVP editor — keep the earliest block.
   const seen = new Set<number>();
