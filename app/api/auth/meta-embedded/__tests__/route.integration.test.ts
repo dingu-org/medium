@@ -282,7 +282,10 @@ describe('POST /api/auth/meta-embedded — mode per finish event', () => {
     // Defence in depth: the client will not send this, but if it did the route
     // must not invent a number. The WABA has no usable number to resolve.
     vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
-    vi.stubGlobal('fetch', fetchWith('/WABA_123/phone_numbers', 200, { data: [] }));
+    vi.stubGlobal(
+      'fetch',
+      fetchWith('/WABA_123/phone_numbers', 200, { data: [] }),
+    );
 
     const res = await POST(
       makePost({
@@ -292,7 +295,7 @@ describe('POST /api/auth/meta-embedded — mode per finish event', () => {
       }),
     );
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ ok: false, error: 'rejected' });
+    expect(await res.json()).toMatchObject({ ok: false, error: 'rejected' });
     const rows = await db
       .select()
       .from(whatsappConnections)
@@ -310,7 +313,7 @@ describe('POST /api/auth/meta-embedded — mode per finish event', () => {
       }),
     );
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ ok: false, error: 'rejected' });
+    expect(await res.json()).toMatchObject({ ok: false, error: 'rejected' });
     const rows = await db
       .select()
       .from(whatsappConnections)
@@ -346,7 +349,9 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     expect(row.accessTokenEncrypted).toBeInstanceOf(Buffer);
     expect(await decryptToken(row.accessTokenEncrypted!)).toBe(BIZ_TOKEN);
     expect(
-      fetchSpy.mock.calls.some(([input]) => String(input).includes('/register')),
+      fetchSpy.mock.calls.some(([input]) =>
+        String(input).includes('/register'),
+      ),
     ).toBe(false);
 
     expect(sendSpy).toHaveBeenCalledWith(
@@ -369,11 +374,14 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
       .select()
       .from(auditLog)
       .where(
-        and(eq(auditLog.accountId, accountId), eq(auditLog.action, 'wa.token.issued')),
+        and(
+          eq(auditLog.accountId, accountId),
+          eq(auditLog.action, 'wa.token.issued'),
+        ),
       );
     expect(audit).toBeTruthy();
     expect(audit.targetTable).toBe('whatsapp_connections');
-    expect(audit.metadata).toEqual({
+    expect(audit.metadata).toMatchObject({
       phone_number_id: phoneNumberId,
       waba_id: 'WABA_123',
     });
@@ -430,7 +438,9 @@ describe('POST /api/auth/meta-embedded — happy path', () => {
     expect(row.mode).toBe('coexistence');
     expect(row.displayPhoneNumber).toBe('+15551234567');
     expect(
-      fetchSpy.mock.calls.some(([input]) => String(input).includes('/register')),
+      fetchSpy.mock.calls.some(([input]) =>
+        String(input).includes('/register'),
+      ),
     ).toBe(false);
     expect(sendSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -537,7 +547,7 @@ describe('POST /api/auth/meta-embedded — failures', () => {
     vi.stubGlobal('fetch', fetchWith('/oauth/access_token', 200, {}));
     const res = await POST(makePost(validBody(nextPni())));
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       ok: false,
       error: 'token_exchange_failed',
     });
@@ -550,7 +560,7 @@ describe('POST /api/auth/meta-embedded — failures', () => {
     );
     const res = await POST(makePost(validBody(nextPni())));
     expect(res.status).toBe(502);
-    expect(await res.json()).toEqual({ ok: false, error: 'graph_error' });
+    expect(await res.json()).toMatchObject({ ok: false, error: 'graph_error' });
   });
 
   it('returns 409 duplicate_number when another PT owns the number', async () => {
@@ -563,6 +573,116 @@ describe('POST /api/auth/meta-embedded — failures', () => {
     });
     const res = await POST(makePost(validBody(phoneNumberId)));
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ ok: false, error: 'duplicate_number' });
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      error: 'duplicate_number',
+    });
+  });
+});
+
+// Platform logs are short-lived, so the callback's own account of a failure —
+// which step, and Meta's codes — has to land somewhere durable.
+describe('POST /api/auth/meta-embedded — diagnostic trail', () => {
+  const ATTEMPT_ID = '7b1c0c1e-6f0a-4d53-9d0e-3f1f8a2b9c11';
+
+  async function auditRows(action: string) {
+    return db
+      .select()
+      .from(auditLog)
+      .where(
+        and(eq(auditLog.accountId, accountId), eq(auditLog.action, action)),
+      );
+  }
+
+  it('records the failing step and Graph codes when the token exchange fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      fetchWith('/oauth/access_token', 400, {
+        error: { message: 'expired', code: 100, error_subcode: 36007 },
+      }),
+    );
+    const res = await POST(
+      makePost({ ...validBody(nextPni()), attemptId: ATTEMPT_ID }),
+    );
+    const body = (await res.json()) as { traceId?: string };
+
+    const [row] = await auditRows('wa.signup.failed');
+    expect(row.metadata).toMatchObject({
+      step: 'token_exchange',
+      kind: 'token_exchange_failed',
+      graph_status: 400,
+      graph_code: 100,
+      graph_subcode: 36007,
+      attempt_id: ATTEMPT_ID,
+      mode: 'coexistence',
+      had_number_id: true,
+      trace_id: body.traceId,
+    });
+    // The one-time auth code and the token never reach the trail.
+    expect(JSON.stringify(row.metadata)).not.toContain('AUTH_CODE_xyz');
+  });
+
+  it('records subscribe_app as the step when the subscription fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      fetchWith('/subscribed_apps', 403, {
+        error: { message: 'boom', code: 200 },
+      }),
+    );
+    await POST(makePost(validBody(nextPni())));
+
+    const [row] = await auditRows('wa.signup.failed');
+    expect(row.metadata).toMatchObject({
+      step: 'subscribe_app',
+      kind: 'graph_error',
+      graph_status: 403,
+      graph_code: 200,
+    });
+    expect(JSON.stringify(row.metadata)).not.toContain(BIZ_TOKEN);
+  });
+
+  it('records persist as the step for a duplicate number', async () => {
+    const phoneNumberId = nextPni();
+    await db.insert(whatsappConnections).values({
+      accountId: otherAccountId,
+      phoneNumberId,
+      wabaId: 'WABA_OTHER',
+      status: 'active',
+    });
+    await POST(makePost(validBody(phoneNumberId)));
+
+    const [row] = await auditRows('wa.signup.failed');
+    expect(row.metadata).toMatchObject({
+      step: 'persist',
+      kind: 'duplicate_number',
+    });
+  });
+
+  it('carries a swallowed register failure into the success row', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    vi.stubGlobal(
+      'fetch',
+      fetchWith('/register', 400, { error: { message: 'pin', code: 133005 } }),
+    );
+    const res = await POST(
+      makePost({ ...validBody(nextPni(), 'cloud_api'), attemptId: ATTEMPT_ID }),
+    );
+    expect(res.status).toBe(200);
+
+    const [row] = await auditRows('wa.token.issued');
+    expect(row.metadata).toMatchObject({
+      mode: 'cloud_api',
+      attempt_id: ATTEMPT_ID,
+      register_failed: true,
+    });
+    expect(await auditRows('wa.signup.failed')).toHaveLength(0);
+  });
+
+  it('marks a clean signup as register_failed: false', async () => {
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: [] } as never);
+    await POST(makePost(validBody(nextPni(), 'cloud_api')));
+
+    const [row] = await auditRows('wa.token.issued');
+    expect(row.metadata).toMatchObject({ register_failed: false });
   });
 });

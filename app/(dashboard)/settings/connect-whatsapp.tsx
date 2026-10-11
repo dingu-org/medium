@@ -10,8 +10,12 @@ import { WhatsAppMark } from '@/components/ui/whatsapp-mark';
 import { t } from '@/lib/i18n';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import {
+  MAX_SIGNUP_MESSAGE_SUMMARIES,
+  classifySignupRefusal,
+  describeSignupMessage,
   postableMode,
   readSignupMessage,
+  type SignupMessageSummary,
   type SignupSession,
 } from './whatsapp-signup';
 
@@ -71,6 +75,52 @@ function loadFbSdk(appId: string, version: string): Promise<void> {
   return sdkPromise;
 }
 
+// Marks a signup in flight so a page that reloads mid-popup — losing every ref
+// and state below — can tell on its next mount that an attempt was cut short.
+const ATTEMPT_STORAGE_KEY = 'medium.wa-signup-attempt';
+
+function readInterruptedAttempt(): string | null {
+  try {
+    const id = window.sessionStorage.getItem(ATTEMPT_STORAGE_KEY);
+    if (id) window.sessionStorage.removeItem(ATTEMPT_STORAGE_KEY);
+    return id;
+  } catch {
+    return null; // storage blocked — diagnostics only, never fatal
+  }
+}
+
+function markAttempt(id: string | null): void {
+  try {
+    if (id) window.sessionStorage.setItem(ATTEMPT_STORAGE_KEY, id);
+    else window.sessionStorage.removeItem(ATTEMPT_STORAGE_KEY);
+  } catch {
+    // storage blocked — diagnostics only, never fatal
+  }
+}
+
+/**
+ * Fire-and-forget report to the signup diagnostics endpoint. Nothing here may
+ * affect the flow: no await at the call sites, every failure swallowed.
+ * `keepalive` lets the report outlive a page that is unloading.
+ */
+function reportSignup(report: Record<string, unknown>): void {
+  try {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches;
+    void fetch('/api/auth/meta-embedded/diagnostics', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      keepalive: true,
+      body: JSON.stringify({
+        ...report,
+        displayMode: standalone ? 'standalone' : 'browser',
+      }),
+    }).catch(() => undefined);
+  } catch {
+    // diagnostics only
+  }
+}
+
 type WaStatus = {
   tone: 'warning' | 'danger';
   title: string;
@@ -127,14 +177,75 @@ export function ConnectWhatsApp({
   // the next server render shows connected.
   const cancelledRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Diagnostic trail for the attempt in flight (null between attempts): what
+  // the popup posted, including the events and origins readSignupMessage drops.
+  const attemptRef = useRef<{
+    id: string;
+    startedAt: number;
+    messages: SignupMessageSummary[];
+  } | null>(null);
+
+  /** Report the attempt's terminal outcome and close it. */
+  const finishAttempt = useCallback(
+    (outcome: string, extra: Record<string, unknown> = {}) => {
+      const attempt = attemptRef.current;
+      if (!attempt) return;
+      attemptRef.current = null;
+      markAttempt(null);
+      reportSignup({
+        attemptId: attempt.id,
+        outcome,
+        messages: attempt.messages,
+        elapsedMs: Date.now() - attempt.startedAt,
+        ...extra,
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
+      const attempt = attemptRef.current;
+      if (attempt && attempt.messages.length < MAX_SIGNUP_MESSAGE_SUMMARIES) {
+        const summary = describeSignupMessage(event);
+        if (summary) attempt.messages.push(summary);
+      }
       const session = readSignupMessage(event);
       if (session) sessionInfo.current = session;
     }
+    // The page going away mid-signup is the one outcome no code path below can
+    // observe. `pagehide` also fires for a page entering the bfcache, so the
+    // attempt is reported but left open: if the page survives, its real
+    // terminal outcome still follows.
+    function onPageHide() {
+      const attempt = attemptRef.current;
+      if (!attempt) return;
+      reportSignup({
+        attemptId: attempt.id,
+        outcome: 'page_unloaded',
+        messages: attempt.messages,
+        elapsedMs: Date.now() - attempt.startedAt,
+      });
+    }
     window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, []);
+
+  // A leftover marker means the previous page instance died mid-signup. Without
+  // this the PT lands on a bare Connect button with no explanation at all.
+  useEffect(() => {
+    const interrupted = readInterruptedAttempt();
+    if (!interrupted) return;
+    reportSignup({ attemptId: interrupted, outcome: 'resumed_after_reload' });
+    setStatus({
+      tone: 'warning',
+      title: t.settings.whatsappIncompleteTitle,
+      body: t.settings.whatsappIncomplete,
+    });
   }, []);
 
   const handleClick = useCallback(async () => {
@@ -156,6 +267,10 @@ export function ConnectWhatsApp({
     setStatus(null);
     cancelledRef.current = false;
     sessionInfo.current = {};
+    const attemptId = crypto.randomUUID();
+    attemptRef.current = { id: attemptId, startedAt: Date.now(), messages: [] };
+    markAttempt(attemptId);
+    reportSignup({ attemptId, outcome: 'started' });
     try {
       await loadFbSdk(appId, graphVersion);
       const fb = window.FB;
@@ -185,12 +300,20 @@ export function ConnectWhatsApp({
         });
       });
 
+      const code = loginResp.authResponse?.code;
+      const login = { loginStatus: loginResp.status, hasCode: Boolean(code) };
+      const refusal = classifySignupRefusal({
+        cancelled: cancelledRef.current,
+        hasCode: Boolean(code),
+        session: sessionInfo.current,
+      });
+      if (refusal) finishAttempt(refusal, login);
+
       if (cancelledRef.current) {
         setPending(false);
         return;
       }
 
-      const code = loginResp.authResponse?.code;
       const { phoneNumberId, wabaId } = sessionInfo.current;
       const mode = postableMode(sessionInfo.current);
       if (!code || !mode) {
@@ -209,10 +332,11 @@ export function ConnectWhatsApp({
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',
         signal: abortRef.current.signal,
-        body: JSON.stringify({ code, phoneNumberId, wabaId, mode }),
+        body: JSON.stringify({ code, phoneNumberId, wabaId, mode, attemptId }),
       });
 
       if (res.ok) {
+        finishAttempt('post_ok', { ...login, httpStatus: res.status });
         // Leave `pending` true — the spinner stays up until the RSC re-renders
         // as 'active' and this component unmounts (no explainer flash).
         toast.success(t.settings.whatsappSuccess);
@@ -220,42 +344,59 @@ export function ConnectWhatsApp({
         return;
       }
 
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        traceId?: string;
+      };
+      finishAttempt('post_failed', {
+        ...login,
+        httpStatus: res.status,
+        errorKind: body.error,
+        serverTraceId: body.traceId,
+      });
       setStatus(errorStatus(body.error));
       setPending(false);
-    } catch {
+    } catch (err) {
+      finishAttempt(cancelledRef.current ? 'cancelled_by_user' : 'threw', {
+        errorName: err instanceof Error ? err.name : typeof err,
+        errorMessage: (err instanceof Error ? err.message : String(err)).slice(
+          0,
+          200,
+        ),
+      });
       if (cancelledRef.current) return;
       setStatus(errorStatus(undefined));
       setPending(false);
     }
-  }, [appId, configId, graphVersion, online, router]);
+  }, [appId, configId, finishAttempt, graphVersion, online, router]);
 
   const handleCancel = useCallback(() => {
     cancelledRef.current = true;
     abortRef.current?.abort();
+    finishAttempt('cancelled_by_user');
     setPending(false);
     setStatus(null);
-  }, []);
+  }, [finishAttempt]);
 
   if (pending) {
     return (
       <div className="flex flex-col items-center pt-24 text-center">
         <div className="mb-5 inline-flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[var(--brand-50)]">
           <Loader2
-            className="h-[30px] w-[30px] animate-spin text-primary"
+            className="text-primary h-[30px] w-[30px] animate-spin"
             strokeWidth={3}
           />
         </div>
-        <p className="font-heading text-[22px] font-bold tracking-[-0.025em] text-foreground">
+        <p className="font-heading text-foreground text-[22px] font-bold tracking-[-0.025em]">
           {t.settings.whatsappPendingTitle}
         </p>
-        <p className="mt-2 max-w-[280px] text-sm leading-[1.55] text-ink-2">
+        <p className="text-ink-2 mt-2 max-w-[280px] text-sm leading-[1.55]">
           {t.settings.whatsappPendingBody}
         </p>
         <button
           type="button"
           onClick={handleCancel}
-          className="mt-4 inline-flex min-h-11 items-center px-4 text-sm font-semibold text-ink-2"
+          className="text-ink-2 mt-4 inline-flex min-h-11 items-center px-4 text-sm font-semibold"
         >
           {t.actions.cancel}
         </button>
@@ -304,7 +445,7 @@ export function ConnectWhatsApp({
           : t.settings.whatsappConnectBusiness}
       </button>
       {note && (
-        <div className="flex items-center justify-center gap-2 text-xs text-ink-3">
+        <div className="text-ink-3 flex items-center justify-center gap-2 text-xs">
           <Clock className="h-[13px] w-[13px]" aria-hidden />
           {note}
         </div>
