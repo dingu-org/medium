@@ -137,8 +137,8 @@ The drizzle config asserts the target's project ref before migrating, so
 
 ### Reseeding preview
 
-`pnpm seed:qa:preview` (idempotent-ish; wipes and recreates the QA PT) or
-`pnpm seed:reset:preview` — both wipe and recreate only the seed PT.
+`pnpm seed:qa:preview` (idempotent-ish; wipes and recreates the QA account) or
+`pnpm seed:reset:preview` — both wipe and recreate only the seed account.
 
 To empty the database entirely — every row, every auth user, schema
 re-migrated from `drizzle/migrations`, nothing seeded — use

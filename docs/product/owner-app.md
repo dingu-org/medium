@@ -164,7 +164,7 @@ The services step is the one that differs: it lists the services already on the 
 
 All owner-facing strings live in one Albanian dictionary, `lib/i18n/sq.ts`, composed from per-area modules under `lib/i18n/dict/`. There is no runtime locale switch: screens import `t` directly. Owner copy is informal ("ti"); the formal register used when writing to a customer lives in the assistant prompts and the reminder handlers, not in the dictionary.
 
-The shipped Albanian copy still calls a customer _pacient_, because the pilot vertical is physiotherapy; the public marketing and legal pages go further and name the owner a _fizioterapist_. The data model and this documentation use `accounts` and `customers`.
+The Albanian copy calls a customer _klient_ and the account a _biznes_, matching `customers` and `accounts` in the data model and this documentation. No owner-facing string names a kind of business; only the public marketing and privacy pages name professions, as examples of who Medium is for.
 
 ## Loading, empty and error states
 
