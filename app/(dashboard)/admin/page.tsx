@@ -2,10 +2,12 @@ import { notFound } from 'next/navigation';
 import {
   getAdminMetrics,
   getBillingMetrics,
+  getSignupTrail,
   type BillingMetrics,
   type FunnelWindow,
   type PaymentRow,
   type AccountCostRow,
+  type SignupTrailRow,
 } from '@/lib/metrics/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { createServerClient } from '@/lib/supabase/server';
@@ -30,9 +32,10 @@ export default async function AdminPage() {
     notFound();
   }
 
-  const [metrics, billing] = await Promise.all([
+  const [metrics, billing, signupTrail] = await Promise.all([
     getAdminMetrics(),
     getBillingMetrics(),
+    getSignupTrail(),
   ]);
   const exportMonths = recentMonthKeys(new Date(), 6);
 
@@ -41,7 +44,10 @@ export default async function AdminPage() {
       <h1 className="text-xl font-bold">Admin metrics</h1>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <FunnelCard title="Funnel — yesterday" funnel={metrics.funnelYesterday} />
+        <FunnelCard
+          title="Funnel — yesterday"
+          funnel={metrics.funnelYesterday}
+        />
         <FunnelCard title="Funnel — last 7 days" funnel={metrics.funnel7d} />
       </div>
 
@@ -54,7 +60,8 @@ export default async function AdminPage() {
             {(metrics.cohort.pct * 100).toFixed(1)}%
           </p>
           <p className="text-muted-foreground text-sm">
-            {metrics.cohort.connectedWithin24h} / {metrics.cohort.totalAccounts} PTs
+            {metrics.cohort.connectedWithin24h} / {metrics.cohort.totalAccounts}{' '}
+            PTs
           </p>
         </CardContent>
       </Card>
@@ -84,6 +91,8 @@ export default async function AdminPage() {
         </CardContent>
       </Card>
 
+      <SignupTrailCard rows={signupTrail} />
+
       <CostCard title="Cost — yesterday" rows={metrics.cost.yesterday} />
       <CostCard title="Cost — current month" rows={metrics.cost.currentMonth} />
       <CostCard
@@ -101,10 +110,7 @@ export default async function AdminPage() {
       <RenewalChurnCard billing={billing} />
       <CapHitsCard billing={billing} />
       <FreeCogsCard billing={billing} />
-      <PaymentsCard
-        rows={billing.recentPayments}
-        exportMonths={exportMonths}
-      />
+      <PaymentsCard rows={billing.recentPayments} exportMonths={exportMonths} />
     </div>
   );
 }
@@ -137,8 +143,8 @@ function PlanDistributionCard({ billing }: { billing: BillingMetrics }) {
           <Stat label="Total" value={String(d.total)} />
         </div>
         <p className="text-muted-foreground mt-2 text-xs">
-          Effective plan at request time — a lapsed Solo counts as Free; lifetime
-          pilots are their own bucket.
+          Effective plan at request time — a lapsed Solo counts as Free;
+          lifetime pilots are their own bucket.
         </p>
       </CardContent>
     </Card>
@@ -206,8 +212,8 @@ function RenewalChurnCard({ billing }: { billing: BillingMetrics }) {
           />
         </div>
         <p className="text-muted-foreground mt-2 text-xs">
-          Ledger-only: a due boundary renews when a later paid order lands within
-          the grace window. {d.distinctAccountsThisMonth} distinct PT
+          Ledger-only: a due boundary renews when a later paid order lands
+          within the grace window. {d.distinctAccountsThisMonth} distinct PT
           {d.distinctAccountsThisMonth === 1 ? '' : 's'} downgraded this month.
         </p>
       </CardContent>
@@ -228,7 +234,8 @@ function CapHitsCard({ billing }: { billing: BillingMetrics }) {
             <p className="text-muted-foreground">Conversations</p>
             <p className="text-lg font-semibold">{pct(conversations.rate)}</p>
             <p className="text-muted-foreground text-xs">
-              {conversations.accounts} / {conversations.activeAccounts} active PTs
+              {conversations.accounts} / {conversations.activeAccounts} active
+              PTs
             </p>
           </div>
           <div>
@@ -258,7 +265,10 @@ function FreeCogsCard({ billing }: { billing: BillingMetrics }) {
       <CardContent>
         <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
           <Stat label="AI cost" value={formatMicro(f.aiCostMicrousd, '$')} />
-          <Stat label="Meta cost" value={formatMicro(f.metaCostMicroEur, '€')} />
+          <Stat
+            label="Meta cost"
+            value={formatMicro(f.metaCostMicroEur, '€')}
+          />
           <Stat label="Free PTs" value={String(f.freeAccountCount)} />
           <Stat label="Meta source" value={metaSourceLabel(f.metaCostSource)} />
         </div>
@@ -312,7 +322,9 @@ function PaymentsCard({
           ))}
         </div>
         {rows.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No payments this month.</p>
+          <p className="text-muted-foreground text-sm">
+            No payments this month.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
@@ -332,7 +344,9 @@ function PaymentsCard({
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.orderId} className="border-t">
-                    <td className="py-1 pr-4">{formatInstant(row.createdAt)}</td>
+                    <td className="py-1 pr-4">
+                      {formatInstant(row.createdAt)}
+                    </td>
                     <td className="py-1 pr-4">{row.email}</td>
                     <td className="py-1 pr-4">{row.plan}</td>
                     <td className="py-1 pr-4">{row.period}</td>
@@ -352,6 +366,102 @@ function PaymentsCard({
         <p className="text-muted-foreground mt-2 text-xs">
           Amounts are POK minor units; the ALL minor-unit factor is UNCONFIRMED
           pending the POK spike — do not divide.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** The one field that says what happened, per kind of trail row. */
+function signupResult(row: SignupTrailRow): string {
+  const m = row.metadata;
+  if (row.action === 'wa.token.issued') {
+    return m.register_failed === true
+      ? 'connected (register failed)'
+      : 'connected';
+  }
+  if (row.action === 'wa.signup.failed') {
+    return `${String(m.kind ?? 'failed')} @ ${String(m.step ?? '?')}`;
+  }
+  return String(m.outcome ?? '—');
+}
+
+/** Everything else worth a glance, compacted to one cell. */
+function signupDetail(row: SignupTrailRow): string {
+  const m = row.metadata;
+  const parts: string[] = [];
+  if (m.graph_status != null || m.graph_code != null) {
+    parts.push(
+      `graph ${String(m.graph_status ?? '?')}/${String(m.graph_code ?? '?')}/${String(m.graph_subcode ?? '-')}`,
+    );
+  }
+  if (m.httpStatus != null) parts.push(`http ${String(m.httpStatus)}`);
+  if (m.errorKind != null) parts.push(String(m.errorKind));
+  if (m.loginStatus != null) parts.push(`login ${String(m.loginStatus)}`);
+  if (m.mode != null) parts.push(String(m.mode));
+  if (m.displayMode != null) parts.push(String(m.displayMode));
+  if (Array.isArray(m.messages)) {
+    const events = (m.messages as Record<string, unknown>[]).map(
+      (msg) =>
+        `${String(msg.event ?? '?')}${msg.originAccepted === false ? ' (origin refused)' : ''}${msg.currentStep ? ` at ${String(msg.currentStep)}` : ''}${msg.errorId ? ` #${String(msg.errorId)}` : ''}`,
+    );
+    parts.push(
+      `popup: ${events.length > 0 ? events.join(', ') : 'no messages'}`,
+    );
+  }
+  if (m.errorMessage != null) parts.push(String(m.errorMessage));
+  return parts.join(' · ') || '—';
+}
+
+function SignupTrailCard({ rows }: { rows: SignupTrailRow[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>WhatsApp signup attempts — latest</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No signup attempts recorded.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th className="py-1 pr-4 font-medium">When (UTC)</th>
+                  <th className="py-1 pr-4 font-medium">Email</th>
+                  <th className="py-1 pr-4 font-medium">Attempt</th>
+                  <th className="py-1 pr-4 font-medium">Result</th>
+                  <th className="py-1 font-medium">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-t">
+                    <td className="py-1 pr-4">
+                      {formatInstant(row.occurredAt)}
+                    </td>
+                    <td className="py-1 pr-4">{row.email ?? '—'}</td>
+                    <td className="py-1 pr-4 font-mono text-xs">
+                      {String(
+                        row.metadata.attemptId ??
+                          row.metadata.attempt_id ??
+                          '—',
+                      ).slice(0, 8)}
+                    </td>
+                    <td className="py-1 pr-4">{signupResult(row)}</td>
+                    <td className="py-1">{signupDetail(row)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-muted-foreground mt-2 text-xs">
+          One attempt id spans the browser&apos;s reports and the callback. A
+          &quot;started&quot; with nothing after it means the page went away
+          mid-popup.
         </p>
       </CardContent>
     </Card>

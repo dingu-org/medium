@@ -2,7 +2,7 @@ import { type NextRequest } from 'next/server';
 import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { whatsappConnections } from '@/lib/db/schema';
+import { auditLog, whatsappConnections } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
@@ -13,6 +13,7 @@ import { graphFetch } from '@/lib/channels/whatsapp/graph';
 import {
   GraphApiError,
   MetaSignupError,
+  graphFailureOf,
   type MetaSignupErrorKind,
 } from '@/lib/channels/whatsapp/errors';
 
@@ -38,7 +39,18 @@ const bodySchema = z.object({
   // standard Cloud API signup as coexistence and start a 24h sync deadline
   // that nothing can satisfy.
   mode: z.enum(['cloud_api', 'coexistence']),
+  // Joins this request to the client's own diagnostic trail for the attempt.
+  attemptId: z.string().uuid().optional(),
 });
+
+/** Where the callback was when it failed — the first thing a postmortem asks. */
+type SignupStep =
+  | 'token_exchange'
+  | 'resolve_number'
+  | 'register_number'
+  | 'subscribe_app'
+  | 'display_number'
+  | 'persist';
 
 const STATUS_BY_KIND: Record<MetaSignupErrorKind, number> = {
   duplicate_number: 409,
@@ -60,9 +72,13 @@ export async function POST(req: NextRequest) {
   const log = createLogger({ trace_id });
 
   if (req.headers.get('origin') !== APP_URL) {
-    log.warn('meta_embedded.bad_origin', 'Rejected: unexpected request origin', {
-      origin: req.headers.get('origin'),
-    });
+    log.warn(
+      'meta_embedded.bad_origin',
+      'Rejected: unexpected request origin',
+      {
+        origin: req.headers.get('origin'),
+      },
+    );
     return new Response('Forbidden', { status: 403 });
   }
 
@@ -71,6 +87,7 @@ export async function POST(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
+    log.warn('meta_embedded.unauthenticated', 'Rejected: no session');
     return new Response('Unauthorized', { status: 401 });
   }
   const accountId = user.id;
@@ -79,12 +96,24 @@ export async function POST(req: NextRequest) {
   try {
     payload = bodySchema.parse(await req.json());
   } catch {
+    log.warn('meta_embedded.bad_request', 'Rejected: malformed body', {
+      account_id: accountId,
+    });
     return new Response('Bad request', { status: 400 });
   }
-  const { code, wabaId, mode } = payload;
+  const { code, wabaId, mode, attemptId } = payload;
+  const attempt = {
+    account_id: accountId,
+    attempt_id: attemptId,
+    mode,
+    had_number_id: payload.phoneNumberId != null,
+  };
+  log.info('meta_embedded.signup_started', 'Embedded Signup callback', attempt);
 
+  let step: SignupStep = 'token_exchange';
   try {
     const token = await exchangeCodeForToken(code);
+    step = 'resolve_number';
     const { phoneNumberId, displayPhoneNumber: resolvedDisplay } =
       await resolvePhoneNumberId({
         wabaId,
@@ -93,15 +122,26 @@ export async function POST(req: NextRequest) {
         mode,
       });
 
+    // The two best-effort steps never fail the signup, so their failures are
+    // carried into the audit row instead — a connection that "worked" with an
+    // unregistered number is otherwise indistinguishable from a healthy one.
+    let registerFailed = false;
     if (mode === 'cloud_api') {
-      await registerPhoneNumber(phoneNumberId, token.accessToken);
+      step = 'register_number';
+      registerFailed = !(await registerPhoneNumber(
+        phoneNumberId,
+        token.accessToken,
+      ));
     }
+    step = 'subscribe_app';
     await subscribeApp(wabaId, token.accessToken); // also validates the token before we persist
 
+    step = 'display_number';
     const displayPhoneNumber =
       resolvedDisplay ??
       (await fetchDisplayPhoneNumber(phoneNumberId, token.accessToken));
 
+    step = 'persist';
     const encrypted = await encryptToken(token.accessToken);
     const tokenExpiresAt = new Date(
       Date.now() + (token.expiresInSeconds ?? 60 * 24 * 60 * 60) * 1000,
@@ -112,7 +152,15 @@ export async function POST(req: NextRequest) {
         actor: 'account',
         action: 'wa.token.issued',
         targetTable: 'whatsapp_connections',
-        metadata: { phone_number_id: phoneNumberId, waba_id: wabaId },
+        metadata: {
+          phone_number_id: phoneNumberId,
+          waba_id: wabaId,
+          mode,
+          attempt_id: attemptId,
+          trace_id,
+          register_failed: registerFailed,
+          display_number_missing: displayPhoneNumber == null,
+        },
       },
       () =>
         persistConnection({
@@ -128,23 +176,72 @@ export async function POST(req: NextRequest) {
     );
     await tryPublishOutboxEvent(eventId);
 
+    log.info('meta_embedded.signup_succeeded', 'Embedded Signup connected', {
+      ...attempt,
+      register_failed: registerFailed,
+    });
     return Response.json({ ok: true, status: 'active' }, { status: 200 });
   } catch (err) {
+    const kind: MetaSignupErrorKind =
+      err instanceof MetaSignupError ? err.kind : 'graph_error';
+    const graph = graphFailureOf(err);
+    const failure = {
+      ...attempt,
+      step,
+      kind,
+      graph_status: graph?.status,
+      graph_code: graph?.code,
+      graph_subcode: graph?.subcode,
+    };
     if (err instanceof MetaSignupError) {
-      log.warn('meta_embedded.signup_failed', 'Embedded Signup failed', {
-        kind: err.kind,
-        account_id: accountId,
-      });
-      return Response.json(
-        { ok: false, error: err.kind },
-        { status: STATUS_BY_KIND[err.kind] },
+      log.warn(
+        'meta_embedded.signup_failed',
+        'Embedded Signup failed',
+        failure,
+      );
+    } else {
+      log.error(
+        'meta_embedded.unexpected_error',
+        'Unexpected Embedded Signup error',
+        { ...failure, ...serializeError(err) },
       );
     }
-    log.error('meta_embedded.unexpected_error', 'Unexpected Embedded Signup error', {
-      account_id: accountId,
-      ...serializeError(err),
+    await recordSignupFailure(accountId, {
+      ...failure,
+      trace_id,
+      account_id: undefined,
+      ...(err instanceof MetaSignupError ? {} : serializeError(err)),
     });
-    return Response.json({ ok: false, error: 'graph_error' }, { status: 502 });
+    return Response.json(
+      { ok: false, error: kind, traceId: trace_id },
+      { status: STATUS_BY_KIND[kind] },
+    );
+  }
+}
+
+/**
+ * Durable record of a failed callback. Platform logs are short-lived, so the
+ * step and Meta's codes go to `audit_log` too. Best-effort: losing the record
+ * must not turn a clean, mapped failure into a 500.
+ */
+async function recordSignupFailure(
+  accountId: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await db.insert(auditLog).values({
+      accountId,
+      actor: 'account',
+      action: 'wa.signup.failed',
+      targetTable: 'whatsapp_connections',
+      metadata,
+    });
+  } catch (err) {
+    createLogger().error(
+      'meta_embedded.diagnostics_write_failed',
+      'Could not persist Embedded Signup failure',
+      { account_id: accountId, ...serializeError(err) },
+    );
   }
 }
 
@@ -186,6 +283,7 @@ async function resolvePhoneNumberId(args: {
     throw new MetaSignupError(
       'graph_error',
       err instanceof Error ? err.message : undefined,
+      err,
     );
   }
 
@@ -217,6 +315,7 @@ async function exchangeCodeForToken(
     throw new MetaSignupError(
       'token_exchange_failed',
       err instanceof Error ? err.message : undefined,
+      err,
     );
   }
   if (!res.access_token) {
@@ -237,11 +336,12 @@ async function exchangeCodeForToken(
 /**
  * Enable Cloud API for the number. Best-effort: Embedded Signup numbers are
  * usually pre-registered, so a failure here should not block the connection.
+ * Resolves `false` when Meta refused, so the caller can record it.
  */
 async function registerPhoneNumber(
   phoneNumberId: string,
   token: string,
-): Promise<void> {
+): Promise<boolean> {
   const pin = String(Math.floor(100000 + Math.random() * 900000));
   try {
     await graphFetch(`${phoneNumberId}/register`, {
@@ -249,6 +349,7 @@ async function registerPhoneNumber(
       token,
       body: { messaging_product: 'whatsapp', pin },
     });
+    return true;
   } catch (err) {
     createLogger().warn(
       'meta_embedded.phone_register_skipped',
@@ -256,8 +357,11 @@ async function registerPhoneNumber(
       {
         phone_number_id: phoneNumberId,
         status: err instanceof GraphApiError ? err.status : undefined,
+        code: err instanceof GraphApiError ? err.code : undefined,
+        subcode: err instanceof GraphApiError ? err.subcode : undefined,
       },
     );
+    return false;
   }
 }
 
@@ -381,7 +485,10 @@ async function persistConnection(args: {
     if (!isUniqueViolation(err)) throw err;
 
     const [existing] = await db
-      .select({ id: whatsappConnections.id, accountId: whatsappConnections.accountId })
+      .select({
+        id: whatsappConnections.id,
+        accountId: whatsappConnections.accountId,
+      })
       .from(whatsappConnections)
       .where(eq(whatsappConnections.phoneNumberId, phoneNumberId))
       .limit(1);

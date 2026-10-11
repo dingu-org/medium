@@ -72,10 +72,7 @@ function utcMidnight(day: Date): Date {
   );
 }
 
-async function loadFunnelWindow(
-  start: Date,
-  end: Date,
-): Promise<FunnelWindow> {
+async function loadFunnelWindow(start: Date, end: Date): Promise<FunnelWindow> {
   const [row] = await db.execute<{
     signups: number | string;
     whatsappConnections: number | string;
@@ -134,7 +131,9 @@ async function loadCohort(): Promise<OnboardingCohort> {
   };
 }
 
-async function loadRolledUpCost(where: ReturnType<typeof sql>): Promise<AccountCostRow[]> {
+async function loadRolledUpCost(
+  where: ReturnType<typeof sql>,
+): Promise<AccountCostRow[]> {
   const rows = await db.execute<{
     accountId: string;
     email: string;
@@ -332,7 +331,11 @@ async function loadPushDelivery(since: Date): Promise<PushDeliverySummary> {
  */
 const METRICS_TIMEOUT_MS = 10_000;
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
   return Promise.race([
     promise,
     new Promise<never>((_, reject) =>
@@ -354,22 +357,29 @@ export async function getAdminMetrics(now?: Date): Promise<AdminMetrics> {
   const sevenDaysAgo = new Date(nowDate.getTime() - 7 * 24 * 60 * 60 * 1000);
   const nowIso = nowDate.toISOString();
 
-  const [funnelYesterday, funnel7d, cohort, yesterday, currentMonth, today, push] =
-    await withTimeout(
-      Promise.all([
-        loadFunnelWindow(yesterdayStart, yesterdayEnd),
-        loadFunnelWindow(sevenDaysAgo, nowDate),
-        loadCohort(),
-        loadRolledUpCost(sql`c.day = ${ydayStr}::date`),
-        loadRolledUpCost(
-          sql`c.day >= date_trunc('month', ${nowIso}::timestamptz)::date`,
-        ),
-        loadTodayLiveCost(todayStart, todayEnd),
-        loadPushDelivery(sevenDaysAgo),
-      ]),
-      METRICS_TIMEOUT_MS,
-      'getAdminMetrics',
-    );
+  const [
+    funnelYesterday,
+    funnel7d,
+    cohort,
+    yesterday,
+    currentMonth,
+    today,
+    push,
+  ] = await withTimeout(
+    Promise.all([
+      loadFunnelWindow(yesterdayStart, yesterdayEnd),
+      loadFunnelWindow(sevenDaysAgo, nowDate),
+      loadCohort(),
+      loadRolledUpCost(sql`c.day = ${ydayStr}::date`),
+      loadRolledUpCost(
+        sql`c.day >= date_trunc('month', ${nowIso}::timestamptz)::date`,
+      ),
+      loadTodayLiveCost(todayStart, todayEnd),
+      loadPushDelivery(sevenDaysAgo),
+    ]),
+    METRICS_TIMEOUT_MS,
+    'getAdminMetrics',
+  );
 
   return {
     funnelYesterday,
@@ -434,7 +444,11 @@ export type DowngradeMetric = {
 };
 
 /** Per-kind cap-hit: distinct capped PTs over active PTs (shared denominator). */
-export type CapHitKind = { accounts: number; activeAccounts: number; rate: number };
+export type CapHitKind = {
+  accounts: number;
+  activeAccounts: number;
+  rate: number;
+};
 export type CapHitMetric = { conversations: CapHitKind; reminders: CapHitKind };
 
 /**
@@ -783,7 +797,9 @@ async function loadFreeCogs(nowDate: Date): Promise<FreeCogsMetric> {
     actualAccountDays,
     estimatedAccountDays,
     avgAiCostMicrousd: freeAccountCount ? aiCostMicrousd / freeAccountCount : 0,
-    avgMetaCostMicroEur: freeAccountCount ? metaCostMicroEur / freeAccountCount : 0,
+    avgMetaCostMicroEur: freeAccountCount
+      ? metaCostMicroEur / freeAccountCount
+      : 0,
   };
 }
 
@@ -869,4 +885,53 @@ export async function getBillingMetrics(now?: Date): Promise<BillingMetrics> {
     freeCogs,
     recentPayments,
   };
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp signup trail
+// ---------------------------------------------------------------------------
+
+export type SignupTrailRow = {
+  id: string;
+  occurredAt: string | null;
+  email: string | null;
+  action: string;
+  /** Free-form diagnostic payload — codes and flags only, see the writers. */
+  metadata: Record<string, unknown>;
+};
+
+/**
+ * The newest Embedded Signup audit rows across all accounts: the client's own
+ * outcome reports, callback failures, and successful token issues. Platform
+ * logs are short-lived, so this is where a signup that "went fine" and
+ * connected nothing gets read back.
+ */
+export async function getSignupTrail(limit = 30): Promise<SignupTrailRow[]> {
+  const rows = await withTimeout(
+    db.execute<{
+      id: string;
+      occurredAt: Date | string;
+      email: string | null;
+      action: string;
+      metadata: Record<string, unknown> | null;
+    }>(sql`
+      SELECT a.id AS "id", a.occurred_at AS "occurredAt", p.email AS "email",
+        a.action AS "action", a.metadata AS "metadata"
+      FROM audit_log a
+      LEFT JOIN accounts p ON p.id = a.account_id
+      WHERE a.action IN
+        ('wa.signup.client_outcome', 'wa.signup.failed', 'wa.token.issued')
+      ORDER BY a.occurred_at DESC
+      LIMIT ${limit}
+    `),
+    METRICS_TIMEOUT_MS,
+    'getSignupTrail',
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    occurredAt: toIso(row.occurredAt),
+    email: row.email,
+    action: row.action,
+    metadata: row.metadata ?? {},
+  }));
 }

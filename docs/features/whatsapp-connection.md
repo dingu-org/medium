@@ -89,7 +89,7 @@ Number resolution only runs when the popup sent none. It filters the WABA's numb
 
 The token's lifetime comes from `expires_in` when Meta sends it and defaults to 60 days when it does not. Persisting happens inside `withAuditLog` under the action `wa.token.issued`, and the row insert and the `wa.connection.created` event share one transaction, so a connection can never exist without the event that bootstraps its templates and coexistence sync.
 
-Failures map to a kind, a status code, and a card on the Settings screen.
+Failures map to a kind, a status code, and a card on the Settings screen. The error response also carries the request's `traceId`.
 
 | Error kind              | Status | What it means                                                |
 | ----------------------- | ------ | ------------------------------------------------------------ |
@@ -97,6 +97,36 @@ Failures map to a kind, a status code, and a card on the Settings screen.
 | `token_exchange_failed` | 400    | The auth code did not yield a token                          |
 | `rejected`              | 400    | No usable phone number could be resolved from the signup     |
 | `graph_error`           | 502    | Any other Graph failure, including a failed app subscription |
+
+### Diagnosing a signup
+
+Platform logs last about an hour and the browser half of the flow causes no request unless it gets as far as the callback, so every attempt also leaves a trail in `audit_log`. The client mints an `attemptId` per click and reports to `POST /api/auth/meta-embedded/diagnostics`, which shares the callback's CSRF posture and validates against a strict schema; the same id rides on the callback POST, so the browser's rows and the server's rows join on it.
+
+| Audit action               | Written when                                  | What it carries                                                                                                           |
+| -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `wa.signup.client_outcome` | At click (`started`) and at the attempt's end | The outcome, `FB.login` status, whether a code arrived, a summary of each popup message, elapsed time, PWA or browser tab |
+| `wa.signup.failed`         | The callback fails at any step                | The failing step, the error kind, Graph status / code / subcode, the trace id                                             |
+| `wa.token.issued`          | The callback succeeds                         | Mode, trace id, and whether the best-effort register or display-number step failed                                        |
+
+The client outcome names why a finished popup did or did not become a connection.
+
+| Outcome                                               | Meaning                                                                                           |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `started`                                             | The popup was opened. With nothing after it for the same attempt, the page went away mid-signup   |
+| `post_ok`, `post_failed`                              | The callback was reached; `post_failed` carries its HTTP status, error kind, and trace id         |
+| `cancelled_by_user`                                   | The owner pressed Cancel on the spinner screen                                                    |
+| `no_code`                                             | `FB.login` returned without an auth code — the popup was closed or blocked                        |
+| `no_finish_message`                                   | A code arrived but no `FINISH*` message did — see the popup message summaries for what did arrive |
+| `unsupported_event`, `missing_waba`, `missing_number` | A finish message arrived that `postableMode` refuses                                              |
+| `threw`                                               | The SDK failed to load or the request threw; carries the error name and message                   |
+| `page_unloaded`                                       | The page was hidden or unloaded while the popup was open                                          |
+| `resumed_after_reload`                                | A new page instance found the marker of an attempt the previous one never finished                |
+
+Popup message summaries are deliberately wider than `readSignupMessage`: they include `CANCEL` (with the screen it was abandoned on), Meta's error id, and signup messages from an origin the trust check refuses, each flagged `originAccepted`. Identifiers are reduced to present-or-absent, and free text is clipped and phone-scrubbed before it is stored.
+
+`resumed_after_reload` is also the one diagnostic that changes what the owner sees: a `sessionStorage` marker set at click and cleared at any terminal outcome lets a page that reloaded mid-popup show the "connection stayed half-done" card instead of a bare Connect button.
+
+The newest rows across all accounts are listed on the admin page's **WhatsApp signup attempts** card; see [observability and admin](./observability-and-admin.md#the-admin-dashboard).
 
 ### Reconnect versus duplicate
 
