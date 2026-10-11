@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { customers, accounts } from '@/lib/db/schema';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { privacyName } from '@/lib/format/name';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { logger, serializeError } from '@/lib/log';
 import { resolveNotificationPrefs } from '@/lib/pwa/read-models';
 import { buildPushPayload, pushPrefKey, type PushEvent } from './push-payload';
@@ -53,7 +54,7 @@ export async function dispatchPushForEvent(
 
   const payload = buildPushPayload(event, {
     customerName,
-    timezone: account.timezone ?? 'Europe/Berlin',
+    timezone: account.timezone ?? DEFAULT_TIMEZONE,
   });
   if (!payload) return { status: 'skipped', reason: 'no_payload' };
 

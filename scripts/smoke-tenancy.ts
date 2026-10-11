@@ -4,6 +4,7 @@ config({ path: '.env' });
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { auditLog, customers, accounts } from '@/lib/db/schema';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { TenancyError, getServiceClient, withAuditLog } from '@/lib/tenancy';
 import { createServiceClient } from '@/lib/supabase/service';
 
@@ -62,7 +63,7 @@ async function main() {
   const aRow = await db.select().from(accounts).where(eq(accounts.id, accountIdA));
   const bRow = await db.select().from(accounts).where(eq(accounts.id, accountIdB));
   results.push(await expect('trigger created accounts row for user A', aRow.length, (n) => n === 1));
-  results.push(await expect('accounts row A has timezone Europe/Berlin', aRow[0]?.timezone, (v) => v === 'Europe/Berlin'));
+  results.push(await expect(`accounts row A has timezone ${DEFAULT_TIMEZONE}`, aRow[0]?.timezone, (v) => v === DEFAULT_TIMEZONE));
   results.push(await expect('accounts row A has retentionDays 90', aRow[0]?.retentionDays, (v) => v === 90));
   results.push(await expect('accounts row A email matches', aRow[0]?.email, (v) => v === userA));
   results.push(await expect('trigger created accounts row for user B', bRow.length, (n) => n === 1));

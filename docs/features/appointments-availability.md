@@ -28,7 +28,7 @@ Application checks run first and give better errors, but they read a snapshot. T
 
 ## Timezones and daylight saving
 
-All slot math happens in `accounts.timezone` (default `Europe/Berlin`), using `TZDate` from `@date-fns/tz` so wall-clock arithmetic stays local while the stored values remain instants. `assertValidTimezone` rejects a timezone `Intl.DateTimeFormat` cannot resolve before any slot is computed.
+All slot math happens in `accounts.timezone` (default `Europe/Tirane`, the `DEFAULT_TIMEZONE` constant in `lib/i18n/timezone.ts`, which is also the fallback wherever the account row is missing), using `TZDate` from `@date-fns/tz` so wall-clock arithmetic stays local while the stored values remain instants. `assertValidTimezone` rejects a timezone `Intl.DateTimeFormat` cannot resolve before any slot is computed.
 
 Daylight saving is handled by three separate rules, because an offer and a bound need opposite treatment.
 

@@ -21,6 +21,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { useOnlineStatus } from '@/lib/hooks/realtime';
 import { t } from '@/lib/i18n';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { cn } from '@/lib/utils';
 import {
   addBlockedPeriod,
@@ -74,7 +75,8 @@ function useTimezones(current: string): string[] {
     } catch {
       zones = [];
     }
-    if (zones.length === 0) zones = ['UTC', 'Europe/Tirane', 'Europe/Berlin', current];
+    if (zones.length === 0)
+      zones = [...new Set(['UTC', DEFAULT_TIMEZONE, current])];
     if (!zones.includes(current)) zones = [current, ...zones];
     return zones;
   }, [current]);

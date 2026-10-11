@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { messageTemplates, accounts, whatsappConnections } from '@/lib/db/schema';
+import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import {
   FALLBACK_REMINDER_TEMPLATE,
   REMINDER_TEMPLATE,
@@ -67,7 +68,7 @@ describe('getSettingsSnapshot', () => {
     // Regression: existing fields still populated.
     expect(snap.whatsappStatus).toBe('active');
     expect(snap.whatsappPhoneNumberId).toMatch(/^pn-snapshot-/);
-    expect(snap.timezone).toBe('Europe/Berlin');
+    expect(snap.timezone).toBe(DEFAULT_TIMEZONE);
     expect(snap.retentionDays).toBe(90);
   });
 

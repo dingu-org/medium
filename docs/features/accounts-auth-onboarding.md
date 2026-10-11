@@ -11,7 +11,7 @@ This document covers how an owner gets into the app and what stands between sign
 - A foreign key from `accounts.id` to `auth.users.id` with `ON DELETE CASCADE`. Account deletion works by deleting the auth user and letting the cascade take out every tenant row underneath.
 - An `AFTER INSERT` trigger on `auth.users` running `public.handle_new_user()`, which mirrors the new user into `accounts`.
 
-The function is `SECURITY DEFINER` so that it can write `public` tables from inside GoTrue's own transaction, where the calling role has no write privileges of its own. It seeds the row with the email, timezone `Europe/Berlin` and 90-day retention, and it also inserts three starter services so a new account is never left with an empty catalogue. Its current definition lives in `drizzle/migrations/0031_rename_pts_to_accounts.sql` — later migrations replace the function wholesale, so that is the one to read.
+The function is `SECURITY DEFINER` so that it can write `public` tables from inside GoTrue's own transaction, where the calling role has no write privileges of its own. It seeds the row with the email, timezone `Europe/Tirane` and 90-day retention, and it also inserts three starter services so a new account is never left with an empty catalogue. Its current definition lives in `drizzle/migrations/0032_default_timezone_tirane.sql` — later migrations replace the function wholesale, so that is the one to read.
 
 Because the trigger runs inside GoTrue's own insert, application code never creates an account row. Every server action resolves the account id straight from `supabase.auth.getUser()` and uses it as the tenant key.
 

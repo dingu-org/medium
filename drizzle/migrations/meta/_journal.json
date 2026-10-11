@@ -225,6 +225,13 @@
       "when": 1787493935920,
       "tag": "0031_rename_pts_to_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791718213862,
+      "tag": "0032_default_timezone_tirane",
+      "breakpoints": true
     }
   ]
 }
