@@ -25,7 +25,7 @@ describe('seedCore', () => {
   it('creates exactly one accounts row with a filled-in profile', async () => {
     const rows = await db.select().from(accounts).where(eq(accounts.id, result.accountId));
     expect(rows).toHaveLength(1);
-    expect(rows[0].name).toBe('Fizio Vita');
+    expect(rows[0].name).toBe('Studio Vita');
     expect(rows[0].timezone).toBe('Europe/Tirane');
   });
 

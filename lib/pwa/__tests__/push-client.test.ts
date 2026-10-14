@@ -36,14 +36,18 @@ function installPushStubs({
   permission = 'granted',
   subscription = null as ReturnType<typeof makeSubscription> | null,
   freshEndpoint = 'https://push.example.com/fresh',
+  registered = true,
 }: {
   permission?: string;
   subscription?: ReturnType<typeof makeSubscription> | null;
   freshEndpoint?: string;
+  /** False models dev, where no service worker is ever registered. */
+  registered?: boolean;
 } = {}) {
   const fresh = makeSubscription(freshEndpoint);
   const subscribe = vi.fn().mockResolvedValue(fresh);
   const getSubscription = vi.fn().mockResolvedValue(subscription);
+  const registration = { pushManager: { getSubscription, subscribe } };
 
   // isPushSupported() probes `navigator`/`window` keys, so both stubs need the
   // Push Notification surface present.
@@ -55,7 +59,11 @@ function installPushStubs({
   vi.stubGlobal('navigator', {
     userAgent: 'test-agent',
     serviceWorker: {
-      ready: Promise.resolve({ pushManager: { getSubscription, subscribe } }),
+      // With no worker registered `.ready` never settles, exactly as in dev.
+      ready: registered ? Promise.resolve(registration) : new Promise(() => {}),
+      getRegistration: vi
+        .fn()
+        .mockResolvedValue(registered ? registration : undefined),
     },
   });
   vi.stubGlobal('localStorage', makeLocalStorage());
@@ -216,6 +224,24 @@ describe('push subscription client', () => {
     await reconcilePushSubscription();
 
     expect(savePushSubscriptionMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Dev never registers a worker (see pwa-provider.tsx), so `.ready` would hang
+  // sign-out forever. Both helpers must read getRegistration() and return.
+  it('returns without hanging when no service worker is registered', async () => {
+    const { subscribe, getSubscription } = installPushStubs({
+      registered: false,
+    });
+    const { reconcilePushSubscription, unsubscribeFromPush } =
+      await import('@/lib/pwa/push-client');
+
+    await reconcilePushSubscription();
+    await unsubscribeFromPush();
+
+    expect(getSubscription).not.toHaveBeenCalled();
+    expect(subscribe).not.toHaveBeenCalled();
+    expect(savePushSubscriptionMock).not.toHaveBeenCalled();
+    expect(removePushSubscriptionMock).not.toHaveBeenCalled();
   });
 
   it('does nothing when notification permission is not granted', async () => {

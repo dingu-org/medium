@@ -15,6 +15,7 @@ import {
 } from '@/lib/billing/usage';
 import { appendBackgroundEvent } from '@/lib/events/background';
 import { tryPublishOutboxEvent } from '@/lib/events/outbox';
+import { reminderBusinessName } from '@/lib/reminders/business-name';
 import { remindersEnabled } from '@/lib/reminders/flag';
 import { inngest } from '../client';
 import {
@@ -342,7 +343,11 @@ function templateVariables(args: {
   if (args.template.variableSet === 'legacy') {
     return [firstName, args.localTime];
   }
-  return [firstName, args.name?.trim() || 'praktika', args.localTime];
+  return [
+    firstName,
+    reminderBusinessName(args.name, args.template.language),
+    args.localTime,
+  ];
 }
 
 async function prepareReminderMessage(args: {
@@ -688,7 +693,9 @@ export async function sendReminderHandler({
       new Date(state.context.startsAt),
       state.context.timezone,
     );
-    const name = state.context.name?.trim() || 'praktika';
+    // The stored copy is Albanian whatever the template's language, so its
+    // stand-in name is too.
+    const name = reminderBusinessName(state.context.name, 'sq');
     const content = `Kujtesë: ${customerFirstName(state.context.customerName)}, takimi juaj me ${name} është më ${localTime}.`;
     const message = await step.run('prepare-reminder-message', () =>
       prepareReminderMessage({

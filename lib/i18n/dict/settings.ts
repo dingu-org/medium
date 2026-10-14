@@ -15,7 +15,7 @@ export const settings = {
   notifReschedules: 'Ricaktime',
   notifEscalations: 'Eskalime',
   notifManualReply: 'Mesazhe që presin ty',
-  notifManualReplySub: 'Kur ti menaxhon bisedën dhe pacienti të shkruan',
+  notifManualReplySub: 'Kur ti menaxhon bisedën dhe klienti të shkruan',
   notifReminderFailure: 'Dështime të kujtesave',
   notifConnection: 'Shkëputje e WhatsApp',
   notifResumeOffer: 'Rikthim i asistentit',
@@ -64,11 +64,11 @@ export const settings = {
   deleteAccount: 'Fshi llogarinë',
   disconnectTitle: 'Shkëput WhatsApp?',
   disconnectBody:
-    'Pacientët nuk do të marrin asnjë përgjigje derisa ta rilidhësh. Takimet dhe historiku ruhen.',
+    'Klientët nuk do të marrin asnjë përgjigje derisa ta rilidhësh. Takimet dhe historiku ruhen.',
   disconnectConfirm: 'Shkëput',
   deleteTitle: 'Fshi llogarinë?',
   deleteBody:
-    "Kjo fshin përgjithmonë praktikën, klientët, takimet, bisedat dhe lidhjen me WhatsApp. S'kthehet.",
+    "Kjo fshin përgjithmonë biznesin, klientët, takimet, bisedat dhe lidhjen me WhatsApp. S'kthehet.",
   deleteConfirm: 'Fshi llogarinë',
   savedToast: 'Ndryshimet u ruajtën.',
 
@@ -143,8 +143,8 @@ export const settings = {
   whatsappRevokedTitle: 'Lidhja u revokua',
   whatsappRevokedBody: (number?: string) =>
     number
-      ? `Meta e ndërpreu lejen për numrin ${number}. Pacientët nuk po marrin përgjigje.`
-      : 'Meta e ndërpreu lejen. Pacientët nuk po marrin përgjigje.',
+      ? `Meta e ndërpreu lejen për numrin ${number}. Klientët nuk po marrin përgjigje.`
+      : 'Meta e ndërpreu lejen. Klientët nuk po marrin përgjigje.',
   whatsappReconnectNote: 'Rilidhja mban numrin dhe historikun',
 
   // ConnectWhatsApp button + toasts
@@ -184,7 +184,7 @@ export const settings = {
 
   // Hub (Ti)
   hubTitle: 'Ti',
-  groupPraktika: 'Praktika',
+  groupPraktika: 'Biznesi',
   groupMedium: 'Medium',
   groupLlogaria: 'Llogaria',
   profileBusiness: 'Profili i biznesit',
@@ -197,19 +197,19 @@ export const settings = {
 
   // Profile screen (Phase 15 task 6)
   profileTitleLabel: 'Titulli',
-  profileTitleHelp: 'Medium e përdor kur u prezantohet pacientëve.',
-  profilePracticeLabel: 'Emri i praktikës',
+  profileTitleHelp: 'Medium e përdor kur u prezantohet klientëve.',
+  profilePracticeLabel: 'Emri i biznesit',
   profileAddressLabel: 'Adresa',
-  profileAddressHelp: 'Medium e përdor kur pacientët pyesin ku ndodhesh.',
+  profileAddressHelp: 'Medium e përdor kur klientët pyesin ku ndodhesh.',
   profilePhoneLabel: 'Telefoni',
   profilePhoneHelp: 'Vjen nga lidhja me WhatsApp Business. Ndryshohet aty.',
-  profilePracticeRequired: 'Shkruaj emrin e praktikës.',
+  profilePracticeRequired: 'Shkruaj emrin e biznesit.',
 
   // AssistantCard (hub + assistant screen)
   assistantCardActiveTitle: 'Medium po përgjigjet',
   assistantCardActiveSub: 'Përgjigjet dhe rezervon vetë në WhatsApp.',
   assistantCardPausedTitle: 'Medium është në pauzë',
-  assistantCardPausedSub: 'Pacientët nuk marrin asnjë përgjigje në WhatsApp.',
+  assistantCardPausedSub: 'Klientët nuk marrin asnjë përgjigje në WhatsApp.',
   assistantToggleLabel: 'Ndiz ose fik asistentin',
   pauseFailed: 'Nuk u ndryshua gjendja e asistentit. Provo sërish.',
 
@@ -217,9 +217,9 @@ export const settings = {
   assistantIdentityGroup: 'Identiteti',
   assistantGreetingRow: 'Prezantimi',
   assistantValueUnset: 'Pa vendosur',
-  assistantNameHelp: 'Emri me të cilin Medium u prezantohet pacientëve.',
+  assistantNameHelp: 'Emri me të cilin Medium u prezantohet klientëve.',
   assistantGreetingHelp:
-    'Mesazhi i parë që dërgon Medium kur pacienti shkruan për herë të parë.',
+    'Mesazhi i parë që dërgon Medium kur klienti shkruan për herë të parë.',
 
   // OfflineNote (shared gate)
   offlineNote: 'Je jashtë linje — ndryshimet nuk ruhen dot tani.',
@@ -230,7 +230,7 @@ export const settings = {
 
   // Services list (Phase 15 redesign)
   serviceActiveCount: (n: number) => `${n} aktive`,
-  serviceListFooter: 'Medium u ofron pacientëve vetëm shërbimet aktive.',
+  serviceListFooter: 'Medium u ofron klientëve vetëm shërbimet aktive.',
   serviceMeta: (durationMinutes: number, price: string | null) =>
     price ? `${durationMinutes} min · ${price} Lekë` : `${durationMinutes} min`,
 

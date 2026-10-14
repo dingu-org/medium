@@ -99,18 +99,19 @@ export async function seedCore(
   await database
     .update(accounts)
     .set({
-      name: 'Fizio Vita',
+      name: 'Studio Vita',
       timezone: 'Europe/Tirane',
       aiName: 'Medium',
       servicesConfiguredAt: new Date(),
     })
     .where(eq(accounts.id, accountId));
 
-  // A signup trigger may pre-create preset services — keep this idempotent.
+  // The signup trigger pre-creates default services. Replace them, so the demo
+  // data does not depend on which default names the trigger currently seeds.
+  await database.delete(services).where(eq(services.accountId, accountId));
   await database
     .insert(services)
-    .values({ accountId, name: 'Seancë fizioterapie', durationMin: 45 })
-    .onConflictDoNothing();
+    .values({ accountId, name: 'Takim standard', durationMin: 45 });
 
   await database.insert(availabilityRules).values(
     [1, 2, 3, 4, 5].map((weekday) => ({
@@ -151,7 +152,7 @@ export async function seedCore(
         customerId: customer.id,
         startsAt: pastStart,
         endsAt: pastEnd,
-        serviceType: 'Seancë fizioterapie',
+        serviceType: 'Takim standard',
         status: 'completed',
       },
       {
@@ -159,7 +160,7 @@ export async function seedCore(
         customerId: customer.id,
         startsAt: upcomingStart,
         endsAt: upcomingEnd,
-        serviceType: 'Seancë fizioterapie',
+        serviceType: 'Takim standard',
         status: 'confirmed',
       },
     ])

@@ -7,7 +7,12 @@ export class GraphApiError extends Error {
   readonly code?: number;
   readonly subcode?: number;
 
-  constructor(opts: { status: number; code?: number; subcode?: number; message: string }) {
+  constructor(opts: {
+    status: number;
+    code?: number;
+    subcode?: number;
+    message: string;
+  }) {
     super(opts.message);
     this.name = 'GraphApiError';
     this.status = opts.status;
@@ -54,13 +59,28 @@ export type MetaSignupErrorKind =
   | 'rejected'
   | 'graph_error';
 
-/** Failure during Embedded Signup callback handling. `kind` maps to HTTP status + UI copy. */
+/** Meta's own description of a failed Graph call — status and codes only. */
+export type GraphFailure = { status?: number; code?: number; subcode?: number };
+
+/** Reduce any thrown value to its Graph status/codes, if it carries them. */
+export function graphFailureOf(err: unknown): GraphFailure | undefined {
+  if (err instanceof MetaSignupError) return err.graph;
+  if (!(err instanceof GraphApiError)) return undefined;
+  return { status: err.status, code: err.code, subcode: err.subcode };
+}
+
+/**
+ * Failure during Embedded Signup callback handling. `kind` maps to HTTP status
+ * + UI copy; `graph` keeps the wrapped Graph error's codes for diagnostics.
+ */
 export class MetaSignupError extends Error {
   readonly kind: MetaSignupErrorKind;
+  readonly graph?: GraphFailure;
 
-  constructor(kind: MetaSignupErrorKind, message?: string) {
+  constructor(kind: MetaSignupErrorKind, message?: string, cause?: unknown) {
     super(message ?? kind);
     this.name = 'MetaSignupError';
     this.kind = kind;
+    this.graph = graphFailureOf(cause);
   }
 }

@@ -819,7 +819,7 @@ function reminderSystemAddendum(context: ReminderTurnContext): string {
     '# Reminder response context',
     '',
     'The latest customer message is related to an appointment reminder.',
-    'Reminder replies may be handled even if the PT has taken over the conversation.',
+    'Reminder replies may be handled even if the professional has taken over the conversation.',
     'If the customer wants to cancel in this reminder context, call `cancel_appointment`; the system will record it as customer-cancelled.',
     'If the customer wants to reschedule, use `list_upcoming_appointments`, `get_availability`, and `reschedule_appointment` as needed.',
   ];

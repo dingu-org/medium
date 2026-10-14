@@ -6,7 +6,7 @@ This document explains what the product is, who the three actors are, and how on
 
 ## Who it's for
 
-Medium targets small service businesses that already take bookings by message: one person or a small team, one phone number, no front desk. Physiotherapy is the pilot vertical, but nothing in the product model depends on it — the same loop fits a barber, a nail salon, or a personal trainer, and no customer-facing sentence names a discipline (`lib/conversation/customer-copy.ts`).
+Medium targets small service businesses that already take bookings by message: one person or a small team, one phone number, no front desk. Nothing in the product model depends on the kind of business — the same loop fits a barber, a nail salon, a dentist, or a personal trainer, and no customer-facing sentence names a discipline (`lib/conversation/customer-copy.ts`).
 
 Two boundaries are deliberate and shape everything else: the assistant speaks one language, formal Albanian, and works on one channel, WhatsApp.
 
@@ -44,7 +44,7 @@ These terms mean one thing across the code and the docs. Use them literally; the
 | **plan**             | Free or Solo.                                                                                  | enum `plan`                                                          |
 | **environment**      | development, preview, or production.                                                           | `appEnv()`                                                           |
 
-Two vocabularies predate this one and still appear in the product. Albanian UI copy, the help pages, and the assistant persona prompt use physiotherapy words (_pacient_, _fizioterapist_), and migrations before `0031_rename_pts_to_accounts.sql` name the tables `pts` and `patients`. Read both as **account** and **customer**.
+An older vocabulary predates this one: migrations before `0031_rename_pts_to_accounts.sql` name the tables `pts` and `patients`, and some internal identifiers and code comments still say _PT_ or _patient_ (for example the `PATIENT_REQUIRED` error code). Read them as **account** and **customer**. Albanian UI copy calls the customer _klient_ and the account a _biznes_.
 
 ## How a customer conversation works
 

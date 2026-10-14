@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   META_SIGNUP_ORIGINS,
+  classifySignupRefusal,
+  describeSignupMessage,
   postableMode,
   readSignupMessage,
 } from '../whatsapp-signup';
@@ -69,7 +71,9 @@ describe('readSignupMessage — origin check', () => {
 
 describe('readSignupMessage — payload shape', () => {
   it('ignores non-JSON messages', () => {
-    expect(readSignupMessage({ origin: ORIGIN, data: 'not json {' })).toBeNull();
+    expect(
+      readSignupMessage({ origin: ORIGIN, data: 'not json {' }),
+    ).toBeNull();
   });
 
   it('ignores messages that are not Embedded Signup', () => {
@@ -148,7 +152,9 @@ describe('postableMode — one row per v4 finish event', () => {
   it.each(['FINISH_OBO_MIGRATION', 'FINISH_GRANT_ONLY_API_ACCESS'])(
     'refuses the unsupported event %s',
     (event) => {
-      expect(postableMode({ event, wabaId: 'W', phoneNumberId: 'P' })).toBeNull();
+      expect(
+        postableMode({ event, wabaId: 'W', phoneNumberId: 'P' }),
+      ).toBeNull();
     },
   );
 
@@ -162,5 +168,132 @@ describe('postableMode — one row per v4 finish event', () => {
     expect(
       postableMode({ event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' }),
     ).toBeNull();
+  });
+});
+
+// Diagnostics: the trail the client reports for an attempt. These are wider
+// than readSignupMessage on purpose — the messages it drops are the evidence.
+describe('describeSignupMessage', () => {
+  it('reduces a finish message to flags, never the ids themselves', () => {
+    const summary = describeSignupMessage(
+      finish('FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING', {
+        phone_number_id: 'PNI_1',
+        waba_id: 'WABA_1',
+      }),
+    );
+    expect(summary).toEqual({
+      origin: ORIGIN,
+      originAccepted: true,
+      type: 'WA_EMBEDDED_SIGNUP',
+      event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+      hasNumberId: true,
+      hasWabaId: true,
+      currentStep: undefined,
+      errorId: undefined,
+      errorMessage: undefined,
+    });
+    expect(JSON.stringify(summary)).not.toContain('PNI_1');
+    expect(JSON.stringify(summary)).not.toContain('WABA_1');
+  });
+
+  it('keeps the CANCEL step that readSignupMessage discards', () => {
+    const cancel = finish('CANCEL', { current_step: 'PHONE_NUMBER_SETUP' });
+    expect(readSignupMessage(cancel)).toBeNull();
+    expect(describeSignupMessage(cancel)).toMatchObject({
+      event: 'CANCEL',
+      currentStep: 'PHONE_NUMBER_SETUP',
+      hasWabaId: false,
+    });
+  });
+
+  it("keeps Meta's error id and a clipped error message", () => {
+    const summary = describeSignupMessage(
+      finish('CANCEL', {
+        error_id: 524126,
+        error_message: 'x'.repeat(500),
+      }),
+    );
+    expect(summary?.errorId).toBe('524126');
+    expect(summary?.errorMessage).toHaveLength(200);
+  });
+
+  it('records a signup message from a refused origin as refused', () => {
+    const payload = {
+      type: 'WA_EMBEDDED_SIGNUP',
+      event: 'FINISH',
+      data: { phone_number_id: 'PNI_1', waba_id: 'WABA_1' },
+    };
+    const lookalike = message(payload, 'https://m.facebook.com');
+    expect(readSignupMessage(lookalike)).toBeNull();
+    expect(describeSignupMessage(lookalike)).toMatchObject({
+      origin: 'https://m.facebook.com',
+      originAccepted: false,
+      event: 'FINISH',
+    });
+  });
+
+  it('accepts an already-parsed object payload', () => {
+    expect(
+      describeSignupMessage({
+        origin: ORIGIN,
+        data: { type: 'WA_EMBEDDED_SIGNUP', event: 'FINISH', data: {} },
+      }),
+    ).toMatchObject({ event: 'FINISH', hasNumberId: false });
+  });
+
+  it('ignores everything that is not a signup payload', () => {
+    expect(
+      describeSignupMessage({ origin: ORIGIN, data: 'not json' }),
+    ).toBeNull();
+    expect(describeSignupMessage({ origin: ORIGIN, data: null })).toBeNull();
+    expect(describeSignupMessage(message({ type: 'OTHER' }))).toBeNull();
+  });
+});
+
+describe('classifySignupRefusal', () => {
+  const coexistence = {
+    event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+    wabaId: 'WABA_1',
+  };
+  const refusal = (
+    session: Parameters<typeof classifySignupRefusal>[0]['session'],
+    over: { cancelled?: boolean; hasCode?: boolean } = {},
+  ) =>
+    classifySignupRefusal({
+      cancelled: false,
+      hasCode: true,
+      session,
+      ...over,
+    });
+
+  it('names each reason a popup result cannot be posted', () => {
+    expect(refusal(coexistence, { cancelled: true })).toBe('cancelled_by_user');
+    expect(refusal(coexistence, { hasCode: false })).toBe('no_code');
+    expect(refusal({})).toBe('no_finish_message');
+    expect(refusal({ event: 'FINISH_OBO_MIGRATION', wabaId: 'W' })).toBe(
+      'unsupported_event',
+    );
+    expect(refusal({ event: 'FINISH' })).toBe('missing_waba');
+    expect(refusal({ event: 'FINISH', wabaId: 'W' })).toBe('missing_number');
+    expect(refusal({ event: 'FINISH_ONLY_WABA', wabaId: 'W' })).toBe(
+      'missing_number',
+    );
+  });
+
+  it('agrees with postableMode: null exactly when a mode is postable', () => {
+    const sessions = [
+      {},
+      coexistence,
+      { event: 'FINISH' },
+      { event: 'FINISH', wabaId: 'W' },
+      { event: 'FINISH', wabaId: 'W', phoneNumberId: 'P' },
+      { event: 'FINISH_ONLY_WABA', wabaId: 'W' },
+      { event: 'FINISH_GRANT_ONLY_API_ACCESS', wabaId: 'W' },
+    ];
+    for (const session of sessions) {
+      expect(refusal(session) === null, JSON.stringify(session)).toBe(
+        postableMode(session) !== null,
+      );
+    }
   });
 });

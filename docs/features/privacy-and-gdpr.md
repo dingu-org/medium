@@ -110,21 +110,23 @@ Each account's purge writes an `audit_log` row with action `messages.retention_p
 
 `withAuditLog(input, fn)` in `lib/tenancy/audit.ts` runs `fn` first and writes the `audit_log` row only after it resolves, so the log records completed access rather than attempted access. It refuses to run without an account id. Rows carry an actor, an action, a target table and optional target id, and free-form metadata.
 
-| Action                            | Actor     | Target table                                             | Written by                                                                       |
-| --------------------------------- | --------- | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `ai.conversation.read`            | `ai`      | `messages`                                               | Every AI turn, when it loads conversation context (`lib/conversation/engine.ts`) |
-| `ai.conversation.failure_handoff` | `system`  | `messages`                                               | The failure-handoff path re-reading context after a failed turn                  |
-| `ai.tool.<tool_name>`             | `ai`      | `availability_rules`, `conversations`, or `appointments` | Every tool dispatch (`lib/ai/dispatcher.ts`)                                     |
-| `conversation.takeover`           | `account` | `conversations`                                          | The chat handling switch (`app/(dashboard)/chat/actions.ts`)                     |
-| `customer.created`                | `account` | `customers`                                              | Manually adding a client                                                         |
-| `customer.notes_updated`          | `account` | `customers`                                              | Editing a client's notes                                                         |
-| `export.customer`                 | `account` | `customers`                                              | Per-customer export                                                              |
-| `export.account`                  | `account` | `accounts`                                               | Full-account export                                                              |
-| `wa.token.issued`                 | `account` | `whatsapp_connections`                                   | The Embedded Signup token exchange (`app/api/auth/meta-embedded/route.ts`)       |
-| `erasure`                         | `account` | `customers`                                              | Written directly inside the erasure transaction                                  |
-| `messages.retention_purge`        | `system`  | `messages`                                               | Written directly inside each account's purge transaction                         |
+| Action                            | Actor     | Target table                                             | Written by                                                                                                             |
+| --------------------------------- | --------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `ai.conversation.read`            | `ai`      | `messages`                                               | Every AI turn, when it loads conversation context (`lib/conversation/engine.ts`)                                       |
+| `ai.conversation.failure_handoff` | `system`  | `messages`                                               | The failure-handoff path re-reading context after a failed turn                                                        |
+| `ai.tool.<tool_name>`             | `ai`      | `availability_rules`, `conversations`, or `appointments` | Every tool dispatch (`lib/ai/dispatcher.ts`)                                                                           |
+| `conversation.takeover`           | `account` | `conversations`                                          | The chat handling switch (`app/(dashboard)/chat/actions.ts`)                                                           |
+| `customer.created`                | `account` | `customers`                                              | Manually adding a client                                                                                               |
+| `customer.notes_updated`          | `account` | `customers`                                              | Editing a client's notes                                                                                               |
+| `export.customer`                 | `account` | `customers`                                              | Per-customer export                                                                                                    |
+| `export.account`                  | `account` | `accounts`                                               | Full-account export                                                                                                    |
+| `wa.token.issued`                 | `account` | `whatsapp_connections`                                   | The Embedded Signup token exchange (`app/api/auth/meta-embedded/route.ts`)                                             |
+| `wa.signup.client_outcome`        | `account` | `whatsapp_connections`                                   | The browser's report of a signup attempt's start and outcome (`app/api/auth/meta-embedded/diagnostics/route.ts`)       |
+| `wa.signup.failed`                | `account` | `whatsapp_connections`                                   | A failed Embedded Signup callback, written directly so the failure is recorded (`app/api/auth/meta-embedded/route.ts`) |
+| `erasure`                         | `account` | `customers`                                              | Written directly inside the erasure transaction                                                                        |
+| `messages.retention_purge`        | `system`  | `messages`                                               | Written directly inside each account's purge transaction                                                               |
 
-The last two bypass `withAuditLog` on purpose: both need the audit row and the deletion to commit or roll back together, which a helper running after its callback can't give them.
+`erasure` and `messages.retention_purge` bypass `withAuditLog` on purpose: both need the audit row and the deletion to commit or roll back together, which a helper running after its callback can't give them. The two `wa.signup.*` rows bypass it for the opposite reason: they record an attempt that did not complete, which a helper that writes only after its callback resolves can't express. They carry flags and Meta's error codes only — never the auth code, the token, or a phone number.
 
 ## Redaction in structured logs
 

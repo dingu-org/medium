@@ -130,7 +130,7 @@ export function createConversationTools(
     }),
     escalate_to_human: tool({
       description:
-        'Hand the conversation to the PT when the customer requests a human, when scheduling cannot be resolved safely, or when the customer agrees to your offer to pass a question on. The system sends the customer a fixed confirmation; do not write one.',
+        'Hand the conversation to the professional when the customer requests a human, when scheduling cannot be resolved safely, or when the customer agrees to your offer to pass a question on. The system sends the customer a fixed confirmation; do not write one.',
       inputSchema: dispatchableSchema(toolSchemas.escalate_to_human),
       execute: (input) => dispatch('escalate_to_human', input, ctx),
     }),

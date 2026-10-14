@@ -58,7 +58,7 @@ async function main() {
   await db
     .update(accounts)
     .set({
-      name: 'Fizio Tirana',
+      name: 'Studio Tirana',
       timezone: 'Europe/Tirane',
       aiName: 'Medium',
       servicesConfiguredAt: new Date(),
@@ -73,14 +73,13 @@ async function main() {
     connectedAt: minsAgo(60 * 24 * 30),
   });
 
-  // A signup trigger may pre-create preset services — keep this idempotent.
-  await db
-    .insert(services)
-    .values([
-      { accountId, name: 'Vlerësim i parë', durationMin: 60 },
-      { accountId, name: 'Seancë vijuese', durationMin: 45 },
-    ])
-    .onConflictDoNothing();
+  // The signup trigger pre-creates default services. Replace them, so the QA
+  // data does not depend on which default names the trigger currently seeds.
+  await db.delete(services).where(eq(services.accountId, accountId));
+  await db.insert(services).values([
+    { accountId, name: 'Takim standard', durationMin: 45 },
+    { accountId, name: 'Takim i shkurtër', durationMin: 30 },
+  ]);
 
   await db.insert(availabilityRules).values(
     [1, 2, 3, 4, 5].map((weekday) => ({
@@ -161,8 +160,8 @@ async function main() {
     escalationState: 'requested',
     unread: true,
     msgs: [
-      { role: 'customer', content: 'Më duhet diçka urgjente, kam dhimbje të forta.', minsAgo: 9 },
-      { role: 'ai', content: "Më vjen keq që keni dhimbje. Dua t'ju lidh drejtpërdrejt me fizioterapistin — ai është njoftuar dhe do t'ju përgjigjet shpejt.", minsAgo: 8 },
+      { role: 'customer', content: 'Kam një pyetje për pagesën e javës së kaluar.', minsAgo: 9 },
+      { role: 'ai', content: "Këtë bisedë ia kalova Studio Tirana — do t'ju përgjigjen personalisht sa më shpejt.", minsAgo: 8 },
       { role: 'customer', content: 'Dua të flas me dikë, jo me robot.', minsAgo: 3 },
     ],
   });
@@ -184,8 +183,8 @@ async function main() {
   await addConversation(anila, {
     msgs: [
       { role: 'customer', content: 'Përshëndetje, dua një takim këtë javë.', minsAgo: 20 },
-      { role: 'ai', content: 'Sigurisht. Cili shërbim ju duhet — vlerësim i parë apo seancë vijuese?', minsAgo: 19 },
-      { role: 'customer', content: 'Vijuese.', minsAgo: 17 },
+      { role: 'ai', content: 'Sigurisht. Cili shërbim ju duhet — takim standard apo takim i shkurtër?', minsAgo: 19 },
+      { role: 'customer', content: 'I shkurtri.', minsAgo: 17 },
       { role: 'ai', content: 'Kam të lirë të mërkurën në 10:00 ose të enjten në 14:30. Cila ju shkon?', minsAgo: 16 },
       { role: 'customer', content: 'E mërkura në 10:00.', minsAgo: 13 },
       { role: 'ai', content: 'Mirë, ju kam rezervuar të mërkurën në orën 10:00. A doni një kujtesë një ditë para?', minsAgo: 12 },
@@ -198,7 +197,7 @@ async function main() {
     aiPausedUntil: new Date(Date.now() + 90 * 60_000),
     aiPauseReason: 'business_app_echo',
     msgs: [
-      { role: 'customer', content: 'A jeni në klinikë sot?', minsAgo: 65 },
+      { role: 'customer', content: 'A jeni të hapur sot?', minsAgo: 65 },
       { role: 'account', content: 'Po Genti, jam deri në 18:00. Eja kur të duash.', minsAgo: 62 },
       { role: 'customer', content: 'Faleminderit, vij nga ora 17:00.', minsAgo: 58 },
     ],
@@ -242,13 +241,13 @@ async function main() {
   });
 
   await db.insert(appointments).values([
-    { accountId, customerId: anila, startsAt: at(0, 10), endsAt: at(0, 11), serviceType: 'Vlerësim i parë', status: 'confirmed' },
-    { accountId, customerId: endi, startsAt: at(0, 14, 30), endsAt: at(0, 15, 15), serviceType: 'Seancë vijuese', status: 'pending' },
+    { accountId, customerId: anila, startsAt: at(0, 10), endsAt: at(0, 11), serviceType: 'Takim standard', status: 'confirmed' },
+    { accountId, customerId: endi, startsAt: at(0, 14, 30), endsAt: at(0, 15, 15), serviceType: 'Takim i shkurtër', status: 'pending' },
     // Tomorrow, so the window-closed composer shows the template CTA.
-    { accountId, customerId: vera, startsAt: at(1, 17), endsAt: at(1, 18), serviceType: 'Seancë vijuese', status: 'confirmed' },
-    { accountId, customerId: genti, startsAt: at(2, 11), endsAt: at(2, 12), serviceType: 'Vlerësim i parë', status: 'confirmed' },
-    { accountId, customerId: mira, startsAt: at(3, 16), endsAt: at(3, 17), serviceType: 'Seancë vijuese', status: 'pending' },
-    { accountId, customerId: liridon, startsAt: at(-2, 10), endsAt: at(-2, 11), serviceType: 'Seancë vijuese', status: 'completed' },
+    { accountId, customerId: vera, startsAt: at(1, 17), endsAt: at(1, 18), serviceType: 'Takim i shkurtër', status: 'confirmed' },
+    { accountId, customerId: genti, startsAt: at(2, 11), endsAt: at(2, 12), serviceType: 'Takim standard', status: 'confirmed' },
+    { accountId, customerId: mira, startsAt: at(3, 16), endsAt: at(3, 17), serviceType: 'Takim i shkurtër', status: 'pending' },
+    { accountId, customerId: liridon, startsAt: at(-2, 10), endsAt: at(-2, 11), serviceType: 'Takim i shkurtër', status: 'completed' },
   ]);
 
   console.log(`Seeded QA practitioner ${EMAIL} (${accountId})`);

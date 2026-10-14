@@ -3,7 +3,7 @@ export const chat = {
   title: 'Bisedat',
   emptyTitle: 'Asnjë bisedë aktive',
   emptyText:
-    'Kur një pacient shkruan në WhatsApp, biseda shfaqet këtu — Medium përgjigjet vetë.',
+    'Kur një klient shkruan në WhatsApp, biseda shfaqet këtu — Medium përgjigjet vetë.',
   emptyClosedTitle: 'Asnjë bisedë e mbyllur',
   searchPlaceholder: 'Kërko bisedat…',
   searchLabel: 'Kërko bisedat',
@@ -28,7 +28,7 @@ export const chat = {
   handBack: 'Ktheja Medium-it',
   resume: 'Aktivizo tani',
   letMedium: 'Lër Medium-in',
-  callCustomer: 'Telefono pacientin',
+  callCustomer: 'Telefono klientin',
   closeConversation: 'Mbyll bisedën',
   reopenConversation: 'Rihap bisedën',
 
@@ -45,7 +45,7 @@ export const chat = {
   noticeCapReached:
     'Ke arritur kufirin e bisedave për këtë muaj. Bisedat e reja i menaxhon ti derisa të rinovohet muaji.',
   noticeEscalated:
-    'Pacienti kërkoi të flasë me një person. Medium ndaloi përgjigjet.',
+    'Klienti kërkoi të flasë me një person. Medium ndaloi përgjigjet.',
   noticeTakeover: "Ti po bisedon — Medium është në pauzë derisa t'ia kthesh.",
   noticePaused: (time: string) =>
     `Ti i shkrove vetë nga WhatsApp. Medium u ndal automatikisht deri në ${time}.`,

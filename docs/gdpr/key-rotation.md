@@ -3,7 +3,7 @@
 `whatsapp_connections.access_token_encrypted` is encrypted at rest with
 Postgres `pgcrypto` (`pgp_sym_encrypt`/`pgp_sym_decrypt`), symmetrically keyed
 by `TOKEN_ENCRYPTION_KEY`. This is the procedure for rotating that key without
-losing any PT's WhatsApp connection.
+losing any account's WhatsApp connection.
 
 ## When to rotate
 
