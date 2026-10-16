@@ -36,7 +36,7 @@ describe('PLANS config', () => {
   it('both plans declare the same model table for every environment', () => {
     for (const plan of [PLANS.free, PLANS.solo]) {
       expect(plan.model.production).toEqual({
-        primary: 'anthropic/claude-haiku-4.5',
+        primary: 'anthropic/claude-haiku-5.5',
         fallbacks: ['openai/gpt-5-mini'],
       });
       // Development and preview share one free config — no paid fallback, so a
@@ -109,7 +109,7 @@ describe('resolvePlans', () => {
       '{"solo":{"model":{"production":{"fallbacks":["x/one","x/two"]}}}}',
     );
     expect(plans.solo.model.production).toEqual({
-      primary: 'anthropic/claude-haiku-4.5',
+      primary: 'anthropic/claude-haiku-5.5',
       fallbacks: ['x/one', 'x/two'],
     });
     // The other environments, and the other plan, are untouched.

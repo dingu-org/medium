@@ -11,7 +11,7 @@ const NON_PROD_PRIVACY = { allow_fallbacks: true };
 describe('selectModelForPlan', () => {
   it('resolves production to the paid model, paid fallback, and zdr routing', () => {
     expect(selectModelForPlan('free', {}, 'production')).toEqual({
-      primary: 'anthropic/claude-haiku-4.5',
+      primary: 'anthropic/claude-haiku-5.5',
       fallbacks: ['openai/gpt-5-mini'],
       reasoningEffort: undefined,
       privacy: PROD_PRIVACY,
@@ -100,7 +100,7 @@ describe('selectModelForPlan', () => {
 
   it('derives the environment from the passed env record when not given', () => {
     expect(selectModelForPlan('free', { APP_ENV: 'production' }).primary).toBe(
-      'anthropic/claude-haiku-4.5',
+      'anthropic/claude-haiku-5.5',
     );
     expect(
       selectModelForPlan('free', { APP_ENV: 'preview' }).primary.endsWith(

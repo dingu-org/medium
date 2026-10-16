@@ -48,7 +48,7 @@ describe('OpenRouter client', () => {
     expect(settings).toEqual({
       provider: PROD_PRIVACY,
       usage: { include: true },
-      models: ['anthropic/claude-haiku-4.5', 'openai/gpt-5-mini'],
+      models: ['anthropic/claude-haiku-5.5', 'openai/gpt-5-mini'],
     });
   });
 

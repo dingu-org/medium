@@ -60,7 +60,7 @@ describe('disclosed AI providers', () => {
   });
 
   it('reads the provider off an OpenRouter model id', () => {
-    expect(providerFromModelId('anthropic/claude-haiku-4.5')).toBe('anthropic');
+    expect(providerFromModelId('anthropic/claude-haiku-5.5')).toBe('anthropic');
     expect(providerFromModelId('gpt-5-mini')).toBe('gpt-5-mini');
   });
 
