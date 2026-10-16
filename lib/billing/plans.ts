@@ -92,7 +92,7 @@ const FREE_MODEL: PlanModelConfig = {
 
 /** Production. Paid primary + paid fallback; the only environment that sees customer data. */
 const PRODUCTION_MODEL: PlanModelConfig = {
-  primary: 'anthropic/claude-haiku-4.5',
+  primary: 'anthropic/claude-haiku-5.5',
   fallbacks: ['openai/gpt-5-mini'],
 };
 

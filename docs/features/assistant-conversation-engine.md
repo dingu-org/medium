@@ -164,7 +164,7 @@ One mechanism resolves the model for every environment. `selectModelForPlan` in 
 | ------------- | ---------------------------------------- | ------------------- | ------------------------------------------- |
 | `development` | `nvidia/nemotron-3-ultra-550b-a55b:free` | none                | `allow_fallbacks: true`                     |
 | `preview`     | `nvidia/nemotron-3-ultra-550b-a55b:free` | none                | `allow_fallbacks: true`                     |
-| `production`  | `anthropic/claude-haiku-4.5`             | `openai/gpt-5-mini` | plus `zdr: true`, `data_collection: 'deny'` |
+| `production`  | `anthropic/claude-haiku-5.5`             | `openai/gpt-5-mini` | plus `zdr: true`, `data_collection: 'deny'` |
 
 Production is the only environment that processes customer data, so it is the only one bound by the zero-retention commitments in the privacy policy and DPA. Development runs against a local stack and preview against its own hosted Supabase project, Meta test app, and Vercel deployment, so neither carries a real customer's messages (see [environments](../environments.md)). The free models both use publish no zero-retention endpoint, so requiring it outside production would fail every turn. `assertProductionPrivacy` runs at module load and throws unless production sets both flags, which fails the build and every test run rather than a customer conversation. Environment identity comes from `appEnv()`, never `NODE_ENV`; see [environments](../environments.md).
 
