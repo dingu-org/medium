@@ -13,8 +13,10 @@ import {
   MAX_SIGNUP_MESSAGE_SUMMARIES,
   classifySignupRefusal,
   describeSignupMessage,
+  hasMetaError,
   postableMode,
   readSignupMessage,
+  type SignupCancel,
   type SignupMessageSummary,
   type SignupSession,
 } from './whatsapp-signup';
@@ -126,6 +128,8 @@ type WaStatus = {
   title: string;
   body: string;
   reasons?: readonly string[];
+  /** Meta's session id, for the owner to quote to support. */
+  reference?: string;
 };
 
 // Persistent status card per the canvas WAStatus states — an error from
@@ -171,6 +175,9 @@ export function ConnectWhatsApp({
   // during the popup, separately from the FB.login auth code — capture it here.
   // The event name is what says which mode the PT actually onboarded in.
   const sessionInfo = useRef<SignupSession>({});
+  // Meta's CANCEL detail, kept apart from sessionInfo so an abandoned step can
+  // never overwrite the IDs of a finish that already arrived.
+  const cancelInfo = useRef<SignupCancel | null>(null);
   // Honest cancel scope: we cannot force-close Meta's browser-owned popup, but
   // cancel discards the pending result (and aborts an in-flight POST). If the
   // server persisted before the abort landed, the DB is the source of truth —
@@ -210,8 +217,9 @@ export function ConnectWhatsApp({
         const summary = describeSignupMessage(event);
         if (summary) attempt.messages.push(summary);
       }
-      const session = readSignupMessage(event);
-      if (session) sessionInfo.current = session;
+      const message = readSignupMessage(event);
+      if (message?.kind === 'finish') sessionInfo.current = message.session;
+      else if (message?.kind === 'cancel') cancelInfo.current = message.cancel;
     }
     // The page going away mid-signup is the one outcome no code path below can
     // observe. `pagehide` also fires for a page entering the bfcache, so the
@@ -267,6 +275,7 @@ export function ConnectWhatsApp({
     setStatus(null);
     cancelledRef.current = false;
     sessionInfo.current = {};
+    cancelInfo.current = null;
     const attemptId = crypto.randomUUID();
     attemptRef.current = { id: attemptId, startedAt: Date.now(), messages: [] };
     markAttempt(attemptId);
@@ -317,10 +326,17 @@ export function ConnectWhatsApp({
       const { phoneNumberId, wabaId } = sessionInfo.current;
       const mode = postableMode(sessionInfo.current);
       if (!code || !mode) {
+        // The message listener fills this in while FB.login is open; widen the
+        // `null` that handleClick's own reset narrowed it to.
+        const cancel = cancelInfo.current as SignupCancel | null;
+        const metaStopped = cancel !== null && hasMetaError(cancel);
         setStatus({
           tone: 'warning',
           title: t.settings.whatsappIncompleteTitle,
-          body: t.settings.whatsappIncomplete,
+          body: metaStopped
+            ? t.settings.whatsappMetaStopped
+            : t.settings.whatsappIncomplete,
+          reference: metaStopped ? cancel.sessionId : undefined,
         });
         setPending(false);
         return;
@@ -414,6 +430,11 @@ export function ConnectWhatsApp({
           title={status.title}
         >
           <p>{status.body}</p>
+          {status.reference && (
+            <p className="text-ink-3 mt-2 font-mono text-[12px]">
+              {t.settings.whatsappReference}: {status.reference}
+            </p>
+          )}
           {status.reasons && (
             <div className="mt-3">
               <p className="text-ink-3 mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase">

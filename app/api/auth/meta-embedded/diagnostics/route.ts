@@ -28,6 +28,7 @@ const messageSchema = z
     currentStep: text.optional(),
     errorId: text.optional(),
     errorMessage: text.optional(),
+    sessionId: text.optional(),
   })
   .strict();
 
