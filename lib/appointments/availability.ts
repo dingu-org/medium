@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { AppointmentError } from './errors';
 import type { FreeSlot } from './types';
+import { zonedWallTime } from './zoned-time';
 
 const DEFAULT_DURATION_MINUTES = 60;
 const MAX_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
@@ -104,39 +105,27 @@ function timeToSeconds(value: string): number {
 }
 
 /**
- * The instant a wall time maps to, with a spring-forward gap resolved the way
- * `Date` resolves it: forward to the moment the clock jumps to (Europe/Tirane
- * skips 02:00 → 03:00 on the last Sunday of March).
+ * The instant a wall time maps to, with a spring-forward gap resolved forward
+ * to the moment the clock jumps to (Europe/Tirane skips 02:00 → 03:00 on the
+ * last Sunday of March) and a repeated hour resolved to its first occurrence.
  */
 function wallDateTime(
   day: TZDate,
   secondsSinceMidnight: number,
   timezone: string,
 ): { instant: TZDate; exact: boolean } {
-  const targetDay = addDays(day, Math.floor(secondsSinceMidnight / 86_400));
-  const wallSeconds = secondsSinceMidnight % 86_400;
-  const hours = Math.floor(wallSeconds / 3600);
-  const minutes = Math.floor((wallSeconds % 3600) / 60);
-  const seconds = wallSeconds % 60;
-  const instant = new TZDate(
-    targetDay.getFullYear(),
-    targetDay.getMonth(),
-    targetDay.getDate(),
-    hours,
-    minutes,
-    seconds,
-    0,
+  const { instant, exact } = zonedWallTime(
+    {
+      year: day.getFullYear(),
+      month: day.getMonth() + 1,
+      day: day.getDate(),
+      hours: 0,
+      minutes: 0,
+      seconds: secondsSinceMidnight,
+    },
     timezone,
   );
-
-  const exact =
-    instant.getFullYear() === targetDay.getFullYear() &&
-    instant.getMonth() === targetDay.getMonth() &&
-    instant.getDate() === targetDay.getDate() &&
-    instant.getHours() === hours &&
-    instant.getMinutes() === minutes &&
-    instant.getSeconds() === seconds;
-  return { instant, exact };
+  return { instant: new TZDate(instant, timezone), exact };
 }
 
 /**
