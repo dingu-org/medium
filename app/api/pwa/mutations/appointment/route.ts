@@ -1,4 +1,3 @@
-import { TZDate } from '@date-fns/tz';
 import { and, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -9,6 +8,7 @@ import {
   rescheduleAppointment,
   transitionAppointment,
 } from '@/lib/appointments';
+import { zonedWallTime } from '@/lib/appointments/zoned-time';
 import { db } from '@/lib/db';
 import { appointments, accounts } from '@/lib/db/schema';
 import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
@@ -215,9 +215,10 @@ async function bookManual(
   const timezone = account?.timezone ?? DEFAULT_TIMEZONE;
   const [year, month, day] = input.date.split('-').map(Number);
   const [h, m] = input.time.split(':').map(Number);
-  const startsAt = new Date(
-    new TZDate(year, month - 1, day, h, m, 0, 0, timezone).getTime(),
-  );
+  const startsAt = zonedWallTime(
+    { year, month, day, hours: h, minutes: m },
+    timezone,
+  ).instant;
 
   let customerId = input.customerId;
   if (!customerId && input.newCustomer) {

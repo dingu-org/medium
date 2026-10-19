@@ -1,10 +1,10 @@
 'use server';
 
-import { TZDate } from '@date-fns/tz';
 import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
+import { zonedWallTime } from '@/lib/appointments/zoned-time';
 import { db } from '@/lib/db';
 import { availabilityRules, blockedPeriods, accounts } from '@/lib/db/schema';
 import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
@@ -138,9 +138,8 @@ async function addBlockedPeriodImpl(input: {
   const [year, month, day] = parsed.data.date.split('-').map(Number);
   const toInstant = (time: string): Date => {
     const [h, m] = time.split(':').map(Number);
-    return new Date(
-      new TZDate(year, month - 1, day, h, m, 0, 0, timezone).getTime(),
-    );
+    return zonedWallTime({ year, month, day, hours: h, minutes: m }, timezone)
+      .instant;
   };
 
   await db.insert(blockedPeriods).values({
