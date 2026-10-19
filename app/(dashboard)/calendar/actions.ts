@@ -1,6 +1,5 @@
 'use server';
 
-import { TZDate } from '@date-fns/tz';
 import { and, desc, eq, ilike, or } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -13,6 +12,7 @@ import {
   transitionAppointment,
 } from '@/lib/appointments';
 import { getFreeSlotsInternal } from '@/lib/appointments/availability';
+import { zonedWallTime } from '@/lib/appointments/zoned-time';
 import { db } from '@/lib/db';
 import { appointments, customers, accounts } from '@/lib/db/schema';
 import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
@@ -309,9 +309,10 @@ async function bookManualAppointmentImpl(input: {
 
   const [year, month, day] = parsed.data.date.split('-').map(Number);
   const [h, m] = parsed.data.time.split(':').map(Number);
-  const startsAt = new Date(
-    new TZDate(year, month - 1, day, h, m, 0, 0, timezone).getTime(),
-  );
+  const startsAt = zonedWallTime(
+    { year, month, day, hours: h, minutes: m },
+    timezone,
+  ).instant;
 
   let customerId = parsed.data.customerId;
   if (!customerId && parsed.data.newCustomer) {
