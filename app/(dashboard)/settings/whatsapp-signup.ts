@@ -49,15 +49,66 @@ const MODE_BY_FINISH_EVENT: Readonly<
   FINISH_ONLY_WABA: 'cloud_api',
 };
 
+/** Cap on the free text kept from one popup message. */
+const MAX_DIAGNOSTIC_TEXT = 200;
+
+function clip(value: unknown): string | undefined {
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
+  return String(value).slice(0, MAX_DIAGNOSTIC_TEXT);
+}
+
 /**
- * Parse one popup message. Returns the session to remember, or `null` when the
- * message is not a finish notice we should act on. Only `FINISH*` events are
- * captured, so a later message cannot clobber a completed signup's IDs.
+ * What Meta's `CANCEL` event says about why the popup was abandoned. Every field
+ * is optional: a user closing the popup sends only the step, while an
+ * eligibility rejection also carries Meta's error and a `session_id` that Meta
+ * support asks for.
+ */
+export type SignupCancel = {
+  currentStep?: string;
+  errorId?: string;
+  errorMessage?: string;
+  sessionId?: string;
+};
+
+/**
+ * The one parser for a popup payload's cancel fields, shared by the trusted
+ * {@link readSignupMessage} path and the wider {@link describeSignupMessage}
+ * trail so both read Meta's names the same way. `error_id` is the documented
+ * key; `error_code` is accepted because some payloads use it.
+ */
+function readCancelDetail(inner: Record<string, unknown>): SignupCancel {
+  return {
+    currentStep: clip(inner.current_step),
+    errorId: clip(inner.error_id ?? inner.error_code),
+    errorMessage: clip(inner.error_message),
+    sessionId: clip(inner.session_id),
+  };
+}
+
+/**
+ * Whether a cancel carries an error from Meta, as opposed to the owner simply
+ * closing the popup on a step. Only the former is worth a "Meta stopped it"
+ * explanation.
+ */
+export function hasMetaError(cancel: SignupCancel): boolean {
+  return Boolean(cancel.errorId || cancel.errorMessage);
+}
+
+/** One trusted popup message, classified by what we may conclude from it. */
+export type SignupMessage =
+  | { kind: 'finish'; session: SignupSession }
+  | { kind: 'cancel'; cancel: SignupCancel };
+
+/**
+ * Parse one popup message. Returns the session to remember for a `FINISH*`
+ * event, the cancel detail for a `CANCEL`, or `null` for anything else. The two
+ * are returned as distinct kinds so a `CANCEL` can never be stored as — and
+ * clobber — a completed signup's IDs.
  */
 export function readSignupMessage(event: {
   origin: string;
   data: unknown;
-}): SignupSession | null {
+}): SignupMessage | null {
   if (!META_SIGNUP_ORIGINS.includes(event.origin)) return null;
   let data: {
     type?: string;
@@ -70,13 +121,21 @@ export function readSignupMessage(event: {
     return null; // non-JSON message — ignore
   }
   if (data?.type !== 'WA_EMBEDDED_SIGNUP') return null;
+  if (data.event === 'CANCEL') {
+    const inner =
+      typeof data.data === 'object' && data.data !== null ? data.data : {};
+    return { kind: 'cancel', cancel: readCancelDetail(inner) };
+  }
   if (typeof data.event !== 'string' || !data.event.startsWith('FINISH')) {
     return null;
   }
   return {
-    event: data.event,
-    phoneNumberId: data.data?.phone_number_id as string | undefined,
-    wabaId: data.data?.waba_id as string | undefined,
+    kind: 'finish',
+    session: {
+      event: data.event,
+      phoneNumberId: data.data?.phone_number_id as string | undefined,
+      wabaId: data.data?.waba_id as string | undefined,
+    },
   };
 }
 
@@ -110,10 +169,14 @@ export function postableMode(
 
 /** Cap on the popup-message summaries one attempt reports. */
 export const MAX_SIGNUP_MESSAGE_SUMMARIES = 20;
-const MAX_DIAGNOSTIC_TEXT = 200;
 
-/** One popup message, reduced to what is safe and useful to store. */
-export type SignupMessageSummary = {
+/**
+ * One popup message, reduced to what is safe and useful to store. Carries
+ * Meta's CANCEL payload ({@link SignupCancel}): the screen the popup was
+ * abandoned on, its error report and the `session_id` Meta support asks for.
+ * None of those are secrets.
+ */
+export type SignupMessageSummary = SignupCancel & {
   origin: string;
   /** Whether {@link readSignupMessage} would have trusted this origin. */
   originAccepted: boolean;
@@ -121,17 +184,7 @@ export type SignupMessageSummary = {
   event?: string;
   hasNumberId: boolean;
   hasWabaId: boolean;
-  /** Meta's CANCEL payload: the screen the popup was abandoned on. */
-  currentStep?: string;
-  /** Meta's error-report payload. */
-  errorId?: string;
-  errorMessage?: string;
 };
-
-function clip(value: unknown): string | undefined {
-  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
-  return String(value).slice(0, MAX_DIAGNOSTIC_TEXT);
-}
 
 /**
  * Summarise one window message for the diagnostic trail, or `null` when it is
@@ -172,9 +225,7 @@ export function describeSignupMessage(event: {
     event: clip(payload.event),
     hasNumberId: Boolean(inner.phone_number_id),
     hasWabaId: Boolean(inner.waba_id),
-    currentStep: clip(inner.current_step),
-    errorId: clip(inner.error_id ?? inner.error_code),
-    errorMessage: clip(inner.error_message),
+    ...readCancelDetail(inner),
   };
 }
 

@@ -122,7 +122,9 @@ The client outcome names why a finished popup did or did not become a connection
 | `page_unloaded`                                       | The page was hidden or unloaded while the popup was open                                          |
 | `resumed_after_reload`                                | A new page instance found the marker of an attempt the previous one never finished                |
 
-Popup message summaries are deliberately wider than `readSignupMessage`: they include `CANCEL` (with the screen it was abandoned on), Meta's error id, and signup messages from an origin the trust check refuses, each flagged `originAccepted`. Identifiers are reduced to present-or-absent, and free text is clipped and phone-scrubbed before it is stored.
+Popup message summaries are deliberately wider than `readSignupMessage`: they include `CANCEL` (with the screen it was abandoned on, Meta's error id and message, and Meta's `session_id`), and signup messages from an origin the trust check refuses, each flagged `originAccepted`. `readSignupMessage` itself returns a `CANCEL` as a separate `cancel` result, never as a finish session, so it cannot overwrite a captured signup's IDs. Both read the cancel fields through one parser. Identifiers are reduced to present-or-absent (the exception is `session_id`, which is not a secret and is what Meta support asks for), and free text is clipped and phone-scrubbed before it is stored.
+
+When a signup ends incomplete after a `CANCEL` that carried a Meta error, the incomplete card says Meta stopped the connection and shows the `session_id` as a reference code the owner can quote to support. A `CANCEL` with only a step (the owner closed the popup) keeps the generic card.
 
 `resumed_after_reload` is also the one diagnostic that changes what the owner sees: a `sessionStorage` marker set at click and cleared at any terminal outcome lets a page that reloaded mid-popup show the "connection stayed half-done" card instead of a bare Connect button.
 

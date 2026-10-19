@@ -157,6 +157,9 @@ export const settings = {
     'WhatsApp kërkon HTTPS — Facebook e bllokon në http://. Hap aplikacionin nëpërmjet HTTPS.',
   whatsappIncomplete: 'Lidhja mbeti e paplotë — mund ta vazhdosh kurdo.',
   whatsappIncompleteTitle: 'Lidhja mbeti përgjysmë',
+  whatsappMetaStopped:
+    'Meta e ndaloi lidhjen para se të përfundonte. Provo sërish, ose kontakto mbështetjen me kodin më poshtë.',
+  whatsappReference: 'Kodi i referencës',
   whatsappSuccess: 'WhatsApp Business u lidh. Sinkronizimi po fillon.',
   whatsappFailed: 'Diçka shkoi keq me lidhjen e WhatsApp. Provo sërish.',
   whatsappFailedTitle: 'Lidhja nuk u përfundua',

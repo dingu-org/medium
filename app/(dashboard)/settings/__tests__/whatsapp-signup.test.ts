@@ -3,6 +3,7 @@ import {
   META_SIGNUP_ORIGINS,
   classifySignupRefusal,
   describeSignupMessage,
+  hasMetaError,
   postableMode,
   readSignupMessage,
 } from '../whatsapp-signup';
@@ -39,9 +40,12 @@ describe('readSignupMessage — origin check', () => {
         }),
       });
       expect(parsed, origin).toEqual({
-        event: 'FINISH',
-        phoneNumberId: 'PNI_1',
-        wabaId: 'WABA_1',
+        kind: 'finish',
+        session: {
+          event: 'FINISH',
+          phoneNumberId: 'PNI_1',
+          wabaId: 'WABA_1',
+        },
       });
     }
   });
@@ -93,29 +97,135 @@ describe('readSignupMessage — payload shape', () => {
         },
       }),
     ).toEqual({
-      event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
-      phoneNumberId: undefined,
-      wabaId: 'WABA_1',
+      kind: 'finish',
+      session: {
+        event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+        phoneNumberId: undefined,
+        wabaId: 'WABA_1',
+      },
     });
   });
 
-  it('ignores non-finish events so they cannot clobber a captured signup', () => {
-    expect(
-      readSignupMessage(
-        finish('CANCEL', { current_step: 'PHONE_NUMBER_VERIFICATION' }),
-      ),
-    ).toBeNull();
+  it('ignores events that are neither a finish nor a cancel', () => {
     expect(readSignupMessage(finish('ERROR', {}))).toBeNull();
+    expect(readSignupMessage(finish('PHONE_NUMBER_ADDED', {}))).toBeNull();
   });
 
   it('keeps the event name so the POST site can derive the mode', () => {
     expect(
       readSignupMessage(finish('FINISH_ONLY_WABA', { waba_id: 'WABA_1' })),
     ).toEqual({
-      event: 'FINISH_ONLY_WABA',
-      phoneNumberId: undefined,
-      wabaId: 'WABA_1',
+      kind: 'finish',
+      session: {
+        event: 'FINISH_ONLY_WABA',
+        phoneNumberId: undefined,
+        wabaId: 'WABA_1',
+      },
     });
+  });
+});
+
+describe('readSignupMessage — CANCEL', () => {
+  it("returns Meta's step, error and session id", () => {
+    expect(
+      readSignupMessage(
+        finish('CANCEL', {
+          current_step: 'PHONE_NUMBER_SETUP',
+          error_message: 'Business is not eligible',
+          error_code: 524126,
+          session_id: 'SESSION_1',
+        }),
+      ),
+    ).toEqual({
+      kind: 'cancel',
+      cancel: {
+        currentStep: 'PHONE_NUMBER_SETUP',
+        errorId: '524126',
+        errorMessage: 'Business is not eligible',
+        sessionId: 'SESSION_1',
+      },
+    });
+  });
+
+  it('prefers error_id over error_code when a payload carries both', () => {
+    const parsed = readSignupMessage(
+      finish('CANCEL', { error_id: 'ID_1', error_code: 'CODE_1' }),
+    );
+    expect(parsed).toMatchObject({ cancel: { errorId: 'ID_1' } });
+  });
+
+  it('returns only the fields the payload carried', () => {
+    const parsed = readSignupMessage(
+      finish('CANCEL', { current_step: 'PHONE_NUMBER_VERIFICATION' }),
+    );
+    expect(parsed).toEqual({
+      kind: 'cancel',
+      cancel: {
+        currentStep: 'PHONE_NUMBER_VERIFICATION',
+        errorId: undefined,
+        errorMessage: undefined,
+        sessionId: undefined,
+      },
+    });
+  });
+
+  it('accepts a CANCEL with no data at all', () => {
+    const noData = readSignupMessage(
+      message({ type: 'WA_EMBEDDED_SIGNUP', event: 'CANCEL' }),
+    );
+    expect(noData).toEqual({
+      kind: 'cancel',
+      cancel: {
+        currentStep: undefined,
+        errorId: undefined,
+        errorMessage: undefined,
+        sessionId: undefined,
+      },
+    });
+    expect(readSignupMessage(finish('CANCEL', {}))).toEqual(noData);
+  });
+
+  it('clips long free text', () => {
+    const parsed = readSignupMessage(
+      finish('CANCEL', {
+        error_message: 'x'.repeat(500),
+        session_id: 's'.repeat(500),
+      }),
+    );
+    expect(
+      parsed?.kind === 'cancel' && parsed.cancel.errorMessage,
+    ).toHaveLength(200);
+    expect(parsed?.kind === 'cancel' && parsed.cancel.sessionId).toHaveLength(
+      200,
+    );
+  });
+
+  it('refuses a CANCEL from a lookalike origin', () => {
+    expect(
+      readSignupMessage(
+        message(
+          {
+            type: 'WA_EMBEDDED_SIGNUP',
+            event: 'CANCEL',
+            data: { error_message: 'forged' },
+          },
+          'https://evilfacebook.com',
+        ),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe('hasMetaError', () => {
+  it('is true when Meta reported an error id or message', () => {
+    expect(hasMetaError({ errorId: '524126' })).toBe(true);
+    expect(hasMetaError({ errorMessage: 'Not eligible' })).toBe(true);
+  });
+
+  it('is false for an owner who only closed the popup on a step', () => {
+    expect(hasMetaError({ currentStep: 'PHONE_NUMBER_SETUP' })).toBe(false);
+    expect(hasMetaError({ sessionId: 'SESSION_1' })).toBe(false);
+    expect(hasMetaError({})).toBe(false);
   });
 });
 
@@ -191,19 +301,37 @@ describe('describeSignupMessage', () => {
       currentStep: undefined,
       errorId: undefined,
       errorMessage: undefined,
+      sessionId: undefined,
     });
     expect(JSON.stringify(summary)).not.toContain('PNI_1');
     expect(JSON.stringify(summary)).not.toContain('WABA_1');
   });
 
-  it('keeps the CANCEL step that readSignupMessage discards', () => {
-    const cancel = finish('CANCEL', { current_step: 'PHONE_NUMBER_SETUP' });
-    expect(readSignupMessage(cancel)).toBeNull();
+  it("keeps the CANCEL step and Meta's session id", () => {
+    const cancel = finish('CANCEL', {
+      current_step: 'PHONE_NUMBER_SETUP',
+      session_id: 'SESSION_1',
+    });
     expect(describeSignupMessage(cancel)).toMatchObject({
       event: 'CANCEL',
       currentStep: 'PHONE_NUMBER_SETUP',
+      sessionId: 'SESSION_1',
       hasWabaId: false,
     });
+  });
+
+  it('reads the cancel fields exactly as readSignupMessage does', () => {
+    const cancel = finish('CANCEL', {
+      current_step: 'PHONE_NUMBER_SETUP',
+      error_code: 524126,
+      error_message: 'Not eligible',
+      session_id: 'SESSION_1',
+    });
+    const parsed = readSignupMessage(cancel);
+    expect(parsed?.kind).toBe('cancel');
+    expect(describeSignupMessage(cancel)).toMatchObject(
+      parsed?.kind === 'cancel' ? parsed.cancel : {},
+    );
   });
 
   it("keeps Meta's error id and a clipped error message", () => {
