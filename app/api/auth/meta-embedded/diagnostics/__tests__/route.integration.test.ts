@@ -125,6 +125,7 @@ describe('POST /api/auth/meta-embedded/diagnostics — trail', () => {
             hasNumberId: false,
             hasWabaId: false,
             currentStep: 'PHONE_NUMBER_SETUP',
+            sessionId: 'SESSION_1',
           },
         ],
       }),
@@ -142,7 +143,13 @@ describe('POST /api/auth/meta-embedded/diagnostics — trail', () => {
       attemptId: ATTEMPT_ID,
       outcome: 'no_finish_message',
       hasCode: true,
-      messages: [{ event: 'CANCEL', currentStep: 'PHONE_NUMBER_SETUP' }],
+      messages: [
+        {
+          event: 'CANCEL',
+          currentStep: 'PHONE_NUMBER_SETUP',
+          sessionId: 'SESSION_1',
+        },
+      ],
     });
   });
 

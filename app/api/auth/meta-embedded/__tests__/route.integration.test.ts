@@ -230,7 +230,7 @@ describe('POST /api/auth/meta-embedded — mode per finish event', () => {
         }),
       );
 
-      const session = readSignupMessage({
+      const message = readSignupMessage({
         origin: META_SIGNUP_ORIGINS[0],
         data: JSON.stringify({
           type: 'WA_EMBEDDED_SIGNUP',
@@ -241,8 +241,10 @@ describe('POST /api/auth/meta-embedded — mode per finish event', () => {
           },
         }),
       });
-      expect(session?.event).toBe(event);
-      const mode = postableMode(session!);
+      expect(message?.kind).toBe('finish');
+      const session = message?.kind === 'finish' ? message.session : {};
+      expect(session.event).toBe(event);
+      const mode = postableMode(session);
 
       const res = await POST(
         makePost({
