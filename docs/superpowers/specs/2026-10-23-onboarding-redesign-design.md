@@ -97,8 +97,8 @@ Non-goals.)
 2. **Business identity.** Required: business name and **business type**,
    chosen only from a predefined list that we define, never free text
    **[KD]**. Each type carries its own AI prompt configuration **[KD]**, which
-   is why the list is closed. The type also drives the starter service
-   suggestions in step 3 **[my call]**. The list **[KD for the first five and
+   is why the list is closed. The type does not drive anything in step 3:
+   the service form shows no suggestions **[KD]**. The list **[KD for the first five and
    the generic fallback; my call for the rest]**: psychologist,
    physiotherapist, dentist, beauty salon, personal trainer, barber /
    hairdresser, massage therapist, nutritionist, coach / tutor, consultant,
@@ -117,15 +117,16 @@ Non-goals.)
    The "add service" control stays visible but gated, with the reason shown
    inline (for example "the free plan includes one service"), never hidden or
    silently disabled **[KD agreed]**. The reason carries no upgrade link or
-   call to action (no upselling in onboarding). Starter suggestions for the
-   chosen business type are single-choice on the free plan, since only one
-   service is allowed **[KD agreed]**. Every new account is on the free plan
+   call to action (no upselling in onboarding).
+   The service form shows no starter suggestions **[KD]**. Every new account is on the free plan
    throughout onboarding.
 4. **Where (adaptive).** Business-level location is *derived* from the
    services' modes, not asked up front **[KD]**:
    - any in-person service → address (required), city, country; optional
-     directions, parking and entrance notes, floor. **Country is prefilled as
-     Shqipëri [KD]**, so in practice the user types address and city;
+     directions, parking and entrance notes, floor. **The fields appear in
+     this order: country, city, address [KD]. Country is fixed text
+     (Shqipëri), not editable for now since the product is Albania only
+     [KD]**, so in practice the user types city and address;
    - any at-the-client's service → a **service area written in plain text**
      (for example "Tiranë dhe rrethinat") **[KD]**. There is no radius, map or
      distance calculation; the AI uses the text to tell a client whether
@@ -139,15 +140,17 @@ Non-goals.)
    with only online services this whole screen is skipped. This screen comes
    after Services for exactly that reason.
 5. **Availability.** Required: working days and hours, timezone. **Timezone
-   is prefilled as Tirana and shown as one line ("Ora: Tiranë · Ndrysho")**
-   **[KD]**; it stays required but nobody has to type it. Each day chip has a
+   is prefilled as Tirana and shown as one line ("Ora: Tiranë · Ndrysho")
+   directly under the subheading, above the days and hours [KD]**; it stays required but nobody has to type it. Each day chip has a
    full accessible name ("E hënë", not "H"). Optional: breaks, holidays and
    closures, vacation mode, buffer.
 6. **WhatsApp.** Two paths **[KD]**:
    - "I have a WhatsApp Business number" → connect it, inside the flow.
    - "I don't have one yet" → an end-user-level guide to getting one (copy
      level per the help-content rule below). The user can continue without
-     connecting; that leaves the single remaining step.
+     connecting; that leaves the single remaining step. **Until the user
+     picks a path there is no main button, only "Më vonë", which skips the
+     step [KD]**.
 7. **Install and notifications [KD].** The last step, so that a user who
    leaves the browser for the installed app is not leaving steps behind
    **[KD]**. Content depends on the device. Already installed, or Android: one
@@ -323,10 +326,8 @@ get the new flow while old ones keep their current behaviour.
 This release builds the closed list, stores the type on the account, and adds
 a lookup from type to assistant configuration. **Every type uses one general
 configuration for now [KD]**; specialised configurations are added one type at
-a time in later work **[KD]**. The type does pick the starter service
-suggestions in step 3 now **[my call]**, and the author drafts those
-suggestions (Albanian names and durations) for KD to review **[my call]**.
-A user may change their business type later in settings **[my call]**.
+a time in later work **[KD]**. The type picks nothing in step 3: there are no starter
+suggestions **[KD]**. A user may change their business type later in settings **[my call]**.
 
 ## Hardening decisions (product-design harden pass; all [my call] unless marked)
 
@@ -402,11 +403,10 @@ system, not the reference apps.
 - *Service mode:* three radio rows, each with a one-line description, none
   preselected (Shopify, link above).
 - *Service form:* duration as one-tap chips plus "Tjetër"; price with a "Lekë"
-  suffix; starter suggestions are cards (name, duration) that fill the form
-  rather than saving at once; a saved service shows as a compact card
+  suffix; a saved service shows as a compact card
   ([Fresha](https://mobbin.com/screens/ea4f8207-318d-4d5e-88bd-30f750055774));
   the gated "add service" row is muted with a lock and the reason inline.
-- *Where:* stacked fields; country as a "Shqipëri · Ndrysho" chip; an
+- *Where:* stacked fields; country as fixed, non-editable text shown first, then city, then address; an
   "Shembull" link that fills the service-area example.
 - *Availability:* circular day chips with full accessible names
   ([Insight Timer](https://mobbin.com/screens/afb57a33-34ce-45a1-a924-07f1d75207e3));
@@ -415,7 +415,7 @@ system, not the reference apps.
   days with different hours in an expandable weekly list
   ([OpenPhone](https://mobbin.com/flows/00e6aeb2-fda7-4b30-a7f4-f3353df1d057)).
 - *WhatsApp:* no useful Mobbin reference found. Two radio rows (same pattern as
-  service mode) with the Continue label changing to match the choice; the
+  service mode) with no main button until a choice is made (only "Më vonë"), then the label matching the choice; the
   number guide reuses the three-card layout below.
 - *Notifications:* icon, short headline, two lines of benefit, primary button,
   "Jo tani" link
@@ -445,7 +445,13 @@ KD delegated them]**:
 
 - **Continue is never disabled.** Pressing it with missing data shows errors
   beside the fields and one reason line above the button (consistent with "no
-  silently disabled button").
+  silently disabled button"). The one exception is not a disabled button: on
+  the WhatsApp choice screen the main button is absent until a path is picked.
+
+Changes after KD's review of the canvas **[KD]**: step 3 shows no suggestions
+(the screen is intro, then the form); step 4 "at my place" shows country as
+fixed text first, then city, then address; step 5 moves the timezone line
+under the subheading; step 6 shows only "Më vonë" until a path is chosen.
 - **iPhone install guide:** one primary button, "Vazhdo në shfletues", no
   "Jo tani" link (nothing else to choose there).
 - **Progress count when Where is skipped:** the total becomes 6 and is
