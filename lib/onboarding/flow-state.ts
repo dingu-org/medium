@@ -19,6 +19,7 @@ import {
 } from './flow';
 import type { ServiceMode } from '../services/modes';
 import type { StepSuccess } from './step-result';
+import { whereFieldsDone, whereNeeds, type WhereRow } from './where';
 
 export type FlowAccountFacts = { flow: 'legacy' | 'guided' } & FlowFacts;
 
@@ -41,9 +42,12 @@ function servicesDone(
   return active.some((s) => s.mode != null && Boolean(s.description?.trim()));
 }
 
-/** MED-119 replaces this with the mode-dependent field check. */
-function whereDone(row: { address: string | null }): boolean {
-  return Boolean(row.address?.trim());
+/** Every location group the active services' modes need is filled (MED-119). */
+function whereDone(
+  row: WhereRow,
+  activeModes: (ServiceMode | null)[],
+): boolean {
+  return whereFieldsDone(whereNeeds(activeModes), row);
 }
 
 /** At least one weekly availability rule exists. */
@@ -62,6 +66,8 @@ export async function loadFlowFacts(
         name: accounts.name,
         businessType: accounts.businessType,
         address: accounts.address,
+        city: accounts.city,
+        serviceArea: accounts.serviceArea,
         introSeenAt: accounts.onboardingIntroSeenAt,
         whatsappSeenAt: accounts.onboardingWhatsappSeenAt,
         notificationsSeenAt: accounts.onboardingNotificationsSeenAt,
@@ -96,13 +102,15 @@ export async function loadFlowFacts(
   ]);
   if (!account) throw new Error('Account row missing');
 
+  const activeModes = activeServices.map((s) => s.mode);
+
   return {
     flow: account.flow,
     introSeen: account.introSeenAt != null,
     business: businessDone(account),
     services: servicesDone(activeServices),
-    serviceModes: activeServices.map((s) => s.mode),
-    where: whereDone(account),
+    serviceModes: activeModes,
+    where: whereDone(account, activeModes),
     availability: availabilityDone(rules.length),
     whatsappSeen: account.whatsappSeenAt != null || connections.length > 0,
     notificationsSeen: account.notificationsSeenAt != null,

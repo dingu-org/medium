@@ -46,6 +46,9 @@ async function reset() {
       name: null,
       businessType: null,
       address: null,
+      city: null,
+      country: null,
+      serviceArea: null,
       onboardingIntroSeenAt: null,
       onboardingWhatsappSeenAt: null,
       onboardingNotificationsSeenAt: null,
@@ -126,7 +129,8 @@ describe('loadFlowFacts', () => {
       flow: 'guided',
       business: false,
       services: false,
-      where: false,
+      // Nothing is needed until a service has a mode.
+      where: true,
       availability: false,
     });
 
@@ -136,17 +140,16 @@ describe('loadFlowFacts', () => {
         name: ' Studio ',
         businessType: 'other_professional',
         address: 'Rruga 1',
+        city: 'Tiranë',
       })
       .where(eq(accounts.id, accountId));
     await addCompleteService();
-    await db
-      .insert(availabilityRules)
-      .values({
-        accountId,
-        weekday: 1,
-        startTime: '09:00:00',
-        endTime: '17:00:00',
-      });
+    await db.insert(availabilityRules).values({
+      accountId,
+      weekday: 1,
+      startTime: '09:00:00',
+      endTime: '17:00:00',
+    });
 
     const filled = await loadFlowFacts(accountId);
     expect(filled).toMatchObject({
@@ -156,6 +159,32 @@ describe('loadFlowFacts', () => {
       availability: true,
     });
     expect(filled.serviceModes).toEqual(['at_business']);
+  });
+
+  it('where follows the modes of the active services', async () => {
+    await addCompleteService();
+    // An address without a city (the placeholder-era row) is not done.
+    await db
+      .update(accounts)
+      .set({ address: 'Rruga 1' })
+      .where(eq(accounts.id, accountId));
+    expect((await loadFlowFacts(accountId)).where).toBe(false);
+    await db
+      .update(accounts)
+      .set({ city: 'Tiranë' })
+      .where(eq(accounts.id, accountId));
+    expect((await loadFlowFacts(accountId)).where).toBe(true);
+
+    await db
+      .update(services)
+      .set({ mode: 'at_client' })
+      .where(eq(services.accountId, accountId));
+    expect((await loadFlowFacts(accountId)).where).toBe(false);
+    await db
+      .update(accounts)
+      .set({ serviceArea: 'Tiranë dhe rrethinat' })
+      .where(eq(accounts.id, accountId));
+    expect((await loadFlowFacts(accountId)).where).toBe(true);
   });
 });
 
@@ -337,17 +366,16 @@ describe('enterScreen', () => {
         name: 'Studio',
         businessType: 'other_professional',
         address: 'Rruga 1',
+        city: 'Tiranë',
       })
       .where(eq(accounts.id, accountId));
     await addCompleteService();
-    await db
-      .insert(availabilityRules)
-      .values({
-        accountId,
-        weekday: 1,
-        startTime: '09:00:00',
-        endTime: '17:00:00',
-      });
+    await db.insert(availabilityRules).values({
+      accountId,
+      weekday: 1,
+      startTime: '09:00:00',
+      endTime: '17:00:00',
+    });
   }
 
   it('completes onboarding when Finish is really visited', async () => {

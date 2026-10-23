@@ -32,7 +32,6 @@ vi.mock('@/lib/supabase/server', () => ({
 import { markSeenAndAdvance, goToDashboard } from '../actions';
 import { saveAvailabilityPlaceholder } from '../availability/actions';
 import { saveBusiness, type BusinessInput } from '../business/actions';
-import { saveWherePlaceholder } from '../where/actions';
 
 let accountId = '';
 
@@ -102,14 +101,6 @@ describe('placeholder step actions are safe to repeat', () => {
     expect(rules).toHaveLength(5);
   });
 
-  it('where: concurrent calls write the address', async () => {
-    await Promise.all([
-      saveWherePlaceholder('Rruga 1'),
-      saveWherePlaceholder('Rruga 1'),
-    ]);
-    expect((await row()).address).toBe('Rruga 1');
-  });
-
   it('seen steps: concurrent calls keep the first timestamp', async () => {
     await markSeenAndAdvance('whatsapp', 'skipped');
     const first = (await row()).onboardingWhatsappSeenAt;
@@ -143,7 +134,10 @@ describe('saveBusiness', () => {
   });
 
   it('double submit: both succeed and one row holds the values', async () => {
-    const results = await Promise.all([saveBusiness(valid), saveBusiness(valid)]);
+    const results = await Promise.all([
+      saveBusiness(valid),
+      saveBusiness(valid),
+    ]);
     expect(results.every((r) => r.ok)).toBe(true);
     expect(await row()).toMatchObject({
       name: 'Studio Vita',
@@ -251,16 +245,6 @@ describe('advancing', () => {
 });
 
 describe('validation', () => {
-  it('returns field errors and writes nothing', async () => {
-    await expect(saveWherePlaceholder('')).resolves.toMatchObject({
-      ok: false,
-      fieldErrors: { address: expect.any(String) },
-    });
-    const r = await row();
-    expect(r.name).toBeNull();
-    expect(r.address).toBeNull();
-  });
-
   it('rejects an unknown step or outcome', async () => {
     await expect(markSeenAndAdvance('business', 'completed')).rejects.toThrow();
     await expect(markSeenAndAdvance('intro', 'nope')).rejects.toThrow();
@@ -284,9 +268,7 @@ describe('who may save', () => {
       .update(accounts)
       .set({ onboardingFlow: 'legacy' })
       .where(eq(accounts.id, accountId));
-    await expect(saveBusiness(valid)).rejects.toThrow(
-      'REDIRECT:/onboarding',
-    );
+    await expect(saveBusiness(valid)).rejects.toThrow('REDIRECT:/onboarding');
   });
 
   it('redirects a completed account', async () => {
@@ -294,9 +276,7 @@ describe('who may save', () => {
       .update(accounts)
       .set({ onboardingCompletedAt: new Date() })
       .where(eq(accounts.id, accountId));
-    await expect(saveBusiness(valid)).rejects.toThrow(
-      'REDIRECT:/today',
-    );
+    await expect(saveBusiness(valid)).rejects.toThrow('REDIRECT:/today');
   });
 
   it('goToDashboard replaces the history entry', async () => {

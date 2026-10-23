@@ -118,6 +118,44 @@ export const onboarding = {
     hiddenTag: '· i fshehur', // DRAFTED
   },
 
+  /**
+   * Step 4, Where (MED-119). Canvas 4a/4b/4c strings verbatim except those
+   * marked DRAFTED, which are listed for the copy review.
+   */
+  where: {
+    title: 'Ku i pret klientët?',
+    sub: 'Medium ua tregon adresën klientëve kur rezervojnë ose kur pyesin.',
+    titleAtClient: 'Ku shkon te klientët?',
+    subAtClient:
+      'Shkruaje me fjalë. Medium u thotë klientëve nëse janë brenda zonës dhe u kërkon adresën kur rezervojnë.',
+    titleMixed: 'Ku i ofron shërbimet?',
+    subMixed: 'Disa shërbime i bën në ambientin tënd, disa te klienti.',
+    sectionBusiness: 'Në ambientin tënd',
+    sectionClient: 'Te klienti',
+    countryLabel: 'Shteti',
+    countryName: 'Shqipëri',
+    cityLabel: 'Qyteti',
+    details: 'Shto detaje',
+    detailsHelp: 'Medium ua tregon klientëve që të gjejnë më lehtë vendin.', // DRAFTED
+    directionsLabel: 'Udhëzime për të ardhur',
+    directionsPlaceholder: 'p.sh. Pranë stacionit të autobusit',
+    parkingLabel: 'Parkimi',
+    parkingPlaceholder: 'p.sh. Parkim publik përballë',
+    entranceLabel: 'Hyrja',
+    entrancePlaceholder: 'p.sh. Nga oborri',
+    floorLabel: 'Kati',
+    floorPlaceholder: 'p.sh. 2',
+    areaLabel: 'Zona ku shërben',
+    areaPlaceholder: 'Qytetet ose zonat ku shkon',
+    example: 'Shembull',
+    exampleLabel: (value: string) => `Shembull: ${value}`,
+    cityRequired: 'Shkruaj qytetin.', // DRAFTED
+    addressRequired: 'Shkruaj adresën.', // DRAFTED
+    serviceAreaRequired: 'Shkruaj zonën ku shërben.', // DRAFTED
+    tooLong: 'Teksti është shumë i gjatë.', // DRAFTED (same text as business.tooLong)
+    nothingNeeded: 'Shërbimet e tua nuk kërkojnë adresë. Vazhdo.', // DRAFTED
+  },
+
   steps: {
     profileTitle: 'Profili yt',
     profileSub: 'Shto emrin e biznesit dhe të dhënat e kontaktit.',

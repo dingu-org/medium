@@ -110,6 +110,17 @@ export const accounts = pgTable('accounts', {
   // Optional short description from onboarding step 2 (MED-117).
   tagline: text('tagline'),
   address: text('address'),
+  // Where step (MED-119). Business-level location, all nullable: existing
+  // accounts have none. country is fixed to 'AL' for now (lib/onboarding/where.ts)
+  // and written with the at-business group. Never cleared when service modes change.
+  country: text('country'),
+  city: text('city'),
+  directions: text('directions'),
+  parking: text('parking'),
+  entrance: text('entrance'),
+  floor: text('floor'),
+  // Free-text area for at-the-client's services ("Tiranë dhe rrethinat"). Not a map.
+  serviceArea: text('service_area'),
   timezone: text('timezone').notNull().default(DEFAULT_TIMEZONE),
   aiName: text('ai_name'),
   aiGreeting: text('ai_greeting'),
