@@ -156,6 +156,29 @@ export const onboarding = {
     nothingNeeded: 'Shërbimet e tua nuk kërkojnë adresë. Vazhdo.', // DRAFTED
   },
 
+  /**
+   * Step 5, Availability (MED-121). Canvas 5a/5c strings verbatim except those
+   * marked DRAFTED, which are listed for the copy review.
+   */
+  availability: {
+    title: 'Kur punon?',
+    sub: 'Medium u ofron klientëve vetëm këto orë.',
+    tzPrefix: 'Ora:',
+    tirana: 'Tiranë',
+    tzChange: 'Ndrysho',
+    tzChangeLabel: 'Ndrysho zonën kohore',
+    daysLegend: 'Ditët e punës',
+    hoursLegend: 'Orari',
+    start: 'Fillon',
+    end: 'Mbaron',
+    differentHours: 'Orë të ndryshme për disa ditë',
+    fixHours: 'Rregullo orarin për të vazhduar.',
+    noDay: 'Zgjidh të paktën një ditë pune.', // DRAFTED
+    timeMissing: 'Zgjidh orën.', // DRAFTED
+    overlap: 'Oraret e kësaj dite mbivendosen.', // DRAFTED
+    timezoneInvalid: 'Zgjidh zonën kohore.', // DRAFTED
+  },
+
   steps: {
     profileTitle: 'Profili yt',
     profileSub: 'Shto emrin e biznesit dhe të dhënat e kontaktit.',

@@ -30,7 +30,6 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { markSeenAndAdvance, goToDashboard } from '../actions';
-import { saveAvailabilityPlaceholder } from '../availability/actions';
 import { saveBusiness, type BusinessInput } from '../business/actions';
 
 let accountId = '';
@@ -89,18 +88,6 @@ beforeEach(async () => {
 });
 
 describe('placeholder step actions are safe to repeat', () => {
-  it('availability: concurrent calls leave one set of five rules', async () => {
-    await Promise.all([
-      saveAvailabilityPlaceholder(),
-      saveAvailabilityPlaceholder(),
-    ]);
-    const rules = await db
-      .select({ id: availabilityRules.id })
-      .from(availabilityRules)
-      .where(eq(availabilityRules.accountId, accountId));
-    expect(rules).toHaveLength(5);
-  });
-
   it('seen steps: concurrent calls keep the first timestamp', async () => {
     await markSeenAndAdvance('whatsapp', 'skipped');
     const first = (await row()).onboardingWhatsappSeenAt;
