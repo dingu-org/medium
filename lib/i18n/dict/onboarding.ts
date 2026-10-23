@@ -13,7 +13,8 @@ export const onboarding = {
     'Medium tashmë mund të pranojë rezervime në WhatsApp. Klienti i parë që shkruan do të marrë përgjigje brenda sekondash.',
 
   stepOf: (i: number, n: number) => `Hapi ${i} nga ${n}`,
-  progress: (done: number, total: number) => `${done} nga ${total} të përfunduara`,
+  progress: (done: number, total: number) =>
+    `${done} nga ${total} të përfunduara`,
 
   /** Guided onboarding shell (MED-115). Canvas strings; see the sprint notes for the invented ones. */
   flow: {
@@ -36,12 +37,25 @@ export const onboarding = {
     goToApp: 'Shko te paneli',
   },
 
+  /** Step 1, How it works (MED-116). Canvas strings, verbatim. */
+  howItWorks: {
+    title: 'Ja si funksionon',
+    steps: [
+      'Klientët të shkruajnë në WhatsApp.',
+      'Medium u përgjigjet dhe gjen një orë që të përshtatet ty.',
+      'Ti merr takimin, gati në kalendar.',
+    ],
+    timeNote:
+      "Konfigurimi zgjat disa minuta. Nëse s'ke ende numër WhatsApp Business, marrja e tij mund të zgjasë më shumë.",
+  },
+
   steps: {
     profileTitle: 'Profili yt',
     profileSub: 'Shto emrin e biznesit dhe të dhënat e kontaktit.',
     profileCta: 'Rregullo profilin',
     whatsappTitle: 'Lidh WhatsApp',
-    whatsappSub: 'Lidh numrin tënd të WhatsApp Business që klientët të shkruajnë.',
+    whatsappSub:
+      'Lidh numrin tënd të WhatsApp Business që klientët të shkruajnë.',
     whatsappCta: 'Lidh',
     availabilityTitle: 'Cakto disponueshmërinë',
     availabilitySub: 'Trego kur mund të rezervojnë klientët.',

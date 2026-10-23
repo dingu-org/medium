@@ -153,6 +153,17 @@ describe('advancing', () => {
       next: '/onboarding/business',
     });
   });
+
+  it('Start pressed again keeps the first intro timestamp', async () => {
+    await markSeenAndAdvance('intro', 'completed');
+    const first = (await row()).onboardingIntroSeenAt;
+    expect(first).not.toBeNull();
+    await expect(markSeenAndAdvance('intro', 'completed')).resolves.toEqual({
+      ok: true,
+      next: '/onboarding/business',
+    });
+    expect((await row()).onboardingIntroSeenAt).toEqual(first);
+  });
 });
 
 describe('validation', () => {

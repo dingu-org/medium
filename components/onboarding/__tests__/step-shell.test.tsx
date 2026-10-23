@@ -98,6 +98,24 @@ describe('StepShell', () => {
     expect(render()).toMatch(/<h1[^>]*tabindex="-1"[^>]*>Titulli<\/h1>/);
   });
 
+  it('renders leading before the heading and omits it by default', () => {
+    const html = render({ leading: <span data-testid="lead" /> });
+    expect(html.indexOf('data-testid="lead"')).toBeGreaterThan(-1);
+    expect(html.indexOf('data-testid="lead"')).toBeLessThan(
+      html.indexOf('<h1'),
+    );
+    expect(render()).not.toContain('data-testid="lead"');
+  });
+
+  it('centres with auto margins, not justify-center', () => {
+    const html = render({ align: 'center' });
+    expect(html).toContain('[&amp;&gt;:first-child]:mt-auto');
+    expect(html).toContain('[&amp;&gt;:last-child]:mb-auto');
+    const main = html.match(/<main[^>]*>/)?.[0] ?? '';
+    expect(main).not.toContain('justify-center');
+    expect(render().match(/<main[^>]*>/)?.[0]).not.toContain('mt-auto');
+  });
+
   it('passes field errors and pending state to a render-prop child', () => {
     const html = renderToStaticMarkup(
       <StepShell

@@ -33,6 +33,8 @@ export type StepShellProps = {
   accountId: string;
   /** The shell renders the h1 and moves focus to it on every step. */
   heading: string;
+  /** Rendered inside `main`, above the heading (e.g. a brand mark). */
+  leading?: ReactNode;
   subheading?: ReactNode;
   align?: 'start' | 'center';
   /** `null` / omitted: no main button (the WhatsApp choice screen). */
@@ -87,6 +89,7 @@ export function StepShell({
   backHref,
   accountId,
   heading,
+  leading,
   subheading,
   align = 'start',
   primary,
@@ -208,9 +211,13 @@ export function StepShell({
       <main
         className={cn(
           'mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col overflow-y-auto px-4 pt-4 pb-6',
-          align === 'center' && 'items-center justify-center text-center',
+          // Auto margins centre when there is room and start at the top when
+          // there is not; `justify-center` would clip the top of the content.
+          align === 'center' &&
+            'items-center text-center [&>:first-child]:mt-auto [&>:last-child]:mb-auto',
         )}
       >
+        {leading}
         <h1
           ref={headingRef}
           tabIndex={-1}
