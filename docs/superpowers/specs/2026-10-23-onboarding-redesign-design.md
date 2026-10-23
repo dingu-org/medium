@@ -369,6 +369,101 @@ A user may change their business type later in settings **[my call]**.
   outside Medium; free or "price on agreement" services are not a concern for
   now.
 
+## UI decisions (from Mobbin research, [my call] unless marked)
+
+Starting points for the visual design, which is done in the Claude Design
+project "Medium" using Medium's own tokens and components. Patterns come from
+the Mobbin references linked here; the final look follows Medium's design
+system, not the reference apps.
+
+**Shell (every step)**
+- One segmented progress bar with "Hapi N nga 7" beside it
+  ([Insight Timer](https://mobbin.com/screens/396c6b53-a0f0-428f-a64b-86eae3fbc936),
+  [Public](https://mobbin.com/screens/06574758-a042-4dde-9bf0-c74460bc5178)).
+- Back is an icon button top-left. No Back + Continue button pair
+  ([Neo](https://mobbin.com/screens/b7f95591-c711-4133-8aab-bd2521071e9f) and
+  [Blue Apron](https://mobbin.com/screens/abae8f67-deed-43a5-b14b-12094e2fdac1)
+  are the pattern to avoid: two buttons compete).
+- Continue is one full-width black pill fixed at the bottom, with a small
+  helper line under it that says progress is saved automatically (the
+  [Insight Timer](https://mobbin.com/screens/396c6b53-a0f0-428f-a64b-86eae3fbc936)
+  "Choose up to 3" line is the pattern). Sign-out is quiet text top-right.
+- Skip is a text link under the button, never a second button
+  ([Bumble](https://mobbin.com/screens/be42614b-6115-4fe0-ac7b-4ef7f7954397)).
+- Avoid a small floating "Next"
+  ([Shopify](https://mobbin.com/screens/c6e64236-9325-4812-b08f-e083aa084093)):
+  it recreates the hard-to-reach Save.
+
+**Per step**
+- *Business type:* vertical rows, icon on the left, radio on the right, a
+  selected row shown with an outline and a check
+  ([Lemonade](https://mobbin.com/screens/b83db3b6-4524-4ad3-a808-eb44c5a09897)).
+  Eleven rows scroll under the fixed button.
+- *Service mode:* three radio rows, each with a one-line description, none
+  preselected (Shopify, link above).
+- *Service form:* duration as one-tap chips plus "Tjetër"; price with a "Lekë"
+  suffix; starter suggestions are cards (name, duration) that fill the form
+  rather than saving at once; a saved service shows as a compact card
+  ([Fresha](https://mobbin.com/screens/ea4f8207-318d-4d5e-88bd-30f750055774));
+  the gated "add service" row is muted with a lock and the reason inline.
+- *Where:* stacked fields; country as a "Shqipëri · Ndrysho" chip; an
+  "Shembull" link that fills the service-area example.
+- *Availability:* circular day chips with full accessible names
+  ([Insight Timer](https://mobbin.com/screens/afb57a33-34ce-45a1-a924-07f1d75207e3));
+  two time fields
+  ([Fresha](https://mobbin.com/screens/b3c44593-f44d-4033-b3d7-c20435b4882c));
+  days with different hours in an expandable weekly list
+  ([OpenPhone](https://mobbin.com/flows/00e6aeb2-fda7-4b30-a7f4-f3353df1d057)).
+- *WhatsApp:* no useful Mobbin reference found. Two radio rows (same pattern as
+  service mode) with the Continue label changing to match the choice; the
+  number guide reuses the three-card layout below.
+- *Notifications:* icon, short headline, two lines of benefit, primary button,
+  "Jo tani" link
+  ([Bumble](https://mobbin.com/screens/be42614b-6115-4fe0-ac7b-4ef7f7954397),
+  [Cash App](https://mobbin.com/screens/be5cd190-352d-4597-a544-31cb00eeea3a)),
+  plus example notification cards in the style of
+  [Claude](https://mobbin.com/screens/c5cbd6f5-1c04-4111-acee-c0080b68e97f)
+  (for example "Takim i ri · Arta, e hënë 10:00").
+- *iPhone install guide:* three illustrated cards in a vertical stack: Share →
+  Add to Home Screen → open from the home screen
+  ([Voicenotes](https://mobbin.com/screens/5e8c7341-3c55-4ca2-8f71-90136c2666f7),
+  [Perplexity](https://mobbin.com/screens/31203340-bf5d-4fa1-ab83-21fbbb541e26)).
+- *Finish:* a check, "Gati", one primary button
+  ([Joi](https://mobbin.com/screens/aabcc0e5-ac55-4833-83b8-e8ffeb747cf8),
+  [Jomo](https://mobbin.com/screens/df40391c-beb7-4a8a-a508-fec2b33601c5)). The
+  "one step left" variant and the dashboard card (a one-row version of
+  [Shopify's setup card](https://mobbin.com/screens/32ac5921-43be-435c-88cc-9e29bd8eb23e))
+  have no direct reference and are designed from scratch.
+
+## Design pass decisions (canvas "Onboarding redesign")
+
+The visual design lives in a Design artifact built on the Medium Design System
+(rebuilt from the shipped code): https://claude.ai/artifact/X46mcFLaD7SE6qq5LvXZcY
+(30 artboards, 390 x 844, light theme). The design agent did not render-check
+it, so a visual review is still owed. Decisions made after the pass **[my call,
+KD delegated them]**:
+
+- **Continue is never disabled.** Pressing it with missing data shows errors
+  beside the fields and one reason line above the button (consistent with "no
+  silently disabled button").
+- **iPhone install guide:** one primary button, "Vazhdo në shfletues", no
+  "Jo tani" link (nothing else to choose there).
+- **Progress count when Where is skipped:** the total becomes 6 and is
+  recalculated as soon as the services are saved, so the user never sees a
+  skipped number. Before the services are saved the label shows 7.
+- **The "mixed" Where variant** (in-person and at-the-client's together) is
+  drawn but cannot occur in onboarding: a free account has one service and so
+  one mode. It is not tested in onboarding QA; it matters later for paid
+  accounts.
+- **Copy departures accepted:** "Provo sërish" and "Më vonë" (they match the
+  existing dictionary), error text in `danger-600` and secondary labels in
+  `ink-2` (contrast), duration chips written with units ("15 min").
+- **Still to verify before release:** a fluent Albanian pass over every string
+  (the design agent listed the least certain ones); that the WhatsApp guide's
+  card 2 matches what Medium's Meta connection accepts (see MED-48,
+  coexistence); the iPhone Share-button wording and the Settings paths for
+  notifications on iPhone and Android (device QA, MED-126).
+
 ## Known gaps (must be closed in the next phase)
 
 - **All business types behave the same.** Until specialised configurations
