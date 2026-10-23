@@ -32,7 +32,6 @@ vi.mock('@/lib/supabase/server', () => ({
 import { markSeenAndAdvance, goToDashboard } from '../actions';
 import { saveAvailabilityPlaceholder } from '../availability/actions';
 import { saveBusiness, type BusinessInput } from '../business/actions';
-import { confirmServicesPlaceholder } from '../services/actions';
 import { saveWherePlaceholder } from '../where/actions';
 
 let accountId = '';
@@ -79,7 +78,6 @@ beforeEach(async () => {
       title: null,
       tagline: null,
       address: null,
-      servicesConfiguredAt: null,
       onboardingIntroSeenAt: null,
       onboardingWhatsappSeenAt: null,
       onboardingNotificationsSeenAt: null,
@@ -110,19 +108,6 @@ describe('placeholder step actions are safe to repeat', () => {
       saveWherePlaceholder('Rruga 1'),
     ]);
     expect((await row()).address).toBe('Rruga 1');
-  });
-
-  it('services: concurrent calls keep the first confirmation timestamp', async () => {
-    await confirmServicesPlaceholder();
-    const first = (await row()).servicesConfiguredAt;
-    expect(first).not.toBeNull();
-    await Promise.all([
-      confirmServicesPlaceholder(),
-      confirmServicesPlaceholder(),
-    ]);
-    expect((await row()).servicesConfiguredAt?.getTime()).toBe(
-      first?.getTime(),
-    );
   });
 
   it('seen steps: concurrent calls keep the first timestamp', async () => {
@@ -246,21 +231,6 @@ describe('saveBusiness', () => {
 });
 
 describe('advancing', () => {
-  it('services moves on to Where while a mode is unknown', async () => {
-    await db
-      .update(accounts)
-      .set({
-        onboardingIntroSeenAt: new Date(),
-        name: 'Studio',
-        businessType: 'other_professional',
-      })
-      .where(eq(accounts.id, accountId));
-    await expect(confirmServicesPlaceholder()).resolves.toEqual({
-      ok: true,
-      next: '/onboarding/where',
-    });
-  });
-
   it('the intro marks itself seen and goes to business', async () => {
     await expect(markSeenAndAdvance('intro', 'completed')).resolves.toEqual({
       ok: true,

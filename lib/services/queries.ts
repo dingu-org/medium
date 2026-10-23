@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { services } from '@/lib/db/schema';
+import type { ServiceMode } from './modes';
 
 export type ServiceRecord = {
   id: string;
@@ -114,4 +115,28 @@ export async function getActiveServiceByName(
     )
     .limit(1);
   return service ?? null;
+}
+
+export type ServiceWithDetails = ServiceRecord & {
+  mode: ServiceMode | null;
+  description: string | null;
+};
+
+/** Every service (active and hidden) with mode and description, oldest first. */
+export async function getServicesWithDetails(
+  accountId: string,
+): Promise<ServiceWithDetails[]> {
+  return db
+    .select({
+      id: services.id,
+      name: services.name,
+      durationMinutes: services.durationMin,
+      active: services.active,
+      priceLek: services.priceLek,
+      mode: services.mode,
+      description: services.description,
+    })
+    .from(services)
+    .where(eq(services.accountId, accountId))
+    .orderBy(asc(services.createdAt), asc(services.name));
 }

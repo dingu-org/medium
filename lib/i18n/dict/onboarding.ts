@@ -67,6 +67,57 @@ export const onboarding = {
     tooLong: 'Teksti është shumë i gjatë.',
   },
 
+  /**
+   * Step 3, Services (MED-118). Canvas strings (3a-3d) except the ones marked
+   * DRAFTED, which have no artboard and are listed for the copy review.
+   */
+  services: {
+    title: 'Shërbimi yt',
+    sub: "Ajo që rezervojnë klientët te ti. Medium e përdor për t'u treguar çfarë përfshin, sa zgjat dhe sa kushton.",
+    subSaved: 'Ky është shërbimi që Medium u ofron klientëve.',
+    nameLabel: 'Emri i shërbimit',
+    namePlaceholder: 'p.sh. Manikyr me xhel',
+    durationLabel: 'Kohëzgjatja',
+    durationChip: (m: number) => `${m} min`,
+    priceLabel: 'Çmimi',
+    pricePlaceholder: 'p.sh. 2500',
+    priceSuffix: 'Lekë',
+    modeLabel: 'Ku bëhet shërbimi?',
+    modes: {
+      at_business: {
+        title: 'Në ambientin tim',
+        sub: 'Klienti vjen në adresën e biznesit.',
+      },
+      at_client: {
+        title: 'Te klienti',
+        sub: 'Ti shkon në adresën e klientit.',
+      },
+      online: {
+        title: 'Online',
+        sub: 'Me video. Lidhjen ia dërgon vetë klientit.',
+      },
+    },
+    descriptionLabel: 'Përshkrimi',
+    descriptionPlaceholder: 'Çfarë përfshin shërbimi',
+    descriptionHelp: 'Medium e përdor kur klientët pyesin çfarë përfshin.',
+    nameRequired: 'Shkruaj emrin e shërbimit.', // DRAFTED
+    durationRequired: 'Zgjidh sa zgjat shërbimi.',
+    durationRange: 'Kohëzgjatja duhet të jetë nga 5 deri në 480 minuta.', // DRAFTED
+    priceRequired: 'Shkruaj çmimin. Duhet të jetë më shumë se 0.',
+    modeRequired: 'Zgjidh ku bëhet shërbimi.',
+    descriptionRequired: 'Shkruaj shkurt çfarë përfshin shërbimi.',
+    nameTaken: 'Një shërbim me këtë emër ekziston tashmë.',
+    fixMany: (n: number) => `Plotëso ${n} fushat e shënuara për të vazhduar.`,
+    editLabel: (name: string) => `Ndrysho shërbimin ${name}`,
+    add: 'Shto shërbim',
+    freeLimit: 'Plani falas përfshin një shërbim.',
+    activeLabel: 'Aktiv',
+    activeHelp: 'Kur është i fshehur, klientët nuk mund ta rezervojnë.', // DRAFTED
+    activeRequired:
+      'Të paktën një shërbim duhet të jetë aktiv që klientët të rezervojnë.', // DRAFTED
+    hiddenTag: '· i fshehur', // DRAFTED
+  },
+
   steps: {
     profileTitle: 'Profili yt',
     profileSub: 'Shto emrin e biznesit dhe të dhënat e kontaktit.',

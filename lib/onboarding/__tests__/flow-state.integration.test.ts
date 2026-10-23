@@ -9,7 +9,7 @@ import {
   vi,
 } from 'vitest';
 import { db } from '@/lib/db';
-import { accounts, availabilityRules } from '@/lib/db/schema';
+import { accounts, availabilityRules, services } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 
 const { getUserMock, headersMock } = vi.hoisted(() => ({
@@ -46,7 +46,6 @@ async function reset() {
       name: null,
       businessType: null,
       address: null,
-      servicesConfiguredAt: null,
       onboardingIntroSeenAt: null,
       onboardingWhatsappSeenAt: null,
       onboardingNotificationsSeenAt: null,
@@ -56,6 +55,22 @@ async function reset() {
   await db
     .delete(availabilityRules)
     .where(eq(availabilityRules.accountId, accountId));
+  await db.delete(services).where(eq(services.accountId, accountId));
+}
+
+/** A service with every field the step requires. */
+async function addCompleteService(
+  over: Partial<typeof services.$inferInsert> = {},
+) {
+  await db.insert(services).values({
+    accountId,
+    name: 'Manikyr',
+    durationMin: 45,
+    priceLek: 2500,
+    mode: 'at_business',
+    description: 'Manikyr me xhel',
+    ...over,
+  });
 }
 
 async function row() {
@@ -105,7 +120,7 @@ describe('guided flow columns', () => {
 });
 
 describe('loadFlowFacts', () => {
-  it('reflects name, address, services confirmation and rules', async () => {
+  it('reflects name, address, services and rules', async () => {
     const empty = await loadFlowFacts(accountId);
     expect(empty).toMatchObject({
       flow: 'guided',
@@ -121,9 +136,9 @@ describe('loadFlowFacts', () => {
         name: ' Studio ',
         businessType: 'other_professional',
         address: 'Rruga 1',
-        servicesConfiguredAt: new Date(),
       })
       .where(eq(accounts.id, accountId));
+    await addCompleteService();
     await db
       .insert(availabilityRules)
       .values({
@@ -136,11 +151,48 @@ describe('loadFlowFacts', () => {
     const filled = await loadFlowFacts(accountId);
     expect(filled).toMatchObject({
       business: true,
-      services: true, // the signup trigger seeded active services
+      services: true,
       where: true,
       availability: true,
     });
-    expect(filled.serviceModes.length).toBeGreaterThan(0);
+    expect(filled.serviceModes).toEqual(['at_business']);
+  });
+});
+
+describe('services step', () => {
+  it('is not done for a new account with no services', async () => {
+    expect((await loadFlowFacts(accountId)).services).toBe(false);
+  });
+
+  it('is not done with a mode but a blank description', async () => {
+    await addCompleteService({ description: '   ' });
+    expect((await loadFlowFacts(accountId)).services).toBe(false);
+  });
+
+  it('is not done with a description but no mode', async () => {
+    await addCompleteService({ mode: null });
+    expect((await loadFlowFacts(accountId)).services).toBe(false);
+  });
+
+  it('is not done when the complete service is inactive', async () => {
+    await addCompleteService({ active: false });
+    expect((await loadFlowFacts(accountId)).services).toBe(false);
+  });
+
+  it('lists the modes of the active services only', async () => {
+    await addCompleteService({ name: 'A', mode: 'online' });
+    await addCompleteService({ name: 'B', mode: 'at_client', active: false });
+    await addCompleteService({ name: 'C', mode: null, description: null });
+    const facts = await loadFlowFacts(accountId);
+    expect([...facts.serviceModes].sort()).toEqual([null, 'online']);
+  });
+
+  it('no longer reads services_configured_at', async () => {
+    await db
+      .update(accounts)
+      .set({ servicesConfiguredAt: new Date() })
+      .where(eq(accounts.id, accountId));
+    expect((await loadFlowFacts(accountId)).services).toBe(false);
   });
 });
 
@@ -285,9 +337,9 @@ describe('enterScreen', () => {
         name: 'Studio',
         businessType: 'other_professional',
         address: 'Rruga 1',
-        servicesConfiguredAt: new Date(),
       })
       .where(eq(accounts.id, accountId));
+    await addCompleteService();
     await db
       .insert(availabilityRules)
       .values({

@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -8,11 +8,18 @@ import { db } from '@/lib/db';
 import { getPostgresErrorCode } from '@/lib/db/postgres-errors';
 import { appointments, services } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
-import { sanitizePromptField } from '@/lib/ai/prompt';
-import { getPlan } from '@/lib/billing/plans';
-import { loadEffectivePlan } from '@/lib/billing/read-model';
 import { withAdvisoryLock } from '@/lib/db/advisory-lock';
 import { t } from '@/lib/i18n';
+import {
+  serviceDurationField,
+  serviceNameField,
+  servicePriceField,
+} from '@/lib/services/fields';
+import {
+  activeServiceCount,
+  maxActiveServicesFor,
+  serviceLockKey,
+} from '@/lib/services/limits';
 import { createServerClient } from '@/lib/supabase/server';
 
 export type ServiceMutationResult =
@@ -29,20 +36,6 @@ export type ServiceMutationResult =
       error: string;
     };
 
-/** Active services for a PT, optionally excluding one (the one being toggled). */
-async function activeServiceCount(
-  accountId: string,
-  excludeId?: string,
-): Promise<number> {
-  const conditions = [eq(services.accountId, accountId), eq(services.active, true)];
-  if (excludeId) conditions.push(ne(services.id, excludeId));
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(services)
-    .where(and(...conditions));
-  return row?.count ?? 0;
-}
-
 const planLimitResult: ServiceMutationResult = {
   ok: false,
   code: 'PLAN_LIMIT',
@@ -50,16 +43,9 @@ const planLimitResult: ServiceMutationResult = {
 };
 
 const serviceSchema = z.object({
-  // Service names are listed in the system prompt as context bullets, so a line
-  // break in one would render as a bullet of its own (lib/ai/prompt.ts).
-  name: z.preprocess(
-    (v) => (typeof v === 'string' ? sanitizePromptField(v) : v),
-    z.string().min(1).max(80),
-  ),
-  durationMinutes: z.number().int().min(5).max(480),
-  // Aligned with the DB CHECK (price_lek > 0); max keeps int4 overflow a
-  // clean INVALID instead of a Postgres 22003.
-  priceLek: z.number().int().positive().max(2_147_483_647).nullable(),
+  name: serviceNameField,
+  durationMinutes: serviceDurationField,
+  priceLek: servicePriceField.nullable(),
 });
 
 async function requireAccountId(): Promise<string> {
@@ -102,8 +88,8 @@ async function createServiceImpl(input: {
   }
   // New services default to active — gate on the plan's active-service cap under
   // an advisory lock so two concurrent creates can't both slip past the limit.
-  return withAdvisoryLock(`usage:services:${accountId}`, async () => {
-    const max = getPlan(await loadEffectivePlan(accountId)).maxActiveServices;
+  return withAdvisoryLock(serviceLockKey(accountId), async () => {
+    const max = await maxActiveServicesFor(accountId);
     if (max !== null && (await activeServiceCount(accountId)) >= max) {
       return planLimitResult;
     }
@@ -193,8 +179,8 @@ async function setServiceActiveImpl(
   // Activating is gated on the plan cap under a lock so a concurrent activation
   // can't slip a second service past a 1-active-service plan. Count OTHER active
   // services: activating this one is allowed only if that count is under the cap.
-  return withAdvisoryLock(`usage:services:${accountId}`, async () => {
-    const max = getPlan(await loadEffectivePlan(accountId)).maxActiveServices;
+  return withAdvisoryLock(serviceLockKey(accountId), async () => {
+    const max = await maxActiveServicesFor(accountId);
     if (max !== null && (await activeServiceCount(accountId, serviceId)) >= max) {
       return planLimitResult;
     }

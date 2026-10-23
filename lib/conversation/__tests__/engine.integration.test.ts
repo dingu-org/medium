@@ -30,6 +30,7 @@ import { ConversationEngineError } from '../errors';
 import { handoffFailedTurn, runTurnCore } from '../engine';
 import type { InboundMessage } from '../types';
 import { DAY, HOUR, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
+import { seedLegacyDefaultServices } from '@/tests/support/services';
 
 type MockGenerateResult = Awaited<
   ReturnType<MockLanguageModelV3['doGenerate']>
@@ -355,6 +356,8 @@ beforeAll(async () => {
   if (error || !data.user)
     throw new Error(`createUser failed: ${error?.message}`);
   accountId = data.user.id;
+  // New accounts have no services; this suite relies on the three legacy ones.
+  await seedLegacyDefaultServices(accountId);
 
   await db
     .update(accounts)

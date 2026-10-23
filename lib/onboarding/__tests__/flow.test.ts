@@ -119,6 +119,21 @@ describe('progress total', () => {
   });
 });
 
+describe('after the services step (MED-118)', () => {
+  const saved = (modes: ServiceMode[]) =>
+    facts({ introSeen: true, business: true, services: true, serviceModes: modes });
+
+  it('skips Where and counts 6 steps when the only service is online', () => {
+    expect(progressFor('services', saved(['online'])).total).toBe(6);
+    expect(nextScreen('services', saved(['online']))).toBe('availability');
+  });
+
+  it('goes to Where and counts 7 steps for an at-client service', () => {
+    expect(progressFor('services', saved(['at_client'])).total).toBe(7);
+    expect(nextScreen('services', saved(['at_client']))).toBe('where');
+  });
+});
+
 describe('resumeScreen', () => {
   it('starts a fresh account on the intro', () => {
     expect(resumeScreen(fresh)).toBe('intro');

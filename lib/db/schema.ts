@@ -19,6 +19,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { BUSINESS_TYPES } from '../business-types';
+import { SERVICE_MODES } from '../services/modes';
 import { DEFAULT_TIMEZONE } from '../i18n/timezone';
 
 const bytea = customType<{ data: Buffer; notNull: false; default: false }>({
@@ -85,6 +86,7 @@ export const reminderResponseType = pgEnum('reminder_response_type', [
 export const plan = pgEnum('plan', ['free', 'solo']);
 export const onboardingFlow = pgEnum('onboarding_flow', ['legacy', 'guided']);
 export const businessType = pgEnum('business_type', BUSINESS_TYPES);
+export const serviceMode = pgEnum('service_mode', SERVICE_MODES);
 export const billingPeriod = pgEnum('billing_period', ['monthly', 'yearly']);
 export const billingOrderStatus = pgEnum('billing_order_status', [
   'created',
@@ -234,6 +236,12 @@ export const services = pgTable(
     // set; the assistant only quotes a price when this is present. Wired into
     // getServices/prompt in a later Phase 15 task.
     priceLek: integer('price_lek'),
+    // What the business told the assistant this service includes (MED-118).
+    // Null on services from before the guided flow; required only in onboarding.
+    description: text('description'),
+    // Where the service takes place (MED-118). Null = unknown (existing
+    // services); the assistant must not guess (MED-120).
+    mode: serviceMode('mode'),
     active: boolean('active').notNull().default(true),
     createdAt: tsTz('created_at').notNull().default(now),
   },

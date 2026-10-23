@@ -23,6 +23,7 @@ import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
 import { dispatchTool } from '../dispatcher';
 import { DAY, testNow, zonedTime } from '@/tests/support/clock';
+import { seedLegacyDefaultServices } from '@/tests/support/services';
 
 // The only availability rule seeded below is Monday 09:00–12:00 local, so every
 // fixture here hangs off a real Monday — derived, and a week out so the bookings
@@ -44,6 +45,8 @@ beforeAll(async () => {
   if (error || !data.user)
     throw new Error(`createUser failed: ${error?.message}`);
   accountId = data.user.id;
+  // New accounts have no services; this suite relies on the three legacy ones.
+  await seedLegacyDefaultServices(accountId);
 
   const [customer] = await db
     .insert(customers)

@@ -246,6 +246,20 @@
       "when": 1792780109460,
       "tag": "0034_business_type",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792781153322,
+      "tag": "0035_service_mode_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792781156566,
+      "tag": "0036_signup_without_default_services",
+      "breakpoints": true
     }
   ]
 }

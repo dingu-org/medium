@@ -107,9 +107,7 @@ export async function seedCore(
     })
     .where(eq(accounts.id, accountId));
 
-  // The signup trigger pre-creates default services. Replace them, so the demo
-  // data does not depend on which default names the trigger currently seeds.
-  await database.delete(services).where(eq(services.accountId, accountId));
+  // New accounts start with no services; add the demo ones.
   await database
     .insert(services)
     .values({ accountId, name: 'Takim standard', durationMin: 45 });

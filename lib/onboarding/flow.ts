@@ -4,6 +4,7 @@
  * rule here is unit-testable. `flow-state.ts` builds the `FlowFacts` snapshot
  * these functions read.
  */
+import type { ServiceMode } from '../services/modes';
 
 export const FLOW_STEPS = [
   'intro',
@@ -48,14 +49,14 @@ export function screenHref(screen: FlowScreenId): string {
   return `/onboarding/${SCREEN_SLUGS[screen]}`;
 }
 
-/** How a service is delivered. MED-118 uses these exact values for its column. */
-export type ServiceMode = 'at_business' | 'at_client' | 'online';
+/** How a service is delivered (single source: lib/services/modes.ts). */
+export type { ServiceMode };
 
 export type FlowFacts = {
   introSeen: boolean;
   business: boolean;
   services: boolean;
-  /** Modes of the active services; `null` until the services carry a mode. */
+  /** Modes of the active services; `null` for a service with no mode (created before the guided flow). */
   serviceModes: (ServiceMode | null)[];
   where: boolean;
   availability: boolean;

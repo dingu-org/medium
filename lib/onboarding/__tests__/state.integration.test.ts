@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getOnboardingState } from '../state';
+import { seedLegacyDefaultServices } from '@/tests/support/services';
 
 let accountId = '';
 
@@ -15,6 +16,8 @@ beforeAll(async () => {
   });
   if (error || !data.user) throw error ?? new Error('Missing user');
   accountId = data.user.id;
+  // New accounts have no services; this suite relies on the three legacy ones.
+  await seedLegacyDefaultServices(accountId);
 });
 
 afterAll(async () => {
@@ -22,7 +25,7 @@ afterAll(async () => {
 });
 
 describe('onboarding service confirmation', () => {
-  it('keeps seeded services pending until the practice confirms them', async () => {
+  it('keeps existing services pending until confirmed', async () => {
     await expect(getOnboardingState(accountId)).resolves.toMatchObject({
       services: false,
     });

@@ -74,9 +74,7 @@ async function main() {
     connectedAt: minsAgo(60 * 24 * 30),
   });
 
-  // The signup trigger pre-creates default services. Replace them, so the QA
-  // data does not depend on which default names the trigger currently seeds.
-  await db.delete(services).where(eq(services.accountId, accountId));
+  // New accounts start with no services; add the QA ones.
   await db.insert(services).values([
     { accountId, name: 'Takim standard', durationMin: 45 },
     { accountId, name: 'Takim i shkurtër', durationMin: 30 },

@@ -17,6 +17,7 @@ import {
   type FlowScreenId,
   type SeenStepId,
 } from './flow';
+import type { ServiceMode } from '../services/modes';
 import type { StepSuccess } from './step-result';
 
 export type FlowAccountFacts = { flow: 'legacy' | 'guided' } & FlowFacts;
@@ -33,15 +34,11 @@ function businessDone(row: {
   return Boolean(row.name?.trim()) && row.businessType != null;
 }
 
-/**
- * MED-118 replaces this with "at least one active service with a mode and a
- * description" and stops using `servicesConfiguredAt`.
- */
+/** At least one active service with a mode and a description (MED-118). */
 function servicesDone(
-  row: { servicesConfiguredAt: Date | null },
-  activeServiceCount: number,
+  active: { mode: ServiceMode | null; description: string | null }[],
 ): boolean {
-  return row.servicesConfiguredAt != null && activeServiceCount > 0;
+  return active.some((s) => s.mode != null && Boolean(s.description?.trim()));
 }
 
 /** MED-119 replaces this with the mode-dependent field check. */
@@ -65,7 +62,6 @@ export async function loadFlowFacts(
         name: accounts.name,
         businessType: accounts.businessType,
         address: accounts.address,
-        servicesConfiguredAt: accounts.servicesConfiguredAt,
         introSeenAt: accounts.onboardingIntroSeenAt,
         whatsappSeenAt: accounts.onboardingWhatsappSeenAt,
         notificationsSeenAt: accounts.onboardingNotificationsSeenAt,
@@ -75,7 +71,11 @@ export async function loadFlowFacts(
       .where(eq(accounts.id, accountId))
       .limit(1),
     db
-      .select({ id: services.id })
+      .select({
+        id: services.id,
+        mode: services.mode,
+        description: services.description,
+      })
       .from(services)
       .where(and(eq(services.accountId, accountId), eq(services.active, true))),
     db
@@ -100,9 +100,8 @@ export async function loadFlowFacts(
     flow: account.flow,
     introSeen: account.introSeenAt != null,
     business: businessDone(account),
-    services: servicesDone(account, activeServices.length),
-    // Until MED-118 adds `services.mode`, no service carries a mode.
-    serviceModes: activeServices.map(() => null),
+    services: servicesDone(activeServices),
+    serviceModes: activeServices.map((s) => s.mode),
     where: whereDone(account),
     availability: availabilityDone(rules.length),
     whatsappSeen: account.whatsappSeenAt != null || connections.length > 0,

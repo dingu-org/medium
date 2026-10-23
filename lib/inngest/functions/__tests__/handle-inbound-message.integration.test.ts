@@ -64,6 +64,7 @@ import {
   sendInboundReply,
 } from '../handle-inbound-message';
 import { DAY, testNow, testNowUtc, zonedTime } from '@/tests/support/clock';
+import { seedLegacyDefaultServices } from '@/tests/support/services';
 
 // The booking turn below books against a Monday-only availability rule, so the
 // fixture needs a real Monday — derived, and a week out so the booking is in the
@@ -85,6 +86,8 @@ beforeAll(async () => {
   });
   if (error || !data.user) throw new Error(error?.message);
   accountId = data.user.id;
+  // New accounts have no services; this suite relies on the three legacy ones.
+  await seedLegacyDefaultServices(accountId);
 });
 
 beforeEach(async () => {
