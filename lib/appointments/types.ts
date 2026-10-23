@@ -11,6 +11,7 @@ export type AppointmentRecord = {
   serviceType: string | null;
   status: AppointmentStatus;
   notes: string | null;
+  clientAddress: string | null;
   cancelledBy: 'customer' | 'account' | 'ai' | null;
   cancellationReason: string | null;
   createdAt: Date;

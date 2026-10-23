@@ -96,6 +96,7 @@ function appointmentView(
     serviceType: string | null;
     status: TodayAppointment['status'];
     notes: string | null;
+    clientAddress: string | null;
     customerName: string;
     customerPhone: string;
     customerWaId: string | null;
@@ -120,6 +121,7 @@ function appointmentView(
     serviceType: row.serviceType,
     status: row.status,
     notes: row.notes,
+    clientAddress: row.clientAddress,
     reminder:
       showReminders && row.reminderStatus
         ? {
@@ -175,6 +177,7 @@ export async function getTodaySnapshot(
         serviceType: appointments.serviceType,
         status: appointments.status,
         notes: appointments.notes,
+        clientAddress: appointments.clientAddress,
         customerName: customers.name,
         customerPhone: customers.phone,
         customerWaId: customers.waId,
@@ -236,6 +239,7 @@ export async function getTodaySnapshot(
             serviceType: appointments.serviceType,
             status: appointments.status,
             notes: appointments.notes,
+            clientAddress: appointments.clientAddress,
             reminderStatus: reminderJobs.status,
             reminderResponse: reminderJobs.responseType,
             reminderSkippedReason: reminderJobs.skippedReason,

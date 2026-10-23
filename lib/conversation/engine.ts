@@ -8,7 +8,7 @@ import {
   type StopCondition,
 } from 'ai';
 import { assistantConfigFor } from '@/lib/ai/assistant-config';
-import { buildSystemPrompt } from '@/lib/ai/prompt';
+import { buildSystemPrompt, type PromptLocation } from '@/lib/ai/prompt';
 import type { BusinessType } from '@/lib/business-types';
 import { buildModelSettings, getOpenRouterModel } from '@/lib/ai/client';
 import { dispatchTool } from '@/lib/ai/dispatcher';
@@ -20,6 +20,7 @@ import {
   type ToolName,
 } from '@/lib/ai/tools';
 import { appointmentConfirmationContent } from '@/lib/format/appointment-confirmation';
+import { loadConfirmationFacts } from '@/lib/format/confirmation-facts';
 import { selectModelForPlan } from '@/lib/ai/models';
 import { effectiveAssistantIdentity } from '@/lib/billing/entitlements';
 import type { PlanId } from '@/lib/billing/plans';
@@ -39,7 +40,7 @@ import type {
   OutboundMessage,
   ReminderTurnContext,
 } from './types';
-import { getServices } from '@/lib/services/queries';
+import { getActiveServicesForPrompt } from '@/lib/services/queries';
 
 const HISTORY_LIMIT = 20;
 const STEP_LIMIT = 5;
@@ -171,6 +172,7 @@ type PersistedContext = {
   aiGreeting: string | null;
   title: string | null;
   address: string | null;
+  location: PromptLocation;
   businessType: BusinessType | null;
   retentionDays: number;
   assistantPaused: boolean;
@@ -391,6 +393,13 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       aiGreeting: accounts.aiGreeting,
       title: accounts.title,
       address: accounts.address,
+      country: accounts.country,
+      city: accounts.city,
+      directions: accounts.directions,
+      parking: accounts.parking,
+      entrance: accounts.entrance,
+      floor: accounts.floor,
+      serviceArea: accounts.serviceArea,
       businessType: accounts.businessType,
       retentionDays: accounts.retentionDays,
       assistantPaused: accounts.assistantPaused,
@@ -440,6 +449,15 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
     aiGreeting: row.aiGreeting,
     title: row.title,
     address: row.address,
+    location: {
+      country: row.country,
+      city: row.city,
+      directions: row.directions,
+      parking: row.parking,
+      entrance: row.entrance,
+      floor: row.floor,
+      serviceArea: row.serviceArea,
+    },
     businessType: row.businessType,
     retentionDays: row.retentionDays,
     assistantPaused: row.assistantPaused,
@@ -701,9 +719,9 @@ async function runTurnCoreUnlocked(args: {
   }
 
   const history = await loadHistory(context.inbound);
-  const configuredServices = await getServices(context.inbound.accountId, {
-    activeOnly: true,
-  });
+  const configuredServices = await getActiveServicesForPrompt(
+    context.inbound.accountId,
+  );
   // Plan-gate the assistant identity: Free (and lapsed-past-grace Solo) fall
   // back to the default persona, Solo/lifetime keep the custom name/greeting.
   // Resolved from the raw stored plan on context. Covers customer +
@@ -723,6 +741,7 @@ async function runTurnCoreUnlocked(args: {
     ),
     title: context.title,
     address: context.address,
+    location: context.location,
     assistantConfig: assistantConfigFor(context.businessType),
     retentionDays: context.retentionDays,
     configuredServices,
@@ -749,6 +768,15 @@ async function runTurnCoreUnlocked(args: {
   // internal/zero metadata the other fixed-text paths use would under-report
   // every booking turn on the cost dashboard.
   if (result.outcome === 'appointment_mutation') {
+    // Cancellations carry no location block; booked/rescheduled share one
+    // loader with the background job so both sides say the same thing.
+    const facts =
+      result.effect.kind === 'cancelled'
+        ? undefined
+        : await loadConfirmationFacts(
+            context.inbound.accountId,
+            result.effect.appointmentId,
+          );
     return persistReply({
       inbound: context.inbound,
       content: appointmentConfirmationContent({
@@ -758,6 +786,7 @@ async function runTurnCoreUnlocked(args: {
         // background job would render this instant identically.
         timezone: context.timezone,
         serviceType: result.effect.serviceType,
+        facts,
       }),
       model: args.modelId,
       provider: result.provider,

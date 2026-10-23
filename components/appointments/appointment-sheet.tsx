@@ -1,7 +1,14 @@
 'use client';
 
 import { TZDate } from '@date-fns/tz';
-import { CalendarDays, Check, MessageSquare, Phone, X } from 'lucide-react';
+import {
+  CalendarDays,
+  Check,
+  MapPin,
+  MessageSquare,
+  Phone,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
@@ -237,6 +244,20 @@ export function AppointmentSheet({
                   <p className="text-ink-2 mt-1 text-sm tabular-nums">
                     {formatTime(start)}–{formatTime(end)}
                   </p>
+                  {appointment.clientAddress && (
+                    <p className="text-ink-2 mt-2 flex items-start gap-1.5 text-sm">
+                      <MapPin
+                        className="mt-0.5 h-4 w-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        <span className="sr-only">
+                          {t.appointment.clientAddress}:{' '}
+                        </span>
+                        {appointment.clientAddress}
+                      </span>
+                    </p>
+                  )}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {appointment.serviceType && (
                       <span className="text-ink-2 text-[13px]">

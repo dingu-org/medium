@@ -31,6 +31,7 @@ import {
   accounts,
   reminderDeliveries,
   reminderJobs,
+  services,
   whatsappConnections,
 } from '@/lib/db/schema';
 import { encryptToken } from '@/lib/db/crypto';
@@ -258,6 +259,36 @@ describe('appointment event confirmation', () => {
 
     expect(sendFn).toHaveBeenCalledTimes(1);
     expect(confirmation.content).toContain('Takimi juaj u rezervua');
+  });
+
+  it('adds the online notice, with no link, to a PT-originated booking of an online service', async () => {
+    await db.insert(services).values({
+      accountId,
+      name: 'Këshillim online',
+      durationMin: 30,
+      mode: 'online',
+    });
+    try {
+      await db
+        .update(appointments)
+        .set({ serviceType: 'Këshillim online' })
+        .where(eq(appointments.id, appointmentId));
+      const confirmation = await prepareAppointmentConfirmation({
+        sourceEventId: randomUUID(),
+        kind: 'appointment.booked',
+        accountId,
+        appointmentId,
+        startsAt,
+      });
+      expect(confirmation.kind).toBe('ready');
+      if (confirmation.kind !== 'ready') return;
+      expect(confirmation.content).toContain(
+        "\nTakimi do të bëhet online. Linkun do t'jua dërgojë profesionisti.",
+      );
+      expect(confirmation.content).not.toMatch(/https?:/i);
+    } finally {
+      await db.delete(services).where(eq(services.accountId, accountId));
+    }
   });
 
   it('surfaces a confirmation whose sends all failed instead of leaving it silent', async () => {

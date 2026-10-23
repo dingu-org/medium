@@ -384,6 +384,10 @@ export const appointments = pgTable(
     serviceType: text('service_type'),
     status: appointmentStatus('status').notNull().default('pending'),
     notes: text('notes'),
+    // Where the professional goes for an at-the-client's booking (MED-120). Text
+    // the client gave the assistant; prompt-safe, max 240. Null for every other
+    // booking.
+    clientAddress: text('client_address'),
     cancelledBy: cancellationActor('cancelled_by'),
     cancellationReason: text('cancellation_reason'),
     createdAt: tsTz('created_at').notNull().default(now),

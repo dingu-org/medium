@@ -38,6 +38,39 @@ describe('assistantConfigFor', () => {
     }
   });
 
+  it('stays byte-identical across types with location and service modes present', () => {
+    const rich = {
+      ...base,
+      address: 'Rr. A 1',
+      location: {
+        country: 'AL',
+        city: 'Tiranë',
+        directions: 'Pas bankës',
+        parking: null,
+        entrance: null,
+        floor: '2',
+        serviceArea: 'Tiranë',
+      },
+      configuredServices: [
+        {
+          name: 'Prerje',
+          durationMinutes: 30,
+          mode: 'at_client' as const,
+          description: 'Në shtëpi',
+        },
+      ],
+    };
+    const plain = buildSystemPrompt(rich);
+    for (const type of [null, ...BUSINESS_TYPES]) {
+      expect(
+        buildSystemPrompt({
+          ...rich,
+          assistantConfig: assistantConfigFor(type),
+        }),
+      ).toBe(plain);
+    }
+  });
+
   it('places a type prompt section before the practice context', () => {
     const config: AssistantConfig = {
       id: 'dentist',

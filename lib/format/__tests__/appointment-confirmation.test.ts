@@ -97,4 +97,112 @@ describe('appointmentConfirmationContent', () => {
       }),
     ).toContain(formatAppointmentTime(startsAt, 'America/New_York'));
   });
+
+  describe('location facts', () => {
+    const base = { startsAt, timezone, serviceType: 'Vlerësim i parë' };
+    const bookedLine = `Takimi juaj u rezervua për ${time} (Vlerësim i parë). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`;
+    const atBusiness = {
+      mode: 'at_business' as const,
+      address: 'Rr. Elbasanit 5',
+      city: null,
+      country: null,
+      directions: null,
+      parking: null,
+      entrance: null,
+      floor: null,
+    };
+
+    it('appends the full in-person block with every detail', () => {
+      expect(
+        appointmentConfirmationContent({
+          ...base,
+          kind: 'booked',
+          facts: {
+            ...atBusiness,
+            city: 'Tiranë',
+            country: 'Shqipëri',
+            directions: 'Pas bankës.',
+            parking: 'Para ndërtesës',
+            entrance: 'Porta e kuqe',
+            floor: '2',
+          },
+        }),
+      ).toBe(
+        `${bookedLine}\nAdresa: Rr. Elbasanit 5, Tiranë, Shqipëri.\nUdhëzime: Pas bankës.\nParkimi: Para ndërtesës.\nHyrja: Porta e kuqe.\nKati: 2.`,
+      );
+    });
+
+    it('appends only the address when no details are filled in', () => {
+      expect(
+        appointmentConfirmationContent({
+          ...base,
+          kind: 'rescheduled',
+          facts: atBusiness,
+        }),
+      ).toBe(
+        `Takimi juaj u ricaktua për ${time} (Vlerësim i parë). Nëse doni ta ndryshoni sërish ose ta anuloni, më shkruani këtu.\nAdresa: Rr. Elbasanit 5.`,
+      );
+    });
+
+    it('adds nothing in person when the business has no address', () => {
+      expect(
+        appointmentConfirmationContent({
+          ...base,
+          kind: 'booked',
+          facts: { ...atBusiness, address: null, city: 'Tiranë' },
+        }),
+      ).toBe(bookedLine);
+    });
+
+    it('names the client address for an at-client booking, or nothing without one', () => {
+      expect(
+        appointmentConfirmationContent({
+          ...base,
+          kind: 'booked',
+          facts: { mode: 'at_client', clientAddress: 'Rr. Durrësit 10' },
+        }),
+      ).toBe(
+        `${bookedLine}\nProfesionisti do të vijë në adresën tuaj: Rr. Durrësit 10.`,
+      );
+      expect(
+        appointmentConfirmationContent({
+          ...base,
+          kind: 'booked',
+          facts: { mode: 'at_client', clientAddress: null },
+        }),
+      ).toBe(bookedLine);
+    });
+
+    it('says online and that the professional sends the link, without any link', () => {
+      const content = appointmentConfirmationContent({
+        ...base,
+        kind: 'booked',
+        facts: { mode: 'online' },
+      });
+      expect(content).toBe(
+        `${bookedLine}\nTakimi do të bëhet online. Linkun do t'jua dërgojë profesionisti.`,
+      );
+      expect(content).not.toMatch(/https?:|link:\/\//i);
+    });
+
+    it('is byte-identical to no facts for mode null, and never adds to a cancellation', () => {
+      for (const kind of ['booked', 'rescheduled', 'cancelled'] as const) {
+        const plain = appointmentConfirmationContent({ ...base, kind });
+        expect(
+          appointmentConfirmationContent({
+            ...base,
+            kind,
+            facts: { mode: null },
+          }),
+        ).toBe(plain);
+      }
+      expect(
+        appointmentConfirmationContent({
+          ...base,
+          kind: 'cancelled',
+          facts: { mode: 'online' },
+        }),
+      ).toBe(appointmentConfirmationContent({ ...base, kind: 'cancelled' }));
+    });
+  });
 });

@@ -100,11 +100,19 @@ export async function resolveBookingService(
 export async function getActiveServiceByName(
   accountId: string,
   name: string,
-): Promise<{ name: string; durationMinutes: number } | null> {
+): Promise<{
+  name: string;
+  durationMinutes: number;
+  mode: ServiceMode | null;
+} | null> {
   const normalized = name.trim();
   if (!normalized) return null;
   const [service] = await db
-    .select({ name: services.name, durationMinutes: services.durationMin })
+    .select({
+      name: services.name,
+      durationMinutes: services.durationMin,
+      mode: services.mode,
+    })
     .from(services)
     .where(
       and(
@@ -139,4 +147,41 @@ export async function getServicesWithDetails(
     .from(services)
     .where(eq(services.accountId, accountId))
     .orderBy(asc(services.createdAt), asc(services.name));
+}
+
+export type PromptService = {
+  name: string;
+  durationMinutes: number;
+  priceLek: number | null;
+  mode: ServiceMode | null;
+  description: string | null;
+};
+
+/**
+ * Active services for the assistant prompt, with mode and description. Same
+ * ORDER BY as {@link getServices}, so a legacy account's line order is unchanged.
+ */
+export async function getActiveServicesForPrompt(
+  accountId: string,
+): Promise<PromptService[]> {
+  return db
+    .select({
+      name: services.name,
+      durationMinutes: services.durationMin,
+      priceLek: services.priceLek,
+      mode: services.mode,
+      description: services.description,
+    })
+    .from(services)
+    .where(and(eq(services.accountId, accountId), eq(services.active, true)))
+    .orderBy(
+      sql`CASE
+        WHEN ${services.name} = 'Vlerësim i parë' THEN 0
+        WHEN ${services.name} = 'Seancë vijuese' THEN 1
+        WHEN ${services.name} = 'Terapi manuale' THEN 2
+        ELSE 3
+      END`,
+      asc(services.createdAt),
+      asc(services.name),
+    );
 }

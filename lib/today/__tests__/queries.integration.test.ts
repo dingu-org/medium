@@ -75,6 +75,7 @@ describe('getTodaySnapshot', () => {
           endsAt: zonedTime(DAY_ONE, 10, 45),
           serviceType: 'Vlerësim i parë',
           status: 'confirmed',
+          clientAddress: 'Rruga e Kavajës 5, Tiranë',
         },
         {
           accountId,
@@ -94,7 +95,9 @@ describe('getTodaySnapshot', () => {
     expect(snapshot.next).toMatchObject({
       id: appts[0].id,
       startLabel: '10:00',
+      clientAddress: 'Rruga e Kavajës 5, Tiranë',
     });
+    expect(snapshot.later[0].clientAddress).toBeNull();
     expect(snapshot.later.map((appointment) => appointment.id)).toEqual([
       appts[1].id,
     ]);

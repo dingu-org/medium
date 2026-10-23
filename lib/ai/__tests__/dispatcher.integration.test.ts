@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   afterAll,
   afterEach,
@@ -18,6 +18,7 @@ import {
   events,
   customers,
   accounts,
+  services,
 } from '@/lib/db/schema';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -64,7 +65,9 @@ beforeAll(async () => {
 beforeEach(async () => {
   await db.delete(appointments).where(eq(appointments.accountId, accountId));
   await db.delete(events).where(eq(events.accountId, accountId));
-  await db.delete(availabilityRules).where(eq(availabilityRules.accountId, accountId));
+  await db
+    .delete(availabilityRules)
+    .where(eq(availabilityRules.accountId, accountId));
   await db.delete(auditLog).where(eq(auditLog.accountId, accountId));
   await db
     .update(accounts)
@@ -169,6 +172,77 @@ describe('dispatchTool', () => {
       .where(eq(appointments.accountId, accountId));
     expect(stored.customerId).toBe(customerId);
     expect(stored.serviceType).toBe('Vlerësim i parë');
+  });
+
+  describe('service modes and the client address', () => {
+    async function setMode(name: string, mode: 'at_client' | 'at_business') {
+      await db
+        .update(services)
+        .set({ mode })
+        .where(and(eq(services.accountId, accountId), eq(services.name, name)));
+    }
+    afterEach(async () => {
+      await db
+        .update(services)
+        .set({ mode: null })
+        .where(eq(services.accountId, accountId));
+    });
+    const book = (extra: Record<string, unknown>) =>
+      dispatchTool(
+        'book_appointment',
+        {
+          starts_at: mondayAt(9).toISOString(),
+          service_type: 'Vlerësim i parë',
+          ...extra,
+        },
+        ctx(),
+      );
+    const stored = () =>
+      db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.accountId, accountId));
+
+    it('refuses an at-client booking without an address and books nothing', async () => {
+      await setMode('Vlerësim i parë', 'at_client');
+      for (const extra of [
+        {},
+        { client_address: '  ' },
+        { client_address: 'ab' },
+      ]) {
+        expect(await book(extra)).toMatchObject({
+          ok: false,
+          error: { code: 'needs_client_address', retryable: true },
+        });
+      }
+      expect(await stored()).toHaveLength(0);
+    });
+
+    it('saves a sanitised client address for an at-client booking', async () => {
+      await setMode('Vlerësim i parë', 'at_client');
+      const result = await book({
+        client_address: ' Rruga e Kavajës 5,\nTiranë ',
+      });
+      expect(result).toMatchObject({ ok: true });
+      const rows = await stored();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].clientAddress).toBe('Rruga e Kavajës 5, Tiranë');
+    });
+
+    it('drops a client address sent for a service that is not at the client', async () => {
+      await setMode('Vlerësim i parë', 'at_business');
+      expect(await book({ client_address: 'Rruga e Kavajës 5' })).toMatchObject(
+        {
+          ok: true,
+        },
+      );
+      expect((await stored())[0].clientAddress).toBeNull();
+    });
+
+    it('books a service with no mode exactly as before', async () => {
+      expect(await book({})).toMatchObject({ ok: true });
+      expect((await stored())[0].clientAddress).toBeNull();
+    });
   });
 
   it('rejects service names that are not active for the practice', async () => {

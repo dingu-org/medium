@@ -13,5 +13,6 @@ export type AppointmentView = {
   serviceType: string | null;
   status: AppointmentStatus;
   notes: string | null;
+  clientAddress: string | null;
   reminder: ReminderInfo;
 };
