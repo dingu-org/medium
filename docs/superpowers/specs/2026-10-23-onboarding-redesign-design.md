@@ -118,7 +118,7 @@ Non-goals.)
    inline (for example "the free plan includes one service"), never hidden or
    silently disabled **[KD agreed]**. The reason carries no upgrade link or
    call to action (no upselling in onboarding).
-   The service form shows no starter suggestions **[KD]**. Every new account is on the free plan
+   The service form shows no starter suggestions **[KD]**. The signup trigger that pre-creates default services for every new account is removed in all environments **[KD]**; existing accounts keep their services. Every new account is on the free plan
    throughout onboarding.
 4. **Where (adaptive).** Business-level location is *derived* from the
    services' modes, not asked up front **[KD]**:
@@ -327,7 +327,7 @@ This release builds the closed list, stores the type on the account, and adds
 a lookup from type to assistant configuration. **Every type uses one general
 configuration for now [KD]**; specialised configurations are added one type at
 a time in later work **[KD]**. The type picks nothing in step 3: there are no starter
-suggestions **[KD]**. A user may change their business type later in settings **[my call]**.
+suggestions **[KD]**. A settings control to change the business type later is a separate task outside this release (MED-134) **[KD]**.
 
 ## Hardening decisions (product-design harden pass; all [my call] unless marked)
 
@@ -439,7 +439,7 @@ system, not the reference apps.
 
 The visual design lives in a Design artifact built on the Medium Design System
 (rebuilt from the shipped code): https://claude.ai/artifact/X46mcFLaD7SE6qq5LvXZcY
-(30 artboards, 390 x 844, light theme). The design agent did not render-check
+(32 artboards, 390 x 844, light theme; includes the Finish screens for an iPhone user reopening from the home screen with the notification prompt ready). The design agent did not render-check
 it, so a visual review is still owed. Decisions made after the pass **[my call,
 KD delegated them]**:
 
