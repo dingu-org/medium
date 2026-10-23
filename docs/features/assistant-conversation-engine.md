@@ -140,6 +140,8 @@ A terminal appointment and a taken slot share the `conflict` code but not the me
 
 `buildSystemPrompt` in `lib/ai/prompt.ts` concatenates a static persona prompt (`lib/ai/prompts/scheduling-assistant.ts`) with a business-context block assembled from account data. The static half has six sections: role, language lock, untrusted customer content, scope and safety, tool rules, and response style.
 
+The account's `business_type` (null for accounts from before the guided onboarding) is resolved through `assistantConfigFor` in `lib/ai/assistant-config.ts`. A configuration may add a `promptSection`, placed between the static prompt and the business-context block. Every type currently resolves to the general configuration with no section, so the prompt is identical for every type and for none; per-type content is added there, one entry per type.
+
 Three of those sections carry rules that other parts of the system depend on:
 
 - **Language lock.** Albanian is the only output language, addressing the customer as _Ju_, whatever language the customer writes in. A request to switch language is answered as an ordinary request — one short Albanian sentence — and never treated as an attack.

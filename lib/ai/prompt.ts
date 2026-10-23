@@ -1,3 +1,4 @@
+import type { AssistantConfig } from './assistant-config';
 import { SCHEDULING_ASSISTANT_PROMPT } from './prompts/scheduling-assistant';
 
 export type PromptContext = {
@@ -13,6 +14,8 @@ export type PromptContext = {
     durationMinutes: number;
     priceLek?: number | null;
   }>;
+  /** Per business type configuration (MED-117); omitted/null section = general prompt. */
+  assistantConfig?: AssistantConfig;
   now?: Date;
 };
 
@@ -78,7 +81,11 @@ export function buildSystemPrompt(context: PromptContext): string {
     })
     .join('\n');
 
-  return `${SCHEDULING_ASSISTANT_PROMPT}
+  const typeSection = context.assistantConfig?.promptSection
+    ? `\n\n${context.assistantConfig.promptSection}`
+    : '';
+
+  return `${SCHEDULING_ASSISTANT_PROMPT}${typeSection}
 
 ## Practice context
 

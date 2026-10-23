@@ -239,6 +239,13 @@
       "when": 1792778734516,
       "tag": "0033_onboarding_flow",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792780109460,
+      "tag": "0034_business_type",
+      "breakpoints": true
     }
   ]
 }

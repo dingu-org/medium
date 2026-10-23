@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import type { BusinessType } from '@/lib/business-types';
 import { db } from '@/lib/db';
 import {
   accounts,
@@ -24,9 +25,12 @@ export type FlowAccountFacts = { flow: 'legacy' | 'guided' } & FlowFacts;
 // ticket changes exactly one of them and the change reaches the resume logic,
 // the gate, the progress total and the Where recalculation.
 
-/** MED-117 adds `&& businessType != null`. */
-function businessDone(row: { name: string | null }): boolean {
-  return Boolean(row.name?.trim());
+/** Business name and a type from the closed list (MED-117). */
+function businessDone(row: {
+  name: string | null;
+  businessType: BusinessType | null;
+}): boolean {
+  return Boolean(row.name?.trim()) && row.businessType != null;
 }
 
 /**
@@ -59,6 +63,7 @@ export async function loadFlowFacts(
       .select({
         flow: accounts.onboardingFlow,
         name: accounts.name,
+        businessType: accounts.businessType,
         address: accounts.address,
         servicesConfiguredAt: accounts.servicesConfiguredAt,
         introSeenAt: accounts.onboardingIntroSeenAt,

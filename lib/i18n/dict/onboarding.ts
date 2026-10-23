@@ -49,6 +49,24 @@ export const onboarding = {
       "Konfigurimi zgjat disa minuta. Nëse s'ke ende numër WhatsApp Business, marrja e tij mund të zgjasë më shumë.",
   },
 
+  /** Step 2, Business identity (MED-117). Canvas strings; typeRequired and tooLong are drafted. */
+  business: {
+    title: 'Biznesi yt',
+    sub: 'Emri që shohin klientët dhe çfarë lloj biznesi ke.',
+    namePlaceholder: 'p.sh. Studio Elira',
+    typeLabel: 'Lloji i biznesit',
+    typeHelp: 'Zgjidh atë që të përshtatet më shumë.',
+    typeRequired: 'Zgjidh llojin e biznesit.',
+    fixOne: 'Plotëso fushën e shënuar për të vazhduar.',
+    more: 'Shto më shumë',
+    optionalTag: '· me dëshirë',
+    ownerLabel: 'Emri yt',
+    titlePlaceholder: 'p.sh. Manikyriste',
+    taglineLabel: 'Përshkrim i shkurtër',
+    taglinePlaceholder: 'p.sh. Manikyr dhe pedikyr në qendër të Tiranës.',
+    tooLong: 'Teksti është shumë i gjatë.',
+  },
+
   steps: {
     profileTitle: 'Profili yt',
     profileSub: 'Shto emrin e biznesit dhe të dhënat e kontaktit.',

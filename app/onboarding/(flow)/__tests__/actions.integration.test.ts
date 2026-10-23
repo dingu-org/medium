@@ -31,11 +31,19 @@ vi.mock('@/lib/supabase/server', () => ({
 
 import { markSeenAndAdvance, goToDashboard } from '../actions';
 import { saveAvailabilityPlaceholder } from '../availability/actions';
-import { saveBusinessPlaceholder } from '../business/actions';
+import { saveBusiness, type BusinessInput } from '../business/actions';
 import { confirmServicesPlaceholder } from '../services/actions';
 import { saveWherePlaceholder } from '../where/actions';
 
 let accountId = '';
+
+const valid: BusinessInput = {
+  name: '  Studio Vita ',
+  businessType: 'beauty_salon',
+  fullName: ' Elira Hoxha ',
+  title: 'Manikyriste',
+  tagline: 'Manikyr në Tiranë.',
+};
 
 async function row() {
   const [r] = await db
@@ -66,6 +74,10 @@ beforeEach(async () => {
     .set({
       onboardingFlow: 'guided',
       name: null,
+      businessType: null,
+      fullName: null,
+      title: null,
+      tagline: null,
       address: null,
       servicesConfiguredAt: null,
       onboardingIntroSeenAt: null,
@@ -90,15 +102,6 @@ describe('placeholder step actions are safe to repeat', () => {
       .from(availabilityRules)
       .where(eq(availabilityRules.accountId, accountId));
     expect(rules).toHaveLength(5);
-  });
-
-  it('business: concurrent calls write the trimmed name', async () => {
-    const results = await Promise.all([
-      saveBusinessPlaceholder('  Studio Vita '),
-      saveBusinessPlaceholder('  Studio Vita '),
-    ]);
-    expect(results.every((r) => r.ok)).toBe(true);
-    expect((await row()).name).toBe('Studio Vita');
   });
 
   it('where: concurrent calls write the address', async () => {
@@ -135,11 +138,122 @@ describe('placeholder step actions are safe to repeat', () => {
   });
 });
 
+describe('saveBusiness', () => {
+  it('writes every value and moves on once the intro is seen', async () => {
+    await db
+      .update(accounts)
+      .set({ onboardingIntroSeenAt: new Date() })
+      .where(eq(accounts.id, accountId));
+    await expect(saveBusiness(valid)).resolves.toEqual({
+      ok: true,
+      next: '/onboarding/services',
+    });
+    expect(await row()).toMatchObject({
+      name: 'Studio Vita',
+      businessType: 'beauty_salon',
+      fullName: 'Elira Hoxha',
+      title: 'Manikyriste',
+      tagline: 'Manikyr në Tiranë.',
+    });
+  });
+
+  it('double submit: both succeed and one row holds the values', async () => {
+    const results = await Promise.all([saveBusiness(valid), saveBusiness(valid)]);
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(await row()).toMatchObject({
+      name: 'Studio Vita',
+      businessType: 'beauty_salon',
+    });
+  });
+
+  it('saves empty optional fields as NULL and clears a stored title', async () => {
+    await db
+      .update(accounts)
+      .set({ title: 'Old', tagline: 'Old', fullName: 'Old' })
+      .where(eq(accounts.id, accountId));
+    await saveBusiness({
+      ...valid,
+      fullName: '',
+      title: '  ',
+      tagline: '',
+    });
+    expect(await row()).toMatchObject({
+      fullName: null,
+      title: null,
+      tagline: null,
+    });
+  });
+
+  it('a missing name is a field error with the singular reason', async () => {
+    await expect(saveBusiness({ ...valid, name: '  ' })).resolves.toEqual({
+      ok: false,
+      fieldErrors: { name: 'Shkruaj emrin e biznesit.' },
+      reason: 'Plotëso fushën e shënuar për të vazhduar.',
+    });
+    expect((await row()).name).toBeNull();
+  });
+
+  it('a missing type is a field error', async () => {
+    await expect(
+      saveBusiness({ ...valid, businessType: null }),
+    ).resolves.toMatchObject({
+      ok: false,
+      fieldErrors: { businessType: 'Zgjidh llojin e biznesit.' },
+      reason: 'Plotëso fushën e shënuar për të vazhduar.',
+    });
+    expect((await row()).name).toBeNull();
+  });
+
+  it('both missing: both errors and the shell default reason', async () => {
+    const result = await saveBusiness({
+      ...valid,
+      name: '',
+      businessType: null,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      fieldErrors: {
+        name: expect.any(String),
+        businessType: expect.any(String),
+      },
+    });
+    expect(result.ok === false && result.reason).toBeUndefined();
+  });
+
+  it.each(['barber', 'Berber', 'tjeter', '', 'x'.repeat(500)])(
+    'rejects the unknown type %j without writing or throwing',
+    async (value) => {
+      await expect(
+        saveBusiness({ ...valid, businessType: value }),
+      ).resolves.toMatchObject({
+        ok: false,
+        fieldErrors: { businessType: expect.any(String) },
+      });
+      const r = await row();
+      expect(r.name).toBeNull();
+      expect(r.businessType).toBeNull();
+    },
+  );
+
+  it('an over-long optional field gets the Albanian message', async () => {
+    await expect(
+      saveBusiness({ ...valid, tagline: 'x'.repeat(161) }),
+    ).resolves.toMatchObject({
+      ok: false,
+      fieldErrors: { tagline: 'Teksti është shumë i gjatë.' },
+    });
+  });
+});
+
 describe('advancing', () => {
   it('services moves on to Where while a mode is unknown', async () => {
     await db
       .update(accounts)
-      .set({ onboardingIntroSeenAt: new Date(), name: 'Studio' })
+      .set({
+        onboardingIntroSeenAt: new Date(),
+        name: 'Studio',
+        businessType: 'other_professional',
+      })
       .where(eq(accounts.id, accountId));
     await expect(confirmServicesPlaceholder()).resolves.toEqual({
       ok: true,
@@ -168,10 +282,6 @@ describe('advancing', () => {
 
 describe('validation', () => {
   it('returns field errors and writes nothing', async () => {
-    await expect(saveBusinessPlaceholder('   ')).resolves.toMatchObject({
-      ok: false,
-      fieldErrors: { name: expect.any(String) },
-    });
     await expect(saveWherePlaceholder('')).resolves.toMatchObject({
       ok: false,
       fieldErrors: { address: expect.any(String) },
@@ -204,7 +314,7 @@ describe('who may save', () => {
       .update(accounts)
       .set({ onboardingFlow: 'legacy' })
       .where(eq(accounts.id, accountId));
-    await expect(saveBusinessPlaceholder('X')).rejects.toThrow(
+    await expect(saveBusiness(valid)).rejects.toThrow(
       'REDIRECT:/onboarding',
     );
   });
@@ -214,7 +324,7 @@ describe('who may save', () => {
       .update(accounts)
       .set({ onboardingCompletedAt: new Date() })
       .where(eq(accounts.id, accountId));
-    await expect(saveBusinessPlaceholder('X')).rejects.toThrow(
+    await expect(saveBusiness(valid)).rejects.toThrow(
       'REDIRECT:/today',
     );
   });

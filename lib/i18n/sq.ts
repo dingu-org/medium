@@ -9,6 +9,7 @@
 import { appointment } from './dict/appointment';
 import { auth } from './dict/auth';
 import { billing } from './dict/billing';
+import { businessTypes } from './dict/business-types';
 import { calendar, reminder, status } from './dict/calendar';
 import { chat } from './dict/chat';
 import { clients } from './dict/clients';
@@ -22,6 +23,7 @@ export const sq = {
   ...common,
   auth,
   billing,
+  businessTypes,
   onboarding,
   calendar,
   status,

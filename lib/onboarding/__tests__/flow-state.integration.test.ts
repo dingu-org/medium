@@ -44,6 +44,7 @@ async function reset() {
     .set({
       onboardingFlow: 'guided',
       name: null,
+      businessType: null,
       address: null,
       servicesConfiguredAt: null,
       onboardingIntroSeenAt: null,
@@ -118,6 +119,7 @@ describe('loadFlowFacts', () => {
       .update(accounts)
       .set({
         name: ' Studio ',
+        businessType: 'other_professional',
         address: 'Rruga 1',
         servicesConfiguredAt: new Date(),
       })
@@ -139,6 +141,37 @@ describe('loadFlowFacts', () => {
       availability: true,
     });
     expect(filled.serviceModes.length).toBeGreaterThan(0);
+  });
+});
+
+describe('business step', () => {
+  it('is done only with a name and a type', async () => {
+    await db
+      .update(accounts)
+      .set({ name: 'Studio' })
+      .where(eq(accounts.id, accountId));
+    expect((await loadFlowFacts(accountId)).business).toBe(false);
+    await db
+      .update(accounts)
+      .set({ businessType: 'dentist' })
+      .where(eq(accounts.id, accountId));
+    expect((await loadFlowFacts(accountId)).business).toBe(true);
+  });
+
+  it('is not done with a type and no name', async () => {
+    await db
+      .update(accounts)
+      .set({ businessType: 'dentist' })
+      .where(eq(accounts.id, accountId));
+    expect((await loadFlowFacts(accountId)).business).toBe(false);
+  });
+
+  it('the database rejects a value outside the closed list', async () => {
+    await expect(
+      db.execute(
+        sql`update accounts set business_type = 'hairdresser' where id = ${accountId}`,
+      ),
+    ).rejects.toThrow();
   });
 });
 
@@ -181,7 +214,11 @@ describe('advanceFrom', () => {
   it('points at the next screen once the step is done', async () => {
     await db
       .update(accounts)
-      .set({ onboardingIntroSeenAt: new Date(), name: 'Studio' })
+      .set({
+        onboardingIntroSeenAt: new Date(),
+        name: 'Studio',
+        businessType: 'other_professional',
+      })
       .where(eq(accounts.id, accountId));
     await expect(advanceFrom(accountId, 'business')).resolves.toEqual({
       ok: true,
@@ -192,6 +229,16 @@ describe('advanceFrom', () => {
   it('resumes at the first unfinished screen when the step is not done', async () => {
     await expect(advanceFrom(accountId, 'business')).resolves.toMatchObject({
       next: '/onboarding/how-it-works',
+    });
+  });
+
+  it('resumes at business when only the name is saved', async () => {
+    await db
+      .update(accounts)
+      .set({ onboardingIntroSeenAt: new Date(), name: 'Studio' })
+      .where(eq(accounts.id, accountId));
+    await expect(advanceFrom(accountId, 'business')).resolves.toMatchObject({
+      next: '/onboarding/business',
     });
   });
 });
@@ -236,6 +283,7 @@ describe('enterScreen', () => {
         onboardingWhatsappSeenAt: new Date(),
         onboardingNotificationsSeenAt: new Date(),
         name: 'Studio',
+        businessType: 'other_professional',
         address: 'Rruga 1',
         servicesConfiguredAt: new Date(),
       })

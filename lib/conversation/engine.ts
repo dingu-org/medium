@@ -7,7 +7,9 @@ import {
   type StepResult,
   type StopCondition,
 } from 'ai';
+import { assistantConfigFor } from '@/lib/ai/assistant-config';
 import { buildSystemPrompt } from '@/lib/ai/prompt';
+import type { BusinessType } from '@/lib/business-types';
 import { buildModelSettings, getOpenRouterModel } from '@/lib/ai/client';
 import { dispatchTool } from '@/lib/ai/dispatcher';
 import {
@@ -169,6 +171,7 @@ type PersistedContext = {
   aiGreeting: string | null;
   title: string | null;
   address: string | null;
+  businessType: BusinessType | null;
   retentionDays: number;
   assistantPaused: boolean;
   // Billing plan state (Phase 16 C1). Pre-wiring only: selected here so the
@@ -388,6 +391,7 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
       aiGreeting: accounts.aiGreeting,
       title: accounts.title,
       address: accounts.address,
+      businessType: accounts.businessType,
       retentionDays: accounts.retentionDays,
       assistantPaused: accounts.assistantPaused,
       plan: accounts.plan,
@@ -436,6 +440,7 @@ async function loadContext(inbound: InboundMessage): Promise<PersistedContext> {
     aiGreeting: row.aiGreeting,
     title: row.title,
     address: row.address,
+    businessType: row.businessType,
     retentionDays: row.retentionDays,
     assistantPaused: row.assistantPaused,
     plan: row.plan,
@@ -718,6 +723,7 @@ async function runTurnCoreUnlocked(args: {
     ),
     title: context.title,
     address: context.address,
+    assistantConfig: assistantConfigFor(context.businessType),
     retentionDays: context.retentionDays,
     configuredServices,
     now: args.now,

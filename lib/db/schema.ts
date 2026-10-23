@@ -18,6 +18,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { BUSINESS_TYPES } from '../business-types';
 import { DEFAULT_TIMEZONE } from '../i18n/timezone';
 
 const bytea = customType<{ data: Buffer; notNull: false; default: false }>({
@@ -83,6 +84,7 @@ export const reminderResponseType = pgEnum('reminder_response_type', [
 ]);
 export const plan = pgEnum('plan', ['free', 'solo']);
 export const onboardingFlow = pgEnum('onboarding_flow', ['legacy', 'guided']);
+export const businessType = pgEnum('business_type', BUSINESS_TYPES);
 export const billingPeriod = pgEnum('billing_period', ['monthly', 'yearly']);
 export const billingOrderStatus = pgEnum('billing_order_status', [
   'created',
@@ -99,6 +101,12 @@ export const accounts = pgTable('accounts', {
   // answers (title/address) and the profile screen. Null = not set.
   fullName: text('full_name'),
   title: text('title'),
+  // What kind of business this is (MED-117), from Medium's closed list; selects
+  // the assistant configuration (lib/ai/assistant-config.ts). Null = never
+  // chosen (accounts from before the guided flow) → general configuration.
+  businessType: businessType('business_type'),
+  // Optional short description from onboarding step 2 (MED-117).
+  tagline: text('tagline'),
   address: text('address'),
   timezone: text('timezone').notNull().default(DEFAULT_TIMEZONE),
   aiName: text('ai_name'),
