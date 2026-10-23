@@ -10,11 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { t } from '@/lib/i18n';
-import {
-  screenHref,
-  type FlowProgress,
-  type FlowScreenId,
-} from '@/lib/onboarding/flow';
+import { type FlowProgress, type FlowScreenId } from '@/lib/onboarding/flow';
 import type { StepActionResult } from '@/lib/onboarding/step-result';
 import { cn } from '@/lib/utils';
 import { BottomBar } from './bottom-bar';
@@ -26,7 +22,8 @@ type Handler = () => Promise<StepActionResult>;
 
 export type StepShellProps = {
   screen: FlowScreenId;
-  progress: FlowProgress;
+  /** `null`: no count (a completed account reopening a step). */
+  progress: FlowProgress | null;
   /** `null`: no Back (first and Finish screens). */
   backHref: string | null;
   /** Keys unsaved drafts and the sign-out cleanup. */
@@ -113,18 +110,20 @@ export function StepShell({
   useVisualViewport(rootRef);
 
   const label =
-    progress.kind === 'complete'
-      ? f.done
-      : f.stepOf(progress.position, progress.total);
+    progress === null
+      ? null
+      : progress.kind === 'complete'
+        ? f.done
+        : f.stepOf(progress.position, progress.total);
 
   useEffect(() => {
     headingRef.current?.focus();
-    setAnnouncement(label);
+    setAnnouncement(label ?? heading);
     if (lastNavigationWasPop) {
       lastNavigationWasPop = false;
       router.refresh();
     }
-  }, [label, router]);
+  }, [label, heading, router]);
 
   // After a rejected save, focus the first field the step marked invalid.
   useEffect(() => {
@@ -156,7 +155,8 @@ export function StepShell({
             setPending(false);
             return;
           }
-          writeMarker(target, screenHref(screen));
+          // Keyed by the real URL, so a nested sub-screen has its own marker.
+          writeMarker(target, window.location.pathname);
           lastNavigationWasPop = false;
           // Stay pending until the next screen replaces this one, so a second
           // press cannot fire while the route is changing.
@@ -183,7 +183,7 @@ export function StepShell({
     // Pushed from the previous screen: step back through history, so system
     // Back and this icon agree. Otherwise (resumed here) replace, never push
     // a "backwards" entry that system Back would then walk forward through.
-    if (readMarker(screenHref(screen)) === backHref) router.back();
+    if (readMarker(window.location.pathname) === backHref) router.back();
     else router.replace(backHref);
   };
 

@@ -179,6 +179,50 @@ export const onboarding = {
     timezoneInvalid: 'Zgjidh zonën kohore.', // DRAFTED
   },
 
+  /** Step 6, WhatsApp choice (MED-122). Canvas 6a-6c strings, verbatim. */
+  whatsapp: {
+    title: 'Lidh WhatsApp',
+    sub: 'Klientët të shkruajnë në numrin tënd të WhatsApp Business dhe Medium u përgjigjet prej tij.',
+    legend: 'Ke një numër WhatsApp Business?',
+    choices: {
+      have: {
+        title: 'Kam një numër WhatsApp Business',
+        sub: 'E lidh tani përmes Meta-s. Zgjat rreth 2 minuta.',
+      },
+      notYet: {
+        title: 'Nuk kam ende',
+        sub: 'Të tregojmë si ta marrësh. Mund të vazhdosh edhe pa të.',
+      },
+    },
+    connect: 'Lidh WhatsApp Business',
+    showGuide: 'Shiko udhëzimin',
+    metaNote:
+      'Hapet dritarja e Meta-s. Aty zgjedh numrin dhe jep leje, pastaj kthehesh këtu.',
+  },
+
+  /**
+   * Step 6, how to get a number (MED-122). Canvas 6d strings; the parts marked
+   * DRAFTED are not in the canvas and go to the copy review. Card 2 also
+   * depends on MED-48 (a Business-app number must connect end to end).
+   */
+  whatsappGuide: {
+    title: 'Si të marrësh një numër',
+    sub: "Tre hapa jashtë Medium. Mund t'i bësh edhe pasi të përfundosh këtu.",
+    card1Title: 'Zgjidh një numër',
+    card1Body:
+      'Një numër që e përdor për biznesin dhe që merr SMS ose telefonata. Mund të jetë edhe një kartë SIM e re.', // DRAFTED: "dhe që merr SMS ose telefonata"
+    card2Title: 'Instalo WhatsApp Business',
+    card2Body:
+      'Shkarkoje falas nga App Store ose Google Play dhe regjistro numrin. Ke vetëm WhatsApp të zakonshëm? Aplikacioni të ofron ta kalosh numrin te Business.', // DRAFTED: blocked on MED-48
+    card3Title: 'Lidhe me Medium',
+    /** The bold part is the label on the dashboard card (MED-124). */
+    card3Lead: 'Kur numri të jetë gati, prek',
+    card3Strong: 'Lidh WhatsApp',
+    card3Tail:
+      'te faqja Sot dhe ndiq hapat e Meta-s. Meta do të të kërkojë ta konfirmosh lidhjen te WhatsApp Business.', // DRAFTED: second sentence
+    note: "Mund të vazhdosh pa e lidhur. Medium fillon t'u përgjigjet klientëve pasi ta lidhësh.",
+  },
+
   steps: {
     profileTitle: 'Profili yt',
     profileSub: 'Shto emrin e biznesit dhe të dhënat e kontaktit.',

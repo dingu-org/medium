@@ -21,10 +21,16 @@ import {
   type SignupSession,
 } from './whatsapp-signup';
 
-type Props = {
+/** How one signup attempt ended: 'connected' only after the server accepted it. */
+export type SignupOutcome = 'connected' | 'stopped';
+
+type SignupConfig = {
   appId: string;
   configId: string;
   graphVersion: string;
+};
+
+type Props = SignupConfig & {
   /** Picks the CTA label; the revoked screen passes 'reconnect'. */
   variant?: 'connect' | 'reconnect';
   /** Clock helper line under the CTA. */
@@ -123,7 +129,7 @@ function reportSignup(report: Record<string, unknown>): void {
   }
 }
 
-type WaStatus = {
+export type WaStatus = {
   tone: 'warning' | 'danger';
   title: string;
   body: string;
@@ -159,15 +165,16 @@ function errorStatus(kind: unknown): WaStatus {
   }
 }
 
-export function ConnectWhatsApp({
+/**
+ * The whole Embedded Signup client: SDK load, popup, postMessage capture, POST
+ * and diagnostics. Shared by the settings button and the onboarding step, so
+ * there is exactly one connection path.
+ */
+export function useWhatsAppSignup({
   appId,
   configId,
   graphVersion,
-  variant = 'connect',
-  note,
-  children,
-}: Props) {
-  const router = useRouter();
+}: SignupConfig) {
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<WaStatus | null>(null);
   const online = useOnlineStatus();
@@ -184,6 +191,9 @@ export function ConnectWhatsApp({
   // the next server render shows connected.
   const cancelledRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Resolves the promise `start` returned; Cancel settles it at once so a
+  // caller awaiting `start` never hangs behind Meta's browser-owned popup.
+  const settleRef = useRef<((outcome: SignupOutcome) => void) | null>(null);
   // Diagnostic trail for the attempt in flight (null between attempts): what
   // the popup posted, including the events and origins readSignupMessage drops.
   const attemptRef = useRef<{
@@ -256,20 +266,20 @@ export function ConnectWhatsApp({
     });
   }, []);
 
-  const handleClick = useCallback(async () => {
+  const runAttempt = useCallback(async (): Promise<SignupOutcome> => {
     if (!online) {
       toast.error(t.settings.whatsappRequiresConnection);
-      return;
+      return 'stopped';
     }
     if (!appId || !configId) {
       toast.error(t.settings.whatsappNotConfigured);
-      return;
+      return 'stopped';
     }
     // Facebook blocks FB.login on http:// pages. Local dev is http://localhost,
     // so signup must be exercised over HTTPS (Vercel preview or an HTTPS tunnel).
     if (window.location.protocol !== 'https:') {
       toast.error(t.settings.whatsappRequiresHttps);
-      return;
+      return 'stopped';
     }
     setPending(true);
     setStatus(null);
@@ -320,7 +330,7 @@ export function ConnectWhatsApp({
 
       if (cancelledRef.current) {
         setPending(false);
-        return;
+        return 'stopped';
       }
 
       const { phoneNumberId, wabaId } = sessionInfo.current;
@@ -339,7 +349,7 @@ export function ConnectWhatsApp({
           reference: metaStopped ? cancel.sessionId : undefined,
         });
         setPending(false);
-        return;
+        return 'stopped';
       }
 
       abortRef.current = new AbortController();
@@ -356,8 +366,7 @@ export function ConnectWhatsApp({
         // Leave `pending` true — the spinner stays up until the RSC re-renders
         // as 'active' and this component unmounts (no explainer flash).
         toast.success(t.settings.whatsappSuccess);
-        router.refresh();
-        return;
+        return 'connected';
       }
 
       const body = (await res.json().catch(() => ({}))) as {
@@ -372,6 +381,7 @@ export function ConnectWhatsApp({
       });
       setStatus(errorStatus(body.error));
       setPending(false);
+      return 'stopped';
     } catch (err) {
       finishAttempt(cancelledRef.current ? 'cancelled_by_user' : 'threw', {
         errorName: err instanceof Error ? err.name : typeof err,
@@ -380,83 +390,129 @@ export function ConnectWhatsApp({
           200,
         ),
       });
-      if (cancelledRef.current) return;
+      if (cancelledRef.current) return 'stopped';
       setStatus(errorStatus(undefined));
       setPending(false);
+      return 'stopped';
     }
-  }, [appId, configId, finishAttempt, graphVersion, online, router]);
+  }, [appId, configId, finishAttempt, graphVersion, online]);
 
-  const handleCancel = useCallback(() => {
+  /** Runs one signup; resolves when it is connected or has stopped for any reason. */
+  const start = useCallback(
+    () =>
+      new Promise<SignupOutcome>((resolve) => {
+        settleRef.current = resolve;
+        void runAttempt().then(resolve);
+      }),
+    [runAttempt],
+  );
+
+  const cancel = useCallback(() => {
     cancelledRef.current = true;
     abortRef.current?.abort();
     finishAttempt('cancelled_by_user');
     setPending(false);
     setStatus(null);
+    settleRef.current?.('stopped');
   }, [finishAttempt]);
 
-  if (pending) {
-    return (
-      <div className="flex flex-col items-center pt-24 text-center">
-        <div className="mb-5 inline-flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[var(--brand-50)]">
-          <Loader2
-            className="text-primary h-[30px] w-[30px] animate-spin"
-            strokeWidth={3}
-          />
-        </div>
-        <p className="font-heading text-foreground text-[22px] font-bold tracking-[-0.025em]">
-          {t.settings.whatsappPendingTitle}
-        </p>
-        <p className="text-ink-2 mt-2 max-w-[280px] text-sm leading-[1.55]">
-          {t.settings.whatsappPendingBody}
-        </p>
-        <button
-          type="button"
-          onClick={handleCancel}
-          className="text-ink-2 mt-4 inline-flex min-h-11 items-center px-4 text-sm font-semibold"
-        >
-          {t.actions.cancel}
-        </button>
+  return { pending, status, online, start, cancel };
+}
+
+/** The "connecting to Meta" panel with its Cancel link. */
+export function SignupPendingPanel({
+  onCancel,
+  className = 'pt-24',
+}: {
+  onCancel: () => void;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-col items-center text-center ${className}`}>
+      <div className="mb-5 inline-flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[var(--brand-50)]">
+        <Loader2
+          className="text-primary h-[30px] w-[30px] animate-spin"
+          strokeWidth={3}
+        />
       </div>
-    );
-  }
+      <p className="font-heading text-foreground text-[22px] font-bold tracking-[-0.025em]">
+        {t.settings.whatsappPendingTitle}
+      </p>
+      <p className="text-ink-2 mt-2 max-w-[280px] text-sm leading-[1.55]">
+        {t.settings.whatsappPendingBody}
+      </p>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="text-ink-2 mt-4 inline-flex min-h-11 items-center px-4 text-sm font-semibold"
+      >
+        {t.actions.cancel}
+      </button>
+    </div>
+  );
+}
+
+/** The persistent warning/danger card for a stopped or failed signup. */
+export function SignupStatusBanner({ status }: { status: WaStatus }) {
+  return (
+    <AppBanner
+      tone={status.tone}
+      icon={status.tone === 'danger' ? X : AlertCircle}
+      title={status.title}
+    >
+      <p>{status.body}</p>
+      {status.reference && (
+        <p className="text-ink-3 mt-2 font-mono text-[12px]">
+          {t.settings.whatsappReference}: {status.reference}
+        </p>
+      )}
+      {status.reasons && (
+        <div className="mt-3">
+          <p className="text-ink-3 mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase">
+            {t.settings.whatsappCommonReasons}
+          </p>
+          <ul className="space-y-2">
+            {status.reasons.map((reason) => (
+              <li key={reason} className="flex gap-2 text-[13px]">
+                <span className="text-destructive" aria-hidden>
+                  •
+                </span>
+                {reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </AppBanner>
+  );
+}
+
+export function ConnectWhatsApp({
+  appId,
+  configId,
+  graphVersion,
+  variant = 'connect',
+  note,
+  children,
+}: Props) {
+  const router = useRouter();
+  const { pending, status, online, start, cancel } = useWhatsAppSignup({
+    appId,
+    configId,
+    graphVersion,
+  });
+
+  if (pending) return <SignupPendingPanel onCancel={cancel} />;
 
   return (
     <div className="space-y-4">
       {children}
-      {status && (
-        <AppBanner
-          tone={status.tone}
-          icon={status.tone === 'danger' ? X : AlertCircle}
-          title={status.title}
-        >
-          <p>{status.body}</p>
-          {status.reference && (
-            <p className="text-ink-3 mt-2 font-mono text-[12px]">
-              {t.settings.whatsappReference}: {status.reference}
-            </p>
-          )}
-          {status.reasons && (
-            <div className="mt-3">
-              <p className="text-ink-3 mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase">
-                {t.settings.whatsappCommonReasons}
-              </p>
-              <ul className="space-y-2">
-                {status.reasons.map((reason) => (
-                  <li key={reason} className="flex gap-2 text-[13px]">
-                    <span className="text-destructive" aria-hidden>
-                      •
-                    </span>
-                    {reason}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </AppBanner>
-      )}
+      {status && <SignupStatusBanner status={status} />}
       <button
         type="button"
-        onClick={handleClick}
+        onClick={async () => {
+          if ((await start()) === 'connected') router.refresh();
+        }}
         disabled={pending || !appId || !configId || !online}
         className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] text-[15.5px] font-bold tracking-[-0.01em] text-white shadow-[0_10px_24px_-12px_rgba(37,211,102,0.5)] transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
       >

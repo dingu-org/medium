@@ -21,7 +21,11 @@ import type { ServiceMode } from '../services/modes';
 import type { StepSuccess } from './step-result';
 import { whereFieldsDone, whereNeeds, type WhereRow } from './where';
 
-export type FlowAccountFacts = { flow: 'legacy' | 'guided' } & FlowFacts;
+export type FlowAccountFacts = {
+  flow: 'legacy' | 'guided';
+  /** An active WhatsApp connection exists (not merely that the step was seen). */
+  whatsappConnected: boolean;
+} & FlowFacts;
 
 // Each step's "done" predicate sits in its own commented function, so a step
 // ticket changes exactly one of them and the change reaches the resume logic,
@@ -106,6 +110,7 @@ export async function loadFlowFacts(
 
   return {
     flow: account.flow,
+    whatsappConnected: connections.length > 0,
     introSeen: account.introSeenAt != null,
     business: businessDone(account),
     services: servicesDone(activeServices),

@@ -58,12 +58,57 @@ export async function enterScreen(
     await ensureOnboardingCompleted(accountId);
   }
 
+  return screenContextFor(accountId, facts, screen);
+}
+
+function screenContextFor(
+  accountId: string,
+  facts: FlowFacts,
+  screen: FlowScreenId,
+): ScreenContext {
   const previous = previousScreen(screen, facts);
   return {
     accountId,
     facts,
     progress: progressFor(screen, facts),
     backHref: previous ? screenHref(previous) : null,
+  };
+}
+
+export type WhatsappScreenContext = Omit<ScreenContext, 'progress'> & {
+  /** `null` when reopened after completion: "step 6 of 7" would be false. */
+  progress: FlowProgress | null;
+  /** A completed account reopening the step from the dashboard (MED-124). */
+  reopened: boolean;
+};
+
+/**
+ * The WhatsApp screens' entry. Unlike every other flow screen they stay open to
+ * a completed account (reopened from the dashboard), so skipping the step never
+ * closes the door on it. A completed account that is already connected has
+ * nothing to do here and goes to the settings page. Everything else is exactly
+ * `enterScreen('whatsapp')`.
+ */
+export async function enterWhatsappScreen(): Promise<WhatsappScreenContext> {
+  const accountId = await requireUserId();
+  const facts = await loadFlowFacts(accountId);
+
+  if (facts.flow === 'legacy') redirect('/onboarding');
+  if (facts.completed) {
+    if (facts.whatsappConnected) redirect('/settings/whatsapp');
+    return {
+      accountId,
+      facts,
+      progress: null,
+      backHref: '/today',
+      reopened: true,
+    };
+  }
+  if (!canVisit('whatsapp', facts)) redirect(screenHref(resumeScreen(facts)));
+
+  return {
+    ...screenContextFor(accountId, facts, 'whatsapp'),
+    reopened: false,
   };
 }
 

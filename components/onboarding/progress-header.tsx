@@ -17,16 +17,25 @@ export function ProgressHeader({
   showBack,
   onBack,
 }: {
-  progress: FlowProgress;
+  /** `null`: Back and sign out only (no progress is true to show). */
+  progress: FlowProgress | null;
   showBack: boolean;
   onBack: () => void;
 }) {
   const [signingOut, startTransition] = useTransition();
   const f = t.onboarding.flow;
   const position =
-    progress.kind === 'complete' ? progress.total : progress.position;
+    progress === null
+      ? 0
+      : progress.kind === 'complete'
+        ? progress.total
+        : progress.position;
   const label =
-    progress.kind === 'complete' ? f.done : f.stepOf(position, progress.total);
+    progress === null
+      ? ''
+      : progress.kind === 'complete'
+        ? f.done
+        : f.stepOf(position, progress.total);
 
   return (
     <header className="bg-background flex h-[60px] flex-none items-center gap-3 px-4 py-2">
@@ -35,34 +44,40 @@ export function ProgressHeader({
           <ChevronLeft aria-hidden />
         </RoundButton>
       )}
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <div
-          role="progressbar"
-          aria-label={f.progressLabel}
-          aria-valuemin={0}
-          aria-valuemax={progress.total}
-          aria-valuenow={position}
-          aria-valuetext={label}
-          className="flex flex-1 gap-1"
-        >
-          {Array.from({ length: progress.total }, (_, index) => (
-            <span
-              key={index}
-              data-filled={index < position}
-              className={cn(
-                'h-1.5 flex-1 rounded-full',
-                index < position ? 'bg-foreground' : 'bg-[var(--neutral-200)]',
-              )}
-            />
-          ))}
+      {progress === null ? (
+        <div className="flex-1" />
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <div
+            role="progressbar"
+            aria-label={f.progressLabel}
+            aria-valuemin={0}
+            aria-valuemax={progress.total}
+            aria-valuenow={position}
+            aria-valuetext={label}
+            className="flex flex-1 gap-1"
+          >
+            {Array.from({ length: progress.total }, (_, index) => (
+              <span
+                key={index}
+                data-filled={index < position}
+                className={cn(
+                  'h-1.5 flex-1 rounded-full',
+                  index < position
+                    ? 'bg-foreground'
+                    : 'bg-[var(--neutral-200)]',
+                )}
+              />
+            ))}
+          </div>
+          <span
+            aria-hidden
+            className="text-ink-2 flex-none text-[13px] font-semibold whitespace-nowrap tabular-nums"
+          >
+            {label}
+          </span>
         </div>
-        <span
-          aria-hidden
-          className="text-ink-2 flex-none text-[13px] font-semibold whitespace-nowrap tabular-nums"
-        >
-          {label}
-        </span>
-      </div>
+      )}
       <button
         type="button"
         aria-label={f.signOutLabel}

@@ -49,6 +49,14 @@ describe('StepShell', () => {
     expect(html.match(/data-filled="false"/g)).toHaveLength(4);
   });
 
+  it('shows Back and sign out but no progress when progress is null', () => {
+    const html = render({ progress: null, backHref: '/today' });
+    expect(html).not.toContain('role="progressbar"');
+    expect(html).not.toContain('Hapi');
+    expect(html).toContain('aria-label="Mbrapa"');
+    expect(html).toContain('aria-label="Dil. Progresi yt është ruajtur."');
+  });
+
   it('renders Back only when there is somewhere to go back to', () => {
     expect(render()).toContain('aria-label="Mbrapa"');
     expect(render({ backHref: null })).not.toContain('aria-label="Mbrapa"');
