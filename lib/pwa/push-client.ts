@@ -108,6 +108,54 @@ export async function subscribeToPush(): Promise<PushPermissionState> {
   return 'granted';
 }
 
+const SW_READY_TIMEOUT_MS = 10_000;
+
+/**
+ * The service worker is registered by PwaProvider, which only mounts in the
+ * dashboard. Onboarding runs before the account has seen it, so step 7
+ * registers it itself (same options, so the dashboard finds the same
+ * registration). Returns `null` when there is none and none can be made: dev
+ * (Serwist's build is off, mirroring PwaProvider) or a worker that never
+ * activated.
+ */
+export async function ensureServiceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (existing) return existing;
+  if (process.env.NODE_ENV === 'development') return null;
+  await navigator.serviceWorker.register('/sw.js', {
+    scope: '/',
+    updateViaCache: 'none',
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), SW_READY_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([navigator.serviceWorker.ready, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Onboarding's "Aktivizo njoftimet" (MED-123, also the Finish card of MED-124).
+ * MUST be called synchronously from the tap handler: the permission request is
+ * the first await, because iOS standalone needs the user activation that a
+ * server action or a worker registration would use up.
+ *
+ * Permission is what the step needs. If the subscription cannot be made now
+ * (no worker in dev, or it never activated) the result is still 'granted';
+ * reconcilePushSubscription() creates it on the next app open.
+ */
+export async function enableNotifications(): Promise<PushPermissionState> {
+  if (!isPushSupported()) return 'unsupported';
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return permission as PushPermissionState;
+  await ensureServiceWorkerRegistration();
+  const result = await subscribeToPush();
+  return result === 'unsupported' ? 'granted' : result;
+}
+
 /**
  * Make the server's view of this browser match reality. Push dies silently
  * otherwise: the browser can rotate the endpoint on its own, and the server

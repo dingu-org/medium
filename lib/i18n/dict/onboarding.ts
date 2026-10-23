@@ -223,6 +223,53 @@ export const onboarding = {
     note: "Mund të vazhdosh pa e lidhur. Medium fillon t'u përgjigjet klientëve pasi ta lidhësh.",
   },
 
+  /**
+   * Step 7, notifications (MED-123). Canvas 7a/7c strings verbatim; the denied
+   * Settings paths are unverified on a real device (MED-126). `unsupportedNote`
+   * is DRAFTED. The `finishCard*` pair is for the Finish prompt (MED-124).
+   */
+  notifications: {
+    title: 'Mëso menjëherë kur rezervon dikush',
+    sub: 'Njoftim për çdo takim të ri, anulim ose bisedë që të kërkon ty. Vjen edhe kur aplikacioni është i mbyllur.',
+    examplesLabel: 'Shembuj njoftimesh',
+    exampleApp: 'Medium',
+    example1Time: 'tani',
+    example1Title: 'Takim i ri',
+    example1Body: 'Arta, e hënë 10:00',
+    example2Time: '12 min më parë',
+    example2Title: 'Anulim',
+    example2Body: 'Dritan, e enjte 16:30',
+    enable: 'Aktivizo njoftimet',
+    deniedTitle: 'Njoftimet janë të fikura',
+    deniedSub:
+      "Nuk do të marrësh njoftime në këtë pajisje. Mund t'i ndezësh kur të duash, nga cilësimet:",
+    deniedIphoneLabel: 'iPhone',
+    deniedIphonePath: 'Cilësimet › Njoftimet › Medium', // VERIFY ON DEVICE (MED-126)
+    deniedAndroidLabel: 'Android',
+    deniedAndroidPath:
+      'Cilësimet e shfletuesit › Cilësimet e faqes › Njoftimet', // VERIFY ON DEVICE (MED-126)
+    unsupportedNote:
+      "Ky shfletues nuk i mbështet njoftimet. Mund t'i aktivizosh më vonë nga një shfletues tjetër.", // DRAFTED
+    finishCardTitle: 'Njoftimet',
+    finishCardBody: 'Aktivizoji që të mësosh menjëherë kur rezervon dikush.',
+  },
+
+  /** Step 7, iPhone install guide (MED-123). Canvas 7b strings, verbatim. */
+  notificationsGuide: {
+    title: 'Shto Medium në ekranin bazë',
+    sub: 'Në iPhone, njoftimet vijnë vetëm kur Medium hapet nga ekrani bazë.',
+    card1Title: 'Prek Ndaj', // VERIFY ON DEVICE (Share wording)
+    card1Body:
+      'Butoni Ndaj (Share) është te shiriti i Safari-t. Nëse nuk e sheh, prek fillimisht butonin me tri pika.', // VERIFY ON DEVICE
+    card2Title: 'Zgjidh Shto në ekranin bazë',
+    card2Body:
+      'Në anglisht quhet Add to Home Screen. Rrëshqit poshtë në listë nëse nuk e sheh.', // VERIFY ON DEVICE
+    card3Title: 'Hape nga ekrani bazë',
+    card3Body: 'Hyr sërish në llogari dhe vazhdon pikërisht këtu.',
+    note: 'Pa e shtuar në ekranin bazë, njoftimet nuk vijnë në iPhone. Do të të pyesim sërish te paneli.',
+    continueInBrowser: 'Vazhdo në shfletues',
+  },
+
   steps: {
     profileTitle: 'Profili yt',
     profileSub: 'Shto emrin e biznesit dhe të dhënat e kontaktit.',

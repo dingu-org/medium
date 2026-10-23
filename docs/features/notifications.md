@@ -193,6 +193,8 @@ Two surfaces call `subscribeToPush`, both in Albanian and both device-scoped.
 
 **The prompt banner** in `PwaProvider` is the opportunistic one. It appears from the second dashboard visit onward, only when the Push APIs exist and permission is still `default`, and dismissing it stores `medium:pwa-push-dismissed-at` for 7 days.
 
+**Onboarding step 7** (`app/onboarding/(flow)/notifications`) asks on a tap through `enableNotifications()` in `lib/pwa/push-client.ts`. The permission request is its first await (iOS standalone needs the tap's user activation), and because `PwaProvider` only mounts in the dashboard it then registers the service worker itself before subscribing. The device matrix is `notificationsView` in `lib/onboarding/notifications.ts`: iPhone in a browser tab gets the install guide (`/onboarding/notifications/guide`, which marks the step seen so the reopened home-screen app resumes at Finish); everything else gets the one-tap screen, with a denied state that explains the Settings paths.
+
 On iOS, push works only once the app is installed to the home screen, and Safari never fires `pushsubscriptionchange` — which is exactly why the mount-time reconcile exists rather than relying on the worker relay alone.
 
 ## Service worker handlers

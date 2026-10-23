@@ -17,6 +17,7 @@ import {
   retryMutation,
   subscribeToQueueChanges,
 } from '@/lib/pwa/client-store';
+import { isIosDevice, isStandaloneDisplay } from '@/lib/pwa/device';
 import {
   getPushPermissionState,
   isPushSupported,
@@ -158,12 +159,8 @@ export function PwaProvider() {
   }, [router]);
 
   useEffect(() => {
-    const ios =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const standaloneMode =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    const ios = isIosDevice();
+    const standaloneMode = isStandaloneDisplay();
     setIsIos(ios);
     setStandalone(standaloneMode);
 
