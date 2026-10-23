@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   LINK_EXPIRED,
   LINK_FAILED,
@@ -7,6 +7,12 @@ import {
 } from '@/lib/auth/link-errors';
 import { t } from '@/lib/i18n';
 import SignInPage from '../page';
+
+// The signed-in redirect reads the session and the account row; it has its own
+// coverage, and these render tests are for the signed-out page.
+vi.mock('@/lib/onboarding/auth-redirect', () => ({
+  redirectUnfinishedGuidedAccount: vi.fn(async () => undefined),
+}));
 
 async function render(searchParams: {
   confirm?: string;

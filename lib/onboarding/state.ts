@@ -27,6 +27,7 @@ export type OnboardingState = {
 };
 
 /**
+ * Legacy accounts only (see accounts.onboarding_flow); MED-132 removes this.
  * Onboarding progress derived purely from data state — no stored flag. A step
  * is done when the corresponding rows exist.
  */

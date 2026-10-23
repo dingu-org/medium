@@ -15,6 +15,27 @@ export const onboarding = {
   stepOf: (i: number, n: number) => `Hapi ${i} nga ${n}`,
   progress: (done: number, total: number) => `${done} nga ${total} të përfunduara`,
 
+  /** Guided onboarding shell (MED-115). Canvas strings; see the sprint notes for the invented ones. */
+  flow: {
+    helper: 'Progresi ruhet automatikisht',
+    saving: 'Po ruhet…',
+    continue: 'Vazhdo',
+    back: 'Mbrapa',
+    signOut: 'Dil',
+    signOutLabel: 'Dil. Progresi yt është ruajtur.',
+    stepOf: (n: number, total: number) => `Hapi ${n} nga ${total}`,
+    done: 'Përfunduar',
+    progressLabel: 'Progresi i konfigurimit',
+    fixErrors: 'Plotëso fushat e shënuara më sipër.',
+    saveFailedTitle: 'Nuk u ruajt.',
+    saveFailedBody:
+      'Kontrollo lidhjen e internetit. Gjithçka që shkrove është ende këtu.',
+    retry: 'Provo sërish',
+    later: 'Më vonë',
+    notNow: 'Jo tani',
+    goToApp: 'Shko te paneli',
+  },
+
   steps: {
     profileTitle: 'Profili yt',
     profileSub: 'Shto emrin e biznesit dhe të dhënat e kontaktit.',

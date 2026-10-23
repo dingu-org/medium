@@ -95,7 +95,23 @@ The matcher excludes static assets and images, `api/inngest`, `api/webhooks`, an
 
 Missing Supabase configuration is fatal everywhere a session is in play, but not on pages that carry none. When `hasSupabaseConfig()` is false and the path is public — `/`, `/sign-in`, `/sign-up`, `/forgot-password`, or anything under `/privacy`, `/terms`, `/help` or `/en/` — the request passes through untouched. `NEXT_PUBLIC_*` values are inlined at build time and have gone missing from a build before; a repeat must not take the marketing and legal pages down with it. `__tests__/middleware.test.ts` covers the split.
 
-## Onboarding is derived from data
+## Two onboarding flows
+
+`accounts.onboarding_flow` is `legacy` or `guided` and is fixed at insert. Migration `0033_onboarding_flow.sql` adds the column with default `legacy` (every existing account becomes legacy) and, in the same transaction, flips the default to `guided`, so each account the signup trigger creates afterwards is guided. Nothing writes the column after insert, so an account is never moved between flows. If an environment is migrated before its code deploys, an account created in that window is guided but still sees the old flow; after the deploy, list `onboarding_flow = 'guided'` rows created before the deploy time and set them to `legacy` by hand.
+
+### Guided flow
+
+One URL per screen under `/onboarding/`: `how-it-works`, `business`, `services`, `where`, `availability`, `whatsapp`, `notifications`, `finish`. `/onboarding` itself redirects a guided account to its resume screen (or to `/today` once complete).
+
+- **Data, not drafts.** Each step writes straight to the live rows on Continue. Required steps (business, services, where, availability) are done from saved data; `lib/onboarding/flow-state.ts` has one commented predicate per step. The skippable steps remember "seen or skipped" in `onboarding_intro_seen_at`, `onboarding_whatsapp_seen_at` and `onboarding_notifications_seen_at` (the WhatsApp step is also seen once a connection is active).
+- **Resume** is computed, never stored: the first applicable step that is not done, else Finish (`lib/onboarding/flow.ts`, pure and unit-tested).
+- **Where** is skipped, and counts as done, only when every saved service is online. The progress total is 7 before the services are saved and 6 after an all-online save, recalculated from fresh data on every render and save.
+- **Screen guard.** Every page calls `enterScreen` (`lib/onboarding/guard.ts`): legacy accounts go to `/onboarding`, completed accounts to `/today` (except Finish), and a screen beyond the resume point, or Where when it does not apply, goes to the resume screen. Going back to earlier screens is allowed.
+- **Completion** is `onboarding_completed_at`, written once when Finish renders for a real visit (not a Next.js prefetch). The dashboard gate reads only this column and never re-checks the data, so a service deactivated later cannot send the account back. A guided account that has not reached Finish is always routed back into the flow, which is how an iPhone user reopening the installed app lands on the right screen.
+- **Shell.** `components/onboarding/step-shell.tsx` owns the header (Back, segmented progress, "Dil"), the fixed bottom bar, double-press protection, field errors, the retry banner, heading focus and the position announcement. Unsaved input survives Back and closing the app in `localStorage` (`onb:draft:<account>:<screen>`), cleared when the step saves and on sign-out. Each Continue pushes one history entry, so system Back steps back once; signed-in guided accounts that are not complete are redirected from `/sign-in` and `/sign-up` to `/onboarding` so Back from the first screen does not land on an auth form.
+- **Step action contract.** A step's save action is a `'use server'` action wrapped in `instrumentedAction` that starts with `requireActiveFlowAccount()`, validates and returns `{ ok: false, reason?, fieldErrors? }` for user errors, writes idempotently (upsert or update by account, under `withAdvisoryLock` where a check-then-insert is needed), then returns `advanceFrom(accountId, step)`. Unexpected failures throw; the shell shows the retry banner.
+
+### Legacy flow: derived from data
 
 `getOnboardingState` (`lib/onboarding/state.ts`) recomputes progress from five row-existence checks. There is no stored progress flag to go stale.
 
@@ -113,9 +129,9 @@ The services step needs both conditions because the signup trigger already seede
 
 ## Bypassing the onboarding gate
 
-`app/(dashboard)/layout.tsx` is the gate. It redirects to `/sign-in` without a user, then — unless a bypass cookie applies — loads the onboarding state and redirects to `/onboarding` while it is incomplete. Onboarding lives outside the dashboard layout, so the redirect cannot loop.
+`app/(dashboard)/layout.tsx` is the gate. It redirects to `/sign-in` without a user, then reads the account row and decides by flow (`guidedGateRedirect`, `lib/onboarding/gate.ts`). A **guided** account is redirected to `/onboarding` until `onboarding_completed_at` is set; the bypass cookie does not apply to it. For a **legacy** account the gate is unchanged: unless a bypass cookie applies, it loads the onboarding state and redirects to `/onboarding` while it is incomplete. Onboarding lives outside the dashboard layout, so the redirect cannot loop. The gate is page-level: server actions and API routes are not gated.
 
-The bypass is one cookie, `onboarding_skipped`, holding a value bound to the user id (`app/onboarding/constants.ts`):
+The bypass (legacy accounts only) is one cookie, `onboarding_skipped`, holding a value bound to the user id (`app/onboarding/constants.ts`):
 
 | Value                 | Written by      | Lifetime | Meaning                                                |
 | --------------------- | --------------- | -------- | ------------------------------------------------------ |

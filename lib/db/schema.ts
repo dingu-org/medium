@@ -82,6 +82,7 @@ export const reminderResponseType = pgEnum('reminder_response_type', [
   'opt_out',
 ]);
 export const plan = pgEnum('plan', ['free', 'solo']);
+export const onboardingFlow = pgEnum('onboarding_flow', ['legacy', 'guided']);
 export const billingPeriod = pgEnum('billing_period', ['monthly', 'yearly']);
 export const billingOrderStatus = pgEnum('billing_order_status', [
   'created',
@@ -124,6 +125,15 @@ export const accounts = pgTable('accounts', {
   // Watermark for the notification bell unread count: events with
   // occurred_at > this are "unread". "Mark all read" sets it to now().
   notificationsSeenAt: tsTz('notifications_seen_at'),
+  // Which onboarding an account goes through (MED-115). Rows that existed when
+  // the guided flow shipped are 'legacy' and keep the old checklist gate + skip
+  // cookie; new rows default to 'guided'. Never updated after insert.
+  onboardingFlow: onboardingFlow('onboarding_flow').notNull().default('guided'),
+  onboardingIntroSeenAt: tsTz('onboarding_intro_seen_at'),
+  onboardingWhatsappSeenAt: tsTz('onboarding_whatsapp_seen_at'),
+  onboardingNotificationsSeenAt: tsTz('onboarding_notifications_seen_at'),
+  // Set once when a guided account reaches Finish; the dashboard gate reads only this.
+  onboardingCompletedAt: tsTz('onboarding_completed_at'),
   createdAt: tsTz('created_at').notNull().default(now),
 });
 

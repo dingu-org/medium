@@ -84,3 +84,11 @@ not before. Implementation details live in code and `docs/`, not here.
   assistant behaviour, so adding a type means defining how the assistant
   works for it. Not the same as a service: a business has one type and
   offers several services.
+
+## Onboarding
+
+- **Onboarding flow** — which setup an account goes through: the **legacy**
+  flow (the checklist) or the **guided** flow (one linear path, one step at a
+  time). It is fixed when the account is created: accounts that existed when
+  the guided flow shipped stay legacy, every account created afterwards is
+  guided, and an account is never moved from one to the other.

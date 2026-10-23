@@ -1,5 +1,6 @@
 import { linkErrorMessage, offersFreshLink } from '@/lib/auth/link-errors';
 import { t } from '@/lib/i18n';
+import { redirectUnfinishedGuidedAccount } from '@/lib/onboarding/auth-redirect';
 import { SignInForm } from './form';
 
 export const metadata = { title: `${t.auth.signIn.title} · ${t.appName}` };
@@ -9,6 +10,7 @@ export default async function SignInPage({
 }: {
   searchParams: Promise<{ confirm?: string; error?: string; reset?: string }>;
 }) {
+  await redirectUnfinishedGuidedAccount();
   const { confirm, error, reset } = await searchParams;
   return (
     <section>

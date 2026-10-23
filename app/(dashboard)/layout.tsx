@@ -14,6 +14,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { getNotificationData } from '@/lib/notifications/query';
+import { guidedGateRedirect } from '@/lib/onboarding/gate';
 import { getOnboardingState } from '@/lib/onboarding/state';
 import { createServerClient } from '@/lib/supabase/server';
 import { getUnreadChatCount } from '@/lib/chat/queries';
@@ -32,20 +33,35 @@ export default async function DashboardLayout({
     redirect('/sign-in');
   }
 
-  // Push fresh PTs through onboarding unless they've dismissed it. Onboarding
-  // lives outside this layout, so redirecting here can't loop.
-  const onboardingCookie = (await cookies()).get(ONBOARDING_SKIP_COOKIE)?.value;
-  const skipped = allowsOnboardingBypass(onboardingCookie, user.id);
-  if (!skipped) {
-    const onboarding = await getOnboardingState(user.id);
-    if (!onboarding.complete) redirect('/onboarding');
+  const [account] = await db
+    .select({
+      name: accounts.name,
+      email: accounts.email,
+      onboardingFlow: accounts.onboardingFlow,
+      onboardingCompletedAt: accounts.onboardingCompletedAt,
+    })
+    .from(accounts)
+    .where(eq(accounts.id, user.id));
+
+  // Guided accounts (new since MED-115) stay in the onboarding flow until
+  // Finish marks it complete; the skip cookie does not apply to them.
+  // Onboarding lives outside this layout, so redirecting here can't loop.
+  const guided = guidedGateRedirect(account);
+  if (guided === 'legacy') {
+    // Push fresh PTs through the old checklist unless they've dismissed it.
+    const onboardingCookie = (await cookies()).get(
+      ONBOARDING_SKIP_COOKIE,
+    )?.value;
+    const skipped = allowsOnboardingBypass(onboardingCookie, user.id);
+    if (!skipped) {
+      const onboarding = await getOnboardingState(user.id);
+      if (!onboarding.complete) redirect('/onboarding');
+    }
+  } else if (guided) {
+    redirect(guided);
   }
 
-  const [[account], notifications, unreadChats] = await Promise.all([
-    db
-      .select({ name: accounts.name, email: accounts.email })
-      .from(accounts)
-      .where(eq(accounts.id, user.id)),
+  const [notifications, unreadChats] = await Promise.all([
     getNotificationData(user.id),
     getUnreadChatCount(user.id),
   ]);

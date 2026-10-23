@@ -62,6 +62,7 @@ async function main() {
       timezone: 'Europe/Tirane',
       aiName: 'Medium',
       servicesConfiguredAt: new Date(),
+      onboardingCompletedAt: new Date(),
     })
     .where(eq(accounts.id, accountId));
 

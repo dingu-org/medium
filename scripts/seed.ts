@@ -103,6 +103,7 @@ export async function seedCore(
       timezone: 'Europe/Tirane',
       aiName: 'Medium',
       servicesConfiguredAt: new Date(),
+      onboardingCompletedAt: new Date(),
     })
     .where(eq(accounts.id, accountId));
 
