@@ -100,7 +100,7 @@ export function TodayClient({
 
       {whatsappStepLeft && (
         <div className="mb-6">
-          <OneStepLeftCard accountId={snapshot.accountId} />
+          <OneStepLeftCard />
         </div>
       )}
 

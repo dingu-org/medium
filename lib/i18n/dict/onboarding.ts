@@ -270,7 +270,6 @@ export const onboarding = {
   oneStepLeft: {
     eyebrow: 'Edhe një hap',
     title: 'Lidh WhatsApp',
-    dismiss: 'Fshih këtë kartë',
   },
 
   /** Step 7, iPhone install guide (MED-123). Canvas 7b strings, verbatim. */
