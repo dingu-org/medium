@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { markStepSeen } from '@/lib/onboarding/flow-state';
+import { recordOnboardingEvent } from '@/lib/onboarding/funnel';
 import { requireActiveFlowAccount } from '@/lib/onboarding/guard';
 import { NOTIFICATIONS_GUIDE_HREF } from '@/lib/onboarding/notifications';
 import type { StepActionResult } from '@/lib/onboarding/step-result';
@@ -17,6 +18,7 @@ export const showNotificationsGuide = instrumentedAction(
   async (): Promise<StepActionResult> => {
     const accountId = await requireActiveFlowAccount();
     await markStepSeen(accountId, 'notifications');
+    await recordOnboardingEvent(accountId, 'notifications', 'skipped');
     revalidatePath('/onboarding', 'layout');
     return { ok: true, next: NOTIFICATIONS_GUIDE_HREF };
   },

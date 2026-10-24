@@ -15,6 +15,7 @@ import type { StepActionResult } from '@/lib/onboarding/step-result';
 import { cn } from '@/lib/utils';
 import { BottomBar } from './bottom-bar';
 import { ProgressHeader } from './progress-header';
+import { reportStepShown } from './report-step-shown';
 import { clearStepDraft } from './use-step-draft';
 import { useVisualViewport } from './use-visual-viewport';
 
@@ -124,6 +125,12 @@ export function StepShell({
       router.refresh();
     }
   }, [label, heading, router]);
+
+  // Funnel: the screen really mounted in a browser (MED-125). Once per screen;
+  // the server dedupes repeats too.
+  useEffect(() => {
+    reportStepShown(screen);
+  }, [screen]);
 
   // After a rejected save, focus the first field the step marked invalid.
   useEffect(() => {

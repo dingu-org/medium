@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { SEEN_STEPS } from '@/lib/onboarding/flow';
 import { advanceFrom, markStepSeen } from '@/lib/onboarding/flow-state';
+import { recordOnboardingEvent } from '@/lib/onboarding/funnel';
 import { requireActiveFlowAccount } from '@/lib/onboarding/guard';
 import type { StepActionResult } from '@/lib/onboarding/step-result';
 import { createServerClient } from '@/lib/supabase/server';
@@ -15,8 +16,7 @@ const seenSchema = z.object({
 
 /**
  * Records that a skippable step was seen or skipped (idempotent: the first
- * timestamp wins) and moves on. `outcome` is unused for now; it is the hook
- * point for the analytics events (MED-125).
+ * timestamp wins), records the funnel outcome and moves on.
  */
 export const markSeenAndAdvance = instrumentedAction(
   'onboarding.markSeenAndAdvance',
@@ -24,7 +24,7 @@ export const markSeenAndAdvance = instrumentedAction(
     const parsed = seenSchema.parse({ step, outcome });
     const accountId = await requireActiveFlowAccount();
     await markStepSeen(accountId, parsed.step);
-    return advanceFrom(accountId, parsed.step);
+    return advanceFrom(accountId, parsed.step, parsed.outcome);
   },
 );
 
@@ -40,6 +40,7 @@ export const goToDashboard = instrumentedAction(
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return { ok: true, next: '/sign-in', replace: true };
+    await recordOnboardingEvent(user.id, 'finish', 'completed');
     return { ok: true, next: '/today', replace: true };
   },
 );

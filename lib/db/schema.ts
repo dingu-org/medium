@@ -581,6 +581,49 @@ export const events = pgTable(
   ],
 );
 
+export const onboardingStep = pgEnum('onboarding_step', [
+  'intro',
+  'business',
+  'services',
+  'where',
+  'availability',
+  'whatsapp',
+  'notifications',
+  'finish',
+]);
+export const onboardingEventOutcome = pgEnum('onboarding_event_outcome', [
+  'shown',
+  'completed',
+  'skipped',
+  'not_applicable',
+]);
+
+// Guided-onboarding funnel trail (MED-125): step + outcome only, never content.
+// Unique per (account, step, outcome): the first occurrence wins.
+export const onboardingEvents = pgTable(
+  'onboarding_events',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    accountId: accountIdRef(),
+    step: onboardingStep('step').notNull(),
+    outcome: onboardingEventOutcome('outcome').notNull(),
+    flowVersion: smallint('flow_version').notNull(),
+    appEnv: text('app_env').notNull(),
+    occurredAt: tsTz('occurred_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('onboarding_events_account_step_outcome_uq').on(
+      t.accountId,
+      t.step,
+      t.outcome,
+    ),
+    check(
+      'onboarding_events_app_env_valid',
+      sql`${t.appEnv} IN ('development', 'preview', 'production')`,
+    ),
+  ],
+);
+
 export const eventOutbox = pgTable(
   'event_outbox',
   {

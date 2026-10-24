@@ -1,8 +1,21 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FlowProgress } from '@/lib/onboarding/flow';
 import { StepShell, type StepShellProps } from '../step-shell';
 
+const { reportMock, effects } = vi.hoisted(() => ({
+  reportMock: vi.fn(),
+  effects: [] as { run: () => unknown; deps: unknown[] | undefined }[],
+}));
+
+// Static rendering never runs effects; record them so the funnel one can be run.
+vi.mock('react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react')>()),
+  useEffect: (run: () => unknown, deps?: unknown[]) => {
+    effects.push({ run, deps });
+  },
+}));
+vi.mock('../report-step-shown', () => ({ reportStepShown: reportMock }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn(),
@@ -36,7 +49,23 @@ function render(over: Partial<StepShellProps> = {}): string {
   );
 }
 
+beforeEach(() => {
+  reportMock.mockReset();
+  effects.length = 0;
+});
+
 describe('StepShell', () => {
+  it('reports the screen as shown once per screen, not per heading or progress', () => {
+    render({ screen: 'where', heading: 'A' });
+    const funnel = effects.filter(
+      (e) => e.deps?.length === 1 && e.deps[0] === 'where',
+    );
+    expect(funnel).toHaveLength(1);
+    funnel[0].run();
+    expect(reportMock).toHaveBeenCalledTimes(1);
+    expect(reportMock).toHaveBeenCalledWith('where');
+  });
+
   it('exposes the position as a progressbar and in the label', () => {
     const html = render();
     expect(html).toContain('role="progressbar"');

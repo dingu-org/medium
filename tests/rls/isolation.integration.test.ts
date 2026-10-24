@@ -108,6 +108,13 @@ const seedFactories: Record<
     external_id: `wamid-rls-${Date.now()}-${Math.random()}`,
     delivered_at: new Date().toISOString(),
   }),
+  onboarding_events: ({ accountId }) => ({
+    account_id: accountId,
+    step: 'intro',
+    outcome: 'shown',
+    flow_version: 1,
+    app_env: 'development',
+  }),
   push_subscriptions: ({ accountId }) => ({
     account_id: accountId,
     endpoint: `https://example.test/${Date.now()}`,
@@ -179,6 +186,7 @@ const UPDATE_COL: Record<string, Record<string, unknown>> = {
   // Not external_id: a unique-violation would satisfy the "rejected" assertion
   // without the privilege check ever being the reason.
   reminder_deliveries: { delivered_at: new Date(0).toISOString() },
+  onboarding_events: { flow_version: 2 },
   push_subscriptions: { user_agent: 'rls-probe' },
   pwa_mutations: { error: 'rls-probe' },
   events: { type: 'rls-probe' },
@@ -193,11 +201,12 @@ const UPDATE_COL: Record<string, Record<string, unknown>> = {
 
 // Operator-only tables: their policy is USING (false), so even the owning tenant
 // reads nothing (0016 erasure_archive, 0021 wa_message_statuses, 0026
-// reminder_deliveries).
+// reminder_deliveries, 0039 onboarding_events).
 const DENY_ALL = new Set([
   'erasure_archive',
   'wa_message_statuses',
   'reminder_deliveries',
+  'onboarding_events',
 ]);
 
 const TENANT_ID_COL: Record<string, 'account_id' | 'id'> = { accounts: 'id' };

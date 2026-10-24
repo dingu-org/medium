@@ -12,6 +12,7 @@ import {
   events,
   messageTemplates,
   messages,
+  onboardingEvents,
   customers,
   accounts,
   pushSubscriptions,
@@ -56,6 +57,7 @@ export type AccountExport = {
   cost_daily: Record<string, unknown>[];
   pwa_mutations: Record<string, unknown>[];
   events: Record<string, unknown>[];
+  onboarding_events: Record<string, unknown>[];
   billing_orders: Record<string, unknown>[];
   push_subscriptions: Record<string, unknown>[];
   audit_log: Record<string, unknown>[];
@@ -275,6 +277,11 @@ export async function buildAccountExport(accountId: string): Promise<AccountExpo
     .select()
     .from(events)
     .where(eq(events.accountId, accountId));
+  const onboardingEventRows = await db
+    .select()
+    .from(onboardingEvents)
+    .where(eq(onboardingEvents.accountId, accountId))
+    .orderBy(onboardingEvents.occurredAt);
   const orderRows = await db
     .select()
     .from(billingOrders)
@@ -348,6 +355,7 @@ export async function buildAccountExport(accountId: string): Promise<AccountExpo
     cost_daily: costRows.map(serializeRow),
     pwa_mutations: mutationRows.map(serializeRow),
     events: eventRows.map(serializeRow),
+    onboarding_events: onboardingEventRows.map(serializeRow),
     billing_orders: orderRows.map(serializeRow),
     push_subscriptions: pushRows.map((row) => ({
       ...serializeRow(row),

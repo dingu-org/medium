@@ -1,6 +1,6 @@
 # Data model
 
-Medium's schema is 23 tables and 13 enums in one Postgres database, defined in `lib/db/schema.ts` and migrated by the SQL files in `drizzle/migrations/`. Twenty-one tables carry an `account_id` foreign key to `accounts`; `accounts` is keyed on the Supabase auth user id, and `erasure_archive` deliberately holds a bare uuid instead. The application reads and writes exclusively through the owner connection, which bypasses row-level security, so RLS exists to bound what a tenant can reach over PostgREST and Realtime — everywhere else, tenancy is a `WHERE account_id = …` discipline in the query. This page is the reference for all of it.
+Medium's schema is 24 tables and 17 enums in one Postgres database, defined in `lib/db/schema.ts` and migrated by the SQL files in `drizzle/migrations/`. Twenty-two tables carry an `account_id` foreign key to `accounts`; `accounts` is keyed on the Supabase auth user id, and `erasure_archive` deliberately holds a bare uuid instead. The application reads and writes exclusively through the owner connection, which bypasses row-level security, so RLS exists to bound what a tenant can reach over PostgREST and Realtime — everywhere else, tenancy is a `WHERE account_id = …` discipline in the query. This page is the reference for all of it.
 
 ## Tenancy model
 
@@ -29,7 +29,7 @@ The convention for any new table follows from that: `GRANT SELECT ON TABLE "x" T
 Two policy shapes exist:
 
 - **Read-own** — `USING (account_id = auth.uid())`, or `USING (id = auth.uid())` on `accounts`. Twenty tables.
-- **Deny-all** — `USING (false)`. Three tables: `wa_message_statuses`, `reminder_deliveries` and `erasure_archive`, all operator or compliance records rather than owner-facing data.
+- **Deny-all** — `USING (false)`. Four tables: `wa_message_statuses`, `reminder_deliveries`, `onboarding_events` and `erasure_archive`, all operator or compliance records rather than owner-facing data.
 
 `tests/rls/coverage.integration.test.ts` enumerates the tables from `pg_class` rather than deriving them from a column name, so a new table cannot ship with RLS off and still pass; it asserts every table's policy classifies as tenant or deny-all and that `anon` and `authenticated` hold no write privilege. `tests/rls/isolation.integration.test.ts` proves one tenant cannot read another's rows.
 
@@ -52,6 +52,7 @@ Every table's tenant column is `account_id` unless noted, and the RLS column giv
 | `message_templates`    | the account's Meta template registry and approval state              | `account_id`                    | read-own |
 | `reminder_jobs`        | one row per appointment's reminder cycle and its response            | `account_id`                    | read-own |
 | `reminder_deliveries`  | billing fact: one Meta-confirmed template delivery per wamid         | `account_id`                    | deny-all |
+| `onboarding_events`    | guided-onboarding funnel: one row per step and outcome, no content   | `account_id`                    | deny-all |
 | `push_subscriptions`   | one Web Push endpoint per browser                                    | `account_id`                    | read-own |
 | `pwa_mutations`        | server-side ledger for mutations replayed from the offline queue     | `account_id`                    | read-own |
 | `events`               | the domain event log, and the source of the notification bell feed   | `account_id`                    | read-own |
@@ -81,6 +82,7 @@ The rules a table enforces for itself live in its constraints and partial indexe
 | `blocked_periods`      | check `ends_at > starts_at`; `label` is free text                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `message_templates`    | no unique index; `status` tracks Meta's approval, `meta_id` is Meta's own template id, `last_status_at` the last poll                                                                                                                                                                                                                                                                                                                                                                   |
 | `reminder_jobs`        | `reminder_jobs_appointment_id_uq` means one job row per appointment, re-armed on reschedule; `reminder_jobs_response_message_id_uq` is partial to non-null; `delivered_at` is a latest-cycle convenience for the badge only — the billed fact is a `reminder_deliveries` row; `message_id` and `response_message_id` are `ON DELETE SET NULL`                                                                                                                                           |
+| `onboarding_events`    | `onboarding_events_account_step_outcome_uq` makes each (account, step, outcome) happen once, first occurrence wins; `app_env` is checked to development, preview or production; enums `onboarding_step` and `onboarding_event_outcome`; no free-text or jsonb column by design |
 | `reminder_deliveries`  | `reminder_deliveries_external_id_uq` makes a redelivered `delivered` webhook count once; `appointment_id` is `ON DELETE SET NULL` so erasure strips the link without deleting the billed fact; `external_id` is the one customer-linked field, so erasure rewrites it to `erased:<row id>`                                                                                                                                                                                              |
 | `push_subscriptions`   | `push_subscriptions_endpoint_uq` makes re-subscribing an upsert instead of a pile of rows for one device; `keys` is jsonb                                                                                                                                                                                                                                                                                                                                                               |
 | `pwa_mutations`        | unique on `(account_id, client_mutation_id)` is the offline queue's idempotency key; `status` moves `processing → sent → success` or `failed`; `result` stashes the response for a replay to return                                                                                                                                                                                                                                                                                     |
@@ -95,7 +97,7 @@ The rules a table enforces for itself live in its constraints and partial indexe
 
 ## Enums
 
-Thirteen Postgres enums are declared at the top of `lib/db/schema.ts`. Two carry a value nothing writes.
+Seventeen Postgres enums are declared at the top of `lib/db/schema.ts`. Two carry a value nothing writes.
 
 | Enum                       | Values                                                                                                                                                                                                          |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -113,6 +115,9 @@ Thirteen Postgres enums are declared at the top of `lib/db/schema.ts`. Two carry
 | `plan`                     | `free`, `solo`                                                                                                                                                                                                  |
 | `billing_period`           | `monthly`, `yearly`                                                                                                                                                                                             |
 | `billing_order_status`     | `created`, `paid`, `failed`, `expired`                                                                                                                                                                          |
+| `service_mode`             | `at_business`, `at_client`, `online`                                           |
+| `onboarding_step`          | `intro`, `business`, `services`, `where`, `availability`, `whatsapp`, `notifications`, `finish` |
+| `onboarding_event_outcome` | `shown`, `completed`, `skipped`, `not_applicable`                              |
 
 ## Text-typed state columns
 
@@ -136,7 +141,7 @@ Cascade direction is what makes account deletion and customer erasure single-sta
 | Foreign key                                              | On delete |
 | -------------------------------------------------------- | --------- |
 | `accounts.id` → `auth.users.id`                          | cascade   |
-| `account_id` on 21 tables → `accounts.id`                | cascade   |
+| `account_id` on 22 tables → `accounts.id`                | cascade   |
 | `conversations.customer_id` → `customers.id`             | cascade   |
 | `appointments.customer_id` → `customers.id`              | cascade   |
 | `messages.conversation_id` → `conversations.id`          | cascade   |
@@ -170,6 +175,7 @@ Three operations remove data, and they remove different things. Customer erasure
 | `message_templates`    | kept                                                                        | deleted                                      | kept                                                                                         |
 | `reminder_jobs`        | deleted by cascade from `appointments`                                      | deleted                                      | kept                                                                                         |
 | `reminder_deliveries`  | kept; `external_id` rewritten to `erased:<row id>`, `appointment_id` nulled | deleted                                      | kept                                                                                         |
+| `onboarding_events`    | kept                                                                        | deleted                                      | kept                                                                                         |
 | `push_subscriptions`   | kept                                                                        | deleted                                      | kept                                                                                         |
 | `pwa_mutations`        | kept                                                                        | deleted                                      | kept                                                                                         |
 | `events`               | kept                                                                        | deleted                                      | deleted past the window, except `billing.*` rows and any row whose outbox row is unpublished |

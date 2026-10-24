@@ -8,11 +8,13 @@ import {
   services,
   whatsappConnections,
 } from '@/lib/db/schema';
+import { recordOnboardingEvent } from './funnel';
 import {
   isStepDone,
   nextScreen,
   resumeScreen,
   screenHref,
+  whereApplies,
   type FlowFacts,
   type FlowScreenId,
   type SeenStepId,
@@ -160,12 +162,23 @@ export async function ensureOnboardingCompleted(
  * The success result of a step save: reloads the facts and points at the next
  * screen. A step that is still not done (it cannot be skipped) resumes at the
  * first unfinished one instead.
+ *
+ * Also writes the funnel's terminal event (MED-125): `outcome` for the step,
+ * only when it is done, then ('where', 'not_applicable') when finishing
+ * Services leaves Where not applicable. Sequential, so the timestamps order.
  */
 export async function advanceFrom(
   accountId: string,
   screen: FlowScreenId,
+  outcome: 'completed' | 'skipped' = 'completed',
 ): Promise<StepSuccess> {
   const facts = await loadFlowFacts(accountId);
+  if (screen !== 'finish' && isStepDone(screen, facts)) {
+    await recordOnboardingEvent(accountId, screen, outcome);
+    if (screen === 'services' && !whereApplies(facts)) {
+      await recordOnboardingEvent(accountId, 'where', 'not_applicable');
+    }
+  }
   const target =
     screen !== 'finish' && !isStepDone(screen, facts)
       ? resumeScreen(facts)

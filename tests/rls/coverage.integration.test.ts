@@ -12,11 +12,13 @@ afterAll(async () => {
 });
 
 // Operator-only tables whose policy is deliberately USING (false) — 0016
-// erasure_archive, 0021 wa_message_statuses, 0026 reminder_deliveries.
+// erasure_archive, 0021 wa_message_statuses, 0026 reminder_deliveries, 0039
+// onboarding_events.
 const DENY_ALL = new Set([
   'erasure_archive',
   'wa_message_statuses',
   'reminder_deliveries',
+  'onboarding_events',
 ]);
 
 const WRITE_PRIVILEGES = ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE'];
