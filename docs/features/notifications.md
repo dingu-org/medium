@@ -218,6 +218,10 @@ Four actions in `app/(dashboard)/settings/push-actions.ts` back the browser life
 | `isEndpointOwned`        | Reports whether this endpoint is stored for the current account. Ownership in the browser proves nothing server-side.       |
 | `removePushSubscription` | Deletes the row for this account and endpoint.                                                                              |
 
+## Onboarding follow-ups (MED-124)
+
+The Finish screen can show a notifications prompt for an installed iPhone that reopens on it (the tap calls `enable()` first, see the onboarding doc). Skipped notifications are asked again by the existing `PushPromptBanner`. For guided accounts only (`PwaProvider guided`), a denied permission shows `PushDeniedBanner`: a neutral, dismissible explanation with the one settings path for the device (iPhone or Android), never a prompt. Dismissal snoozes it for 7 days (`medium:pwa-push-denied-dismissed-at`), and it is re-checked on `visibilitychange`, so it disappears after the user turns notifications on in the device settings and returns.
+
 ## Events with no owner-facing surface
 
 Two events are written and published but reach nobody, which is worth knowing before you go looking for the notification that explains a dead connection.

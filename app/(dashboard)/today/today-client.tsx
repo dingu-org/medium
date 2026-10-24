@@ -10,6 +10,7 @@ import {
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { OneStepLeftCard } from '@/components/dashboard/one-step-left-card';
 import { AppointmentSheet } from '@/components/appointments/appointment-sheet';
 import { StatusBadge } from '@/components/appointments/badges';
 import { RealtimeRefresher } from '@/components/realtime-refresher';
@@ -32,6 +33,7 @@ import { t } from '@/lib/i18n';
 export function TodayClient({
   snapshot,
   remindersEnabled,
+  whatsappStepLeft = false,
 }: {
   snapshot: TodaySnapshot;
   /**
@@ -40,6 +42,12 @@ export function TodayClient({
    * `NEXT_PUBLIC_` twin.
    */
   remindersEnabled: boolean;
+  /**
+   * Guided account that finished onboarding without an active WhatsApp
+   * connection (MED-124): shows the "one step left" card and hides the green
+   * "nothing needs you" card, which would not be true yet.
+   */
+  whatsappStepLeft?: boolean;
 }) {
   const [selected, setSelected] = useState<TodayAppointment | null>(null);
   // Cancelling is irreversible and WhatsApps the customer, so the card's "Anulo"
@@ -90,6 +98,12 @@ export function TodayClient({
         />
       )}
 
+      {whatsappStepLeft && (
+        <div className="mb-6">
+          <OneStepLeftCard accountId={snapshot.accountId} />
+        </div>
+      )}
+
       <section className="mb-6">
         <SectionLabel>{t.today.weekLabel}</SectionLabel>
         <div className="border-line flex items-center rounded-lg border bg-card p-4 shadow-[var(--shadow-card)]">
@@ -109,23 +123,25 @@ export function TodayClient({
 
       {quiet ? (
         <>
-          <div className="border-line flex items-center gap-3 rounded-lg border bg-[var(--success-50)] px-4 py-5 shadow-[var(--shadow-card)]">
-            <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-white">
-              <Check
-                className="h-5 w-5 text-[var(--success-500)]"
-                strokeWidth={2}
-                aria-hidden
-              />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[15.5px] font-semibold text-[var(--success-600)]">
-                Asgjë nuk kërkon vëmendjen tënde
-              </p>
-              <p className="mt-1 text-[13.5px] text-[var(--success-600)] opacity-80">
-                Medium po i mban të gjitha bisedat.
-              </p>
+          {!whatsappStepLeft && (
+            <div className="border-line flex items-center gap-3 rounded-lg border bg-[var(--success-50)] px-4 py-5 shadow-[var(--shadow-card)]">
+              <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-white">
+                <Check
+                  className="h-5 w-5 text-[var(--success-500)]"
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[15.5px] font-semibold text-[var(--success-600)]">
+                  Asgjë nuk kërkon vëmendjen tënde
+                </p>
+                <p className="mt-1 text-[13.5px] text-[var(--success-600)] opacity-80">
+                  Medium po i mban të gjitha bisedat.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
           <div className="px-6 pt-10 pb-2 text-center">
             <span className="mx-auto flex h-[60px] w-[60px] items-center justify-center rounded-full bg-[#ecece7]">
               <CalendarDays className="text-ink-3 h-7 w-7" aria-hidden />

@@ -75,7 +75,7 @@ export default async function DashboardLayout({
       notifications={notifications.items}
       unreadChats={unreadChats}
     >
-      <PwaProvider />
+      <PwaProvider guided={account?.onboardingFlow === 'guided'} />
       {/* App-wide: keeps the bottom-nav unread chat badge fresh on screens
           without their own conversations subscription (calendar, settings).
           Every inbound customer message bumps conversations.last_inbound_at. */}

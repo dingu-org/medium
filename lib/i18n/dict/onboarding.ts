@@ -254,6 +254,25 @@ export const onboarding = {
     finishCardBody: 'Aktivizoji që të mësosh menjëherë kur rezervon dikush.',
   },
 
+  /** Finish (MED-124). Canvas 8a/8b strings, verbatim. */
+  finish: {
+    readyTitle: 'Gati',
+    readySub:
+      'Konfigurimi përfundoi. Kur të shkruajë klienti i parë, biseda shfaqet te Bisedat.',
+    oneLeftTitle: 'Edhe një hap',
+    oneLeftSub:
+      "Gjithçka tjetër është gati. Medium fillon t'u përgjigjet klientëve sapo të lidhësh WhatsApp.",
+    whatsappCardTitle: 'Lidh WhatsApp',
+    whatsappCardBody: 'Kur ta kesh numrin, lidhe nga faqja Sot.',
+  },
+
+  /** The dashboard "one step left" card on Today (MED-124). Canvas S9. */
+  oneStepLeft: {
+    eyebrow: 'Edhe një hap',
+    title: 'Lidh WhatsApp',
+    dismiss: 'Fshih këtë kartë',
+  },
+
   /** Step 7, iPhone install guide (MED-123). Canvas 7b strings, verbatim. */
   notificationsGuide: {
     title: 'Shto Medium në ekranin bazë',

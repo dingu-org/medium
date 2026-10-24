@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { getDashboardOnboardingState } from '@/lib/onboarding/dashboard-state';
 import { createServerClient } from '@/lib/supabase/server';
 import { remindersEnabled } from '@/lib/reminders/flag';
 import { getTodaySnapshot } from '@/lib/today/queries';
@@ -12,8 +13,15 @@ export default async function TodayPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
-  const snapshot = await getTodaySnapshot(user.id);
+  const [snapshot, onboarding] = await Promise.all([
+    getTodaySnapshot(user.id),
+    getDashboardOnboardingState(user.id),
+  ]);
   return (
-    <TodayClient snapshot={snapshot} remindersEnabled={remindersEnabled()} />
+    <TodayClient
+      snapshot={snapshot}
+      remindersEnabled={remindersEnabled()}
+      whatsappStepLeft={onboarding.whatsappStepLeft}
+    />
   );
 }

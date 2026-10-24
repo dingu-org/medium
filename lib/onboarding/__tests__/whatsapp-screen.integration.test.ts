@@ -34,6 +34,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { loadFlowFacts } from '../flow-state';
+import { guidedGateRedirect } from '../gate';
 import { enterScreen, enterWhatsappScreen } from '../guard';
 
 let accountId = '';
@@ -200,5 +201,64 @@ describe('loadFlowFacts().whatsappConnected', () => {
     const facts = await loadFlowFacts(accountId);
     expect(facts.whatsappConnected).toBe(true);
     expect(facts.whatsappSeen).toBe(true);
+  });
+});
+
+describe('Finish completes onboarding for good (MED-124)', () => {
+  async function readyForFinish() {
+    await doneUpToWhatsapp();
+    await db
+      .update(accounts)
+      .set({
+        onboardingWhatsappSeenAt: new Date(),
+        onboardingNotificationsSeenAt: new Date(),
+      })
+      .where(eq(accounts.id, accountId));
+  }
+  async function completedAt() {
+    const [row] = await db
+      .select({ at: accounts.onboardingCompletedAt })
+      .from(accounts)
+      .where(eq(accounts.id, accountId));
+    return row.at;
+  }
+
+  it('writes completion once; a second visit changes nothing and does not redirect', async () => {
+    await readyForFinish();
+    await enterScreen('finish');
+    const first = await completedAt();
+    expect(first).not.toBeNull();
+    await expect(enterScreen('finish')).resolves.toMatchObject({ accountId });
+    expect((await completedAt())?.getTime()).toBe(first?.getTime());
+  });
+
+  it('does not complete on a prefetch', async () => {
+    await readyForFinish();
+    headersMock.mockResolvedValue(
+      new Headers({ 'next-router-prefetch': '1' }),
+    );
+    await enterScreen('finish');
+    expect(await completedAt()).toBeNull();
+  });
+
+  it('stays complete whatever the data later does', async () => {
+    await readyForFinish();
+    await enterScreen('finish');
+    await db.update(services).set({ active: false }).where(
+      eq(services.accountId, accountId),
+    );
+    await db
+      .delete(availabilityRules)
+      .where(eq(availabilityRules.accountId, accountId));
+    const [row] = await db
+      .select({
+        onboardingFlow: accounts.onboardingFlow,
+        onboardingCompletedAt: accounts.onboardingCompletedAt,
+      })
+      .from(accounts)
+      .where(eq(accounts.id, accountId));
+    expect(guidedGateRedirect(row)).toBeNull();
+    await expect(enterScreen('business')).rejects.toThrow('REDIRECT:/today');
+    expect((await loadFlowFacts(accountId)).completed).toBe(true);
   });
 });

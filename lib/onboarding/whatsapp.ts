@@ -37,3 +37,16 @@ export function whatsappPrimaryLabel(
   if (choice === 'notYet') return 'showGuide';
   return null;
 }
+
+/**
+ * Whether the dashboard shows the "one step left" card (MED-124): a guided
+ * account that finished onboarding but has no active WhatsApp connection
+ * (skipped, pending verification or revoked: the assistant is not answering).
+ */
+export function whatsappStepLeft(s: {
+  flow: 'legacy' | 'guided';
+  completed: boolean;
+  whatsappConnected: boolean;
+}): boolean {
+  return s.flow === 'guided' && s.completed && !s.whatsappConnected;
+}

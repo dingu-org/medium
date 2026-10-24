@@ -5,6 +5,7 @@ import {
   WHATSAPP_GUIDE_HREF,
   WHATSAPP_STEP_HREF,
   isWhatsappChoice,
+  whatsappStepLeft,
   whatsappPrimaryLabel,
 } from '../whatsapp';
 
@@ -41,5 +42,16 @@ describe('whatsapp hrefs', () => {
 
   it('leaves a reopened step for the dashboard without a history entry', () => {
     expect(REOPEN_EXIT).toEqual({ ok: true, next: '/today', replace: true });
+  });
+});
+
+describe('whatsappStepLeft', () => {
+  const base = { flow: 'guided', completed: true, whatsappConnected: false } as const;
+
+  it('shows only for a completed guided account without a connection', () => {
+    expect(whatsappStepLeft(base)).toBe(true);
+    expect(whatsappStepLeft({ ...base, flow: 'legacy' })).toBe(false);
+    expect(whatsappStepLeft({ ...base, completed: false })).toBe(false);
+    expect(whatsappStepLeft({ ...base, whatsappConnected: true })).toBe(false);
   });
 });
