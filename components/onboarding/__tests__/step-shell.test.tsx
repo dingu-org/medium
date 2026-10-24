@@ -78,6 +78,14 @@ describe('StepShell', () => {
     expect(html.match(/data-filled="false"/g)).toHaveLength(4);
   });
 
+  it('lets the visible step label shrink instead of overlapping sign out', () => {
+    const html = render();
+    expect(html).toMatch(
+      /<span aria-hidden="true" class="[^"]*\bmin-w-0\b[^"]*\btruncate\b[^"]*">Hapi 3 nga 7<\/span>/,
+    );
+    expect(html).not.toMatch(/class="[^"]*\bflex-none\b[^"]*">Hapi 3 nga 7</);
+  });
+
   it('shows Back and sign out but no progress when progress is null', () => {
     const html = render({ progress: null, backHref: '/today' });
     expect(html).not.toContain('role="progressbar"');

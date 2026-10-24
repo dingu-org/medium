@@ -81,17 +81,8 @@ export async function isPushSubscribed(): Promise<boolean> {
   return (await registration.pushManager.getSubscription()) !== null;
 }
 
-/**
- * Request permission, subscribe via the push manager, and persist the
- * subscription server-side. Returns the resulting permission state so the
- * caller can surface "granted" / "denied" feedback.
- */
-export async function subscribeToPush(): Promise<PushPermissionState> {
-  if (!isPushSupported()) return 'unsupported';
-
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') return permission as PushPermissionState;
-
+/** Subscribe (or reuse) and persist; permission must already be granted. */
+async function subscribeGranted(): Promise<PushPermissionState> {
   const registration = await navigator.serviceWorker.getRegistration();
   if (!registration) return 'unsupported';
   let subscription = await registration.pushManager.getSubscription();
@@ -106,6 +97,20 @@ export async function subscribeToPush(): Promise<PushPermissionState> {
   await savePushSubscription(subscription.toJSON(), navigator.userAgent);
   setPushOptedOut(false);
   return 'granted';
+}
+
+/**
+ * Request permission, subscribe via the push manager, and persist the
+ * subscription server-side. Returns the resulting permission state so the
+ * caller can surface "granted" / "denied" feedback.
+ */
+export async function subscribeToPush(): Promise<PushPermissionState> {
+  if (!isPushSupported()) return 'unsupported';
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return permission as PushPermissionState;
+
+  return subscribeGranted();
 }
 
 const SW_READY_TIMEOUT_MS = 10_000;
@@ -146,13 +151,14 @@ export async function ensureServiceWorkerRegistration(): Promise<ServiceWorkerRe
  * Permission is what the step needs. If the subscription cannot be made now
  * (no worker in dev, or it never activated) the result is still 'granted';
  * reconcilePushSubscription() creates it on the next app open.
+ * Asks once: the subscribe part runs without re-asking.
  */
 export async function enableNotifications(): Promise<PushPermissionState> {
   if (!isPushSupported()) return 'unsupported';
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return permission as PushPermissionState;
   await ensureServiceWorkerRegistration();
-  const result = await subscribeToPush();
+  const result = await subscribeGranted();
   return result === 'unsupported' ? 'granted' : result;
 }
 

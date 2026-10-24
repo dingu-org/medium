@@ -55,6 +55,19 @@ describe('AvailabilityStep: default', () => {
     expect(at(a.sub)).toBeGreaterThan(at('Kur punon?'));
   });
 
+  it('lays the day chips out so they shrink and stay round instead of overflowing', () => {
+    expect(html).toMatch(/<fieldset class="min-w-0"/);
+    expect(html).toContain('class="flex items-center justify-between gap-0.5"');
+    const chips =
+      html.match(/<button[^>]*aria-pressed="(?:true|false)"[^>]*>/g) ?? [];
+    expect(chips).toHaveLength(7);
+    for (const chip of chips) {
+      expect(chip).toMatch(/\baspect-square\b/);
+      expect(chip).toMatch(/\bw-11\b/);
+      expect(chip).not.toMatch(/\bsize-1[01]\b/);
+    }
+  });
+
   it('puts the timezone line under the subheading, above the days and hours', () => {
     const order = [
       a.sub,

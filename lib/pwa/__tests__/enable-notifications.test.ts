@@ -106,6 +106,19 @@ describe('enableNotifications', () => {
     return pending;
   });
 
+  it('asks for permission exactly once per call', async () => {
+    const s = setup();
+    await expect(enableNotifications()).resolves.toBe('granted');
+    expect(s.requestPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks once also when it has to register the worker', async () => {
+    const s = setup({ registered: false });
+    await enableNotifications();
+    expect(s.requestPermission).toHaveBeenCalledTimes(1);
+    expect(s.subscribe).toHaveBeenCalledTimes(1);
+  });
+
   it('returns denied without registering anything', async () => {
     const s = setup({ permission: 'denied', registered: false });
     await expect(enableNotifications()).resolves.toBe('denied');

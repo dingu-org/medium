@@ -142,6 +142,7 @@ export function AvailabilityStep({
         return (
           <div className="flex flex-col gap-6">
             <fieldset
+              className="min-w-0"
               aria-describedby={
                 daysError ? 'availability-days-error' : undefined
               }
@@ -149,7 +150,7 @@ export function AvailabilityStep({
               <legend className="mb-3 text-[14px] font-medium">
                 {a.daysLegend}
               </legend>
-              <div className="flex justify-between">
+              <div className="flex items-center justify-between gap-0.5">
                 {DAY_ORDER.map((w, index) => {
                   const isOpen = draft.days[w].open;
                   const invalid = Boolean(daysError) && index === 0;
@@ -166,9 +167,9 @@ export function AvailabilityStep({
                         invalid ? 'availability-days-error' : undefined
                       }
                       onClick={() => setStored(toggleDay(draft, w))}
-                      // 7 x 44px does not fit a 320px viewport (288px content).
+                      // 44px chips; they shrink (staying round) when 7 do not fit, e.g. 320px or large text.
                       className={cn(
-                        'size-10 rounded-full border text-[13px] font-semibold min-[360px]:size-11',
+                        'aspect-square w-11 rounded-full border text-[13px] font-semibold',
                         FOCUS_RING,
                         isOpen
                           ? 'bg-primary border-primary text-primary-foreground font-bold'

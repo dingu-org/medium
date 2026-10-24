@@ -72,7 +72,7 @@ export function ProgressHeader({
           </div>
           <span
             aria-hidden
-            className="text-ink-2 flex-none text-[13px] font-semibold whitespace-nowrap tabular-nums"
+            className="text-ink-2 min-w-0 truncate text-[13px] font-semibold tabular-nums"
           >
             {label}
           </span>
