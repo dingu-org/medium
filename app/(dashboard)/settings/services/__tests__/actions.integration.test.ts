@@ -11,10 +11,11 @@ import {
 } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { appointments, customers, accounts } from '@/lib/db/schema';
-import { getServices } from '@/lib/services/queries';
+import { appointments, customers, accounts, services } from '@/lib/db/schema';
+import { getServices, getServicesWithDetails } from '@/lib/services/queries';
 import { createService, deleteService, updateService } from '../actions';
 import { MINUTE, testNow } from '@/tests/support/clock';
+import { seedLegacyDefaultServices } from '@/tests/support/services';
 
 // Only the existence of an appointment on the service matters here, never its
 // date — derived so it stays a plausible upcoming booking forever.
@@ -46,7 +47,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 // A real service client, independent of the mocks above, purely to seed/clean
-// up a real auth user (the trigger creates accounts + the three design services).
+// up a real auth user (the trigger creates the account; the three legacy services are seeded below).
 const realService = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -63,6 +64,8 @@ beforeAll(async () => {
   });
   if (error || !data.user) throw new Error(error?.message);
   accountId = data.user.id;
+  // New accounts have no services; this suite relies on the three legacy ones.
+  await seedLegacyDefaultServices(accountId);
 });
 
 afterAll(async () => {
@@ -73,7 +76,7 @@ beforeEach(async () => {
   getUserMock.mockResolvedValue({ data: { user: { id: accountId } } });
   // This suite covers create/update/delete behavior, not the Phase 16 C6
   // active-service cap (which is Free-only and has its own plan-gate suite).
-  // Grant lifetime Solo so createService isn't capped by the seeded services.
+  // Grant lifetime Solo so createService isn't capped by the legacy services.
   await db.update(accounts).set({ planLifetime: true }).where(eq(accounts.id, accountId));
 });
 
@@ -119,6 +122,54 @@ describe('createService', () => {
     expect(negative).toMatchObject({ ok: false, code: 'INVALID' });
 
     expect(await serviceByName('X')).toBeUndefined();
+  });
+});
+
+describe('services without a mode or description (MED-118)', () => {
+  it('lists and updates a service that has neither', async () => {
+    const legacy = await serviceByName('Seancë vijuese');
+    expect(legacy).toBeDefined();
+    const detail = (await getServicesWithDetails(accountId)).find(
+      (row) => row.id === legacy!.id,
+    );
+    expect(detail).toMatchObject({ mode: null, description: null });
+
+    const result = await updateService(legacy!.id, {
+      name: 'Seancë vijuese',
+      durationMinutes: 35,
+      priceLek: null,
+    });
+    expect(result).toEqual({ ok: true });
+    expect((await serviceByName('Seancë vijuese'))?.durationMinutes).toBe(35);
+  });
+
+  it('keeps the mode and description of an onboarding service on update', async () => {
+    const [created] = await db
+      .insert(services)
+      .values({
+        accountId,
+        name: 'Seancë online',
+        durationMin: 30,
+        priceLek: 2000,
+        mode: 'online',
+        description: 'Seancë me video',
+      })
+      .returning({ id: services.id });
+    const result = await updateService(created.id, {
+      name: 'Seancë online',
+      durationMinutes: 40,
+      priceLek: 2200,
+    });
+    expect(result).toEqual({ ok: true });
+    const detail = (await getServicesWithDetails(accountId)).find(
+      (row) => row.id === created.id,
+    );
+    expect(detail).toMatchObject({
+      durationMinutes: 40,
+      priceLek: 2200,
+      mode: 'online',
+      description: 'Seancë me video',
+    });
   });
 });
 

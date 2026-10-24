@@ -7,28 +7,20 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { instrumentedAction } from '@/lib/actions/instrument';
-import { sanitizePromptField } from '@/lib/ai/prompt';
-import { t } from '@/lib/i18n';
+import {
+  addressField,
+  businessNameField,
+  ownerNameField,
+  titleField,
+} from '@/lib/accounts/profile-fields';
 import { createServerClient } from '@/lib/supabase/server';
 import type { SettingsState } from '../constants';
 
-const emptyToUndefined = (v: unknown) =>
-  typeof v === 'string' && v.trim() === '' ? undefined : v;
-
-// name, title and address are interpolated into the system prompt as
-// context bullets, so a line break in them would render as a bullet of its own
-// and read as a practice-authored rule (lib/ai/prompt.ts).
-const promptSafe = (v: unknown) =>
-  emptyToUndefined(typeof v === 'string' ? sanitizePromptField(v) : v);
-
 const schema = z.object({
-  name: z.preprocess(
-    (v) => (typeof v === 'string' ? sanitizePromptField(v) : v),
-    z.string().min(1, t.settings.profilePracticeRequired).max(120),
-  ),
-  fullName: z.preprocess(emptyToUndefined, z.string().trim().max(120).optional()),
-  title: z.preprocess(promptSafe, z.string().max(120).optional()),
-  address: z.preprocess(promptSafe, z.string().max(240).optional()),
+  name: businessNameField,
+  fullName: ownerNameField,
+  title: titleField,
+  address: addressField,
 });
 
 async function updateProfileImpl(

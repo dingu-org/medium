@@ -248,6 +248,7 @@ export async function getClientDetail(
       serviceType: appointments.serviceType,
       status: appointments.status,
       notes: appointments.notes,
+      clientAddress: appointments.clientAddress,
       reminderStatus: reminderJobs.status,
       reminderResponse: reminderJobs.responseType,
     })
@@ -276,6 +277,7 @@ export async function getClientDetail(
     serviceType: row.serviceType,
     status: row.status,
     notes: row.notes,
+    clientAddress: row.clientAddress,
     reminder:
       showReminders && row.reminderStatus
         ? { status: row.reminderStatus, responseType: row.reminderResponse }

@@ -22,6 +22,8 @@ type BookAppointmentInput = {
   serviceType: string;
   durationMinutes?: number;
   notes?: string;
+  // At-the-client's bookings only (MED-120); the caller decides when it applies.
+  clientAddress?: string;
   // PT-initiated manual bookings may fall outside working hours / blocked
   // periods. Double-booking is still prevented by the active-overlap exclusion
   // constraint, so we only skip the availability-window check here.
@@ -119,6 +121,7 @@ export async function bookAppointment(
             endsAt,
             serviceType: input.serviceType.trim(),
             notes: input.notes?.trim() || null,
+            clientAddress: input.clientAddress?.trim() || null,
             status: 'pending',
           })
           .returning();

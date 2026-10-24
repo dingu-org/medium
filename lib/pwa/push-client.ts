@@ -81,17 +81,8 @@ export async function isPushSubscribed(): Promise<boolean> {
   return (await registration.pushManager.getSubscription()) !== null;
 }
 
-/**
- * Request permission, subscribe via the push manager, and persist the
- * subscription server-side. Returns the resulting permission state so the
- * caller can surface "granted" / "denied" feedback.
- */
-export async function subscribeToPush(): Promise<PushPermissionState> {
-  if (!isPushSupported()) return 'unsupported';
-
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') return permission as PushPermissionState;
-
+/** Subscribe (or reuse) and persist; permission must already be granted. */
+async function subscribeGranted(): Promise<PushPermissionState> {
   const registration = await navigator.serviceWorker.getRegistration();
   if (!registration) return 'unsupported';
   let subscription = await registration.pushManager.getSubscription();
@@ -106,6 +97,69 @@ export async function subscribeToPush(): Promise<PushPermissionState> {
   await savePushSubscription(subscription.toJSON(), navigator.userAgent);
   setPushOptedOut(false);
   return 'granted';
+}
+
+/**
+ * Request permission, subscribe via the push manager, and persist the
+ * subscription server-side. Returns the resulting permission state so the
+ * caller can surface "granted" / "denied" feedback.
+ */
+export async function subscribeToPush(): Promise<PushPermissionState> {
+  if (!isPushSupported()) return 'unsupported';
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return permission as PushPermissionState;
+
+  return subscribeGranted();
+}
+
+const SW_READY_TIMEOUT_MS = 10_000;
+
+/**
+ * The service worker is registered by PwaProvider, which only mounts in the
+ * dashboard. Onboarding runs before the account has seen it, so step 7
+ * registers it itself (same options, so the dashboard finds the same
+ * registration). Returns `null` when there is none and none can be made: dev
+ * (Serwist's build is off, mirroring PwaProvider) or a worker that never
+ * activated.
+ */
+export async function ensureServiceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (existing) return existing;
+  if (process.env.NODE_ENV === 'development') return null;
+  await navigator.serviceWorker.register('/sw.js', {
+    scope: '/',
+    updateViaCache: 'none',
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), SW_READY_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([navigator.serviceWorker.ready, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Onboarding's "Aktivizo njoftimet" (MED-123, also the Finish card of MED-124).
+ * MUST be called synchronously from the tap handler: the permission request is
+ * the first await, because iOS standalone needs the user activation that a
+ * server action or a worker registration would use up.
+ *
+ * Permission is what the step needs. If the subscription cannot be made now
+ * (no worker in dev, or it never activated) the result is still 'granted';
+ * reconcilePushSubscription() creates it on the next app open.
+ * Asks once: the subscribe part runs without re-asking.
+ */
+export async function enableNotifications(): Promise<PushPermissionState> {
+  if (!isPushSupported()) return 'unsupported';
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return permission as PushPermissionState;
+  await ensureServiceWorkerRegistration();
+  const result = await subscribeGranted();
+  return result === 'unsupported' ? 'granted' : result;
 }
 
 /**

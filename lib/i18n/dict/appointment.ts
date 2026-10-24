@@ -2,6 +2,8 @@
 export const appointment = {
   detailsTitle: 'Detajet e takimit',
   privateNote: 'Shënim privat',
+  // DRAFTED (MED-120): label for the address the client gave for an at-the-client's booking.
+  clientAddress: 'Adresa e klientit',
   notePlaceholder: 'Shto një shënim privat…',
   saveNote: 'Ruaj shënimin',
 

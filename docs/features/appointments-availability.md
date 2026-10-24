@@ -144,7 +144,7 @@ A service supplies the name and the duration a booking is made with. `lib/servic
 - `resolveBookingService` accepts either a `serviceId` or a legacy free-text `serviceType`. An unmatched legacy name falls back to the entered text at 60 minutes, which keeps old queued offline mutations replayable.
 - `getServices` lists them for the prompt and the settings screen.
 
-Active services are capped by plan. `app/(dashboard)/settings/services/actions.ts` counts other active services against `maxActiveServices` when a service is created or re-activated, and a downgrade deactivates services beyond the cap. See [billing and plans](./billing-and-plans.md).
+Active services are capped by plan. `lib/services/limits.ts` (called by `app/(dashboard)/settings/services/actions.ts`) counts other active services against `maxActiveServices` when a service is created or re-activated, and a downgrade deactivates services beyond the cap. See [billing and plans](./billing-and-plans.md).
 
 ## Owner-side entry points
 

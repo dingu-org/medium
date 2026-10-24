@@ -23,6 +23,14 @@ export const toolSchemas = {
     starts_at: isoDateTime,
     service_type: z.string().trim().min(1).max(120),
     notes: z.string().trim().max(500).optional(),
+    client_address: z
+      .string()
+      .trim()
+      .max(240)
+      .optional()
+      .describe(
+        "The client's own address, in their words. Required for a service done at the client's place; omit otherwise.",
+      ),
   }),
   reschedule_appointment: z.object({
     appointment_id: z.uuid(),
@@ -65,7 +73,12 @@ export type ToolResult<T = unknown> =
   | {
       ok: false;
       error: {
-        code: 'invalid_input' | 'not_found' | 'conflict' | 'internal_error';
+        code:
+          | 'invalid_input'
+          | 'not_found'
+          | 'conflict'
+          | 'needs_client_address'
+          | 'internal_error';
         message: string;
         retryable: boolean;
       };

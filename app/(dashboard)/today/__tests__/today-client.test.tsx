@@ -49,6 +49,7 @@ const appointment: TodayAppointment = {
   serviceType: 'Fizioterapi',
   status: 'confirmed',
   notes: null,
+  clientAddress: null,
   reminder: { status: 'sent', responseType: null },
   startLabel: 'Nesër 10:00',
   durationMinutes: 45,

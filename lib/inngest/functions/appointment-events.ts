@@ -8,6 +8,8 @@ import {
   appointmentConfirmationContent,
   type AppointmentConfirmationKind,
 } from '@/lib/format/appointment-confirmation';
+import { loadConfirmationFacts } from '@/lib/format/confirmation-facts';
+import type { ConfirmationFacts } from '@/lib/format/confirmation-facts';
 import { inngest } from '../client';
 import { loadAppointmentJobContext } from './appointment-context';
 
@@ -30,12 +32,14 @@ function confirmationContent(args: {
   startsAt: Date;
   timezone: string;
   serviceType: string | null;
+  facts?: ConfirmationFacts;
 }): string {
   return appointmentConfirmationContent({
     kind: confirmationKinds[args.kind],
     startsAt: args.startsAt,
     timezone: args.timezone,
     serviceType: args.serviceType,
+    facts: args.facts,
   });
 }
 
@@ -124,7 +128,12 @@ export async function prepareAppointmentConfirmation(args: {
     return { kind: 'skipped', reason: 'delivery_context_missing' };
   }
 
+  const facts =
+    args.kind === 'appointment.cancelled'
+      ? undefined
+      : await loadConfirmationFacts(args.accountId, args.appointmentId);
   const content = confirmationContent({
+    facts,
     kind: args.kind,
     startsAt: args.startsAt,
     timezone: context.timezone,

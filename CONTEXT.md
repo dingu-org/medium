@@ -64,3 +64,31 @@ not before. Implementation details live in code and `docs/`, not here.
 - **Preview data** — disposable by definition. Seeded on demand with the QA
   fixtures, wiped and reseeded freely, augmented organically via the Meta
   test app. Production data never enters Preview in any form.
+
+## Services and where they happen
+
+- **Service mode** — where a single service takes place: at the business's
+  own place, at the client's place, or online. Every service has exactly one
+  mode. Offering the same thing in two modes means two services, which is
+  why a free account (one active service) can offer only one mode. A
+  business has no mode of its own; what it offers is the set of its
+  services' modes.
+
+- **Service area** — the free-text description of where a business will come
+  to the client ("Tiranë dhe rrethinat"). It is words, not a map or a radius.
+  The assistant uses it to say whether a client is covered, and records the
+  client's own address, as text, on the appointment.
+
+- **Business type** — what kind of business an account is, picked from a
+  closed list that Medium defines (never free text). Each type has its own
+  assistant behaviour, so adding a type means defining how the assistant
+  works for it. Not the same as a service: a business has one type and
+  offers several services.
+
+## Onboarding
+
+- **Onboarding flow** — which setup an account goes through: the **legacy**
+  flow (the checklist) or the **guided** flow (one linear path, one step at a
+  time). It is fixed when the account is created: accounts that existed when
+  the guided flow shipped stay legacy, every account created afterwards is
+  guided, and an account is never moved from one to the other.

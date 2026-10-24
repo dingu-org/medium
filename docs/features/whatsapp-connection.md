@@ -34,6 +34,8 @@ The Settings state machine reads that column: no row shows the connect explainer
 
 Connecting runs Meta's Embedded Signup v4 popup from the Settings screen. `app/(dashboard)/settings/connect-whatsapp.tsx` loads the Facebook JS SDK once per page, calls `FB.login` with the configuration id in `NEXT_PUBLIC_META_CONFIG_ID`, and collects the result from two independent channels: `FB.login` returns the one-time auth code, while a `postMessage` from the popup carries the finish event, `phone_number_id`, and `waba_id`.
 
+The popup logic is the `useWhatsAppSignup` hook in that file, with `SignupPendingPanel` and `SignupStatusBanner` beside it. Settings renders it through `ConnectWhatsApp`; the guided onboarding's WhatsApp step (step 6) uses the same hook from the shell's own button, so both start the identical signup and show the same status banners. `start()` resolves `'connected'` or `'stopped'` (Cancel resolves it at once), and the caller decides what follows: Settings refreshes, onboarding advances. The dashboard card for an unconnected account (MED-124) should link to `/onboarding/whatsapp` (`WHATSAPP_STEP_HREF`), which reopens the same screen for a completed account.
+
 `app/(dashboard)/settings/whatsapp-signup.ts` holds the trust boundary for that message, deliberately separate from the component so both are testable in isolation:
 
 - The origin must equal one of `https://www.facebook.com`, `https://web.facebook.com`, or `https://business.facebook.com` exactly. Meta's own sample uses a suffix test, which a lookalike domain passes; nothing else in the message authenticates the identifiers it carries.

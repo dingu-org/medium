@@ -22,6 +22,7 @@ import {
   messages,
   customers,
   accounts,
+  services,
 } from '@/lib/db/schema';
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -30,6 +31,7 @@ import { ConversationEngineError } from '../errors';
 import { handoffFailedTurn, runTurnCore } from '../engine';
 import type { InboundMessage } from '../types';
 import { DAY, HOUR, MINUTE, testNow, zonedTime } from '@/tests/support/clock';
+import { seedLegacyDefaultServices } from '@/tests/support/services';
 
 type MockGenerateResult = Awaited<
   ReturnType<MockLanguageModelV3['doGenerate']>
@@ -355,6 +357,8 @@ beforeAll(async () => {
   if (error || !data.user)
     throw new Error(`createUser failed: ${error?.message}`);
   accountId = data.user.id;
+  // New accounts have no services; this suite relies on the three legacy ones.
+  await seedLegacyDefaultServices(accountId);
 
   await db
     .update(accounts)
@@ -1089,6 +1093,175 @@ describe('runTurnCore', () => {
         .from(appointments)
         .where(eq(appointments.customerId, customerId));
       expect(appointment).toMatchObject({ startsAt: mondayAt(9) });
+    });
+  });
+
+  describe('service modes (MED-120)', () => {
+    const BOOKED = (service: string) =>
+      `Takimi juaj u rezervua për ${tirane(mondayAt(9).toISOString())} (${service}). Nëse doni ta ndryshoni ose ta anuloni, më shkruani këtu.`;
+
+    beforeEach(async () => {
+      await db.insert(services).values([
+        {
+          accountId,
+          name: 'Prerje në vend',
+          durationMin: 30,
+          mode: 'at_business',
+          description: 'Prerje klasike',
+        },
+        {
+          accountId,
+          name: 'Vizitë në shtëpi',
+          durationMin: 30,
+          mode: 'at_client',
+        },
+        {
+          accountId,
+          name: 'Këshillim online',
+          durationMin: 30,
+          mode: 'online',
+        },
+      ]);
+      await db
+        .update(accounts)
+        .set({
+          address: 'Rr. Elbasanit 5',
+          city: 'Tiranë',
+          country: 'AL',
+          directions: 'Pas bankës',
+          parking: null,
+          entrance: 'Porta e kuqe',
+          floor: '2',
+          serviceArea: 'Tiranë dhe rrethinat',
+        })
+        .where(eq(accounts.id, accountId));
+    });
+
+    afterEach(async () => {
+      await db
+        .delete(services)
+        .where(
+          and(
+            eq(services.accountId, accountId),
+            eq(services.durationMin, 30),
+            eq(services.active, true),
+          ),
+        );
+      await seedLegacyServicesIfMissing();
+      await db
+        .update(accounts)
+        .set({
+          address: null,
+          city: null,
+          country: null,
+          directions: null,
+          entrance: null,
+          floor: null,
+          serviceArea: null,
+        })
+        .where(eq(accounts.id, accountId));
+    });
+
+    // The mode services above are deleted by name; the legacy 30-minute
+    // "Seancë vijuese" must survive for the rest of the suite.
+    async function seedLegacyServicesIfMissing() {
+      const rows = await db
+        .select({ name: services.name })
+        .from(services)
+        .where(eq(services.accountId, accountId));
+      if (!rows.some((row) => row.name === 'Seancë vijuese')) {
+        await db
+          .insert(services)
+          .values({ accountId, name: 'Seancë vijuese', durationMin: 30 });
+      }
+    }
+
+    function book(service: string, extra: Record<string, unknown> = {}) {
+      return toolCallStep(`book-${service}`, 'book_appointment', {
+        starts_at: mondayAt(9).toISOString(),
+        service_type: service,
+        ...extra,
+      });
+    }
+
+    it('shows the model each service mode and description, and the location facts', async () => {
+      const model = sequenceModel([textStep('Po.')]);
+      await runTurnCore({
+        inboundMessage: inbound,
+        model,
+        modelId: 'requested/model',
+        now: BEFORE_MONDAY,
+      });
+      const prompt = JSON.stringify(model.doGenerateCalls[0].prompt);
+      expect(prompt).toContain(
+        "Prerje në vend: 30 minuta — where: at the business's address — description: Prerje klasike",
+      );
+      expect(prompt).toContain(
+        "Vizitë në shtëpi: 30 minuta — where: at the client's address",
+      );
+      expect(prompt).toContain('Këshillim online: 30 minuta — where: online');
+      expect(prompt).toContain('Practice country: Shqipëri');
+      expect(prompt).toContain('Tiranë dhe rrethinat');
+      // A legacy service carries no where/description.
+      expect(prompt).toContain('Vlerësim i parë: 45 minuta\\n');
+    });
+
+    it('confirms an in-person booking with the address and details', async () => {
+      const result = await runTurnCore({
+        inboundMessage: inbound,
+        model: sequenceModel([book('Prerje në vend')]),
+        modelId: 'requested/model',
+        now: BEFORE_MONDAY,
+      });
+      expect(result.content).toBe(
+        `${BOOKED('Prerje në vend')}\nAdresa: Rr. Elbasanit 5, Tiranë, Shqipëri.\nUdhëzime: Pas bankës.\nHyrja: Porta e kuqe.\nKati: 2.`,
+      );
+    });
+
+    it('refuses an at-client booking without an address, then books and confirms it once given', async () => {
+      const model = sequenceModel([
+        book('Vizitë në shtëpi'),
+        book('Vizitë në shtëpi', { client_address: 'Rr. Durrësit 10, Tiranë' }),
+      ]);
+      const result = await runTurnCore({
+        inboundMessage: inbound,
+        model,
+        modelId: 'requested/model',
+        now: BEFORE_MONDAY,
+      });
+      expect(model.doGenerateCalls).toHaveLength(2);
+      expect(result.content).toBe(
+        `${BOOKED('Vizitë në shtëpi')}\nProfesionisti do të vijë në adresën tuaj: Rr. Durrësit 10, Tiranë.`,
+      );
+      const rows = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.customerId, customerId));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].clientAddress).toBe('Rr. Durrësit 10, Tiranë');
+    });
+
+    it('confirms an online booking with the online notice and no link', async () => {
+      const result = await runTurnCore({
+        inboundMessage: inbound,
+        model: sequenceModel([book('Këshillim online')]),
+        modelId: 'requested/model',
+        now: BEFORE_MONDAY,
+      });
+      expect(result.content).toBe(
+        `${BOOKED('Këshillim online')}\nTakimi do të bëhet online. Linkun do t'jua dërgojë profesionisti.`,
+      );
+      expect(result.content).not.toMatch(/https?:/i);
+    });
+
+    it('leaves a legacy service confirmation exactly as before', async () => {
+      const result = await runTurnCore({
+        inboundMessage: inbound,
+        model: sequenceModel([book('Vlerësim i parë')]),
+        modelId: 'requested/model',
+        now: BEFORE_MONDAY,
+      });
+      expect(result.content).toBe(BOOKED('Vlerësim i parë'));
     });
   });
 

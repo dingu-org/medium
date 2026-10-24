@@ -1,9 +1,11 @@
 import { t } from '@/lib/i18n';
+import { redirectUnfinishedGuidedAccount } from '@/lib/onboarding/auth-redirect';
 import { SignUpForm } from './form';
 
 export const metadata = { title: `${t.auth.signUp.title} · ${t.appName}` };
 
-export default function SignUpPage() {
+export default async function SignUpPage() {
+  await redirectUnfinishedGuidedAccount();
   return (
     <section>
       <header className="mt-6 mb-6">

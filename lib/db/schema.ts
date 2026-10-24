@@ -18,6 +18,8 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { BUSINESS_TYPES } from '../business-types';
+import { SERVICE_MODES } from '../services/modes';
 import { DEFAULT_TIMEZONE } from '../i18n/timezone';
 
 const bytea = customType<{ data: Buffer; notNull: false; default: false }>({
@@ -82,6 +84,9 @@ export const reminderResponseType = pgEnum('reminder_response_type', [
   'opt_out',
 ]);
 export const plan = pgEnum('plan', ['free', 'solo']);
+export const onboardingFlow = pgEnum('onboarding_flow', ['legacy', 'guided']);
+export const businessType = pgEnum('business_type', BUSINESS_TYPES);
+export const serviceMode = pgEnum('service_mode', SERVICE_MODES);
 export const billingPeriod = pgEnum('billing_period', ['monthly', 'yearly']);
 export const billingOrderStatus = pgEnum('billing_order_status', [
   'created',
@@ -98,7 +103,24 @@ export const accounts = pgTable('accounts', {
   // answers (title/address) and the profile screen. Null = not set.
   fullName: text('full_name'),
   title: text('title'),
+  // What kind of business this is (MED-117), from Medium's closed list; selects
+  // the assistant configuration (lib/ai/assistant-config.ts). Null = never
+  // chosen (accounts from before the guided flow) → general configuration.
+  businessType: businessType('business_type'),
+  // Optional short description from onboarding step 2 (MED-117).
+  tagline: text('tagline'),
   address: text('address'),
+  // Where step (MED-119). Business-level location, all nullable: existing
+  // accounts have none. country is fixed to 'AL' for now (lib/onboarding/where.ts)
+  // and written with the at-business group. Never cleared when service modes change.
+  country: text('country'),
+  city: text('city'),
+  directions: text('directions'),
+  parking: text('parking'),
+  entrance: text('entrance'),
+  floor: text('floor'),
+  // Free-text area for at-the-client's services ("Tiranë dhe rrethinat"). Not a map.
+  serviceArea: text('service_area'),
   timezone: text('timezone').notNull().default(DEFAULT_TIMEZONE),
   aiName: text('ai_name'),
   aiGreeting: text('ai_greeting'),
@@ -124,6 +146,15 @@ export const accounts = pgTable('accounts', {
   // Watermark for the notification bell unread count: events with
   // occurred_at > this are "unread". "Mark all read" sets it to now().
   notificationsSeenAt: tsTz('notifications_seen_at'),
+  // Which onboarding an account goes through (MED-115). Rows that existed when
+  // the guided flow shipped are 'legacy' and keep the old checklist gate + skip
+  // cookie; new rows default to 'guided'. Never updated after insert.
+  onboardingFlow: onboardingFlow('onboarding_flow').notNull().default('guided'),
+  onboardingIntroSeenAt: tsTz('onboarding_intro_seen_at'),
+  onboardingWhatsappSeenAt: tsTz('onboarding_whatsapp_seen_at'),
+  onboardingNotificationsSeenAt: tsTz('onboarding_notifications_seen_at'),
+  // Set once when a guided account reaches Finish; the dashboard gate reads only this.
+  onboardingCompletedAt: tsTz('onboarding_completed_at'),
   createdAt: tsTz('created_at').notNull().default(now),
 });
 
@@ -216,6 +247,12 @@ export const services = pgTable(
     // set; the assistant only quotes a price when this is present. Wired into
     // getServices/prompt in a later Phase 15 task.
     priceLek: integer('price_lek'),
+    // What the business told the assistant this service includes (MED-118).
+    // Null on services from before the guided flow; required only in onboarding.
+    description: text('description'),
+    // Where the service takes place (MED-118). Null = unknown (existing
+    // services); the assistant must not guess (MED-120).
+    mode: serviceMode('mode'),
     active: boolean('active').notNull().default(true),
     createdAt: tsTz('created_at').notNull().default(now),
   },
@@ -347,6 +384,10 @@ export const appointments = pgTable(
     serviceType: text('service_type'),
     status: appointmentStatus('status').notNull().default('pending'),
     notes: text('notes'),
+    // Where the professional goes for an at-the-client's booking (MED-120). Text
+    // the client gave the assistant; prompt-safe, max 240. Null for every other
+    // booking.
+    clientAddress: text('client_address'),
     cancelledBy: cancellationActor('cancelled_by'),
     cancellationReason: text('cancellation_reason'),
     createdAt: tsTz('created_at').notNull().default(now),
@@ -537,6 +578,49 @@ export const events = pgTable(
     // Serves the admin push-delivery aggregate, which filters by type +
     // occurred_at with no account_id (so the account-scoped index above can't be used).
     index('events_type_occurred_at_idx').on(t.type, t.occurredAt),
+  ],
+);
+
+export const onboardingStep = pgEnum('onboarding_step', [
+  'intro',
+  'business',
+  'services',
+  'where',
+  'availability',
+  'whatsapp',
+  'notifications',
+  'finish',
+]);
+export const onboardingEventOutcome = pgEnum('onboarding_event_outcome', [
+  'shown',
+  'completed',
+  'skipped',
+  'not_applicable',
+]);
+
+// Guided-onboarding funnel trail (MED-125): step + outcome only, never content.
+// Unique per (account, step, outcome): the first occurrence wins.
+export const onboardingEvents = pgTable(
+  'onboarding_events',
+  {
+    id: uuid('id').primaryKey().default(genUuid),
+    accountId: accountIdRef(),
+    step: onboardingStep('step').notNull(),
+    outcome: onboardingEventOutcome('outcome').notNull(),
+    flowVersion: smallint('flow_version').notNull(),
+    appEnv: text('app_env').notNull(),
+    occurredAt: tsTz('occurred_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('onboarding_events_account_step_outcome_uq').on(
+      t.accountId,
+      t.step,
+      t.outcome,
+    ),
+    check(
+      'onboarding_events_app_env_valid',
+      sql`${t.appEnv} IN ('development', 'preview', 'production')`,
+    ),
   ],
 );
 

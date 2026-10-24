@@ -11,6 +11,7 @@ import {
   conversations,
   costDaily,
   events,
+  onboardingEvents,
   messageTemplates,
   messages,
   customers,
@@ -67,6 +68,7 @@ beforeEach(async () => {
   await db.delete(blockedPeriods).where(eq(blockedPeriods.accountId, accountId));
   await db.delete(messageTemplates).where(eq(messageTemplates.accountId, accountId));
   await db.delete(events).where(eq(events.accountId, accountId));
+  await db.delete(onboardingEvents).where(eq(onboardingEvents.accountId, accountId));
   await db.delete(auditLog).where(eq(auditLog.accountId, accountId));
   await db.delete(whatsappConnections).where(eq(whatsappConnections.accountId, accountId));
   await db.delete(whatsappContacts).where(eq(whatsappContacts.accountId, accountId));
@@ -174,6 +176,13 @@ beforeEach(async () => {
     body: 'Kujtues',
   });
   await db.insert(events).values({ accountId, type: 'seed.metric', payload: { count: 1 } });
+  await db.insert(onboardingEvents).values({
+    accountId,
+    step: 'intro',
+    outcome: 'shown',
+    flowVersion: 1,
+    appEnv: 'development',
+  });
   // Audit rows: one for this customer, one for another target (must be excluded).
   await db.insert(auditLog).values({
     accountId,
@@ -368,6 +377,7 @@ describe('buildAccountExport', () => {
     expect(exp.blocked_periods).toHaveLength(1);
     expect(exp.message_templates).toHaveLength(1);
     expect(exp.events).toHaveLength(1);
+    expect(exp.onboarding_events).toHaveLength(1);
     expect(exp.billing_orders).toHaveLength(1);
     expect(exp.billing_orders[0].amountMinor).toBe(250_000);
     // Both audit rows of the tenant, not just the customer-scoped one.

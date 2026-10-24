@@ -41,6 +41,7 @@ export const pwa = {
   pushPrompt: 'Aktivizo njoftimet për rezervime, anulime dhe kërkesa të reja.',
   pushEnable: 'Aktivizo',
   dismissPush: 'Mbyll kërkesën e njoftimeve',
+  dismissPushDenied: 'Mbyll shpjegimin e njoftimeve', // DRAFTED
 
   // Queue / transport errors surfaced as toasts or in the failed-changes banner
   queueFull:

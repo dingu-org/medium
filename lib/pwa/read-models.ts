@@ -62,6 +62,7 @@ export type CalendarAppointmentSnapshot = {
     | 'no_show'
     | 'rescheduled';
   notes: string | null;
+  clientAddress: string | null;
   reminder: {
     status: string;
     responseType: string | null;
@@ -238,6 +239,7 @@ export async function getCalendarSnapshot(
         serviceType: appointments.serviceType,
         status: appointments.status,
         notes: appointments.notes,
+        clientAddress: appointments.clientAddress,
         customerName: customers.name,
         customerPhone: customers.phone,
         customerWaId: customers.waId,
@@ -287,6 +289,7 @@ export async function getCalendarSnapshot(
       serviceType: r.serviceType,
       status: r.status as CalendarAppointmentSnapshot['status'],
       notes: r.notes,
+      clientAddress: r.clientAddress,
       reminder:
         showReminders && r.reminderStatus
           ? {

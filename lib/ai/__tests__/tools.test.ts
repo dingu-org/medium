@@ -34,6 +34,26 @@ describe('AI tool schemas', () => {
     }
   });
 
+  it('accepts an optional client_address on booking and caps it at 240', () => {
+    const base = {
+      starts_at: '2026-06-12T10:00:00+02:00',
+      service_type: 'Vizitë në shtëpi',
+    };
+    expect(
+      toolSchemas.book_appointment.safeParse({
+        ...base,
+        client_address: 'Rruga Myslym Shyri 12, Tiranë',
+      }).success,
+    ).toBe(true);
+    expect(toolSchemas.book_appointment.safeParse(base).success).toBe(true);
+    expect(
+      toolSchemas.book_appointment.safeParse({
+        ...base,
+        client_address: 'a'.repeat(241),
+      }).success,
+    ).toBe(false);
+  });
+
   it('requires UUID appointment identifiers for mutations', () => {
     expect(
       toolSchemas.cancel_appointment.safeParse({ appointment_id: 'not-an-id' })

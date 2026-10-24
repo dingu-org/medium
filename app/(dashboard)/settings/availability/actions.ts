@@ -10,8 +10,7 @@ import { availabilityRules, blockedPeriods, accounts } from '@/lib/db/schema';
 import { DEFAULT_TIMEZONE } from '@/lib/i18n/timezone';
 import { instrumentedAction } from '@/lib/actions/instrument';
 import { createServerClient } from '@/lib/supabase/server';
-
-const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+import { isValidTimezone, TIME_RE as TIME } from '@/lib/availability/rules';
 
 const ruleSchema = z
   .object({
@@ -69,17 +68,8 @@ export const saveAvailability = instrumentedAction(
   saveAvailabilityImpl,
 );
 
-const validTimezone = (tz: string): boolean => {
-  try {
-    new Intl.DateTimeFormat('en', { timeZone: tz });
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 const timezoneSchema = z.object({
-  timezone: z.string().min(1).refine(validTimezone, 'Invalid timezone'),
+  timezone: z.string().min(1).refine(isValidTimezone, 'Invalid timezone'),
 });
 
 /** Persist the PT timezone (moved here from /settings/account in Phase 15). */

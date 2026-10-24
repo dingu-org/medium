@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { services } from '@/lib/db/schema';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getActiveServiceByName, getServices } from '../queries';
+import { seedLegacyDefaultServices } from '@/tests/support/services';
 
 let accountId = '';
 
@@ -15,6 +16,8 @@ beforeAll(async () => {
   });
   if (error || !data.user) throw error ?? new Error('Missing user');
   accountId = data.user.id;
+  // New accounts have no services; this suite relies on the three legacy ones.
+  await seedLegacyDefaultServices(accountId);
 });
 
 afterAll(async () => {
@@ -22,7 +25,7 @@ afterAll(async () => {
 });
 
 describe('services schema and defaults', () => {
-  it('seeds the three design presets with the first two active', async () => {
+  it('orders the legacy default names first, with the first two active', async () => {
     const rows = await getServices(accountId);
     expect(
       rows.map(({ name, durationMinutes, active }) => ({

@@ -9,6 +9,7 @@ import {
 import { escalateConversationToHuman } from '@/lib/conversation/escalation';
 import { logger, serializeError } from '@/lib/log';
 import { withAuditLog } from '@/lib/tenancy';
+import { clientAddressField } from '@/lib/appointments/client-address';
 import { getActiveServiceByName } from '@/lib/services/queries';
 import {
   toolSchemas,
@@ -82,6 +83,24 @@ async function executeTool(
     if (!service) {
       return invalidInput('Ky shërbim nuk është i disponueshëm.');
     }
+    // The address is stored only for a service done at the client's place; for
+    // any other service a client_address the model sent is dropped.
+    let clientAddress: string | undefined;
+    if (service.mode === 'at_client') {
+      const parsed = clientAddressField.safeParse(input.client_address);
+      if (!parsed.success) {
+        return {
+          ok: false,
+          error: {
+            code: 'needs_client_address',
+            message:
+              'Për këtë shërbim duhet adresa e klientit. Pyetini klientin për adresën e tij dhe provoni sërish.',
+            retryable: true,
+          },
+        };
+      }
+      clientAddress = parsed.data as string;
+    }
     const appointment = await bookAppointment({
       accountId: ctx.accountId,
       customerId: ctx.customerId,
@@ -89,6 +108,7 @@ async function executeTool(
       serviceType: service.name,
       durationMinutes: service.durationMinutes,
       notes: input.notes as string | undefined,
+      clientAddress,
       origin: 'conversation',
     });
     return {

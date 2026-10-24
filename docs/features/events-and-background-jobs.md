@@ -180,7 +180,7 @@ Waiters are bounded by `LOCK_TIMEOUT_MS` (30 s), set as `SET LOCAL lock_timeout`
 | `reminder-response:<messageId>`        | `lib/reminders/response-handler.ts`            | one deterministic reminder answer per inbound message |
 | `appointments:<accountId>`             | `lib/appointments/lock.ts`                     | booking, rescheduling and transitions for one account |
 | `usage:conv:<accountId>`               | `lib/billing/usage.ts`                         | the conversation-day insert and cap check             |
-| `usage:services:<accountId>`           | `app/(dashboard)/settings/services/actions.ts` | the active-services plan cap                          |
+| `usage:services:<accountId>`           | `lib/services/limits.ts` (`serviceLockKey`) | the active-services plan cap                          |
 | `manual-customer:<accountId>:<digits>` | `lib/clients/mutations.ts`                     | duplicate-phone check on manual customer creation     |
 | `reminder:<conversationId>`            | `app/(dashboard)/chat/actions.ts`              | the manual "send reminder" action per thread          |
 | `reminder-quota:<accountId>`           | `app/(dashboard)/chat/actions.ts`              | the reminder quota check behind a manual send         |

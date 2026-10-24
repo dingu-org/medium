@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Download, RefreshCcw, Share, X } from 'lucide-react';
+import { Bell, BellOff, Download, RefreshCcw, Share, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -17,6 +17,7 @@ import {
   retryMutation,
   subscribeToQueueChanges,
 } from '@/lib/pwa/client-store';
+import { isIosDevice, isStandaloneDisplay } from '@/lib/pwa/device';
 import {
   getPushPermissionState,
   isPushSupported,
@@ -28,6 +29,7 @@ import { recordPwaInstalled } from '@/app/(dashboard)/pwa-install-actions';
 
 const INSTALL_DISMISSED_KEY = 'medium:pwa-install-dismissed-at';
 const PUSH_DISMISSED_KEY = 'medium:pwa-push-dismissed-at';
+const PUSH_DENIED_DISMISSED_KEY = 'medium:pwa-push-denied-dismissed-at';
 const DASHBOARD_VISITS_KEY = 'medium:pwa-dashboard-visits';
 const DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
 const REPLAY_BACKOFF_MS = [15_000, 30_000, 60_000];
@@ -55,7 +57,7 @@ function triggerReplay(): Promise<void> {
   return replayInFlight;
 }
 
-export function PwaProvider() {
+export function PwaProvider({ guided = false }: { guided?: boolean } = {}) {
   const router = useRouter();
   const [online, setOnline] = useState(true);
   const [counts, setCounts] = useState({ pending: 0, failed: 0, total: 0 });
@@ -64,6 +66,7 @@ export function PwaProvider() {
     useState<BeforeInstallPromptEvent | null>(null);
   const [showInstall, setShowInstall] = useState(false);
   const [showPush, setShowPush] = useState(false);
+  const [showDenied, setShowDenied] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [standalone, setStandalone] = useState(false);
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(
@@ -158,12 +161,8 @@ export function PwaProvider() {
   }, [router]);
 
   useEffect(() => {
-    const ios =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const standaloneMode =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    const ios = isIosDevice();
+    const standaloneMode = isStandaloneDisplay();
     setIsIos(ios);
     setStandalone(standaloneMode);
 
@@ -186,6 +185,24 @@ export function PwaProvider() {
     window.addEventListener(PWA_ENGAGEMENT_EVENT, onEngaged);
     return () => window.removeEventListener(PWA_ENGAGEMENT_EVENT, onEngaged);
   }, []);
+
+  // Guided accounts only (MED-124): a quiet explanation when notifications are
+  // blocked on this device. Re-checked on return from the device settings so it
+  // disappears once notifications are on.
+  useEffect(() => {
+    if (!guided) return;
+    const check = () => {
+      const permission = getPushPermissionState();
+      setShowDenied(permission === 'denied' && !isPushDeniedDismissed());
+      if (permission !== 'default') setShowPush(false);
+    };
+    check();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [guided]);
 
   useEffect(() => {
     const onPrompt = (event: Event) => {
@@ -278,6 +295,15 @@ export function PwaProvider() {
     setShowPush(false);
   };
 
+  const dismissPushDenied = () => {
+    try {
+      localStorage.setItem(PUSH_DENIED_DISMISSED_KEY, String(Date.now()));
+    } catch {
+      // Storage unavailable: the explanation just hides for this visit.
+    }
+    setShowDenied(false);
+  };
+
   if (standalone) {
     return (
       <>
@@ -288,6 +314,9 @@ export function PwaProvider() {
         <FailedMutationsBanner items={failedMutations} />
         <UpdateBanner worker={waitingWorker} />
         {showPush && <PushPromptBanner onDismiss={dismissPush} />}
+        {showDenied && (
+          <PushDeniedBanner ios={isIos} onDismiss={dismissPushDenied} />
+        )}
       </>
     );
   }
@@ -301,6 +330,9 @@ export function PwaProvider() {
       <FailedMutationsBanner items={failedMutations} />
       <UpdateBanner worker={waitingWorker} />
       {showPush && <PushPromptBanner onDismiss={dismissPush} />}
+      {showDenied && (
+        <PushDeniedBanner ios={isIos} onDismiss={dismissPushDenied} />
+      )}
       {showInstall && (
         <InstallBanner
           installEvent={installEvent}
@@ -508,4 +540,52 @@ function PushPromptBanner({ onDismiss }: { onDismiss: () => void }) {
 function isPushDismissed() {
   const dismissedAt = Number(localStorage.getItem(PUSH_DISMISSED_KEY) ?? '0');
   return dismissedAt > 0 && Date.now() - dismissedAt < DISMISS_MS;
+}
+
+function isPushDeniedDismissed() {
+  try {
+    const dismissedAt = Number(
+      localStorage.getItem(PUSH_DENIED_DISMISSED_KEY) ?? '0',
+    );
+    return dismissedAt > 0 && Date.now() - dismissedAt < DISMISS_MS;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Quiet explanation for blocked notifications (guided accounts, MED-124): never
+ * a prompt, since the browser cannot be asked again. One path for this device.
+ */
+export function PushDeniedBanner({
+  ios,
+  onDismiss,
+}: {
+  ios: boolean;
+  onDismiss: () => void;
+}) {
+  const n = t.onboarding.notifications;
+  return (
+    <AppBanner
+      tone="neutral"
+      icon={BellOff}
+      title={n.deniedTitle}
+      className="px-4 py-3 text-xs"
+      action={
+        <button
+          type="button"
+          className="-mr-3 flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground"
+          aria-label={t.pwa.dismissPushDenied}
+          onClick={onDismiss}
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      }
+    >
+      <p>{n.deniedSub}</p>
+      <p className="mt-1 font-semibold">
+        {ios ? n.deniedIphonePath : n.deniedAndroidPath}
+      </p>
+    </AppBanner>
+  );
 }

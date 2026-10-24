@@ -14,6 +14,7 @@ import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { getServices } from '@/lib/services/queries';
 import { createService, setServiceActive } from '../actions';
+import { seedLegacyDefaultServices } from '@/tests/support/services';
 
 const { getUserMock, redirectMock } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
@@ -51,6 +52,8 @@ beforeAll(async () => {
   });
   if (error || !data.user) throw new Error(error?.message);
   accountId = data.user.id;
+  // New accounts have no services; this suite relies on the three legacy ones.
+  await seedLegacyDefaultServices(accountId);
 });
 
 afterAll(async () => {
@@ -65,7 +68,7 @@ afterEach(() => vi.clearAllMocks());
 
 describe('services plan gate (Free = 1 active)', () => {
   it('blocks a second active service on Free but allows a swap', async () => {
-    // Free by default. Reduce the seeded services to exactly one active.
+    // Free by default. Reduce the legacy services to exactly one active.
     let all = await getServices(accountId);
     const active = all.filter((s) => s.active);
     for (const s of active.slice(1)) {

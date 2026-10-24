@@ -232,6 +232,55 @@
       "when": 1791718213862,
       "tag": "0032_default_timezone_tirane",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792778734516,
+      "tag": "0033_onboarding_flow",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792780109460,
+      "tag": "0034_business_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792781153322,
+      "tag": "0035_service_mode_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792781156566,
+      "tag": "0036_signup_without_default_services",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792782272205,
+      "tag": "0037_where_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792795579090,
+      "tag": "0038_appointment_client_address",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792800815808,
+      "tag": "0039_onboarding_events",
+      "breakpoints": true
     }
   ]
 }
